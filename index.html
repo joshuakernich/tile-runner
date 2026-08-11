@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tile Runner">
+<meta name="theme-color" content="#0d0b1a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<title>Tile Runner</title>
+<style>
+  :root {
+    --bg:        #0d0b1a;
+    --panel:     #17142b;
+    --grid-line: #221d40;
+    --ink:       #e8e6ff;
+    --dim:       #6f68a8;
+    --accent:    #ff4d6d;
+    --track:     #ffcf4d;   /* beam body */
+    --track-lo:  #b8892a;   /* beam underside / shade */
+    --rail:      #fff2c4;   /* running surface highlight */
+    --free:      #b9b3ff;   /* freed / draggable tile */
+    --runner:    #4dd6ff;
+    --goal:      #7dff6b;
+    --wall:      #3a2a55;
+    --shadow:    #05040d;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body {
+    height:100%; width:100%; overflow:hidden;
+    background:var(--bg); color:var(--ink);
+    font-family:"Courier New", ui-monospace, monospace;
+    -webkit-user-select:none; user-select:none;
+    -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent;
+    touch-action:none; overscroll-behavior:none;
+  }
+  #app {
+    position:fixed; inset:0; display:flex; flex-direction:column; align-items:center;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  header { text-align:center; padding:10px 0 6px; width:100%; }
+  header h1 {
+    font-size:22px; font-weight:900; letter-spacing:4px; text-transform:uppercase; color:var(--track);
+    text-shadow: 2px 0 var(--shadow), -2px 0 var(--shadow), 0 2px var(--shadow), 0 -2px var(--shadow), 2px 2px var(--accent);
+  }
+  #hud {
+    display:flex; gap:16px; align-items:center; justify-content:center;
+    margin-top:8px; font-size:12px; letter-spacing:2px; text-transform:uppercase; color:var(--dim);
+  }
+  #hud b { color:var(--ink); }
+  #ready { color:var(--free); }
+  #board-wrap { flex:1; width:100%; display:flex; align-items:stretch; justify-content:center; min-height:0; overflow:hidden; }
+  canvas { image-rendering:pixelated; touch-action:none; display:block; }
+  footer { padding:10px 0 16px; display:flex; gap:12px; }
+  button {
+    font-family:inherit; font-weight:900; text-transform:uppercase; letter-spacing:2px; font-size:12px;
+    color:var(--ink); background:var(--panel); border:3px solid var(--grid-line);
+    box-shadow:3px 3px 0 var(--shadow); padding:11px 16px; cursor:pointer; touch-action:manipulation;
+  }
+  button:active { transform:translate(3px,3px); box-shadow:none; }
+  #overlay {
+    position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+    background:rgba(5,4,13,0.82); z-index:20; text-align:center; padding:24px;
+  }
+  #overlay.show { display:flex; }
+  #overlay .card { max-width:340px; }
+  #overlay h2 { font-size:26px; letter-spacing:3px; text-transform:uppercase; margin-bottom:12px; }
+  #overlay p { font-size:13px; line-height:1.7; color:var(--dim); margin-bottom:20px; letter-spacing:1px; }
+  #overlay.win h2 { color:var(--goal); }
+  #overlay.lose h2 { color:var(--accent); }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Tile&nbsp;Runner</h1>
+    <div id="hud">
+      <span>Level <b id="level">1</b></span>
+      <span>Drag <b id="ready">0</b></span>
+      <span>Key <b id="keystate">✗</b></span>
+    </div>
+  </header>
+  <div id="board-wrap"><canvas id="game"></canvas></div>
+  <footer>
+    <button id="restart">Restart</button>
+    <button id="mute">Sound: On</button>
+  </footer>
+</div>
+
+<div id="overlay">
+  <div class="card">
+    <h2 id="ov-title">Level Clear</h2>
+    <p id="ov-msg"></p>
+    <button id="ov-btn">Continue</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------- Levels ------------------------------------------------------
+  const COLS = 7, ROWS = 13;
+  // --- TEST LEVEL: breaking stone is REQUIRED to reach the goal -----------
+  // Three full-width barriers span the grid; the ONLY opening in each is a
+  // stone tile, so the runner physically cannot advance without smashing it.
+  // Verified by BFS: solvable when the stones can be broken, and impossible
+  // if they were treated as unbreakable walls. The forced route passes over
+  // all three stones ([3,8] and [1,5] before the key, [4,2] after) on the
+  // way to the key and the exit.
+  const LEVELS = [
+    { start:[3,12], goal:[3,0], speed:1150, goalDir:[0,-1], key:[1,4],
+      init:[[3,11],[3,10],[3,9]],
+      walls:[[0,8],[1,8],[2,8],[4,8],[5,8],[6,8],
+             [0,5],[2,5],[3,5],[4,5],[5,5],[6,5],
+             [0,2],[1,2],[2,2],[3,2],[5,2],[6,2]],
+      stone:[[3,8],[1,5],[4,2]] },
+  ];
+
+  /* --- Original v19 levels (kept here so you can restore them) -----------
+  const LEVELS = [
+    { start:[3,12], goal:[3,0], speed:1200, goalDir:[0,-1], key:[5,8],
+      init:[[3,11],[3,10],[3,9]],
+      walls:[[1,9],[2,9],[4,6],[5,6],[1,3],[2,3],[3,3]],
+      stone:[[3,6],[3,5]] },
+    { start:[0,12], goal:[6,0], speed:1050, goalDir:[0,-1], key:[1,5],
+      init:[[0,11],[0,10],[1,10]],
+      walls:[[2,11],[2,10],[2,9],[4,7],[4,6],[4,5],[5,3],[6,3]],
+      stone:[[3,7],[3,6],[5,8]] },
+    { start:[3,12], goal:[0,0], speed:950, goalDir:[0,-1], key:[6,7],
+      init:[[3,11],[3,10],[4,10]],
+      walls:[[2,10],[2,9],[3,9],[5,8],[5,7],[5,6],[1,6],[2,6],[3,4],[4,4],[1,3]],
+      stone:[[4,6],[4,5],[1,8]] },
+  ];
+  ----------------------------------------------------------------------- */
+
+  // ---------- DOM ---------------------------------------------------------
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const elLevel = document.getElementById("level");
+  const elReady = document.getElementById("ready");
+  const elKey = document.getElementById("keystate");
+  const overlay = document.getElementById("overlay");
+  const ovTitle = document.getElementById("ov-title");
+  const ovMsg = document.getElementById("ov-msg");
+  const ovBtn = document.getElementById("ov-btn");
+  const restartBtn = document.getElementById("restart");
+
+  // ---------- Tunables ----------------------------------------------------
+  const TILES_TOTAL = 3;
+  const GRACE_MS = 2600;
+  const MIN_CELL = 78, MAX_CELL = 170;
+  const VIEW_COLS = 4.2, VIEW_ROWS = 6;
+  const CAM_LERP = 0.009;
+  const TRACK_T = 0.44;        // platform thickness as fraction of cell (hangs below centre)
+  const SAMPLE_D = 0.42;       // tangent smoothing window (path-param units)
+  const FALL_G = 0.0022, FALL_MS = 850;   // gravity fall on lose
+
+  // ---------- Sound engine ------------------------------------------------
+  // A tiny Web Audio synth + backing band. Every cleared tile is one BEAT: the
+  // runner moves at a constant ms-per-cell, so clears land at a perfectly even
+  // cadence. Each beat plays the next note of a looping MELODY and, locked to
+  // that same instant, a bass note, a soft kick, and an off-beat hi-hat; each
+  // bar (4 beats) also (re)starts a sustained chord PAD. Because every beat is
+  // anchored to a real tile event and the between-beat hat is scheduled on the
+  // audio clock, the whole arrangement stays in sync with the tiles with no
+  // drift, and its tempo tracks each level's speed. Resets each level.
+  const Sound = (() => {
+    const BASE = 220;                          // A3, in Hz
+    // Lead melody: 16 steps (4 bars of 4) drawn from A major pentatonic.
+    const MELODY = [0, 4, 7, 4,  9, 7, 4, 2,  0, 4, 7, 12,  9, 7, 4, 2];
+    const WAVES  = ["triangle", "square"];     // lead timbre alternates per step
+    // One chord per bar: A - D - F#m - E (a I-IV-vi-V loop in A major).
+    const CHORDS = [
+      { root: 0, tones: [0, 4, 7]  },          // A  major
+      { root: 5, tones: [5, 9, 12] },          // D  major
+      { root: 9, tones: [9, 12, 16] },         // F# minor
+      { root: 7, tones: [7, 11, 14] },         // E  major
+    ];
+    let ac = null, master = null, sendBus = null, noiseBuf = null;
+    let muted = false, step = 0, beatSec = 1.15;
+
+    function ensure() {
+      if (ac) return true;
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return false;
+      ac = new AC();
+      master = ac.createGain();
+      master.gain.value = 0.16;
+      master.connect(ac.destination);
+      // Damped feedback delay = a ringing echo tail so tones resonate.
+      const delay = ac.createDelay(1.0); delay.delayTime.value = 0.24;
+      const fb    = ac.createGain();     fb.gain.value = 0.34;      // echo regeneration
+      const damp  = ac.createBiquadFilter(); damp.type = "lowpass"; damp.frequency.value = 2400;
+      const wet   = ac.createGain();     wet.gain.value = 0.30;     // echo level into mix
+      delay.connect(damp); damp.connect(fb); fb.connect(delay);     // feedback loop, softened
+      delay.connect(wet);  wet.connect(master);
+      sendBus = delay;                                              // tonal voices feed the echo
+      // A short noise buffer reused for the hi-hat.
+      noiseBuf = ac.createBuffer(1, Math.floor(ac.sampleRate * 0.2), ac.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      return true;
+    }
+    // Must be triggered from a user gesture so iOS/Safari unlocks audio.
+    function unlock() {
+      if (!ensure()) return;
+      if (ac.state === "suspended") ac.resume();
+    }
+    // A tonal voice: two detuned oscillators through a long-release envelope,
+    // started at absolute time `t`. Optionally fed into the resonant echo tail.
+    function voice(t, semi, wave, dur, vel, attack, wet) {
+      const freq = BASE * Math.pow(2, semi / 12);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vel, t + attack);       // attack
+      g.gain.exponentialRampToValueAtTime(0.0006, t + dur);       // release / ring-out
+      for (const cents of [-6, 6]) {                              // detuned pair = fuller tone
+        const o = ac.createOscillator();
+        o.type = wave;
+        o.frequency.setValueAtTime(freq, t);
+        o.detune.setValueAtTime(cents, t);
+        o.connect(g);
+        o.start(t); o.stop(t + dur + 0.05);
+      }
+      g.connect(master); if (wet) g.connect(sendBus);
+    }
+    // Percussion: a short pitched-down sine thump on the beat.
+    function kick(t, vel) {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = "sine";
+      o.frequency.setValueAtTime(130, t);
+      o.frequency.exponentialRampToValueAtTime(46, t + 0.11);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vel, t + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0006, t + 0.16);
+      o.connect(g); g.connect(master);
+      o.start(t); o.stop(t + 0.2);
+    }
+    // Percussion: a filtered noise tick, used on the off-beat.
+    function hat(t, vel) {
+      const src = ac.createBufferSource(); src.buffer = noiseBuf;
+      const hp = ac.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 7000;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vel, t + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0006, t + 0.05);
+      src.connect(hp); hp.connect(g); g.connect(master);
+      src.start(t); src.stop(t + 0.08);
+    }
+    // One-shot impact for smashing a stone: a gritty noise burst swept downward
+    // through a bandpass (the "crunch") plus a short low thud for weight. Kept
+    // off the musical scale and dry so it reads as an impact, not a note.
+    function smash() {
+      if (muted || !ac || ac.state !== "running") return;
+      const t = ac.currentTime;
+      // gritty crunch: noise through a downward-sweeping bandpass
+      const src = ac.createBufferSource(); src.buffer = noiseBuf;
+      src.playbackRate.value = 0.75;                         // lower = grittier
+      const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 0.8;
+      bp.frequency.setValueAtTime(1900, t);
+      bp.frequency.exponentialRampToValueAtTime(420, t + 0.18);
+      const ng = ac.createGain();
+      ng.gain.setValueAtTime(0.0001, t);
+      ng.gain.exponentialRampToValueAtTime(0.9, t + 0.004);  // sharp attack
+      ng.gain.exponentialRampToValueAtTime(0.0006, t + 0.2); // fast decay
+      src.connect(bp); bp.connect(ng); ng.connect(master);
+      src.start(t); src.stop(t + 0.22);
+      // low thud for weight/impact
+      const o = ac.createOscillator(), og = ac.createGain();
+      o.type = "triangle";
+      o.frequency.setValueAtTime(160, t);
+      o.frequency.exponentialRampToValueAtTime(58, t + 0.12);
+      og.gain.setValueAtTime(0.0001, t);
+      og.gain.exponentialRampToValueAtTime(0.55, t + 0.004);
+      og.gain.exponentialRampToValueAtTime(0.0006, t + 0.16);
+      o.connect(og); og.connect(master);
+      o.start(t); o.stop(t + 0.2);
+    }
+    // Called once per cleared tile == one beat of the backing track.
+    function clearTile() {
+      if (muted || !ac || ac.state !== "running") return;        // silent until unlocked
+      const now = ac.currentTime;
+      const i = step % MELODY.length;
+      const chord = CHORDS[Math.floor(step / 4) % CHORDS.length];
+      // Lead melody note, on the beat.
+      voice(now, MELODY[i], WAVES[step % WAVES.length], 0.9, 0.8, 0.008, true);
+      // Backing, locked to the same beat.
+      voice(now, chord.root - 12, "triangle", beatSec * 0.9, 0.40, 0.010, false);  // bass
+      kick(now, 0.5);                                             // pulse on the beat
+      hat(now + beatSec * 0.5, 0.12);                             // groove on the off-beat
+      if (step % 4 === 0)                                         // new bar -> sustained pad bed
+        for (const semi of chord.tones)
+          voice(now, semi - 12, "sine", beatSec * 3.9, 0.14, beatSec * 0.25, true);
+      step++;
+    }
+    function setTempo(msPerCell) { beatSec = Math.max(0.15, msPerCell / 1000); }
+    function resetMelody() { step = 0; }
+    function setMuted(m) { muted = !!m; }
+    function isMuted() { return muted; }
+    return { unlock, clearTile, smash, setTempo, resetMelody, setMuted, isMuted };
+  })();
+
+  // ---------- State -------------------------------------------------------
+  let cell = 0, dpr = 1;
+  let viewW = 0, viewH = 0, worldW = 0, worldH = 0;
+  let camX = 0, camY = 0;
+  let levelIdx = 0;
+  let state = null;
+  let lastTs = 0;
+
+  const key = (c, r) => c + "," + r;
+  const inBounds = (c, r) => c >= 0 && c < COLS && r >= 0 && r < ROWS;
+  const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+  const DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
+  const adjacent = (a, b) => Math.abs(a[0]-b[0]) + Math.abs(a[1]-b[1]) === 1;
+
+  function loadLevel(i) {
+    const L = LEVELS[i];
+    const walls = new Set(L.walls.map(w => key(w[0], w[1])));
+    const path = [{ c:L.start[0], r:L.start[1], kind:"start" }];
+    const tiles = L.init.map((cp, idx) => ({ id:idx, c:cp[0], r:cp[1], status:"active" }));
+    tiles.forEach(t => path.push({ c:t.c, r:t.r, kind:"tile", tileId:t.id }));
+    state = {
+      L, walls, tiles, path,
+      stones: new Set((L.stone || []).map(w => key(w[0], w[1]))),
+      shards: [],
+      goal:{ c:L.goal[0], r:L.goal[1] },
+      keyCell:{ c:L.key[0], r:L.key[1] }, keyCollected:false,
+      runIdx:0, runT:0, msPerCell:L.speed,
+      status:"play", drag:null, fall:null, runPhase:0,
+    };
+    elLevel.textContent = String(i + 1);
+    updateReadyHud();
+    updateKeyHud();
+    overlay.className = "";
+    Sound.resetMelody();
+    Sound.setTempo(L.speed);      // backing-track tempo tracks this level's runner speed
+    computeLayout();
+    snapCamera();
+  }
+
+  function updateReadyHud() {
+    // "Drag" = tiles you can currently pick up: freed (walked-over) + parked (staged).
+    elReady.textContent = String(state.tiles.filter(t => t.status !== "active").length);
+  }
+  function updateKeyHud() {
+    elKey.textContent = state.keyCollected ? "✓" : "✗";
+    elKey.style.color = state.keyCollected ? "var(--goal)" : "var(--accent)";
+  }
+
+  // ---------- Layout + camera --------------------------------------------
+  function computeLayout() {
+    const wrap = document.getElementById("board-wrap");
+    viewW = Math.floor(wrap.clientWidth);
+    viewH = Math.floor(wrap.clientHeight);
+    cell = Math.round(clamp(Math.min(viewW / VIEW_COLS, viewH / VIEW_ROWS), MIN_CELL, MAX_CELL));
+    worldW = cell * COLS; worldH = cell * ROWS;
+    dpr = Math.min(window.devicePixelRatio || 1, 3);
+    canvas.width = viewW * dpr; canvas.height = viewH * dpr;
+    canvas.style.width = viewW + "px"; canvas.style.height = viewH + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  const nodeCenter = n => ({ x:(n.c + 0.5) * cell, y:(n.r + 0.5) * cell });
+  function pathPos(param) {
+    const p = state.path, len = p.length;
+    const f = clamp(param, 0, len - 1), i = Math.floor(f);
+    if (i >= len - 1) return nodeCenter(p[len - 1]);
+    const fr = f - i, a = nodeCenter(p[i]), b = nodeCenter(p[i + 1]);
+    return { x:a.x + (b.x - a.x) * fr, y:a.y + (b.y - a.y) * fr };
+  }
+  // runner frame: centre point, tangent (travel dir), normal (surface "up"),
+  // and the surface point the runner's feet rest on
+  function runnerInfo() {
+    const param = state.runIdx + state.runT;
+    const pos = visualAt(param);                     // follows the curved surface
+    const a = visualAt(param - 0.08), b = visualAt(param + 0.08);
+    let tx = b.x - a.x, ty = b.y - a.y;
+    const m = Math.hypot(tx, ty) || 1; tx /= m; ty /= m;
+    const nx = ty, ny = -tx;                 // left-normal = surface side
+    return { x:pos.x, y:pos.y, tx, ty, nx, ny,
+             sx:pos.x, sy:pos.y,
+             angle:Math.atan2(ty, tx) };
+  }
+
+  // ---- visual path: node-to-node motion with corner tiles rounded ---------
+  const axisDir = (from, to) => ({ x: Math.sign(to.c - from.c), y: Math.sign(to.r - from.r) });
+
+  // the top-surface points of one tile: straight (3 pts) or a quarter-circle arc
+  function tileSurface(n, prev, next) {
+    const C = nodeCenter(n), h = cell/2;
+    let entry = prev ? axisDir(n, prev) : null;   // toward prev
+    let exit  = next ? axisDir(n, next) : null;    // toward next
+    if (!entry && !exit) { entry = { x:-1, y:0 }; exit = { x:1, y:0 }; }
+    else if (!entry)     { entry = { x:-exit.x, y:-exit.y }; }
+    else if (!exit)      { exit  = { x:-entry.x, y:-entry.y }; }
+    const Me = { x:C.x + entry.x*h, y:C.y + entry.y*h };
+    const Mx = { x:C.x + exit.x*h,  y:C.y + exit.y*h };
+    if (entry.x === -exit.x && entry.y === -exit.y) return [Me, { x:C.x, y:C.y }, Mx];  // straight
+    // corner: quarter circle centred on the shared cell corner, radius h
+    const O = { x:C.x + (entry.x+exit.x)*h, y:C.y + (entry.y+exit.y)*h };
+    let a0 = Math.atan2(Me.y-O.y, Me.x-O.x), a1 = Math.atan2(Mx.y-O.y, Mx.x-O.x);
+    let d = a1 - a0; while (d > Math.PI) d -= 2*Math.PI; while (d < -Math.PI) d += 2*Math.PI;
+    const N = 12, pts = [];
+    for (let k = 0; k <= N; k++) { const a = a0 + d*(k/N); pts.push({ x:O.x + h*Math.cos(a), y:O.y + h*Math.sin(a) }); }
+    return pts;
+  }
+  function samplePolyline(pts, u) {
+    if (pts.length === 1) return pts[0];
+    let total = 0; const seg = [];
+    for (let k = 0; k < pts.length-1; k++) { const d = Math.hypot(pts[k+1].x-pts[k].x, pts[k+1].y-pts[k].y); seg.push(d); total += d; }
+    let target = clamp(u,0,1) * total;
+    for (let k = 0; k < seg.length; k++) {
+      if (target <= seg[k] || k === seg.length-1) { const t = seg[k] ? target/seg[k] : 0;
+        return { x:pts[k].x + (pts[k+1].x-pts[k].x)*t, y:pts[k].y + (pts[k+1].y-pts[k].y)*t }; }
+      target -= seg[k];
+    }
+    return pts[pts.length-1];
+  }
+  const surfaceAtTile = (i, u) => samplePolyline(tileSurface(state.path[i], state.path[i-1], state.path[i+1]), u);
+  // position along the whole route at fractional node index `param`
+  function visualAt(param) {
+    const len = state.path.length;
+    const f = clamp(param, 0, len-1);
+    let i = clamp(Math.round(f), 0, len-1);
+    return surfaceAtTile(i, (f - i) + 0.5);          // each tile spans param [i-0.5, i+0.5]
+  }
+
+  function camTarget() {
+    const p = visualAt(state.runIdx + state.runT);
+    const tx = worldW <= viewW ? (worldW - viewW) / 2 : clamp(p.x - viewW/2, 0, worldW - viewW);
+    const ty = worldH <= viewH ? (worldH - viewH) / 2 : clamp(p.y - viewH/2, 0, worldH - viewH);
+    return { tx, ty };
+  }
+  function snapCamera() { const t = camTarget(); camX = t.tx; camY = t.ty; }
+  function updateCamera(dt) {
+    if (state.status !== "play") return;      // freeze during fall / overlays
+    const t = camTarget(), k = Math.min(1, dt * CAM_LERP);
+    camX += (t.tx - camX) * k; camY += (t.ty - camY) * k;
+  }
+
+  const cx = c => c * cell, cy = r => r * cell;
+  const cellAtWorld = (wx, wy) => ({ c: Math.floor(wx / cell), r: Math.floor(wy / cell) });
+
+  // ---------- Occupancy / targets ----------------------------------------
+  function head() { return state.path[state.path.length - 1]; }
+  function occupiedFor(dragTile) {
+    const occ = new Set(state.walls);
+    for (const sk of state.stones) occ.add(sk);               // intact stone blocks placement
+    occ.add(key(state.L.start[0], state.L.start[1]));
+    occ.add(key(state.goal.c, state.goal.r));                 // exit tile is fixed, never a drop cell
+    for (const t of state.tiles) { if (dragTile && t.id === dragTile.id) continue; occ.add(key(t.c, t.r)); }
+    return occ;
+  }
+
+  // tap a stone tile to smash it (opens the cell for a path tile)
+  function breakStone(c, r) {
+    if (!state.stones.delete(key(c, r))) return;
+    Sound.smash();                                  // crunch/impact when the stone breaks
+    const wx = (c + 0.5) * cell, wy = (r + 0.5) * cell;
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + (bgHash(c + i, r) % 100) / 60;
+      const sp = cell * (0.0016 + (bgHash(c, r + i) % 100) / 100000);
+      state.shards.push({ x:wx + (Math.cos(a))*cell*0.15, y:wy + (Math.sin(a))*cell*0.15,
+        vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - cell*0.0008,
+        life:0, max:360 + (i % 6)*40, sz: cell*0.07*(0.6 + (i % 4)*0.2) });
+    }
+  }
+  function updateShards(dt) {
+    if (!state || !state.shards.length) return;
+    for (const p of state.shards) { p.life += dt; p.vy += 0.0018*dt; p.x += p.vx*dt; p.y += p.vy*dt; }
+    state.shards = state.shards.filter(p => p.life < p.max);
+  }
+  function drawShards() {
+    for (const p of state.shards) {
+      ctx.globalAlpha = Math.max(0, 1 - p.life/p.max);
+      ctx.fillStyle = "#8a8478";
+      ctx.fillRect(Math.round(p.x - p.sz/2), Math.round(p.y - p.sz/2), Math.ceil(p.sz), Math.ceil(p.sz));
+    }
+    ctx.globalAlpha = 1;
+  }
+  // Every in-bounds unoccupied cell is a legal drop now (free placement).
+  function validTargets(dragTile) {
+    const occ = occupiedFor(dragTile), out = [];
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++)
+        if (!occ.has(key(c, r))) out.push({ c, r });
+    return out;
+  }
+  // The unoccupied in-bounds cell nearest to (c, r) — where a dropped tile lands.
+  function nearestFreeCell(dragTile, c, r) {
+    const occ = occupiedFor(dragTile);
+    let best = null, bestD = Infinity;
+    for (let rr = 0; rr < ROWS; rr++)
+      for (let cc = 0; cc < COLS; cc++) {
+        if (occ.has(key(cc, rr))) continue;
+        const d = (cc - c) * (cc - c) + (rr - r) * (rr - r);
+        if (d < bestD) { bestD = d; best = { c: cc, r: rr }; }
+      }
+    return best;
+  }
+  // Drop a tile: it snaps to the nearest empty cell and PARKS there (not yet on
+  // the path). If that lands it next to the track's front it links immediately.
+  function dropTileOn(tile, c, r) {
+    if (state.status !== "play" || tile.status === "active") return false;
+    const pos = nearestFreeCell(tile, c, r);
+    if (!pos) return false;                 // grid completely full (shouldn't happen)
+    tile.c = pos.c; tile.r = pos.r; tile.status = "parked";
+    state.stall = 0;
+    linkParkedTiles();                      // connect now if it's beside the front
+    updateReadyHud();
+    return true;
+  }
+
+  // Pull any parked tile that touches the track's front into the path, chaining
+  // along connected parked tiles. Freed (walked-over) tiles are left alone, so
+  // the runner never links backward onto ground it already covered.
+  function linkParkedTiles() {
+    const s = state;
+    let linked = false, guard = 0;
+    while (guard++ < s.tiles.length + 2) {
+      const h = head();
+      if (h.kind === "goal") break;         // path already reaches the exit
+      const t = s.tiles.find(t => t.status === "parked" && adjacent([t.c, t.r], [h.c, h.r]));
+      if (!t) break;
+      t.status = "active";
+      s.path.push({ c: t.c, r: t.r, kind: "tile", tileId: t.id });
+      linked = true;
+      linkExitIfReady();                    // the new front may be beside the exit
+      if (head().kind === "goal") break;
+    }
+    if (linked) updateReadyHud();
+  }
+
+  // link the path onto the (fixed) exit tile — but only once the key is collected
+  function linkExitIfReady() {
+    const s = state;
+    if (!s.keyCollected) return;
+    const h = head();
+    if (h.kind !== "tile") return;
+    if (adjacent([h.c, h.r], [s.goal.c, s.goal.r]))
+      s.path.push({ c: s.goal.c, r: s.goal.r, kind: "goal" });
+  }
+
+  // ---------- Runner logic ------------------------------------------------
+  function update(dt) {
+    if (state.status !== "play") return;
+    const s = state;
+    s.runPhase += dt / 110;                 // legs animate while running
+    s.runT += dt / s.msPerCell;
+    while (s.runT >= 1 && s.runIdx + 1 < s.path.length) {
+      s.runT -= 1;
+      s.runIdx++;
+      const now = s.path[s.runIdx];
+      if (now.kind === "goal") { s.runT = 0; endWin(); return; }
+    }
+    freeClearedTiles();
+    collectKey();
+    linkParkedTiles();      // connect any staged tile that now touches the front
+    // no tile ahead: the runner keeps going to the edge of the last tile, then falls off
+    if (s.runIdx + 1 >= s.path.length && s.runT >= 0.5) { startFall(); return; }
+  }
+
+  // the runner grabs the key by passing over its cell
+  function collectKey() {
+    const s = state;
+    if (s.keyCollected) return;
+    const rp = visualAt(s.runIdx + s.runT);
+    const kx = (s.keyCell.c + 0.5) * cell, ky = (s.keyCell.r + 0.5) * cell;
+    if (Math.hypot(rp.x - kx, rp.y - ky) < cell * 0.7) {
+      s.keyCollected = true;
+      updateKeyHud();
+      linkExitIfReady();      // in case the head is already beside the exit
+    }
+  }
+
+  // A tile becomes draggable the moment the runner crosses out of its cell
+  // (i.e. past its centre-to-next midpoint), not when it reaches the next tile.
+  function freeClearedTiles() {
+    const s = state, param = s.runIdx + s.runT;
+    let changed = false;
+    for (let i = 0; i < s.path.length; i++) {
+      const node = s.path[i];
+      if (node.kind !== "tile" || node.exited) continue;   // per-node, so re-placed tiles are unaffected
+      if (param > i + 0.5) {
+        node.exited = true;                                 // this placement is done
+        Sound.clearTile();                                  // play a tone as the tile clears
+        if (node.tileId != null) {
+          const t = s.tiles[node.tileId];
+          if (t) { t.status = "free"; changed = true; }
+        }
+      }
+    }
+    if (changed) updateReadyHud();
+  }
+
+  function startFall() {
+    const ri = runnerInfo();
+    state.status = "falling";
+    state.drag = null;
+    const spd = cell / state.msPerCell;            // the runner's forward speed (px/ms)
+    state.fall = { x:ri.sx, y:ri.sy, angle:ri.angle,
+                   vx:ri.tx * spd, vy:ri.ty * spd,  // run off the edge, then gravity takes over
+                   va:(ri.tx >= 0 ? 1 : -1) * 0.004, t:0 };
+  }
+  function tickFall(dt) {
+    const f = state.fall;
+    f.t += dt; f.vy += FALL_G * dt;
+    f.x += f.vx * dt; f.y += f.vy * dt; f.angle += f.va * dt;
+    if (f.t >= FALL_MS) showLose();
+  }
+  function endWin() {
+    state.status = "win";
+    const last = levelIdx >= LEVELS.length - 1;
+    overlay.className = "win show";
+    ovTitle.textContent = last ? "You Win!" : "Level Clear";
+    ovMsg.textContent = last ? "You guided the runner across every track."
+                             : "Nice routing. Ready for the next track?";
+    ovBtn.textContent = last ? "Play Again" : "Next Level";
+  }
+  function showLose() {
+    state.status = "lose";
+    overlay.className = "lose show";
+    ovTitle.textContent = "Runner Fell";
+    ovMsg.textContent = "The track ran out. Drag your freed tiles to the front to keep laying track ahead of the runner.";
+    ovBtn.textContent = "Retry";
+  }
+
+  // ---------- Rendering ---------------------------------------------------
+  function draw(ts) {
+    drawBackground(ts);                       // parallax procedural backdrop (screen space)
+    ctx.save();
+    ctx.translate(-Math.round(camX), -Math.round(camY));
+
+    for (const wk of state.walls) {
+      const [c, r] = wk.split(",").map(Number);
+      drawWall(c, r);
+    }
+    for (const sk of state.stones) {
+      const [c, r] = sk.split(",").map(Number);
+      drawStone(c, r, ts);
+    }
+
+    drawTrack(ts);
+    if (state.drag) drawTargets(ts);
+    for (const t of state.tiles)
+      if (t.status !== "active" && (!state.drag || state.drag.tile.id !== t.id))
+        drawFreeTile(cx(t.c), cy(t.r), ts, false);
+
+    drawShards();
+    drawRunner(ts);
+
+    if (state.drag) {
+      const d = state.drag;
+      drawFreeTile(d.sx + camX - d.grabDX, d.sy + camY - d.grabDY, ts, true);
+    }
+    ctx.restore();
+
+    // off-screen indicators (screen space): key (until collected) + exit
+    if (state.status === "play" || state.status === "falling") {
+      if (!state.keyCollected)
+        drawOffscreenArrow((state.keyCell.c+0.5)*cell, (state.keyCell.r+0.5)*cell, "#ffd24a");
+      drawOffscreenArrow((state.goal.c+0.5)*cell, (state.goal.r+0.5)*cell,
+                         state.keyCollected ? getVar("--goal") : getVar("--accent"));
+    }
+  }
+
+  // The laid path is drawn as a set of per-tile platform segments. Each tile
+  // renders its OWN piece (a straight or corner beam) contained within its
+  // cell: a glass background, then the platform whose running surface passes
+  // through the tile centre and whose body hangs into the lower half.
+  function drawTrack(ts) {
+    const p = state.path, idx = state.runIdx;
+    if (idx >= p.length) return;
+
+    // permanent start & goal gates (glass + platform + door) — never cleared
+    const startNode = { c:state.L.start[0], r:state.L.start[1] };
+    const exitDir = axisDir(startNode, { c:state.path[1].c, r:state.path[1].r });
+    drawGate(startNode, exitDir, false, ts);
+    // exit gate: once a tile links to it, orient along the actual approach so
+    // its platform connects; otherwise show the level's default facing.
+    const goalNode = { c:state.goal.c, r:state.goal.r };
+    const linked = p[p.length - 1].kind === "goal";
+    const goalDir = linked
+      ? axisDir({ c:p[p.length-2].c, r:p[p.length-2].r }, goalNode)
+      : { x:state.L.goalDir[0], y:state.L.goalDir[1] };
+    drawGate(goalNode, goalDir, true, ts);
+
+    // a node carries a platform until the runner exits it (per-node flag, so a
+    // re-placed tile's stale old node never affects its fresh placement).
+    const live = (n) => n.kind === "tile" && !n.exited;
+
+    for (let i = idx; i < p.length; i++)
+      if (live(p[i])) drawGlass(cx(p[i].c), cy(p[i].r), cell);
+
+    for (let i = idx; i < p.length; i++)
+      if (live(p[i])) drawPlatformTile(p[i], p[i-1], p[i+1]);
+
+    // head marker: pulsing chevron at the front tile, pointing along travel
+    const hn = p[p.length - 1];
+    if (hn.kind === "tile") {
+      const prev = p[p.length - 2];
+      const dir = prev ? axisDir(prev, hn) : { x:1, y:0 };
+      const C = nodeCenter(hn);
+      const pulse = 0.5 + 0.5*Math.sin(ts/160);
+      ctx.save(); ctx.translate(C.x, C.y); ctx.rotate(Math.atan2(dir.y, dir.x));
+      ctx.fillStyle = getVar("--accent"); ctx.globalAlpha = 0.55 + 0.45*pulse;
+      const cs = cell*0.13;
+      ctx.beginPath(); ctx.moveTo(cs*0.7, -cs); ctx.lineTo(cs*0.7+cs, 0); ctx.lineTo(cs*0.7, cs); ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 1; ctx.restore();
+    }
+
+    // padlock on the exit until the key is collected
+    if (!state.keyCollected) drawLock((state.goal.c+0.5)*cell, (state.goal.r+0.5)*cell, ts);
+    // the key, hovering on its cell until collected
+    if (!state.keyCollected) drawKey((state.keyCell.c+0.5)*cell, (state.keyCell.r+0.5)*cell, ts);
+  }
+
+  function drawKey(x, y, ts) {
+    const s = cell, bob = Math.sin(ts/300)*s*0.05;
+    y += bob;
+    ctx.save();
+    const g = ctx.createRadialGradient(x, y, 0, x, y, s*0.55);
+    g.addColorStop(0, "rgba(255,210,74,0.40)"); g.addColorStop(1, "rgba(255,210,74,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, s*0.55, 0, Math.PI*2); ctx.fill();
+    const gold = "#ffd24a", R = s*0.12, bx = x - s*0.10;
+    ctx.fillStyle = gold;
+    ctx.beginPath(); ctx.arc(bx, y, R, 0, Math.PI*2); ctx.fill();                    // bow ring
+    ctx.fillStyle = getVar("--shadow"); ctx.beginPath(); ctx.arc(bx, y, R*0.42, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = gold;
+    ctx.fillRect(bx + R*0.6, y - s*0.028, s*0.30, s*0.056);                          // shaft
+    ctx.fillRect(x + s*0.12, y + s*0.012, s*0.035, s*0.07);                          // teeth
+    ctx.fillRect(x + s*0.05, y + s*0.012, s*0.035, s*0.07);
+    ctx.restore();
+  }
+
+  function drawLock(x, y, ts) {
+    const s = cell*0.46, pulse = 0.6 + 0.4*Math.sin(ts/260);
+    ctx.save();
+    ctx.globalAlpha = 0.4 + 0.35*pulse;
+    ctx.strokeStyle = getVar("--accent"); ctx.lineWidth = Math.max(3, cell*0.05);
+    ctx.beginPath(); ctx.arc(x, y - s*0.12, s*0.26, Math.PI, 0); ctx.stroke();       // shackle
+    ctx.globalAlpha = 1;
+    rrect(x - s*0.3, y - s*0.02, s*0.6, s*0.42, s*0.08);
+    ctx.fillStyle = getVar("--shadow"); ctx.fill();
+    rrect(x - s*0.26, y + s*0.01, s*0.52, s*0.36, s*0.06);
+    ctx.fillStyle = "#d9d3ff"; ctx.fill();
+    ctx.fillStyle = getVar("--shadow");
+    ctx.beginPath(); ctx.arc(x, y + s*0.16, s*0.075, 0, Math.PI*2); ctx.fill();      // keyhole
+    ctx.fillRect(x - s*0.03, y + s*0.16, s*0.06, s*0.13);
+    ctx.restore();
+  }
+
+  // edge arrow pointing to an off-screen target (drawn in screen space)
+  function drawOffscreenArrow(wx, wy, color) {
+    const sx = wx - camX, sy = wy - camY;
+    if (sx >= 0 && sx <= viewW && sy >= 0 && sy <= viewH) return;   // on-screen
+    const cxs = viewW/2, cys = viewH/2, pad = 30;
+    let dx = sx - cxs, dy = sy - cys; const m = Math.hypot(dx, dy) || 1; dx /= m; dy /= m;
+    const hw = viewW/2 - pad, hh = viewH/2 - pad;
+    const scale = Math.min(hw/Math.max(Math.abs(dx),1e-6), hh/Math.max(Math.abs(dy),1e-6));
+    const ax = cxs + dx*scale, ay = cys + dy*scale;
+    const sz = (cell || 90) * 0.17;
+    ctx.save();
+    ctx.translate(ax, ay); ctx.rotate(Math.atan2(dy, dx));
+    ctx.fillStyle = color; ctx.strokeStyle = getVar("--shadow"); ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(sz, 0); ctx.lineTo(-sz*0.7, -sz*0.8); ctx.lineTo(-sz*0.35, 0); ctx.lineTo(-sz*0.7, sz*0.8); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
+  // one tile's platform piece, clipped to its own cell. The top surface is the
+  // tile's surface polyline (a straight line, or a quarter-circle arc for
+  // corners); the body hangs off the down-normal side.
+  function drawPlatformTile(n, prev, next) {
+    drawPlatformSurface(n, tileSurface(n, prev, next), getVar("--track"));
+  }
+
+  // draw a platform body + rail from a surface polyline S, clipped to the cell
+  function drawPlatformSurface(n, S, fill) {
+    const T = cell * TRACK_T, nlast = S.length - 1;
+    const nrm = S.map((pt, k) => {
+      const a = S[Math.max(0, k-1)], b = S[Math.min(nlast, k+1)];
+      let tx = b.x-a.x, ty = b.y-a.y; const m = Math.hypot(tx,ty) || 1;
+      return { x: ty/m, y: -tx/m };
+    });
+    const O = S.map((pt, k) => ({ x:pt.x - nrm[k].x*T, y:pt.y - nrm[k].y*T }));
+
+    ctx.save();
+    rrect(cx(n.c), cy(n.r), cell, cell, cell*0.16); ctx.clip();
+
+    ctx.beginPath();
+    ctx.moveTo(S[0].x, S[0].y);
+    for (let k = 1; k <= nlast; k++) ctx.lineTo(S[k].x, S[k].y);
+    for (let k = nlast; k >= 0; k--) ctx.lineTo(O[k].x, O[k].y);
+    ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+
+    // underside shade (soft depth, no hard outline)
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.strokeStyle = getVar("--track-lo"); ctx.lineWidth = Math.max(2, cell*0.05);
+    ctx.beginPath(); ctx.moveTo(O[0].x, O[0].y);
+    for (let k = 1; k <= nlast; k++) ctx.lineTo(O[k].x, O[k].y); ctx.stroke();
+
+    ctx.strokeStyle = getVar("--rail"); ctx.lineWidth = Math.max(3, cell*0.06);
+    railPath(S); ctx.stroke();
+    ctx.restore();
+  }
+  function railPath(S) {
+    ctx.beginPath(); ctx.moveTo(S[0].x, S[0].y);
+    for (let k = 1; k < S.length; k++) ctx.lineTo(S[k].x, S[k].y);
+  }
+
+  // permanent start/goal gate: glass cell, a straight platform along `dir`,
+  // and a little door at the closed end. `dir` is the travel direction the
+  // tile operates in (start: toward the first tile; goal: into the goal).
+  function drawGate(node, dir, isGoal, ts) {
+    const C = nodeCenter(node), h = cell/2;
+    drawGlass(cx(node.c), cy(node.r), cell);
+    // straight surface spanning the cell along dir
+    const Me = { x:C.x - dir.x*h, y:C.y - dir.y*h };   // open end (track connects here)
+    const Mx = { x:C.x + dir.x*h, y:C.y + dir.y*h };   // closed end (door)
+    drawPlatformSurface(node, [Me, { x:C.x, y:C.y }, Mx], getVar(isGoal ? "--goal" : "--track"));
+    // door: goal -> at the far end it runs into; start -> at the back it emerges from
+    const end = isGoal ? Mx : Me, sgn = isGoal ? -1 : 1;
+    const doorPos = { x:end.x + dir.x*(cell*0.2)*sgn, y:end.y + dir.y*(cell*0.2)*sgn };
+    drawDoor(node, doorPos, dir, isGoal, ts);
+  }
+
+  function drawDoor(node, pos, dir, isGoal, ts) {
+    const s = cell, up = { x:dir.y, y:-dir.x };          // surface normal
+    const w = s*0.34, hgt = s*0.46;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(cx(node.c), cy(node.r), cell, cell); ctx.clip();
+    ctx.translate(pos.x, pos.y); ctx.rotate(Math.atan2(dir.y, dir.x));
+    // local frame: +x = travel (out of door), local up (0,-1) = surface normal
+    const frame = isGoal ? getVar("--goal") : getVar("--runner");
+    // frame — no outline
+    ctx.fillStyle = frame; ctx.fillRect(-w/2, -hgt, w, hgt);
+    // dark opening
+    ctx.fillStyle = getVar("--shadow"); ctx.fillRect(-w/2+4, -hgt+4, w-8, hgt-4);
+    // opening inner glow / depth
+    ctx.fillStyle = "rgba(255,255,255,0.10)"; ctx.fillRect(-w/2+4, -hgt+4, w-8, 4);
+    // knob
+    ctx.fillStyle = frame; ctx.beginPath(); ctx.arc(w*0.22, -hgt*0.5, s*0.03, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  function strokePoly(pts, w, color) {
+    ctx.strokeStyle = color; ctx.lineWidth = w;
+    strokePathOnly(pts); ctx.stroke();
+  }
+  function strokePathOnly(pts) {
+    ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  }
+
+  function drawRunner(ts) {
+    let sx, sy, angle, moving;
+    if (state.status === "falling") {
+      sx = state.fall.x; sy = state.fall.y; angle = state.fall.angle; moving = false;
+    } else {
+      const ri = runnerInfo(); sx = ri.sx; sy = ri.sy; angle = ri.angle;
+      moving = state.status === "play";      // the runner is always moving now
+    }
+    const s = cell;
+    const phase = state.runPhase;
+    const swing = moving ? Math.sin(phase) * s*0.09 : 0;
+    const bob   = moving ? Math.abs(Math.sin(phase)) * s*0.02 : 0;
+
+    ctx.save();
+    ctx.translate(sx, sy); ctx.rotate(angle);
+    // local frame: +x = travel, feet at y=0, body toward -y (surface "up")
+    const pale = "#bfe6ff";
+    const legL = s*0.12, bodyH = s*0.26, bodyW = s*0.26;
+    // soft ground shadow (not an outline)
+    ctx.fillStyle = "rgba(5,4,13,0.26)";
+    ctx.beginPath(); ctx.ellipse(0, -1, bodyW*0.55, s*0.04, 0, 0, Math.PI*2); ctx.fill();
+    // legs — same colour as body, no outline
+    ctx.strokeStyle = pale; ctx.lineWidth = Math.max(3, s*0.06); ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-bodyW*0.22, -legL - bob); ctx.lineTo( swing, 0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo( bodyW*0.22, -legL - bob); ctx.lineTo(-swing, 0); ctx.stroke();
+    // body — pale blue, rounded, no outline
+    const byTop = -(legL + bodyH) - bob;
+    ctx.fillStyle = pale;
+    rrect(-bodyW/2, byTop, bodyW, bodyH, s*0.07); ctx.fill();
+    // little round eyes (facing +x = travel direction)
+    ctx.fillStyle = "#17263f";
+    const eyeR = s*0.037, eyeY = byTop + bodyH*0.38;
+    ctx.beginPath(); ctx.arc(-bodyW*0.02, eyeY, eyeR, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc( bodyW*0.28, eyeY, eyeR, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  // rounded-rectangle path (arcTo works on iOS 15+, unlike ctx.roundRect)
+  function rrect(x, y, w, h, r) {
+    r = Math.max(0, Math.min(r, w/2, h/2));
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.arcTo(x+w, y,   x+w, y+h, r);
+    ctx.arcTo(x+w, y+h, x,   y+h, r);
+    ctx.arcTo(x,   y+h, x,   y,   r);
+    ctx.arcTo(x,   y,   x+w, y,   r);
+    ctx.closePath();
+  }
+
+  // rounded, full-cell obstacle
+  // metal barrier tile: brushed steel plate with a bevel, sheen and corner bolts
+  function drawWall(c, r) {
+    const x = cx(c), y = cy(r), s = cell, rad = s*0.16;
+    const g = ctx.createLinearGradient(x, y, x, y + s);
+    g.addColorStop(0, "#868ea0"); g.addColorStop(0.45, "#5c6474");
+    g.addColorStop(0.55, "#515867"); g.addColorStop(1, "#363b48");
+    rrect(x, y, s, s, rad); ctx.fillStyle = g; ctx.fill();            // full-cell plate, no outline
+    // brushed sheen streak
+    ctx.save(); rrect(x, y, s, s, rad); ctx.clip();
+    ctx.fillStyle = "rgba(255,255,255,0.10)";
+    ctx.beginPath(); ctx.moveTo(x, y+s*0.16); ctx.lineTo(x+s*0.5, y);
+    ctx.lineTo(x+s*0.8, y); ctx.lineTo(x, y+s*0.55); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    // corner bolts
+    const off = s*0.17, br = s*0.05;
+    for (const [bx, by] of [[off,off],[s-off,off],[off,s-off],[s-off,s-off]]) {
+      ctx.fillStyle = "rgba(15,17,24,0.9)"; ctx.beginPath(); ctx.arc(x+bx, y+by, br, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.20)"; ctx.beginPath(); ctx.arc(x+bx - br*0.3, y+by - br*0.3, br*0.4, 0, Math.PI*2); ctx.fill();
+    }
+  }
+
+  // breakable stone tile: cracked rock, tap to smash
+  function drawStone(c, r, ts) {
+    const x = cx(c), y = cy(r), s = cell, rad = s*0.16;
+    const g = ctx.createLinearGradient(x, y, x, y + s);
+    g.addColorStop(0, "#9c9284"); g.addColorStop(1, "#655c4f");
+    rrect(x, y, s, s, rad); ctx.fillStyle = g; ctx.fill();            // full-cell, no outline
+    ctx.save(); rrect(x, y, s, s, rad); ctx.clip();
+    // top sheen
+    ctx.fillStyle = "rgba(255,255,255,0.10)"; ctx.fillRect(x, y, s, s*0.3);
+    // deterministic speckles
+    ctx.fillStyle = "rgba(40,36,30,0.5)";
+    for (let i = 0; i < 6; i++) {
+      const h = bgHash(c*7+i, r*13+i);
+      const px = x + s*0.15 + (h % 70)/100*s, py = y + s*0.15 + ((h>>7) % 70)/100*s;
+      ctx.fillRect(px, py, Math.max(2, s*0.03), Math.max(2, s*0.03));
+    }
+    // cracks
+    ctx.strokeStyle = "rgba(30,26,20,0.6)"; ctx.lineWidth = Math.max(2, s*0.022); ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(x + s*0.5, y + s*0.06); ctx.lineTo(x + s*0.42, y + s*0.42);
+    ctx.lineTo(x + s*0.6, y + s*0.6); ctx.lineTo(x + s*0.5, y + s*0.95);
+    ctx.moveTo(x + s*0.42, y + s*0.42); ctx.lineTo(x + s*0.12, y + s*0.5);
+    ctx.moveTo(x + s*0.6, y + s*0.6); ctx.lineTo(x + s*0.9, y + s*0.68);
+    ctx.stroke();
+    // subtle "tappable" shimmer (brightness pulse, not an outline)
+    const pulse = 0.5 + 0.5*Math.sin(ts/380 + (c+r));
+    ctx.globalAlpha = 0.06 + 0.10*pulse; ctx.fillStyle = "#fff0c4"; ctx.fillRect(x, y, s, s);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // ---- parallax procedural backdrop (drawn in screen space) --------------
+  function drawBackground(ts) {
+    const g = ctx.createLinearGradient(0, 0, 0, viewH);
+    g.addColorStop(0, "#141026"); g.addColorStop(1, "#0a0917");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, viewW, viewH);
+    const u = cell || 90;
+    bgLayer(ts, 0.12, u*0.95, u*0.030, "rgba(125,115,205,0.10)", 0);
+    bgLayer(ts, 0.26, u*1.45, u*0.055, "rgba(130,120,215,0.13)", 1);
+    bgLayer(ts, 0.46, u*2.20, u*0.085, "rgba(160,150,235,0.10)", 2);
+  }
+  function bgHash(i, j) {
+    let n = (Math.imul(i, 73856093) ^ Math.imul(j, 19349663)) >>> 0;
+    n = Math.imul(n ^ (n >>> 13), 1274126177) >>> 0;
+    return n;
+  }
+  function bgLayer(ts, f, S, size, color, shape) {
+    const ox = camX*f + ts*0.004*(1 - f);          // parallax offset + gentle drift
+    const oy = camY*f - ts*0.006*f;
+    const i0 = Math.floor(ox/S)-1, i1 = Math.floor((ox+viewW)/S)+1;
+    const j0 = Math.floor(oy/S)-1, j1 = Math.floor((oy+viewH)/S)+1;
+    ctx.fillStyle = color; ctx.strokeStyle = color;
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
+      const h = bgHash(i, j);
+      if ((h & 3) === 0) continue;                 // skip ~1/4 for irregularity
+      const jx = ((h>>>3)&15)/15, jy = ((h>>>7)&15)/15;
+      const px = i*S + jx*S - ox, py = j*S + jy*S - oy;
+      const sz = size * (0.55 + ((h>>>11)&7)/7 * 0.7);
+      bgShape(shape, px, py, sz, h);
+    }
+  }
+  function bgShape(shape, x, y, s, h) {
+    if (shape === 0) { ctx.beginPath(); ctx.arc(x, y, s*0.6, 0, Math.PI*2); ctx.fill(); }
+    else if (shape === 1) {
+      ctx.beginPath(); ctx.moveTo(x, y-s); ctx.lineTo(x+s, y); ctx.lineTo(x, y+s); ctx.lineTo(x-s, y); ctx.closePath(); ctx.fill();
+    } else if (h & 0x400000) {
+      ctx.lineWidth = Math.max(1.5, s*0.28); ctx.beginPath(); ctx.arc(x, y, s, 0, Math.PI*2); ctx.stroke();
+    } else {
+      const t = s*0.34; ctx.fillRect(x-t, y-s, t*2, s*2); ctx.fillRect(x-s, y-t, s*2, t*2);
+    }
+  }
+
+  // frosted-glass tile: full cell, rounded corners, no margin
+  function drawGlass(x, y, s) {
+    const r = s*0.16;
+    ctx.save();
+    rrect(x, y, s, s, r); ctx.clip();
+    const g = ctx.createLinearGradient(x, y, x, y + s);
+    g.addColorStop(0, "rgba(201,196,255,0.42)");
+    g.addColorStop(1, "rgba(150,143,220,0.22)");
+    ctx.fillStyle = g; ctx.fillRect(x, y, s, s);
+    ctx.fillStyle = "rgba(255,255,255,0.16)";       // diagonal sheen streaks
+    ctx.beginPath();
+    ctx.moveTo(x, y+s*0.18); ctx.lineTo(x+s*0.55, y);
+    ctx.lineTo(x+s*0.85, y); ctx.lineTo(x, y+s*0.6); ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x+s*0.78, y+s); ctx.lineTo(x+s, y+s*0.62);
+    ctx.lineTo(x+s, y+s*0.82); ctx.lineTo(x+s*0.9, y+s); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawFreeTile(x, y, ts, lifted) {
+    const s = cell, r = s*0.16;
+    if (lifted) { ctx.fillStyle = "rgba(5,4,13,0.4)"; rrect(x+6, y+9, s, s, r); ctx.fill(); }
+    drawGlass(x, y, s);
+    // fingerprint, etched into the glass (the drag affordance — no border/outline)
+    const pulse = 0.5 + 0.5*Math.sin(ts/180);
+    ctx.globalAlpha = 0.7 + 0.3*pulse;
+    drawFingerprint(x + s/2, y + s/2, s*0.27);
+    ctx.globalAlpha = 1;
+  }
+
+  // stylised fingerprint: nested ridges open at the bottom + a central whorl
+  // pixelated fingerprint: concentric ridge bands on a pixel grid, open at bottom
+  function drawFingerprint(fx, fy, R) {
+    const px = Math.max(2, R*0.16);          // pixel size
+    const band = R*0.34;                      // ridge spacing
+    const reach = R*1.02;
+    const cx0 = fx, cy0 = fy - R*0.05;
+    const n = Math.ceil(reach/px);
+    ctx.fillStyle = getVar("--shadow");
+    for (let gy = -n; gy <= n; gy++) {
+      for (let gx = -n; gx <= n; gx++) {
+        const x = gx*px, y = gy*px;
+        const rr = Math.hypot(x, y);
+        if (rr > reach) continue;
+        if ((rr/band) % 1 >= 0.5) continue;                       // gap between ridges
+        if (y > band*0.2 && Math.abs(x) < band*0.55) continue;    // opening at the bottom
+        ctx.fillRect(Math.round(cx0 + x - px/2), Math.round(cy0 + y - px/2),
+                     Math.ceil(px), Math.ceil(px));
+      }
+    }
+  }
+
+  // Ghost of the single cell the dragged tile will snap to (nearest empty cell).
+  function drawTargets(ts) {
+    const d = state.drag; if (!d) return;
+    const wx = d.sx + camX - d.grabDX + cell/2, wy = d.sy + camY - d.grabDY + cell/2;
+    let { c, r } = cellAtWorld(wx, wy);
+    c = clamp(c, 0, COLS-1); r = clamp(r, 0, ROWS-1);
+    const pos = nearestFreeCell(d.tile, c, r); if (!pos) return;
+    const pulse = 0.35 + 0.25*Math.sin(ts/220);
+    const rad = cell*0.16, x = cx(pos.c), y = cy(pos.r), s = cell;
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = getVar("--free");
+    rrect(x+6, y+6, s-12, s-12, rad-2); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = getVar("--free");
+    ctx.lineWidth = 3; rrect(x+5, y+5, s-10, s-10, rad-1); ctx.stroke();
+  }
+
+  function drawStart(c, r) {
+    const x = cx(c), y = cy(r), s = cell;
+    ctx.fillStyle = getVar("--dim");
+    ctx.fillRect(x + s*0.3, y + s*0.3, s*0.4, s*0.4);
+  }
+  function drawGoal(c, r, ts) {
+    const x = cx(c), y = cy(r), s = cell;
+    const pulse = 0.6 + 0.4*Math.sin(ts/300);
+    pixelRect(x+4, y+4, s-8, s-8, getVar("--goal"), getVar("--shadow"));
+    ctx.globalAlpha = pulse; ctx.fillStyle = getVar("--shadow");
+    ctx.fillRect(x + s*0.35, y + s*0.25, s*0.1, s*0.5);
+    ctx.fillRect(x + s*0.45, y + s*0.25, s*0.28, s*0.2);
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- helpers -----------------------------------------------------
+  function line(x1,y1,x2,y2){ ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); }
+  function pixelRect(x,y,w,h,fill,edge){
+    ctx.fillStyle = edge; ctx.fillRect(x,y,w,h);
+    ctx.fillStyle = fill; ctx.fillRect(x+2,y+2,w-4,h-4);
+    ctx.fillStyle = "rgba(255,255,255,0.22)"; ctx.fillRect(x+2,y+2,w-4,3);
+  }
+  const _varCache = {};
+  function getVar(name){
+    if (!_varCache[name]) _varCache[name] = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return _varCache[name];
+  }
+
+  // ---------- Input: drag freed tiles ------------------------------------
+  function screenXY(e){ const rect = canvas.getBoundingClientRect(); return { x:e.clientX-rect.left, y:e.clientY-rect.top }; }
+  const freeTileAt = (c,r) => state.tiles.find(t => (t.status==="free" || t.status==="parked") && t.c===c && t.r===r) || null;
+
+  canvas.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    Sound.unlock();                     // first touch unlocks audio (iOS autoplay policy)
+    if (state.status !== "play") return;
+    const { x, y } = screenXY(e);
+    const wx = x + camX, wy = y + camY;
+    const { c, r } = cellAtWorld(wx, wy);
+    if (!inBounds(c, r)) return;
+    const tile = freeTileAt(c, r);
+    if (!tile) {
+      if (state.stones.has(key(c, r))) breakStone(c, r);   // tap a stone to smash it
+      return;
+    }
+    state.drag = { tile, grabDX: wx - cx(tile.c), grabDY: wy - cy(tile.r), sx: x, sy: y };
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!state.drag) return; e.preventDefault();
+    const { x, y } = screenXY(e); state.drag.sx = x; state.drag.sy = y;
+  });
+  function endDrag(e){
+    if (!state.drag) return; e.preventDefault();
+    const d = state.drag;
+    const wx = d.sx + camX - d.grabDX + cell/2, wy = d.sy + camY - d.grabDY + cell/2;
+    let { c, r } = cellAtWorld(wx, wy);
+    c = clamp(c, 0, COLS-1); r = clamp(r, 0, ROWS-1);   // snap even if released off-grid
+    dropTileOn(d.tile, c, r);
+    state.drag = null;
+    try { canvas.releasePointerCapture(e.pointerId); } catch(_) {}
+  }
+  canvas.addEventListener("pointerup", endDrag);
+  canvas.addEventListener("pointercancel", endDrag);
+
+  // ---------- Loop --------------------------------------------------------
+  function frame(ts){
+    if (!lastTs) lastTs = ts;
+    let dt = ts - lastTs; lastTs = ts;
+    if (dt > 100) dt = 100;
+    update(dt);
+    if (state.status === "falling") tickFall(dt);
+    updateShards(dt);
+    updateCamera(dt);
+    draw(ts);
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- Buttons -----------------------------------------------------
+  ovBtn.addEventListener("click", () => {
+    if (state.status === "win") levelIdx = (levelIdx + 1) % LEVELS.length;
+    loadLevel(levelIdx);
+  });
+  restartBtn.addEventListener("click", () => loadLevel(levelIdx));
+  const muteBtn = document.getElementById("mute");
+  muteBtn.addEventListener("click", () => {
+    Sound.unlock();                          // this tap also serves as the audio unlock
+    const m = !Sound.isMuted();
+    Sound.setMuted(m);
+    muteBtn.textContent = m ? "Sound: Off" : "Sound: On";
+  });
+  window.addEventListener("resize", () => { computeLayout(); snapCamera(); });
+  window.addEventListener("orientationchange", () => setTimeout(() => { computeLayout(); snapCamera(); }, 150));
+  document.addEventListener("gesturestart", e => e.preventDefault());
+  document.addEventListener("dblclick", e => e.preventDefault());
+
+  // ---------- Debug hook --------------------------------------------------
+  window.__TR = {
+    state: () => state, head,
+    targets: () => validTargets(state.drag ? state.drag.tile : null),
+    freeTiles: () => state.tiles.filter(t => t.status === "free"),
+    drop: (id, c, r) => dropTileOn(state.tiles[id], c, r),
+    cam: () => ({ camX, camY, cell, viewW, viewH, worldW, worldH }),
+    runner: () => runnerInfo(),
+    stones: () => [...state.stones],
+    smash: (c, r) => breakStone(c, r),
+    sound: Sound,
+  };
+
+  loadLevel(0);
+  requestAnimationFrame(frame);
+})();
+</script>
+<script>
+  // Offline support when served over https (or localhost). Harmless elsewhere.
+  if ("serviceWorker" in navigator &&
+      (location.protocol === "https:" || location.hostname === "localhost")) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  }
+</script>
+</body>
+</html>
