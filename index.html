@@ -47,10 +47,33 @@
     text-shadow: 2px 0 var(--shadow), -2px 0 var(--shadow), 0 2px var(--shadow), 0 -2px var(--shadow), 2px 2px var(--accent);
   }
   #hud {
-    display:flex; gap:16px; align-items:center; justify-content:center;
+    display:flex; gap:12px; align-items:center; justify-content:center;
     margin-top:8px; font-size:12px; letter-spacing:2px; text-transform:uppercase; color:var(--dim);
   }
   #hud b { color:var(--ink); }
+  #ov-stars { font-size:30px; letter-spacing:8px; margin-bottom:10px; color:var(--track); min-height:34px; }
+  #pauseFloat {
+    position:fixed; z-index:15; padding:0; cursor:pointer;
+    top:calc(env(safe-area-inset-top) + 12px); right:calc(env(safe-area-inset-right) + 12px);
+    width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; gap:5px;
+    background:rgba(23,20,43,0.72); border:2px solid var(--grid-line); box-shadow:2px 2px 0 var(--shadow);
+  }
+  #pauseFloat span { width:4px; height:16px; background:var(--ink); border-radius:1px; }
+  #pauseFloat:active { transform:translate(2px,2px); box-shadow:none; }
+  #mechpop {
+    position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+    background:rgba(5,4,13,0.86); z-index:35; padding:24px;
+  }
+  #mechpop.show { display:flex; }
+  .mech-card {
+    max-width:300px; text-align:center; background:var(--panel);
+    border:3px solid var(--grid-line); box-shadow:5px 5px 0 var(--shadow); padding:20px 22px 18px;
+  }
+  .mech-tag { font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--accent); font-weight:900; }
+  #mech-icon { width:112px; height:112px; margin:8px auto 4px; display:block; }
+  .mech-card h3 { font-size:18px; letter-spacing:2px; text-transform:uppercase; color:var(--track); margin:2px 0 8px; }
+  .mech-card p { font-size:13px; line-height:1.6; color:var(--ink); margin-bottom:16px; }
+  .mech-card button { width:100%; }
   #ready { color:var(--free); }
   #board-wrap { flex:1; width:100%; display:flex; align-items:stretch; justify-content:center; min-height:0; overflow:hidden; }
   canvas { image-rendering:pixelated; touch-action:none; display:block; }
@@ -71,28 +94,77 @@
   #overlay p { font-size:13px; line-height:1.7; color:var(--dim); margin-bottom:20px; letter-spacing:1px; }
   #overlay.win h2 { color:var(--goal); }
   #overlay.lose h2 { color:var(--accent); }
+
+  /* colorblind-friendly palette (Okabe–Ito) */
+  .cb { --accent:#d55e00; --goal:#009e73; --runner:#56b4e9; }
+
+  #menu {
+    position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+    background:rgba(5,4,13,0.92); z-index:30; padding:22px; overflow:auto;
+  }
+  #menu.show { display:flex; }
+  .menu-card { width:100%; max-width:330px; text-align:center; }
+  .menu-card h2 { font-size:24px; letter-spacing:3px; text-transform:uppercase; color:var(--track);
+    text-shadow:2px 2px var(--shadow); margin-bottom:16px; }
+  #menu-body { display:flex; flex-direction:column; gap:9px; }
+  #menu-body button { width:100%; }
+  .menu-sub { font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--dim);
+    margin:10px 0 2px; }
+  .toggle { display:flex; justify-content:space-between; align-items:center;
+    border:3px solid var(--grid-line); background:var(--panel); box-shadow:3px 3px 0 var(--shadow);
+    padding:10px 14px; font-family:inherit; font-weight:900; text-transform:uppercase;
+    letter-spacing:2px; font-size:12px; color:var(--ink); cursor:pointer; }
+  .toggle .val { color:var(--track); }
+  .toggle.off .val { color:var(--dim); }
+  .lvl-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
+  .lvl-grid button { display:flex; flex-direction:column; gap:3px; padding:12px 0; line-height:1.1; }
+  .lvl-grid .st { font-size:11px; color:var(--track); letter-spacing:1px; }
+  .lvl-grid .st.none { color:var(--dim); }
+
+  #editbar { position:fixed; left:0; right:0; bottom:0; z-index:25; display:none;
+    flex-direction:column; gap:6px; padding:8px; background:rgba(13,11,26,0.94);
+    border-top:3px solid var(--grid-line); }
+  #editbar.show { display:flex; }
+  #edtools, #edactions { display:flex; flex-wrap:wrap; gap:5px; justify-content:center; }
+  #editbar button { padding:8px 9px; font-size:10px; letter-spacing:1px; box-shadow:2px 2px 0 var(--shadow); }
+  #editbar button.sel { background:var(--track); color:var(--shadow); border-color:var(--track); }
+  #edcode { width:100%; height:44px; resize:none; font-family:inherit; font-size:10px;
+    background:var(--panel); color:var(--ink); border:2px solid var(--grid-line); padding:6px; }
 </style>
 </head>
 <body>
 <div id="app">
-  <header>
-    <h1>Tile&nbsp;Runner</h1>
-    <div id="hud">
-      <span>Level <b id="level">1</b></span>
-      <span>Drag <b id="ready">0</b></span>
-      <span>Key <b id="keystate">✗</b></span>
-    </div>
-  </header>
   <div id="board-wrap"><canvas id="game"></canvas></div>
-  <footer>
-    <button id="restart">Restart</button>
-    <button id="mute">Sound: On</button>
-  </footer>
+  <button id="pauseFloat" aria-label="Menu"><span></span><span></span></button>
+</div>
+
+<div id="menu">
+  <div class="menu-card">
+    <h2 id="menu-title">Tile&nbsp;Runner</h2>
+    <div id="menu-body"></div>
+  </div>
+</div>
+
+<div id="editbar">
+  <div id="edtools"></div>
+  <div id="edactions"></div>
+  <textarea id="edcode" placeholder="Share code — Export writes it here; paste one and Import to load."></textarea>
+</div>
+
+<div id="mechpop">
+  <div class="mech-card">
+    <div class="mech-tag">New!</div>
+    <canvas id="mech-icon" width="112" height="112"></canvas>
+    <h3 id="mech-name"></h3>
+    <p id="mech-desc"></p>
+    <button id="mech-ok">Got it</button>
+  </div>
 </div>
 
 <div id="overlay">
   <div class="card">
     <h2 id="ov-title">Level Clear</h2>
+    <div id="ov-stars"></div>
     <p id="ov-msg"></p>
     <button id="ov-btn">Continue</button>
   </div>
@@ -111,31 +183,59 @@
   // if they were treated as unbreakable walls. The forced route passes over
   // all three stones ([3,8] and [1,5] before the key, [4,2] after) on the
   // way to the key and the exit.
+  // 50-level campaign: each new mechanic is introduced on its own level (see `intro`).
   const LEVELS = [
-    { start:[3,12], goal:[3,0], speed:1150, goalDir:[0,-1], key:[1,4],
-      init:[[3,11],[3,10],[3,9]],
-      walls:[[0,8],[1,8],[2,8],[4,8],[5,8],[6,8],
-             [0,5],[2,5],[3,5],[4,5],[5,5],[6,5],
-             [0,2],[1,2],[2,2],[3,2],[5,2],[6,2]],
-      stone:[[3,8],[1,5],[4,2]] },
+    {"start":[3,12],"goal":[3,0],"key":[3,6],"init":[[3,11],[3,10],[3,9]],"walls":[],"speed":1250,"par":26000,"intro":["tile","key","flag"]},
+    {"start":[3,12],"goal":[5,0],"key":[1,6],"init":[[3,11],[3,10],[3,9]],"walls":[],"speed":1230,"par":26000,"intro":[]},
+    {"start":[2,12],"goal":[5,0],"key":[4,7],"init":[[2,11],[2,10],[2,9]],"walls":[],"coins":[[3,4]],"speed":1210,"par":27000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,4],"init":[[3,11],[3,10],[3,9]],"walls":[[0,7],[1,7],[2,7],[4,7],[5,7],[6,7]],"speed":1180,"par":27000,"intro":["wall"]},
+    {"start":[3,12],"goal":[3,0],"key":[3,2],"init":[[3,11],[3,10],[3,9]],"walls":[[0,8],[2,8],[3,8],[4,8],[5,8],[6,8],[0,4],[1,4],[2,4],[3,4],[4,4],[6,4]],"speed":1150,"par":29000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,5],"init":[[3,11],[3,10],[3,9]],"walls":[[0,9],[1,9],[2,9],[3,9],[4,9],[6,9],[0,6],[2,6],[3,6],[4,6],[5,6],[6,6],[0,3],[1,3],[2,3],[3,3],[4,3],[6,3]],"speed":1130,"par":31000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,3],"init":[[3,11],[3,10],[3,9]],"walls":[[0,6],[1,6],[2,6],[4,6],[5,6],[6,6]],"stone":[[3,6]],"speed":1160,"par":28000,"intro":["stone"]},
+    {"start":[3,12],"goal":[3,0],"key":[3,2],"init":[[3,11],[3,10],[3,9]],"walls":[[0,8],[1,8],[2,8],[4,8],[5,8],[6,8],[0,4],[1,4],[2,4],[4,4],[5,4],[6,4]],"stone":[[3,8],[3,4]],"speed":1130,"par":30000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,5],"init":[[3,11],[3,10],[3,9]],"walls":[[0,7],[1,7],[2,7],[4,7],[5,7],[6,7],[0,3],[1,3],[2,3],[4,3],[5,3],[6,3]],"stone":[[3,7]],"coins":[[3,2]],"speed":1110,"par":31000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,5],"init":[[3,11],[3,10],[3,9]],"walls":[],"coins":[[3,9],[3,7],[3,4],[3,2]],"speed":1150,"par":28000,"intro":["coin"]},
+    {"start":[3,12],"goal":[1,0],"key":[5,6],"init":[[3,11],[3,10],[3,9]],"walls":[],"coins":[[1,8],[5,8],[3,5],[1,3],[5,3]],"speed":1120,"par":30000,"intro":[]},
+    {"start":[4,12],"goal":[2,0],"key":[4,7],"init":[[4,11],[4,10],[4,9]],"walls":[[0,5],[1,5],[3,5],[4,5],[5,5],[6,5]],"coins":[[4,9],[3,6],[2,3]],"speed":1100,"par":31000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,4],"init":[[3,11],[3,10],[3,9]],"walls":[],"boost":[[3,8],[3,7]],"coins":[[3,5]],"speed":1120,"par":30000,"intro":["boost"]},
+    {"start":[3,12],"goal":[5,0],"key":[1,6],"init":[[3,11],[3,10],[3,9]],"walls":[[0,8],[2,8],[3,8],[4,8],[6,8]],"boost":[[1,7],[5,7]],"speed":1090,"par":31000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,3],"init":[[3,11],[3,10],[3,9]],"walls":[[0,9],[1,9],[2,9],[4,9],[5,9],[6,9],[0,5],[1,5],[2,5],[4,5],[5,5],[6,5]],"boost":[[3,8],[3,7]],"coins":[[3,2]],"speed":1070,"par":32000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,4],"init":[[3,11],[3,10],[3,9]],"walls":[],"crumble":[[3,6]],"coins":[[3,3]],"speed":1150,"par":29000,"intro":["crumble"]},
+    {"start":[3,12],"goal":[3,0],"key":[3,3],"init":[[3,11],[3,10],[3,9]],"walls":[[0,6],[1,6],[5,6],[6,6]],"crumble":[[3,6]],"speed":1120,"par":31000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,2],"init":[[3,11],[3,10],[3,9]],"walls":[[0,8],[1,8],[2,8],[4,8],[5,8],[6,8]],"crumble":[[3,8],[3,5]],"coins":[[3,3]],"speed":1100,"par":33000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,4],"init":[[3,11],[3,10],[3,9]],"walls":[],"slow":[[3,8],[3,7]],"coins":[[3,5]],"speed":1110,"par":31000,"intro":["slow"]},
+    {"start":[3,12],"goal":[5,0],"key":[1,6],"init":[[3,11],[3,10],[3,9]],"walls":[[1,8],[2,8],[3,8],[4,8],[5,8]],"slow":[[1,7],[5,7]],"speed":1080,"par":32000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,3],"init":[[3,11],[3,10],[3,9]],"walls":[],"boost":[[3,9],[3,8]],"slow":[[3,5],[3,4]],"coins":[[3,1]],"speed":1070,"par":33000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"keys":[[1,7,"#4dd6ff"]],"init":[[3,11],[3,10],[3,9]],"walls":[[0,4],[1,4],[2,4],[4,4],[5,4],[6,4]],"doors":[[3,4,"#4dd6ff"]],"coins":[[3,6]],"speed":1140,"par":31000,"intro":["door"]},
+    {"start":[3,12],"goal":[3,0],"keys":[[5,8,"#4dd6ff"]],"init":[[3,11],[3,10],[3,9]],"walls":[[0,5],[1,5],[2,5],[4,5],[5,5],[6,5],[0,10],[1,10],[2,10],[6,10]],"doors":[[3,5,"#4dd6ff"]],"coins":[[3,2]],"speed":1110,"par":32000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"keys":[[5,9,"#ff6d6d"],[1,5,"#4dd6ff"]],"init":[[3,11],[3,10],[3,9]],"walls":[[0,7],[1,7],[2,7],[4,7],[5,7],[6,7],[0,3],[1,3],[2,3],[4,3],[5,3],[6,3]],"doors":[[3,7,"#ff6d6d"],[3,3,"#4dd6ff"]],"speed":1080,"par":35000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,3],"init":[[3,11],[3,10],[3,9]],"walls":[[0,5],[1,5],[2,5],[4,5],[5,5],[6,5]],"switches":[{"c":1,"r":8,"gates":[[3,5]]}],"coins":[[3,7]],"speed":1130,"par":32000,"intro":["switch"]},
+    {"start":[3,12],"goal":[3,0],"key":[3,2],"init":[[3,11],[3,10],[3,9]],"walls":[[0,7],[1,7],[2,7],[4,7],[5,7],[6,7],[0,4],[1,4],[2,4],[4,4],[5,4],[6,4]],"switches":[{"c":5,"r":9,"gates":[[3,7]]}],"coins":[[3,3]],"speed":1100,"par":34000,"intro":[]},
+    {"start":[3,12],"goal":[5,0],"key":[1,4],"init":[[3,11],[3,10],[3,9]],"walls":[[0,6],[2,6],[3,6],[4,6],[6,6]],"switches":[{"c":5,"r":8,"gates":[[1,6]]}],"coins":[[5,3]],"speed":1080,"par":35000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,4],"init":[[3,11],[3,10],[3,9]],"walls":[],"hazards":[{"c":3,"r":7,"axis":"h","lo":1,"hi":5,"speed":5200}],"coins":[[3,5]],"speed":1110,"par":33000,"intro":["saw"]},
+    {"start":[3,12],"goal":[3,0],"key":[3,5],"init":[[3,11],[3,10],[3,9]],"walls":[],"hazards":[{"c":3,"r":8,"axis":"h","lo":0,"hi":6,"speed":6000},{"c":3,"r":3,"axis":"h","lo":1,"hi":5,"speed":5200}],"speed":1080,"par":35000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,2],"init":[[3,11],[3,10],[3,9]],"walls":[[0,9],[1,9],[2,9],[4,9],[5,9],[6,9]],"hazards":[{"c":3,"r":6,"axis":"h","lo":1,"hi":5,"speed":5600}],"boost":[[3,8]],"coins":[[3,4]],"speed":1060,"par":36000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,2],"init":[[3,11],[3,10],[3,9]],"walls":[[0,8],[1,8],[2,8],[4,8],[5,8],[6,8],[0,4],[1,4],[2,4],[4,4],[5,4],[6,4]],"stone":[[3,8]],"coins":[[3,6],[3,1]],"speed":1080,"par":35000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,3],"init":[[3,11],[3,10],[3,9]],"walls":[],"boost":[[3,10],[3,9]],"slow":[[3,6],[3,5]],"coins":[[3,7],[3,1]],"speed":1060,"par":36000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,2],"init":[[3,11],[3,10],[3,9]],"walls":[[0,7],[1,7],[5,7],[6,7]],"crumble":[[3,7],[3,4]],"coins":[[3,9],[3,1]],"speed":1050,"par":37000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"keys":[[1,8,"#4dd6ff"]],"init":[[3,11],[3,10],[3,9]],"walls":[[0,4],[1,4],[2,4],[4,4],[5,4],[6,4],[0,9],[1,9],[2,9],[4,9],[5,9],[6,9]],"doors":[[3,4,"#4dd6ff"]],"stone":[[3,9]],"coins":[[3,6]],"speed":1050,"par":38000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,3],"init":[[3,11],[3,10],[3,9]],"walls":[[0,5],[1,5],[2,5],[4,5],[5,5],[6,5]],"switches":[{"c":1,"r":8,"gates":[[3,5]]}],"hazards":[{"c":3,"r":9,"axis":"h","lo":1,"hi":5,"speed":5400}],"coins":[[3,7]],"speed":1040,"par":39000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,2],"init":[[3,11],[3,10],[3,9]],"walls":[],"boost":[[3,9]],"crumble":[[3,6],[3,5]],"coins":[[3,3]],"speed":1040,"par":38000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"keys":[[5,9,"#ff6d6d"]],"init":[[3,11],[3,10],[3,9]],"walls":[[0,4],[1,4],[2,4],[4,4],[5,4],[6,4]],"doors":[[3,4,"#ff6d6d"]],"hazards":[{"c":3,"r":7,"axis":"h","lo":1,"hi":5,"speed":5400}],"coins":[[3,2]],"speed":1030,"par":40000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,2],"init":[[3,11],[3,10],[3,9]],"walls":[[0,6],[1,6],[2,6],[4,6],[5,6],[6,6]],"slow":[[3,9],[3,8]],"switches":[{"c":5,"r":10,"gates":[[3,6]]}],"coins":[[3,4]],"speed":1030,"par":40000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,1],"init":[[3,11],[3,10],[3,9]],"walls":[[0,9],[1,9],[2,9],[4,9],[5,9],[6,9],[0,5],[1,5],[2,5],[4,5],[5,5],[6,5]],"stone":[[3,9]],"coins":[[3,7],[3,3]],"boost":[[3,6]],"speed":1020,"par":41000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"keys":[[5,8,"#4dd6ff"]],"init":[[3,11],[3,10],[3,9]],"walls":[[0,4],[1,4],[2,4],[4,4],[5,4],[6,4],[0,10],[1,10],[5,10],[6,10]],"doors":[[3,4,"#4dd6ff"]],"boost":[[3,7],[3,6]],"coins":[[3,2]],"speed":1010,"par":42000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,2],"init":[[3,11],[3,10],[3,9]],"walls":[],"hazards":[{"c":3,"r":8,"axis":"h","lo":0,"hi":6,"speed":5600},{"c":3,"r":4,"axis":"h","lo":1,"hi":5,"speed":5000}],"slow":[[3,6]],"coins":[[3,3]],"speed":1010,"par":42000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"keys":[[1,8,"#4dd6ff"]],"init":[[3,11],[3,10],[3,9]],"walls":[[0,4],[1,4],[2,4],[4,4],[5,4],[6,4]],"doors":[[3,4,"#4dd6ff"]],"crumble":[[3,7],[3,6]],"coins":[[3,2]],"speed":1000,"par":43000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,2],"init":[[3,11],[3,10],[3,9]],"walls":[[0,6],[1,6],[2,6],[4,6],[5,6],[6,6]],"switches":[{"c":1,"r":9,"gates":[[3,6]]}],"boost":[[3,8]],"coins":[[3,4],[3,10]],"speed":1000,"par":43000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,1],"init":[[3,11],[3,10],[3,9]],"walls":[[0,9],[1,9],[2,9],[4,9],[5,9],[6,9]],"stone":[[3,9]],"hazards":[{"c":3,"r":6,"axis":"h","lo":1,"hi":5,"speed":5200}],"coins":[[3,7],[3,4],[3,2]],"speed":990,"par":44000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"keys":[[5,9,"#ff6d6d"],[1,5,"#4dd6ff"]],"init":[[3,11],[3,10],[3,9]],"walls":[[0,7],[1,7],[2,7],[4,7],[5,7],[6,7],[0,3],[1,3],[2,3],[4,3],[5,3],[6,3]],"doors":[[3,7,"#ff6d6d"],[3,3,"#4dd6ff"]],"hazards":[{"c":3,"r":10,"axis":"h","lo":1,"hi":5,"speed":5400}],"speed":980,"par":46000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,1],"init":[[3,11],[3,10],[3,9]],"walls":[[0,10],[1,10],[2,10],[4,10],[5,10],[6,10],[0,7],[1,7],[2,7],[4,7],[5,7],[6,7],[0,4],[1,4],[2,4],[4,4],[5,4],[6,4]],"stone":[[3,7]],"boost":[[3,9]],"coins":[[3,5],[3,2]],"speed":980,"par":46000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"key":[3,2],"init":[[3,11],[3,10],[3,9]],"walls":[],"crumble":[[3,9],[3,7],[3,5]],"slow":[[3,3]],"coins":[[3,10],[3,1]],"speed":970,"par":47000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"keys":[[5,8,"#4dd6ff"]],"init":[[3,11],[3,10],[3,9]],"walls":[[0,4],[1,4],[2,4],[4,4],[5,4],[6,4],[0,9],[1,9],[2,9],[4,9],[5,9],[6,9]],"doors":[[3,4,"#4dd6ff"]],"switches":[{"c":1,"r":10,"gates":[[3,9]]}],"coins":[[3,6]],"speed":970,"par":48000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"keys":[[1,8,"#4dd6ff"]],"init":[[3,11],[3,10],[3,9]],"walls":[[0,4],[1,4],[2,4],[4,4],[5,4],[6,4]],"doors":[[3,4,"#4dd6ff"]],"hazards":[{"c":3,"r":7,"axis":"h","lo":1,"hi":5,"speed":5200}],"boost":[[3,10]],"crumble":[[3,6]],"coins":[[3,2]],"speed":960,"par":49000,"intro":[]},
+    {"start":[3,12],"goal":[3,0],"keys":[[5,9,"#ff6d6d"],[1,5,"#4dd6ff"]],"init":[[3,11],[3,10],[3,9]],"walls":[[0,7],[1,7],[2,7],[4,7],[5,7],[6,7],[0,3],[1,3],[2,3],[4,3],[5,3],[6,3],[0,10],[1,10],[5,10],[6,10]],"doors":[[3,7,"#ff6d6d"],[3,3,"#4dd6ff"]],"stone":[[3,10]],"hazards":[{"c":3,"r":6,"axis":"h","lo":1,"hi":5,"speed":5200}],"boost":[[3,9]],"coins":[[3,4]],"speed":950,"par":52000,"intro":[]}
   ];
-
-  /* --- Original v19 levels (kept here so you can restore them) -----------
-  const LEVELS = [
-    { start:[3,12], goal:[3,0], speed:1200, goalDir:[0,-1], key:[5,8],
-      init:[[3,11],[3,10],[3,9]],
-      walls:[[1,9],[2,9],[4,6],[5,6],[1,3],[2,3],[3,3]],
-      stone:[[3,6],[3,5]] },
-    { start:[0,12], goal:[6,0], speed:1050, goalDir:[0,-1], key:[1,5],
-      init:[[0,11],[0,10],[1,10]],
-      walls:[[2,11],[2,10],[2,9],[4,7],[4,6],[4,5],[5,3],[6,3]],
-      stone:[[3,7],[3,6],[5,8]] },
-    { start:[3,12], goal:[0,0], speed:950, goalDir:[0,-1], key:[6,7],
-      init:[[3,11],[3,10],[4,10]],
-      walls:[[2,10],[2,9],[3,9],[5,8],[5,7],[5,6],[1,6],[2,6],[3,4],[4,4],[1,3]],
-      stone:[[4,6],[4,5],[1,8]] },
-  ];
-  ----------------------------------------------------------------------- */
 
   // ---------- DOM ---------------------------------------------------------
   const canvas = document.getElementById("game");
@@ -147,7 +247,8 @@
   const ovTitle = document.getElementById("ov-title");
   const ovMsg = document.getElementById("ov-msg");
   const ovBtn = document.getElementById("ov-btn");
-  const restartBtn = document.getElementById("restart");
+  const elScore = document.getElementById("score");
+  const ovStars = document.getElementById("ov-stars");
 
   // ---------- Tunables ----------------------------------------------------
   const TILES_TOTAL = 3;
@@ -170,18 +271,24 @@
   // drift, and its tempo tracks each level's speed. Resets each level.
   const Sound = (() => {
     const BASE = 220;                          // A3, in Hz
-    // Lead melody: 16 steps (4 bars of 4) drawn from A major pentatonic.
-    const MELODY = [0, 4, 7, 4,  9, 7, 4, 2,  0, 4, 7, 12,  9, 7, 4, 2];
     const WAVES  = ["triangle", "square"];     // lead timbre alternates per step
-    // One chord per bar: A - D - F#m - E (a I-IV-vi-V loop in A major).
-    const CHORDS = [
-      { root: 0, tones: [0, 4, 7]  },          // A  major
-      { root: 5, tones: [5, 9, 12] },          // D  major
-      { root: 9, tones: [9, 12, 16] },         // F# minor
-      { root: 7, tones: [7, 11, 14] },         // E  major
-    ];
+    // Lead melody + chord loop — regenerated per level by setSong(seed).
+    let MELODY = [0, 4, 7, 4,  9, 7, 4, 2,  0, 4, 7, 12,  9, 7, 4, 2];
+    let CHORDS = [ {root:0,tones:[0,4,7]}, {root:5,tones:[5,9,12]}, {root:9,tones:[9,12,16]}, {root:7,tones:[7,11,14]} ];
     let ac = null, master = null, sendBus = null, noiseBuf = null;
     let muted = false, step = 0, beatSec = 1.15;
+
+    // pick a fresh pentatonic melody + chord progression from a seed (each level differs)
+    function setSong(seed) {
+      const rnd = mulberry32((seed>>>0) || 1);
+      const SC = [0,2,4,7,9,12,14];            // major pentatonic over ~2 octaves
+      const tr = [-5,-3,0,0,2,4,5,7][Math.floor(rnd()*8)];   // transpose (key)
+      MELODY = []; let d = 2 + Math.floor(rnd()*3);
+      for (let i=0;i<16;i++){ d += Math.floor(rnd()*3)-1; if (rnd()<0.15) d += Math.floor(rnd()*3)-1;
+        d = Math.max(0, Math.min(SC.length-1, d)); MELODY.push(SC[d] + tr); }
+      const progs = [[0,5,7,5],[0,7,9,7],[0,5,9,7],[0,9,5,7],[0,4,5,7]];
+      CHORDS = progs[Math.floor(rnd()*progs.length)].map(r => ({ root:r+tr, tones:[r+tr, r+tr+4, r+tr+7] }));
+    }
 
     function ensure() {
       if (ac) return true;
@@ -280,6 +387,99 @@
       o.connect(og); og.connect(master);
       o.start(t); o.stop(t + 0.2);
     }
+    // Victory jingle: a quick rising arpeggio.
+    function win() {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime;
+      [0, 4, 7, 12, 16].forEach((s, i) => {
+        const t = t0 + i * 0.10, freq = BASE * Math.pow(2, s / 12);
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.6, t + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0006, t + 0.5);
+        for (const cents of [-5, 5]) {
+          const o = ac.createOscillator(); o.type = "triangle";
+          o.frequency.setValueAtTime(freq, t); o.detune.setValueAtTime(cents, t);
+          o.connect(g); o.start(t); o.stop(t + 0.55);
+        }
+        g.connect(master); g.connect(sendBus);
+      });
+    }
+    // Failure sting: a detuned downward thud.
+    function lose() {
+      if (muted || !ac || ac.state !== "running") return;
+      const t = ac.currentTime;
+      const o = ac.createOscillator(), o2 = ac.createOscillator(), g = ac.createGain();
+      o.type = "sawtooth"; o2.type = "triangle";
+      o.frequency.setValueAtTime(220, t);  o.frequency.exponentialRampToValueAtTime(70, t + 0.5);
+      o2.frequency.setValueAtTime(110, t); o2.frequency.exponentialRampToValueAtTime(38, t + 0.5);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.5, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0006, t + 0.6);
+      o.connect(g); o2.connect(g); g.connect(master);
+      o.start(t); o2.start(t); o.stop(t + 0.65); o2.stop(t + 0.65);
+    }
+    // Coin pickup: a quick bright two-note ping.
+    function coin() {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime;
+      [19, 24].forEach((s, i) => {
+        const t = t0 + i * 0.06, freq = BASE * Math.pow(2, s / 12);
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "square";
+        o.frequency.setValueAtTime(freq, t);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.28, t + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.0006, t + 0.14);
+        o.connect(g); g.connect(master);
+        o.start(t); o.stop(t + 0.16);
+      });
+    }
+    // Key pickup: a bright rising three-note sparkle.
+    function key() {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime;
+      [12, 16, 19].forEach((s, i) => {
+        const t = t0 + i*0.07, freq = BASE * Math.pow(2, s/12);
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "triangle"; o.frequency.setValueAtTime(freq, t);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.32, t + 0.006);
+        g.gain.exponentialRampToValueAtTime(0.0006, t + 0.3);
+        o.connect(g); g.connect(master); g.connect(sendBus);
+        o.start(t); o.stop(t + 0.34);
+      });
+    }
+    // Intro: a rising shimmer as the pixels gather.
+    function introGather() {
+      if (muted || !ac || ac.state !== "running") return;
+      const t = ac.currentTime;
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = "sawtooth";
+      o.frequency.setValueAtTime(80, t); o.frequency.exponentialRampToValueAtTime(560, t + 0.85);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.16, t + 0.4);
+      g.gain.exponentialRampToValueAtTime(0.0006, t + 0.95);
+      const lp = ac.createBiquadFilter(); lp.type = "lowpass";
+      lp.frequency.setValueAtTime(400, t); lp.frequency.exponentialRampToValueAtTime(3000, t + 0.85);
+      o.connect(lp); lp.connect(g); g.connect(master);
+      o.start(t); o.stop(t + 1.0);
+    }
+    // Intro: a bright materialise chord when the character forms.
+    function introFlash() {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime;
+      [12, 16, 19, 24].forEach((s, i) => {
+        const t = t0 + i*0.03, freq = BASE * Math.pow(2, s/12);
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "triangle"; o.frequency.setValueAtTime(freq, t);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.3, t + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.0006, t + 0.6);
+        o.connect(g); g.connect(master); g.connect(sendBus);
+        o.start(t); o.stop(t + 0.65);
+      });
+    }
     // Called once per cleared tile == one beat of the backing track.
     function clearTile() {
       if (muted || !ac || ac.state !== "running") return;        // silent until unlocked
@@ -301,7 +501,7 @@
     function resetMelody() { step = 0; }
     function setMuted(m) { muted = !!m; }
     function isMuted() { return muted; }
-    return { unlock, clearTile, smash, setTempo, resetMelody, setMuted, isMuted };
+    return { unlock, clearTile, smash, win, lose, coin, key, introGather, introFlash, setSong, setTempo, resetMelody, setMuted, isMuted };
   })();
 
   // ---------- State -------------------------------------------------------
@@ -318,38 +518,391 @@
   const DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
   const adjacent = (a, b) => Math.abs(a[0]-b[0]) + Math.abs(a[1]-b[1]) === 1;
 
-  function loadLevel(i) {
-    const L = LEVELS[i];
+  // ---------- Score / feedback helpers -----------------------------------
+  function haptic(p){ try { if (navigator.vibrate) navigator.vibrate(p); } catch(_){} }
+  const comboMult = c => c >= 30 ? 5 : c >= 20 ? 4 : c >= 12 ? 3 : c >= 5 ? 2 : 1;
+  const BEST_KEY = "tilerunner:best";
+  function loadBest(){ try { return JSON.parse(localStorage.getItem(BEST_KEY)) || {}; } catch(_){ return {}; } }
+  function saveBest(o){ try { localStorage.setItem(BEST_KEY, JSON.stringify(o)); } catch(_){} }
+  const SET_KEY = "tilerunner:settings";
+  function loadSettings(){ try { return JSON.parse(localStorage.getItem(SET_KEY)) || {}; } catch(_){ return {}; } }
+  function saveSettings(){ try { localStorage.setItem(SET_KEY, JSON.stringify(settings)); } catch(_){} }
+  const settings = loadSettings();
+  let paused = false;
+  let titleActive = true;               // the attract/title screen is up before the first play
+  let zen = !!settings.zen;
+  let colorblind = !!settings.colorblind;
+  // gameplay colours that need colorblind-safe alternates (Okabe–Ito)
+  function pal(k){
+    if (!colorblind) return ({ boost:"#7dff6b", slow:"#ff9e4d", saw:"#ff4d6d", sw:"#7dff6b", swOff:"#4a7d3a", gate:"#d7ff6b" })[k];
+    return ({ boost:"#009e73", slow:"#e69f00", saw:"#d55e00", sw:"#009e73", swOff:"#33684f", gate:"#f0e442" })[k];
+  }
+  function applyColorblind(){ document.documentElement.classList.toggle("cb", colorblind); for (const k in _varCache) delete _varCache[k]; }
+
+  // ---------- Procedural levels (endless / daily) ------------------------
+  function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+  function hashSeed(str){ let h=2166136261; str=String(str); for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
+  // a distinct background theme per level (colours / stripe width / angle / style)
+  function genTheme(seed){
+    const rnd=mulberry32((seed^0x9e3779b9)>>>0 || 7);
+    const baseH=rnd()*360, N=4+Math.floor(rnd()*4);
+    const sat=(28+rnd()*34)|0, lig=(15+rnd()*15)|0;            // dark, muted
+    const spread=50+rnd()*280, colors=[];
+    for(let i=0;i<N;i++){ const h=((baseH+spread*i/N)%360)|0; colors.push("hsl("+h+","+sat+"%,"+lig+"%)"); }
+    return { colors, angle:rnd()*Math.PI, stripeW:0.5+rnd()*1.0,
+             style:["plain","plain","lined","dotted"][Math.floor(rnd()*4)],
+             drift:(rnd()<0.5?1:-1)*(0.2+rnd()*0.5) };
+  }
+  function solvableGen(L){
+    const W=new Set(L.walls.map(w=>key(w[0],w[1])));
+    const bfs=(from,to)=>{ const q=[from], seen=new Set([key(from[0],from[1])]);
+      while(q.length){ const [c,r]=q.shift(); if(c===to[0]&&r===to[1]) return true;
+        for(const [dc,dr] of DIRS){ const nc=c+dc,nr=r+dr; if(nc<0||nc>=COLS||nr<0||nr>=ROWS) continue;
+          const k=key(nc,nr); if(W.has(k)||seen.has(k)) continue; seen.add(k); q.push([nc,nr]); } }
+      return false; };
+    return bfs(L.start,L.key) && bfs(L.key,L.goal);
+  }
+  function genLevel(seed, diff){
+    const rnd=mulberry32(seed>>>0), ri=n=>Math.floor(rnd()*n);
+    for(let att=0; att<50; att++){
+      const startC=1+ri(COLS-2), goalC=1+ri(COLS-2);
+      const init=[[startC,11],[startC,10],[startC,9]];
+      const used=new Set([key(startC,12),key(goalC,0),...init.map(t=>key(t[0],t[1]))]);
+      const grab=(n,r0,r1)=>{ const out=[]; let tries=0;
+        while(out.length<n && tries++<120){ const c=ri(COLS), r=r0+ri(r1-r0+1), k=key(c,r);
+          if(used.has(k)) continue; used.add(k); out.push([c,r]); } return out; };
+      const walls=grab(6+diff*2, 2,10);
+      const stone=grab(2+diff, 2,10);
+      const keyC=ri(COLS), keyR=3+ri(7); used.add(key(keyC,keyR));
+      const protect=new Set([key(keyC,keyR),key(goalC,0),key(startC,12)]);
+      const walls2=walls.filter(w=>!protect.has(key(w[0],w[1])));
+      const stone2=stone.filter(w=>!protect.has(key(w[0],w[1])));
+      const coins=grab(3+diff, 1,11);
+      const boost=diff>=1?grab(1,3,9):[];
+      const slow=diff>=2?grab(1,3,9):[];
+      const L={ start:[startC,12], goal:[goalC,0], goalDir:[0,-1], key:[keyC,keyR],
+                init, walls:walls2, stone:stone2, coins, boost, slow,
+                speed:Math.max(650,1150-diff*70), par:26000 };
+      if(solvableGen(L)) return L;
+    }
+    return { start:[3,12], goal:[3,0], goalDir:[0,-1], key:[3,6], init:[[3,11],[3,10],[3,9]],
+             walls:[], stone:[], coins:[[3,8],[3,4]], speed:1000, par:26000 };
+  }
+  const endlessDiff = () => Math.min(6, Math.floor((endlessN-1)/2));
+  function startEndless(){ mode="endless"; endlessN=0; endlessSeed=Math.floor(Math.random()*1e9); nextEndless(); }
+  function nextEndless(){ endlessN++; beginLevel(genLevel(endlessSeed+endlessN, endlessDiff()), "E"+endlessN); }
+  function startDaily(){ mode="daily"; const d=new Date(); beginLevel(genLevel(d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate(), 3), "Daily"); }
+
+  // ---------- Level editor -----------------------------------------------
+  let editing = false, editor = null, edLayout = { ecell:40, eox:0, eoy:0 };
+  let edMsg = "", edMsgT = 0;
+  const ED_TOOLS = [["Start","start"],["Goal","goal"],["Key","key"],["Wall","wall"],["Stone","stone"],
+                    ["Coin","coin"],["Boost","boost"],["Slow","slow"],["Crumble","crumble"],["Erase","erase"]];
+  const ED_SETS = ["wall","stone","coin","boost","slow","crumble"];
+  function flashEdMsg(m){ edMsg = m; edMsgT = 2200; }
+
+  function openEditor(fromLevel){
+    mode = "editor"; editing = true; paused = false;
+    editor = fromLevel ? editorFromLevel(fromLevel) : {
+      start:[3,12], goal:[3,0], key:[3,6], tool:"wall",
+      wall:new Set(), stone:new Set(), coin:new Set(), boost:new Set(), slow:new Set(), crumble:new Set() };
+    buildEditBar();
+    document.getElementById("editbar").classList.add("show");
+  }
+  function exitEditor(){ editing = false; document.getElementById("editbar").classList.remove("show"); openMenu("main"); }
+  function editorFromLevel(L){
+    const mk = arr => new Set((arr||[]).map(c=>key(c[0],c[1])));
+    return { start:L.start.slice(), goal:L.goal.slice(), key:(L.keys?[L.keys[0][0],L.keys[0][1]]:L.key.slice()), tool:"wall",
+             wall:mk(L.walls), stone:mk(L.stone), coin:mk(L.coins), boost:mk(L.boost), slow:mk(L.slow), crumble:mk(L.crumble) };
+  }
+  function buildEditBar(){
+    const tools = document.getElementById("edtools"); tools.innerHTML = "";
+    ED_TOOLS.forEach(([label,id])=>{ const b=document.createElement("button"); b.textContent=label;
+      if(editor.tool===id) b.className="sel"; b.onclick=()=>{ editor.tool=id; buildEditBar(); }; tools.appendChild(b); });
+    const acts = document.getElementById("edactions"); acts.innerHTML = "";
+    const mkb=(t,fn)=>{ const b=document.createElement("button"); b.textContent=t; b.onclick=fn; return b; };
+    acts.appendChild(mkb("▶ Play", ()=>playEditorLevel()));
+    acts.appendChild(mkb("Export", ()=>{ document.getElementById("edcode").value = editorExport(); flashEdMsg("Share code written below"); }));
+    acts.appendChild(mkb("Import", ()=>{ const L=editorImport(document.getElementById("edcode").value);
+      if(L){ editor=editorFromLevel(L); buildEditBar(); flashEdMsg("Loaded share code"); } else flashEdMsg("Invalid share code"); }));
+    acts.appendChild(mkb("Clear", ()=>{ ED_SETS.forEach(s=>editor[s].clear()); }));
+    acts.appendChild(mkb("Exit", ()=>exitEditor()));
+  }
+  function editorApply(c, r){
+    if (c<0||c>=COLS||r<0||r>=ROWS) return;
+    const k = key(c,r), t = editor.tool; haptic(5);
+    if (t==="start"||t==="goal"||t==="key"){ editor[t]=[c,r]; ED_SETS.forEach(s=>editor[s].delete(k)); return; }
+    if (t==="erase"){ ED_SETS.forEach(s=>editor[s].delete(k)); return; }
+    if (editor[t].has(k)) editor[t].delete(k);
+    else { ED_SETS.forEach(s=>{ if(s!==t) editor[s].delete(k); }); editor[t].add(k); }
+  }
+  function editorPaint(sx, sy){ const { ecell, eox, eoy } = edLayout;
+    editorApply(Math.floor((sx-eox)/ecell), Math.floor((sy-eoy)/ecell)); }
+  function editorInit(s){
+    const occ=new Set([...editor.wall, ...editor.stone]); occ.add(key(editor.goal[0],editor.goal[1]));
+    const init=[]; let cur=s; const pri=[[0,-1],[-1,0],[1,0],[0,1]];
+    for(let n=0;n<3;n++){ let nx=null;
+      for(const [dc,dr] of pri){ const c=cur[0]+dc,r=cur[1]+dr;
+        if(c<0||c>=COLS||r<0||r>=ROWS) continue; const kk=key(c,r);
+        if(occ.has(kk)||(c===s[0]&&r===s[1])) continue; nx=[c,r]; break; }
+      if(!nx) break; init.push(nx); occ.add(key(nx[0],nx[1])); cur=nx; }
+    return init;
+  }
+  function editorToLevel(){ const sp=k=>k.split(",").map(Number);
+    return { start:editor.start.slice(), goal:editor.goal.slice(), goalDir:[0,-1], key:editor.key.slice(),
+             init:editorInit(editor.start),
+             walls:[...editor.wall].map(sp), stone:[...editor.stone].map(sp), coins:[...editor.coin].map(sp),
+             boost:[...editor.boost].map(sp), slow:[...editor.slow].map(sp), crumble:[...editor.crumble].map(sp),
+             speed:900, par:26000 };
+  }
+  function normalizeLevel(L){ L.walls=L.walls||[]; L.stone=L.stone||[]; L.coins=L.coins||[]; L.init=L.init||[];
+    L.goalDir=L.goalDir||[0,-1]; if(!L.key && L.keys) L.key=[L.keys[0][0],L.keys[0][1]]; return L; }
+  function editorExport(){ try { return btoa(JSON.stringify(editorToLevel())); } catch(_){ return ""; } }
+  function editorImport(code){ try { return normalizeLevel(JSON.parse(atob((code||"").trim()))); } catch(_){ return null; } }
+  function playEditorLevel(){
+    const L = editorToLevel();
+    if (!L.init.length) { flashEdMsg("Start is boxed in — clear a space next to it."); return; }
+    if (!solvableGen(L)) { flashEdMsg("No route from start → key → exit."); return; }
+    editing = false; mode = "editor";
+    document.getElementById("editbar").classList.remove("show");
+    beginLevel(L, "Edit");
+  }
+  function drawEditor(){
+    const g = ctx.createLinearGradient(0,0,0,viewH); g.addColorStop(0,"#141026"); g.addColorStop(1,"#0a0917");
+    ctx.fillStyle=g; ctx.fillRect(0,0,viewW,viewH);
+    const ecell = Math.min(viewW/(COLS+0.4), (viewH-70)/(ROWS+0.4));
+    const eox = (viewW - ecell*COLS)/2, eoy = 34;
+    edLayout = { ecell, eox, eoy };
+    const X=c=>eox+c*ecell, Y=r=>eoy+r*ecell;
+    ctx.strokeStyle="rgba(120,110,190,0.28)"; ctx.lineWidth=1;
+    for(let c=0;c<=COLS;c++){ ctx.beginPath(); ctx.moveTo(X(c),Y(0)); ctx.lineTo(X(c),Y(ROWS)); ctx.stroke(); }
+    for(let r=0;r<=ROWS;r++){ ctx.beginPath(); ctx.moveTo(X(0),Y(r)); ctx.lineTo(X(COLS),Y(r)); ctx.stroke(); }
+    const fill=(k,col)=>{ const [c,r]=k.split(",").map(Number); ctx.fillStyle=col; ctx.fillRect(X(c)+2,Y(r)+2,ecell-4,ecell-4); };
+    const dot=(c,r,col,rad)=>{ ctx.fillStyle=col; ctx.beginPath(); ctx.arc(X(c)+ecell/2,Y(r)+ecell/2,ecell*rad,0,Math.PI*2); ctx.fill(); };
+    for(const k of editor.wall) fill(k, getVar("--wall"));
+    for(const k of editor.stone) fill(k, "#8a7f63");
+    for(const k of editor.crumble) fill(k, "#5a5470");
+    for(const k of editor.boost){ fill(k,"rgba(125,255,107,0.22)"); const [c,r]=k.split(",").map(Number); dot(c,r,pal("boost"),0.13); }
+    for(const k of editor.slow){ fill(k,"rgba(255,158,77,0.20)"); const [c,r]=k.split(",").map(Number); dot(c,r,pal("slow"),0.13); }
+    for(const k of editor.coin){ const [c,r]=k.split(",").map(Number); dot(c,r,"#ffd24a",0.17); }
+    dot(editor.key[0],editor.key[1],"#ffd24a",0.24);
+    ctx.font="900 "+Math.round(ecell*0.42)+"px 'Courier New',monospace"; ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillStyle=getVar("--runner"); const [sc,sr]=editor.start; ctx.fillRect(X(sc)+ecell*0.24,Y(sr)+ecell*0.24,ecell*0.52,ecell*0.52);
+    ctx.fillStyle=getVar("--goal"); const [gc,gr]=editor.goal; ctx.fillRect(X(gc)+ecell*0.18,Y(gr)+ecell*0.18,ecell*0.64,ecell*0.64);
+    ctx.fillStyle=getVar("--shadow"); ctx.fillText("S",X(sc)+ecell/2,Y(sr)+ecell/2); ctx.fillText("G",X(gc)+ecell/2,Y(gr)+ecell/2);
+    ctx.textBaseline="top"; ctx.fillStyle=getVar("--dim"); ctx.font="700 12px 'Courier New',monospace";
+    ctx.fillText("Editing — tool: "+editor.tool.toUpperCase(), viewW/2, 8);
+    if(edMsgT>0){ edMsgT-=16; ctx.fillStyle=getVar("--accent"); ctx.font="900 13px 'Courier New',monospace";
+      ctx.fillText(edMsg, viewW/2, viewH-18); }
+  }
+
+  let mode = "normal", endlessN = 0, endlessSeed = 1;
+  function loadLevel(i) { mode = "normal"; levelIdx = clamp(i, 0, LEVELS.length - 1); beginLevel(LEVELS[levelIdx], String(levelIdx + 1)); }
+  function beginLevel(L, label) {
     const walls = new Set(L.walls.map(w => key(w[0], w[1])));
-    const path = [{ c:L.start[0], r:L.start[1], kind:"start" }];
-    const tiles = L.init.map((cp, idx) => ({ id:idx, c:cp[0], r:cp[1], status:"active" }));
-    tiles.forEach(t => path.push({ c:t.c, r:t.r, kind:"tile", tileId:t.id }));
+    // the start IS a reusable tile: the 3 tiles start pre-laid from the start cell
+    const initCells = [L.start, ...L.init].slice(0, TILES_TOTAL);
+    const tiles = initCells.map((cp, idx) => ({ id:idx, c:cp[0], r:cp[1], status:"active" }));
+    const path = tiles.map(t => ({ c:t.c, r:t.r, kind:"tile", tileId:t.id }));
     state = {
       L, walls, tiles, path,
       stones: new Set((L.stone || []).map(w => key(w[0], w[1]))),
       shards: [],
       goal:{ c:L.goal[0], r:L.goal[1] },
-      keyCell:{ c:L.key[0], r:L.key[1] }, keyCollected:false,
+      keyCollected:false,
       runIdx:0, runT:0, msPerCell:L.speed,
       status:"play", drag:null, fall:null, runPhase:0,
+      score:0, combo:0, maxCombo:0, coins:0, elapsed:0, flowClears:0,
+      par: L.par || 24000,
+      shake:0, beatPulse:0, comboFlash:0, pops:[], lights:[],
+      // --- Batch 2: optional extra cell types & hazards ---
+      coinCells: new Set((L.coins||[]).map(c=>key(c[0],c[1]))),
+      coinsGot: 0,
+      keys: (L.keys || [[L.key[0], L.key[1], "#ffd24a"]]).map(k=>({ c:k[0], r:k[1], color:k[2]||"#ffd24a", got:false })),
+      doors: (L.doors||[]).map(d=>({ c:d[0], r:d[1], color:d[2]||"#ff6d6d", open:false, reached:false })),
+      switches: (L.switches||[]).map(s=>({ c:s.c, r:s.r, gates:(s.gates||[]).map(g=>key(g[0],g[1])), used:false })),
+      gatesClosed: new Set([].concat(...(L.switches||[]).map(s=>(s.gates||[]).map(g=>key(g[0],g[1]))))),
+      boost: new Set((L.boost||[]).map(c=>key(c[0],c[1]))),
+      slow:  new Set((L.slow ||[]).map(c=>key(c[0],c[1]))),
+      crumble: new Set((L.crumble||[]).map(c=>key(c[0],c[1]))),
+      crumbled: new Set(),
+      hazards: (L.hazards||[]).map(h=>{ const ax = h.axis||"h"; return {
+        axis:ax, lo:h.lo, hi:h.hi, c:h.c, r:h.r, speed:h.speed||4800, t:0, dir:1,
+        cc: ax==="h"?h.lo:h.c, cr: ax==="h"?h.r:h.lo, pos: h.lo }; }),
+      lastPlacedId: null,
     };
-    elLevel.textContent = String(i + 1);
+    if (elLevel) elLevel.textContent = label;
     updateReadyHud();
+    updateScoreHud();
     updateKeyHud();
     overlay.className = "";
+    const seed = hashSeed(label);
+    state.bgTheme = genTheme(seed);          // per-level background theme
+    Sound.setSong(seed);                     // per-level melody
     Sound.resetMelody();
     Sound.setTempo(L.speed);      // backing-track tempo tracks this level's runner speed
     computeLayout();
     snapCamera();
+    startIntro();                 // pixels assemble into the character before the run
+    maybeShowMechIntro(L);        // pop up any never-seen mechanic on this level
   }
 
   function updateReadyHud() {
-    // "Drag" = tiles you can currently pick up: freed (walked-over) + parked (staged).
-    elReady.textContent = String(state.tiles.filter(t => t.status !== "active").length);
+    if (elReady) elReady.textContent = String(state.tiles.filter(t => t.status === "free" || t.status === "parked").length);
+  }
+  function updateScoreHud() { if (elScore) elScore.textContent = String(state.score); }
+  // spawn an expanding ring "pop" at a cell centre (tile placed, coin, etc.)
+  function spawnPop(c, r, color) {
+    state.pops.push({ x:(c+0.5)*cell, y:(r+0.5)*cell, life:0, max:340, color: color || getVar("--free") });
+  }
+  // a burst of light that pulses out from a cell (tile cleared)
+  function spawnLight(c, r) {
+    state.lights.push({ x:(c+0.5)*cell, y:(r+0.5)*cell, life:0, max:520 });
+  }
+
+  // ---------- Level-start intro (pixels assemble into the character) ------
+  const INTRO_CONVERGE = 950, INTRO_FLASH = 2000;
+  function startIntro() {
+    const s = state; s.status = "intro"; s.introT = 0; s.introSnd = { gather:false, flash:false };
+    const rp = visualAt(0);                        // where the character forms (start tile)
+    s.introTarget = { x: rp.x, y: rp.y };
+    s.introParticles = [];
+    const N = 90, reach = Math.max(viewW, viewH);
+    for (let i = 0; i < N; i++) {
+      const ang = Math.random()*Math.PI*2, dist = reach*(0.55 + Math.random()*0.6);
+      s.introParticles.push({
+        x0: rp.x + Math.cos(ang)*dist, y0: rp.y + Math.sin(ang)*dist,
+        sz: cell*(0.05 + Math.random()*0.07),
+        col: Math.random() < 0.7 ? getVar("--runner") : "#ffffff",
+      });
+    }
+  }
+  function tickIntro(dt) {
+    const s = state;
+    if (!s.introSnd.gather) { s.introSnd.gather = true; Sound.introGather(); }  // plays once the intro runs (audio unlocked)
+    const before = s.introT; s.introT += dt;
+    if (before < INTRO_CONVERGE && s.introT >= INTRO_CONVERGE && !s.introSnd.flash) { s.introSnd.flash = true; Sound.introFlash(); }
+    if (s.introT >= INTRO_CONVERGE + INTRO_FLASH) { s.status = "play"; s.introParticles = null; }
+  }
+  function drawIntro(ts) {
+    const s = state, t = s.introT, tgt = s.introTarget;
+    if (t < INTRO_CONVERGE) {                       // pixels stream in from all around
+      const u = t / INTRO_CONVERGE, e = 1 - Math.pow(1-u, 3);   // ease-out
+      for (const p of s.introParticles) {
+        const px = p.x0 + (tgt.x - p.x0)*e, py = p.y0 + (tgt.y - p.y0)*e, sz = p.sz*(1 - u*0.4);
+        ctx.globalAlpha = 0.35 + 0.65*u; ctx.fillStyle = p.col;
+        ctx.fillRect(px - sz/2, py - sz/2, sz, sz);
+      }
+      ctx.globalAlpha = u*0.6; drawRunner(ts); ctx.globalAlpha = 1;   // character fading in
+    } else {                                        // assembled — the runner himself flashes
+      const flash = 0.5 + 0.5*Math.sin(t/60);
+      ctx.save(); ctx.globalAlpha = 0.25 + 0.75*flash; drawRunner(ts); ctx.restore();
+    }
   }
   function updateKeyHud() {
+    if (!elKey) return;
     elKey.textContent = state.keyCollected ? "✓" : "✗";
     elKey.style.color = state.keyCollected ? "var(--goal)" : "var(--accent)";
+  }
+
+  // ---------- New-mechanic intro pop-ups ---------------------------------
+  const MECHS = {
+    tile:   { name:"Track Tiles", desc:"The runner never stops! Drag the dotted tiles to lay track ahead of it." },
+    key:    { name:"Key", desc:"Grab the key to unlock the exit." },
+    flag:   { name:"The Exit", desc:"Lay a tile on the flag to finish the level." },
+    wall:   { name:"Metal Wall", desc:"Solid — you can't build on it. Route around." },
+    stone:  { name:"Stone Block", desc:"Tap to smash it, then build through the gap." },
+    coin:   { name:"Coins", desc:"Collect coins along the way for bonus points." },
+    boost:  { name:"Boost Pad", desc:"The runner speeds up across these — mind your timing." },
+    crumble:{ name:"Spacetime Rift", desc:"A vortex in the floor. Crossing it swallows that tile for good — spend wisely." },
+    slow:   { name:"Slow Zone", desc:"The runner drags here — plan your timing." },
+    door:   { name:"Colour Door", desc:"Opens when you collect the matching-colour key." },
+    switch: { name:"Switch & Gate", desc:"Tap the switch to open its linked gate." },
+    saw:    { name:"Saw Blade", desc:"A hazard sliding on a rail. Never let the runner touch it!" },
+  };
+  function levelMechs(L) {
+    const m = ["tile","key","flag"];                    // the basics, taught on the first level
+    if (L.walls && L.walls.length) m.push("wall");
+    if (L.stone && L.stone.length) m.push("stone");
+    if (L.coins && L.coins.length) m.push("coin");
+    if (L.boost && L.boost.length) m.push("boost");
+    if (L.crumble && L.crumble.length) m.push("crumble");
+    if (L.slow && L.slow.length) m.push("slow");
+    if (L.doors && L.doors.length) m.push("door");
+    if (L.switches && L.switches.length) m.push("switch");
+    if (L.hazards && L.hazards.length) m.push("saw");
+    return m;
+  }
+  const SEEN_KEY = "tilerunner:seen";
+  function loadSeen(){ try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY)) || []); } catch(_){ return new Set(); } }
+  function saveSeen(s){ try { localStorage.setItem(SEEN_KEY, JSON.stringify([...s])); } catch(_){} }
+  let mechQueue = [];
+  function maybeShowMechIntro(L) {
+    if (titleActive) return;             // never pop the tutorial over the title screen
+    const seen = loadSeen();
+    const news = levelMechs(L).filter(m => !seen.has(m));
+    if (!news.length) return;
+    news.forEach(m => seen.add(m)); saveSeen(seen);
+    mechQueue = news; paused = true; showNextMech();
+  }
+  function showNextMech() {
+    const pop = document.getElementById("mechpop");
+    if (!mechQueue.length) { pop.classList.remove("show"); paused = false; return; }
+    const type = mechQueue[0], M = MECHS[type];
+    document.getElementById("mech-name").textContent = M.name;
+    document.getElementById("mech-desc").textContent = M.desc;
+    const cv = document.getElementById("mech-icon"), g = cv.getContext("2d");
+    drawMechIcon(g, type, cv.width);
+    document.getElementById("mech-ok").textContent = mechQueue.length > 1 ? "Next" : "Got it";
+    pop.classList.add("show");
+  }
+  // draw a small representative icon for a mechanic on a 2d context of size S
+  function drawMechIcon(g, type, S) {
+    g.clearRect(0, 0, S, S);
+    const cx = S/2, cy = S/2, V = n => getVar(n);
+    const rr = (x,y,w,h,rad)=>{ g.beginPath(); g.moveTo(x+rad,y); g.arcTo(x+w,y,x+w,y+h,rad);
+      g.arcTo(x+w,y+h,x,y+h,rad); g.arcTo(x,y+h,x,y,rad); g.arcTo(x,y,x+w,y,rad); g.closePath(); };
+    const tile = col => { rr(S*0.14,S*0.14,S*0.72,S*0.72,S*0.13); g.fillStyle = col; g.fill(); };
+    if (type==="tile") { tile("rgba(180,174,235,0.9)"); g.fillStyle=V("--shadow");
+      const gp=S*0.15; for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++){g.beginPath();g.arc(cx+i*gp,cy+j*gp,S*0.028,0,7);g.fill();} }
+    else if (type==="wall") { tile("#5c6474"); g.fillStyle="rgba(15,17,24,0.9)";
+      const o=S*0.26; for(const [a,b] of [[o,o],[S-o,o],[o,S-o],[S-o,S-o]]){g.beginPath();g.arc(a,b,S*0.045,0,7);g.fill();} }
+    else if (type==="stone") { tile("#8a7f63"); g.strokeStyle="rgba(30,26,20,0.7)"; g.lineWidth=S*0.03; g.lineJoin="round";
+      g.beginPath(); g.moveTo(cx,S*0.24);g.lineTo(cx-S*0.09,cy);g.lineTo(cx+S*0.07,cy+S*0.11);g.lineTo(cx-S*0.02,S*0.78);
+      g.moveTo(cx-S*0.09,cy);g.lineTo(S*0.24,cy+S*0.03); g.stroke(); }
+    else if (type==="crumble") {
+      const rad=S*0.33;
+      const grd=g.createRadialGradient(cx,cy,S*0.05,cx,cy,rad);
+      grd.addColorStop(0,"rgba(8,4,20,0.95)"); grd.addColorStop(0.6,"rgba(60,30,110,0.6)"); grd.addColorStop(1,"rgba(60,30,110,0)");
+      g.fillStyle=grd; g.beginPath(); g.arc(cx,cy,rad,0,7); g.fill();
+      g.lineWidth=S*0.03; g.lineCap="round";
+      for(let a=0;a<3;a++){ g.strokeStyle=a%2?"#b98cff":"#6de0ff"; g.beginPath();
+        for(let t=0;t<=1.0001;t+=0.06){ const ang=a/3*Math.PI*2+t*Math.PI*2.4, rd=rad*(0.15+t*0.8);
+          const px=cx+Math.cos(ang)*rd, py=cy+Math.sin(ang)*rd; if(t===0)g.moveTo(px,py);else g.lineTo(px,py);} g.stroke(); } }
+    else if (type==="boost") { tile("rgba(180,174,235,0.5)"); g.strokeStyle="#7dff6b"; g.lineWidth=S*0.05; g.lineCap="round";
+      for(let k=0;k<3;k++){const y=S*0.66-k*S*0.15; g.beginPath();g.moveTo(cx-S*0.15,y);g.lineTo(cx,y-S*0.1);g.lineTo(cx+S*0.15,y);g.stroke();} }
+    else if (type==="slow") { tile("rgba(180,174,235,0.5)"); g.strokeStyle="#ff9e4d"; g.lineWidth=S*0.05; g.lineCap="round";
+      for(let k=0;k<3;k++){const y=S*0.34+k*S*0.15; g.beginPath();g.moveTo(cx-S*0.15,y);g.lineTo(cx,y+S*0.1);g.lineTo(cx+S*0.15,y);g.stroke();} }
+    else if (type==="coin") { g.fillStyle="#ffd24a"; g.beginPath();g.ellipse(cx,cy,S*0.2,S*0.26,0,0,7);g.fill();
+      g.fillStyle="#b8892a"; g.beginPath();g.ellipse(cx,cy,S*0.09,S*0.14,0,0,7);g.fill(); }
+    else if (type==="key") { g.fillStyle="#ffd24a"; g.beginPath();g.arc(cx-S*0.12,cy,S*0.11,0,7);g.fill();
+      g.fillStyle=V("--shadow");g.beginPath();g.arc(cx-S*0.12,cy,S*0.045,0,7);g.fill();
+      g.fillStyle="#ffd24a"; g.fillRect(cx-S*0.02,cy-S*0.03,S*0.3,S*0.055);
+      g.fillRect(cx+S*0.2,cy,S*0.04,S*0.09); g.fillRect(cx+S*0.12,cy,S*0.04,S*0.09); }
+    else if (type==="flag") { g.strokeStyle="#d9d3ff";g.lineWidth=S*0.035;g.lineCap="round";
+      g.beginPath();g.moveTo(cx,S*0.24);g.lineTo(cx,S*0.74);g.stroke();
+      g.fillStyle=V("--goal"); g.beginPath();g.moveTo(cx,S*0.24);g.lineTo(cx+S*0.26,S*0.34);g.lineTo(cx,S*0.44);g.closePath();g.fill();
+      g.globalAlpha=0.5;g.strokeStyle=V("--goal");g.lineWidth=S*0.028;g.setLineDash([S*0.08,S*0.06]);
+      g.beginPath();g.arc(cx,S*0.6,S*0.16,0,7);g.stroke();g.setLineDash([]);g.globalAlpha=1; }
+    else if (type==="door") { tile("#4dd6ff"); g.fillStyle=V("--shadow");
+      for(let k=0;k<3;k++) g.fillRect(S*0.3,S*0.32+k*S*0.14,S*0.4,S*0.055); }
+    else if (type==="switch") { tile("rgba(180,174,235,0.4)"); g.fillStyle="#7dff6b";
+      g.beginPath();g.arc(cx,cy,S*0.15,0,7);g.fill(); g.fillStyle=V("--shadow"); g.fillRect(cx-S*0.02,cy-S*0.12,S*0.04,S*0.16); }
+    else if (type==="saw") { g.strokeStyle="rgba(150,156,172,0.85)";g.lineWidth=S*0.04;g.lineCap="round";
+      g.beginPath();g.moveTo(S*0.2,cy);g.lineTo(S*0.8,cy);g.stroke();
+      g.save();g.translate(cx,cy);g.fillStyle="#c9ced6";g.beginPath();
+      for(let k=0;k<16;k++){const a=k/16*Math.PI*2,r2=(k%2?S*0.2:S*0.13);g.lineTo(Math.cos(a)*r2,Math.sin(a)*r2);} g.closePath();g.fill();
+      g.fillStyle=V("--shadow");g.beginPath();g.arc(0,0,S*0.055,0,7);g.fill(); g.restore(); }
   }
 
   // ---------- Layout + camera --------------------------------------------
@@ -357,7 +910,7 @@
     const wrap = document.getElementById("board-wrap");
     viewW = Math.floor(wrap.clientWidth);
     viewH = Math.floor(wrap.clientHeight);
-    cell = Math.round(clamp(Math.min(viewW / VIEW_COLS, viewH / VIEW_ROWS), MIN_CELL, MAX_CELL));
+    cell = Math.round(clamp(Math.min(viewW / VIEW_COLS, viewH / VIEW_ROWS), MIN_CELL, MAX_CELL) * 0.9);
     worldW = cell * COLS; worldH = cell * ROWS;
     dpr = Math.min(window.devicePixelRatio || 1, 3);
     canvas.width = viewW * dpr; canvas.height = viewH * dpr;
@@ -425,7 +978,7 @@
   // position along the whole route at fractional node index `param`
   function visualAt(param) {
     const len = state.path.length;
-    const f = clamp(param, 0, len-1);
+    const f = clamp(param, 0, len-0.5);              // allow the leading tile to run out to its far edge
     let i = clamp(Math.round(f), 0, len-1);
     return surfaceAtTile(i, (f - i) + 0.5);          // each tile spans param [i-0.5, i+0.5]
   }
@@ -451,9 +1004,12 @@
   function occupiedFor(dragTile) {
     const occ = new Set(state.walls);
     for (const sk of state.stones) occ.add(sk);               // intact stone blocks placement
-    occ.add(key(state.L.start[0], state.L.start[1]));
-    occ.add(key(state.goal.c, state.goal.r));                 // exit tile is fixed, never a drop cell
-    for (const t of state.tiles) { if (dragTile && t.id === dragTile.id) continue; occ.add(key(t.c, t.r)); }
+    for (const d of state.doors) if (!d.open) occ.add(key(d.c, d.r));   // closed colored doors
+    for (const gk of state.gatesClosed) occ.add(gk);          // closed switch-gates
+    for (const ck of state.crumbled) occ.add(ck);             // cells that have crumbled away
+    for (const h of state.hazards) occ.add(key(h.cc, h.cr));  // a hazard's current cell
+    if (!state.keyCollected) occ.add(key(state.goal.c, state.goal.r));   // exit locked until the key is collected
+    for (const t of state.tiles) { if (dragTile && t.id === dragTile.id) continue; if (t.status==="spent") continue; occ.add(key(t.c, t.r)); }
     return occ;
   }
 
@@ -461,6 +1017,8 @@
   function breakStone(c, r) {
     if (!state.stones.delete(key(c, r))) return;
     Sound.smash();                                  // crunch/impact when the stone breaks
+    state.shake = Math.max(state.shake, cell * 0.16);
+    haptic(18);
     const wx = (c + 0.5) * cell, wy = (r + 0.5) * cell;
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2 + (bgHash(c + i, r) % 100) / 60;
@@ -482,6 +1040,57 @@
       ctx.fillRect(Math.round(p.x - p.sz/2), Math.round(p.y - p.sz/2), Math.ceil(p.sz), Math.ceil(p.sz));
     }
     ctx.globalAlpha = 1;
+  }
+  // a bright ring of light pulsing outward from a cleared tile (additive glow)
+  function drawLights() {
+    if (!state.lights || !state.lights.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (const p of state.lights) {
+      const k = p.life / p.max;                 // 0..1
+      const rad = cell * (0.25 + k * 1.3);
+      const fade = (1 - k) * (1 - k);           // ease-out fade
+      // soft radial bloom
+      const g = ctx.createRadialGradient(p.x, p.y, rad*0.2, p.x, p.y, rad);
+      g.addColorStop(0, "rgba(255,248,220," + (0.42*fade) + ")");
+      g.addColorStop(0.6, "rgba(255,224,160," + (0.24*fade) + ")");
+      g.addColorStop(1, "rgba(255,224,160,0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, Math.PI*2); ctx.fill();
+      // crisp expanding ring
+      ctx.globalAlpha = 0.9 * fade;
+      ctx.strokeStyle = "#fff7d6"; ctx.lineWidth = Math.max(1.5, cell*0.05*(1-k));
+      ctx.beginPath(); ctx.arc(p.x, p.y, rad*0.9, 0, Math.PI*2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  }
+  // expanding-ring "pop" pulses (tile placed, coin grabbed, …)
+  function drawPops() {
+    if (!state.pops) return;
+    for (const p of state.pops) {
+      const k = p.life / p.max;
+      ctx.globalAlpha = (1 - k) * 0.85;
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = Math.max(2, cell*0.05*(1-k));
+      ctx.beginPath(); ctx.arc(p.x, p.y, cell*(0.18 + k*0.55), 0, Math.PI*2); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+  // floating "×N" combo tag above the runner
+  function drawCombo() {
+    const s = state;
+    if (s.combo < 2 || s.status !== "play") return;
+    const ri = runnerInfo();
+    const size = Math.round(cell * 0.36 * (1 + s.comboFlash * 0.5));
+    const x = ri.sx, y = ri.sy - cell*1.0, txt = "×" + s.combo;
+    ctx.save();
+    ctx.font = "900 " + size + "px 'Courier New', monospace";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = Math.max(3, size*0.22); ctx.strokeStyle = getVar("--shadow");
+    ctx.strokeText(txt, x, y);                       // dark outline for contrast over the track
+    ctx.fillStyle = getVar("--track"); ctx.fillText(txt, x, y);
+    ctx.restore();
   }
   // Every in-bounds unoccupied cell is a legal drop now (free placement).
   function validTargets(dragTile) {
@@ -510,7 +1119,8 @@
     const pos = nearestFreeCell(tile, c, r);
     if (!pos) return false;                 // grid completely full (shouldn't happen)
     tile.c = pos.c; tile.r = pos.r; tile.status = "parked";
-    state.stall = 0;
+    state.stall = 0; state.lastPlacedId = tile.id;
+    spawnPop(pos.c, pos.r);                  // placement pop
     linkParkedTiles();                      // connect now if it's beside the front
     updateReadyHud();
     return true;
@@ -524,26 +1134,13 @@
     let linked = false, guard = 0;
     while (guard++ < s.tiles.length + 2) {
       const h = head();
-      if (h.kind === "goal") break;         // path already reaches the exit
       const t = s.tiles.find(t => t.status === "parked" && adjacent([t.c, t.r], [h.c, h.r]));
       if (!t) break;
       t.status = "active";
       s.path.push({ c: t.c, r: t.r, kind: "tile", tileId: t.id });
       linked = true;
-      linkExitIfReady();                    // the new front may be beside the exit
-      if (head().kind === "goal") break;
     }
     if (linked) updateReadyHud();
-  }
-
-  // link the path onto the (fixed) exit tile — but only once the key is collected
-  function linkExitIfReady() {
-    const s = state;
-    if (!s.keyCollected) return;
-    const h = head();
-    if (h.kind !== "tile") return;
-    if (adjacent([h.c, h.r], [s.goal.c, s.goal.r]))
-      s.path.push({ c: s.goal.c, r: s.goal.r, kind: "goal" });
   }
 
   // ---------- Runner logic ------------------------------------------------
@@ -551,31 +1148,69 @@
     if (state.status !== "play") return;
     const s = state;
     s.runPhase += dt / 110;                 // legs animate while running
-    s.runT += dt / s.msPerCell;
+    s.elapsed += dt;                        // level clock (for time bonus / stars)
+    // speed zones: the runner accelerates over boost cells, drags over slow ones
+    let factor = 1;
+    if (s.boost.size || s.slow.size) {
+      const rp0 = visualAt(s.runIdx + s.runT);
+      const rk = key(Math.floor(rp0.x/cell), Math.floor(rp0.y/cell));
+      if (s.boost.has(rk)) factor = 1.8; else if (s.slow.has(rk)) factor = 0.5;
+    }
+    s.runT += (dt / s.msPerCell) * factor;
     while (s.runT >= 1 && s.runIdx + 1 < s.path.length) {
       s.runT -= 1;
       s.runIdx++;
       const now = s.path[s.runIdx];
-      if (now.kind === "goal") { s.runT = 0; endWin(); return; }
+      if (s.keyCollected && now.c === s.goal.c && now.r === s.goal.r) { s.runT = 0; endWin(); return; }
     }
     freeClearedTiles();
     collectKey();
     linkParkedTiles();      // connect any staged tile that now touches the front
     // no tile ahead: the runner keeps going to the edge of the last tile, then falls off
-    if (s.runIdx + 1 >= s.path.length && s.runT >= 0.5) { startFall(); return; }
+    if (s.runIdx + 1 >= s.path.length && s.runT >= 0.5) {
+      if (zen) { s.runT = 0.5; return; }    // zen mode: idle at the edge instead of falling
+      startFall(); return;
+    }
+  }
+
+  // undo the most recent placement (if the runner hasn't reached it yet)
+  function undoLast() {
+    const s = state;
+    if (s.status !== "play" || s.lastPlacedId == null) return;
+    const t = s.tiles[s.lastPlacedId];
+    if (!t) return;
+    const h = s.path[s.path.length - 1];
+    if (h.kind === "tile" && h.tileId === t.id && s.runIdx < s.path.length - 1) {
+      s.path.pop(); t.status = "free";       // pop it off the front, back into the pool
+    } else if (t.status === "parked") {
+      t.status = "free";                     // un-stage a parked tile
+    } else { return; }
+    s.lastPlacedId = null;
+    spawnPop(t.c, t.r, "#ff6d6d");
+    updateReadyHud();
   }
 
   // the runner grabs the key by passing over its cell
   function collectKey() {
     const s = state;
-    if (s.keyCollected) return;
     const rp = visualAt(s.runIdx + s.runT);
-    const kx = (s.keyCell.c + 0.5) * cell, ky = (s.keyCell.r + 0.5) * cell;
-    if (Math.hypot(rp.x - kx, rp.y - ky) < cell * 0.7) {
-      s.keyCollected = true;
-      updateKeyHud();
-      linkExitIfReady();      // in case the head is already beside the exit
+    const near = (c, r) => Math.hypot(rp.x-(c+0.5)*cell, rp.y-(r+0.5)*cell) < cell*0.7;
+    // coins: grabbed by passing over them
+    for (const ck of Array.from(s.coinCells)) {
+      const [c, r] = ck.split(",").map(Number);
+      if (near(c, r)) { s.coinCells.delete(ck); s.coinsGot++; s.score += 25; updateScoreHud();
+                        spawnPop(c, r, "#ffd24a"); Sound.coin(); haptic(6); }
     }
+    // colored keys: each opens all doors of its colour; exit unlocks when ALL are held
+    if (!s.keyCollected) {
+      for (const k of s.keys) if (!k.got && near(k.c, k.r)) {
+        k.got = true; spawnPop(k.c, k.r, k.color); haptic(10); Sound.key();
+        for (const d of s.doors) if (d.color === k.color) d.open = true;
+      }
+      if (s.keys.every(k => k.got)) { s.keyCollected = true; updateKeyHud(); }
+    }
+    // doors keep their lock marker until the runner physically passes through them
+    for (const d of s.doors) if (!d.reached && near(d.c, d.r)) d.reached = true;
   }
 
   // A tile becomes draggable the moment the runner crosses out of its cell
@@ -589,18 +1224,52 @@
       if (param > i + 0.5) {
         node.exited = true;                                 // this placement is done
         Sound.clearTile();                                  // play a tone as the tile clears
+        spawnLight(node.c, node.r);                         // burst of light from the cleared tile
+        scoreClear(i);                                      // score, combo, juice on the beat
         if (node.tileId != null) {
           const t = s.tiles[node.tileId];
-          if (t) { t.status = "free"; changed = true; }
+          if (t) {
+            if (s.crumble.has(key(node.c, node.r))) {       // fragile floor: tile is consumed
+              t.status = "spent"; t.c = -1; t.r = -1;
+              s.crumbled.add(key(node.c, node.r));
+              s.shake = Math.max(s.shake, cell * 0.12);
+            } else {
+              t.status = "free";
+            }
+            changed = true;
+          }
         }
       }
     }
     if (changed) updateReadyHud();
   }
 
+  // Award points for a cleared tile and drive the beat-combo + feedback.
+  function scoreClear(clearedIdx) {
+    const s = state;
+    s.combo++;
+    if (s.combo > s.maxCombo) s.maxCombo = s.combo;
+    const mult = comboMult(s.combo);
+    // "flow" bonus for keeping a healthy buffer of track ahead of the runner
+    let ahead = 0;
+    for (let j = clearedIdx + 1; j < s.path.length; j++)
+      if (s.path[j].kind === "tile" && !s.path[j].exited) ahead++;
+    const flow = ahead >= 2 ? 5 : 0;
+    if (flow) s.flowClears++;        // clears made with a healthy buffer ahead
+    s.score += 10 * mult + flow;
+    updateScoreHud();
+    s.beatPulse = 1;                 // pulse the visuals on the beat
+    s.comboFlash = 1;
+    haptic(6);
+  }
+
   function startFall() {
     const ri = runnerInfo();
     state.status = "falling";
+    state.combo = 0;                 // the run ends — combo breaks
+    state.shake = Math.max(state.shake, cell * 0.10);
+    Sound.lose();
+    haptic(60);
     state.drag = null;
     const spd = cell / state.msPerCell;            // the runner's forward speed (px/ms)
     state.fall = { x:ri.sx, y:ri.sy, angle:ri.angle,
@@ -615,15 +1284,41 @@
   }
   function endWin() {
     state.status = "win";
-    const last = levelIdx >= LEVELS.length - 1;
+    // time bonus + star rating
+    const timeBonus = Math.max(0, Math.round((state.par - state.elapsed) / 100));
+    state.score += timeBonus;
+    updateScoreHud();
+    let stars = 1;                                     // finishing earns one
+    if (state.elapsed < state.par) stars++;            // under par time
+    const flowRatio = state.flowClears / (state.maxCombo || 1);
+    if (flowRatio >= 0.6) stars++;                     // kept tiles staged ahead (skillful flow)
+    let bestLine = "";
+    if (mode === "normal") {                           // only built-in levels persist a best
+      const best = loadBest(), keyId = "L" + levelIdx;
+      const prev = best[keyId] || { score:0, stars:0 };
+      const isBest = state.score > prev.score;
+      best[keyId] = { score: Math.max(prev.score, state.score), stars: Math.max(prev.stars, stars) };
+      saveBest(best);
+      bestLine = " &nbsp;·&nbsp; Best <b>" + best[keyId].score + "</b>" +
+        (isBest ? " &nbsp;·&nbsp; <b style='color:var(--goal)'>New best!</b>" : "");
+    }
+    Sound.win();
+    haptic([12, 40, 12]);
+    ovStars.textContent = "★".repeat(stars) + "☆".repeat(3 - stars);
     overlay.className = "win show";
-    ovTitle.textContent = last ? "You Win!" : "Level Clear";
-    ovMsg.textContent = last ? "You guided the runner across every track."
-                             : "Nice routing. Ready for the next track?";
-    ovBtn.textContent = last ? "Play Again" : "Next Level";
+    const last = mode === "normal" && levelIdx >= LEVELS.length - 1;
+    ovTitle.textContent = mode === "endless" ? "Level " + endlessN + " Clear"
+                        : mode === "daily"   ? "Daily Done!"
+                        : last ? "You Win!" : "Level Clear";
+    ovMsg.innerHTML = "Score <b>" + state.score + "</b>" +
+      (timeBonus ? " (incl. +" + timeBonus + " time)" : "") + bestLine;
+    ovBtn.textContent = mode === "endless" ? "Next (Endless)"
+                      : mode === "daily"   ? "Menu"
+                      : last ? "Play Again" : "Next Level";
   }
   function showLose() {
     state.status = "lose";
+    ovStars.textContent = "";
     overlay.className = "lose show";
     ovTitle.textContent = "Runner Fell";
     ovMsg.textContent = "The track ran out. Drag your freed tiles to the front to keep laying track ahead of the runner.";
@@ -633,8 +1328,10 @@
   // ---------- Rendering ---------------------------------------------------
   function draw(ts) {
     drawBackground(ts);                       // parallax procedural backdrop (screen space)
+    const sh = state.shake || 0;
+    const shx = sh ? (Math.random()*2-1)*sh : 0, shy = sh ? (Math.random()*2-1)*sh : 0;
     ctx.save();
-    ctx.translate(-Math.round(camX), -Math.round(camY));
+    ctx.translate(-Math.round(camX - shx), -Math.round(camY - shy));
 
     for (const wk of state.walls) {
       const [c, r] = wk.split(",").map(Number);
@@ -645,14 +1342,20 @@
       drawStone(c, r, ts);
     }
 
+    drawBarriers(ts);
     drawTrack(ts);
     if (state.drag) drawTargets(ts);
     for (const t of state.tiles)
-      if (t.status !== "active" && (!state.drag || state.drag.tile.id !== t.id))
+      if ((t.status === "free" || t.status === "parked") && (!state.drag || state.drag.tile.id !== t.id))
         drawFreeTile(cx(t.c), cy(t.r), ts, false);
 
+    drawPickups(ts);
     drawShards();
-    drawRunner(ts);
+    drawPops();
+    drawLights();
+    if (state.status === "intro") drawIntro(ts); else drawRunner(ts);
+    drawCombo();
+    drawHazards(ts);
 
     if (state.drag) {
       const d = state.drag;
@@ -663,7 +1366,8 @@
     // off-screen indicators (screen space): key (until collected) + exit
     if (state.status === "play" || state.status === "falling") {
       if (!state.keyCollected)
-        drawOffscreenArrow((state.keyCell.c+0.5)*cell, (state.keyCell.r+0.5)*cell, "#ffd24a");
+        for (const k of state.keys) if (!k.got)
+          drawOffscreenArrow((k.c+0.5)*cell, (k.r+0.5)*cell, k.color);
       drawOffscreenArrow((state.goal.c+0.5)*cell, (state.goal.r+0.5)*cell,
                          state.keyCollected ? getVar("--goal") : getVar("--accent"));
     }
@@ -677,64 +1381,180 @@
     const p = state.path, idx = state.runIdx;
     if (idx >= p.length) return;
 
-    // permanent start & goal gates (glass + platform + door) — never cleared
-    const startNode = { c:state.L.start[0], r:state.L.start[1] };
-    const exitDir = axisDir(startNode, { c:state.path[1].c, r:state.path[1].r });
-    drawGate(startNode, exitDir, false, ts);
-    // exit gate: once a tile links to it, orient along the actual approach so
-    // its platform connects; otherwise show the level's default facing.
-    const goalNode = { c:state.goal.c, r:state.goal.r };
-    const linked = p[p.length - 1].kind === "goal";
-    const goalDir = linked
-      ? axisDir({ c:p[p.length-2].c, r:p[p.length-2].r }, goalNode)
-      : { x:state.L.goalDir[0], y:state.L.goalDir[1] };
-    drawGate(goalNode, goalDir, true, ts);
-
     // a node carries a platform until the runner exits it (per-node flag, so a
     // re-placed tile's stale old node never affects its fresh placement).
     const live = (n) => n.kind === "tile" && !n.exited;
+    const onGoal = (n) => n.c === state.goal.c && n.r === state.goal.r;
 
     for (let i = idx; i < p.length; i++)
       if (live(p[i])) drawGlass(cx(p[i].c), cy(p[i].r), cell);
 
     for (let i = idx; i < p.length; i++)
-      if (live(p[i])) drawPlatformTile(p[i], p[i-1], p[i+1]);
+      if (live(p[i])) {
+        // leading tile = 3-way junction, unless it's the final tile on the goal cell
+        if (i === p.length - 1 && !onGoal(p[i])) drawJunction(p[i], p[i-1], ts);
+        else drawPlatformTile(p[i], p[i-1], p[i+1]);
+      }
 
-    // head marker: pulsing chevron at the front tile, pointing along travel
-    const hn = p[p.length - 1];
-    if (hn.kind === "tile") {
-      const prev = p[p.length - 2];
-      const dir = prev ? axisDir(prev, hn) : { x:1, y:0 };
-      const C = nodeCenter(hn);
-      const pulse = 0.5 + 0.5*Math.sin(ts/160);
-      ctx.save(); ctx.translate(C.x, C.y); ctx.rotate(Math.atan2(dir.y, dir.x));
-      ctx.fillStyle = getVar("--accent"); ctx.globalAlpha = 0.55 + 0.45*pulse;
-      const cs = cell*0.13;
-      ctx.beginPath(); ctx.moveTo(cs*0.7, -cs); ctx.lineTo(cs*0.7+cs, 0); ctx.lineTo(cs*0.7, cs); ctx.closePath(); ctx.fill();
-      ctx.globalAlpha = 1; ctx.restore();
-    }
-
-    // padlock on the exit until the key is collected
-    if (!state.keyCollected) drawLock((state.goal.c+0.5)*cell, (state.goal.r+0.5)*cell, ts);
-    // the key, hovering on its cell until collected
-    if (!state.keyCollected) drawKey((state.keyCell.c+0.5)*cell, (state.keyCell.r+0.5)*cell, ts);
+    // the exit is a floating flag on its cell; you must lay a tile there to finish
+    drawFlag(state.goal.c, state.goal.r, ts, !state.keyCollected);
   }
 
-  function drawKey(x, y, ts) {
+  // floating finish flag; you place a tile on its cell to reach the exit
+  function drawFlag(c, r, ts, locked) {
+    const x = (c+0.5)*cell, cy0 = (r+0.5)*cell, s = cell;
+    const bob = Math.sin(ts/300)*s*0.05, y = cy0 + bob;
+    const col = locked ? getVar("--dim") : getVar("--goal");
+    ctx.save();
+    // target ring on the cell (place-here indicator)
+    ctx.globalAlpha = 0.45 + 0.3*Math.sin(ts/240);
+    ctx.strokeStyle = col; ctx.lineWidth = Math.max(2, s*0.045);
+    ctx.setLineDash([s*0.12, s*0.09]);
+    ctx.beginPath(); ctx.arc(x, cy0, s*0.3, 0, Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    // pole
+    const poleTop = y - s*0.34, poleBot = y + s*0.24;
+    ctx.strokeStyle = "#d9d3ff"; ctx.lineWidth = Math.max(2, s*0.035); ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x, poleTop); ctx.lineTo(x, poleBot); ctx.stroke();
+    // waving flag
+    const wave = Math.sin(ts/180)*s*0.03, fw = s*0.3, fh = s*0.2;
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.moveTo(x, poleTop);
+    ctx.quadraticCurveTo(x + fw*0.6, poleTop + fh*0.1 + wave, x + fw, poleTop + fh*0.5);
+    ctx.quadraticCurveTo(x + fw*0.6, poleTop + fh*0.9 - wave, x, poleTop + fh);
+    ctx.closePath(); ctx.fill();
+    if (locked) drawLock(x, cy0 + s*0.02, ts);   // small padlock until the key is collected
+    ctx.restore();
+  }
+
+  function drawKey(x, y, ts, color) {
+    color = color || "#ffd24a";
     const s = cell, bob = Math.sin(ts/300)*s*0.05;
     y += bob;
     ctx.save();
-    const g = ctx.createRadialGradient(x, y, 0, x, y, s*0.55);
-    g.addColorStop(0, "rgba(255,210,74,0.40)"); g.addColorStop(1, "rgba(255,210,74,0)");
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, s*0.55, 0, Math.PI*2); ctx.fill();
-    const gold = "#ffd24a", R = s*0.12, bx = x - s*0.10;
-    ctx.fillStyle = gold;
+    ctx.globalAlpha = 0.28; ctx.fillStyle = color;                                   // soft glow
+    ctx.beginPath(); ctx.arc(x, y, s*0.4, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+    const R = s*0.12, bx = x - s*0.10;
+    ctx.fillStyle = color;
     ctx.beginPath(); ctx.arc(bx, y, R, 0, Math.PI*2); ctx.fill();                    // bow ring
     ctx.fillStyle = getVar("--shadow"); ctx.beginPath(); ctx.arc(bx, y, R*0.42, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = gold;
+    ctx.fillStyle = color;
     ctx.fillRect(bx + R*0.6, y - s*0.028, s*0.30, s*0.056);                          // shaft
     ctx.fillRect(x + s*0.12, y + s*0.012, s*0.035, s*0.07);                          // teeth
     ctx.fillRect(x + s*0.05, y + s*0.012, s*0.035, s*0.07);
+    ctx.restore();
+  }
+
+  // --- Batch 2 cell-type rendering ---------------------------------------
+  function drawBarriers(ts) {
+    const s = state;
+    for (const ck of s.crumble) if (!s.crumbled.has(ck)) { const [c,r]=ck.split(",").map(Number); drawCrumble(c,r,false,ts); }
+    for (const ck of s.crumbled) { const [c,r]=ck.split(",").map(Number); drawCrumble(c,r,true,ts); }
+    for (const bk of s.boost) { const [c,r]=bk.split(",").map(Number); drawChevrons(c,r,ts,-1,pal("boost")); }
+    for (const bk of s.slow)  { const [c,r]=bk.split(",").map(Number); drawChevrons(c,r,ts, 1,pal("slow")); }
+    for (const d of s.doors) {
+      if (!d.open) drawDoor(d.c,d.r,d.color);                    // solid door until its key is found
+      if (!d.reached) drawDoorLock(d.c,d.r,ts,d.color,d.open);   // lock marker stays until the runner arrives
+    }
+    for (const gk of s.gatesClosed) { const [c,r]=gk.split(",").map(Number); drawGateCell(c,r,ts); }
+    for (const sw of s.switches) drawSwitch(sw.c,sw.r,sw.used,ts);
+  }
+  function drawPickups(ts) {
+    for (const ck of state.coinCells) { const [c,r]=ck.split(",").map(Number); drawCoin((c+0.5)*cell,(r+0.5)*cell,ts); }
+    if (!state.keyCollected) for (const k of state.keys) if (!k.got) drawKey((k.c+0.5)*cell,(k.r+0.5)*cell,ts,k.color);
+  }
+  function drawHazards(ts) {
+    for (const h of state.hazards) {
+      // the rail the saw slides along (lo -> hi)
+      const x1 = h.axis==="h" ? (h.lo+0.5)*cell : (h.c+0.5)*cell;
+      const y1 = h.axis==="h" ? (h.r+0.5)*cell  : (h.lo+0.5)*cell;
+      const x2 = h.axis==="h" ? (h.hi+0.5)*cell : (h.c+0.5)*cell;
+      const y2 = h.axis==="h" ? (h.r+0.5)*cell  : (h.hi+0.5)*cell;
+      ctx.save();
+      ctx.strokeStyle = "rgba(150,156,172,0.55)"; ctx.lineWidth = Math.max(2, cell*0.05); ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+      ctx.fillStyle = "rgba(120,126,142,0.65)";
+      for (const [ex,ey] of [[x1,y1],[x2,y2]]) { ctx.beginPath(); ctx.arc(ex,ey,cell*0.09,0,Math.PI*2); ctx.fill(); }
+      ctx.restore();
+      // saw drawn at its smooth sliding position
+      const pos = h.pos != null ? h.pos : (h.axis==="h" ? h.cc : h.cr);
+      const sx = h.axis==="h" ? (pos+0.5)*cell : (h.c+0.5)*cell;
+      const sy = h.axis==="h" ? (h.r+0.5)*cell : (pos+0.5)*cell;
+      drawSaw(sx, sy, ts);
+    }
+  }
+  function drawCoin(x, y, ts) {
+    const w = Math.max(2, cell*0.20 * (0.35 + 0.65*Math.abs(Math.cos(ts/280))));   // spin
+    ctx.save();
+    ctx.fillStyle = "#ffd24a"; ctx.beginPath(); ctx.ellipse(x, y, w, cell*0.20, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = "#b8892a"; ctx.beginPath(); ctx.ellipse(x, y, Math.max(1,w*0.5), cell*0.11, 0, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+  function drawChevrons(c, r, ts, dir, color) {   // dir -1 = boost (up), +1 = slow (down)
+    const x = cx(c), y = cy(r), s = cell, ph = (ts/380) % 1;
+    ctx.save(); ctx.globalAlpha = 0.5; ctx.strokeStyle = color; ctx.lineWidth = Math.max(2, s*0.05);
+    for (let k=0;k<3;k++){ const yy = y + s*(0.22 + ((k*0.26 + (dir<0?1-ph:ph)) % 0.78));
+      ctx.beginPath(); ctx.moveTo(x+s*0.30, yy - dir*s*0.06); ctx.lineTo(x+s*0.5, yy + dir*s*0.06); ctx.lineTo(x+s*0.70, yy - dir*s*0.06); ctx.stroke(); }
+    ctx.globalAlpha = 1; ctx.restore();
+  }
+  function drawCrumble(c, r, gone, ts) {
+    // a vortex — a swirling hole in spacetime
+    const x = cx(c)+cell*0.5, y = cy(r)+cell*0.5, s = cell*0.42, rot = (ts||0)/900;
+    ctx.save();
+    const g = ctx.createRadialGradient(x, y, s*0.08, x, y, s);
+    g.addColorStop(0, gone ? "rgba(4,2,10,0.7)"  : "rgba(6,3,16,0.95)");
+    g.addColorStop(0.55, gone ? "rgba(30,18,60,0.32)" : "rgba(64,32,116,0.55)");
+    g.addColorStop(1, "rgba(64,32,116,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, s, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = gone ? 0.28 : 0.8;
+    ctx.lineWidth = Math.max(1.5, cell*0.028); ctx.lineCap = "round";
+    for (let a=0;a<3;a++){
+      ctx.strokeStyle = a%2 ? "#b98cff" : "#6de0ff";
+      ctx.beginPath();
+      for (let t=0;t<=1.0001;t+=0.05){
+        const ang = rot + a/3*Math.PI*2 + t*Math.PI*2.4, rad = s*(0.12 + t*0.82);
+        const px = x + Math.cos(ang)*rad, py = y + Math.sin(ang)*rad;
+        if (t===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+      }
+      ctx.stroke();
+    }
+    // bright event-horizon core
+    ctx.globalAlpha = gone ? 0.2 : 0.5 + 0.3*Math.sin((ts||0)/220);
+    ctx.fillStyle = "#e6d8ff"; ctx.beginPath(); ctx.arc(x, y, s*0.12, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+  function drawDoor(c, r, color) {
+    const x = cx(c), y = cy(r), s = cell;
+    pixelRect(x+3, y+3, s-6, s-6, color, getVar("--shadow"));
+    ctx.save(); ctx.globalAlpha = 0.8; ctx.fillStyle = getVar("--shadow");
+    for (let k=0;k<3;k++) ctx.fillRect(x+s*0.2, y+s*(0.26+k*0.22), s*0.6, s*0.075);
+    ctx.globalAlpha = 1; ctx.restore();
+  }
+  function drawGateCell(c, r, ts) {
+    const x = cx(c), y = cy(r), s = cell, pulse = 0.5+0.5*Math.sin(ts/240);
+    pixelRect(x+3, y+3, s-6, s-6, "#6b6f2e", getVar("--shadow"));
+    ctx.save(); ctx.globalAlpha = 0.4+0.3*pulse; ctx.fillStyle = pal("gate");
+    ctx.fillRect(x+s*0.15, y+s*0.45, s*0.7, s*0.1); ctx.globalAlpha=1; ctx.restore();
+  }
+  function drawSwitch(c, r, used, ts) {
+    const x = cx(c)+cell*0.5, y = cy(r)+cell*0.5, s = cell, pulse = 0.5+0.5*Math.sin(ts/200);
+    ctx.save();
+    ctx.fillStyle = used ? pal("swOff") : pal("sw"); ctx.globalAlpha = used ? 0.7 : 0.6+0.4*pulse;
+    ctx.beginPath(); ctx.arc(x, y, s*0.18, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1; ctx.fillStyle = getVar("--shadow");
+    ctx.fillRect(x - s*0.02, y - (used? -s*0.02 : s*0.12), s*0.04, s*0.16);    // lever flips when used
+    ctx.restore();
+  }
+  function drawSaw(x, y, ts) {
+    const s = cell*0.30, rot = ts/120;
+    ctx.save(); ctx.globalAlpha = 0.25; ctx.fillStyle = pal("saw");
+    ctx.beginPath(); ctx.arc(x, y, cell*0.42, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1;   // danger glow
+    ctx.translate(x, y); ctx.rotate(rot); ctx.fillStyle = "#c9ced6";
+    ctx.beginPath();
+    for (let k=0;k<16;k++){ const a=k/16*Math.PI*2, rr = k%2?s:s*0.62; ctx.lineTo(Math.cos(a)*rr, Math.sin(a)*rr); }
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = getVar("--shadow"); ctx.beginPath(); ctx.arc(0,0,s*0.25,0,Math.PI*2); ctx.fill();
     ctx.restore();
   }
 
@@ -755,6 +1575,24 @@
     ctx.restore();
   }
 
+  // a padlock marker on a colored door; open=true shows an unlocked shackle but stays until reached
+  function drawDoorLock(c, r, ts, color, open) {
+    const x = cx(c)+cell*0.5, y = cy(r)+cell*0.5, s = cell*0.5, pulse = 0.6 + 0.4*Math.sin(ts/260);
+    ctx.save();
+    ctx.strokeStyle = color; ctx.lineWidth = Math.max(3, cell*0.06); ctx.lineCap = "round";
+    ctx.globalAlpha = open ? 0.85 : 0.55 + 0.35*pulse;
+    ctx.beginPath();
+    if (open) ctx.arc(x - s*0.2, y - s*0.14, s*0.22, Math.PI*0.75, Math.PI*2.05);   // shackle swung open
+    else      ctx.arc(x,          y - s*0.14, s*0.22, Math.PI,        0);            // shackle closed
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    rrect(x - s*0.26, y - s*0.02, s*0.52, s*0.38, s*0.07); ctx.fillStyle = color; ctx.fill();
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.beginPath(); ctx.arc(x, y + s*0.14, s*0.065, 0, Math.PI*2); ctx.fill();      // keyhole
+    ctx.fillRect(x - s*0.028, y + s*0.14, s*0.056, s*0.12);
+    ctx.restore();
+  }
+
   // edge arrow pointing to an off-screen target (drawn in screen space)
   function drawOffscreenArrow(wx, wy, color) {
     const sx = wx - camX, sy = wy - camY;
@@ -767,9 +1605,9 @@
     const sz = (cell || 90) * 0.17;
     ctx.save();
     ctx.translate(ax, ay); ctx.rotate(Math.atan2(dy, dx));
-    ctx.fillStyle = color; ctx.strokeStyle = getVar("--shadow"); ctx.lineWidth = 2.5;
+    ctx.fillStyle = color;                             // no outline
     ctx.beginPath(); ctx.moveTo(sz, 0); ctx.lineTo(-sz*0.7, -sz*0.8); ctx.lineTo(-sz*0.35, 0); ctx.lineTo(-sz*0.7, sz*0.8); ctx.closePath();
-    ctx.fill(); ctx.stroke();
+    ctx.fill();
     ctx.restore();
   }
 
@@ -780,38 +1618,90 @@
     drawPlatformSurface(n, tileSurface(n, prev, next), getVar("--track"));
   }
 
-  // draw a platform body + rail from a surface polyline S, clipped to the cell
-  function drawPlatformSurface(n, S, fill) {
-    const T = cell * TRACK_T, nlast = S.length - 1;
+  // draw a platform body + rail from a surface polyline S, clipped to the cell.
+  // The body is solid from the running surface all the way to the tile edge.
+  function hexA(hex, a) {   // "#ffcf4d" -> "rgba(255,207,77,a)"
+    const n = parseInt(hex.replace("#",""), 16);
+    return "rgba(" + ((n>>16)&255) + "," + ((n>>8)&255) + "," + (n&255) + "," + a + ")";
+  }
+  // build the body polygon (surface S, extended past the far tile edge) as the current path
+  function bodyPath(S) {
+    const nlast = S.length - 1;
     const nrm = S.map((pt, k) => {
       const a = S[Math.max(0, k-1)], b = S[Math.min(nlast, k+1)];
       let tx = b.x-a.x, ty = b.y-a.y; const m = Math.hypot(tx,ty) || 1;
       return { x: ty/m, y: -tx/m };
     });
-    const O = S.map((pt, k) => ({ x:pt.x - nrm[k].x*T, y:pt.y - nrm[k].y*T }));
-
+    const Obig = S.map((pt, k) => ({ x:pt.x - nrm[k].x*cell*1.7, y:pt.y - nrm[k].y*cell*1.7 })); // past the edge; clip trims it
+    ctx.moveTo(S[0].x, S[0].y);                          // adds a subpath (caller does beginPath/fill)
+    for (let k = 1; k <= nlast; k++) ctx.lineTo(S[k].x, S[k].y);
+    for (let k = nlast; k >= 0; k--) ctx.lineTo(Obig[k].x, Obig[k].y);
+    ctx.closePath();
+  }
+  function drawPlatformBody(n, S, fill) {
     ctx.save();
     rrect(cx(n.c), cy(n.r), cell, cell, cell*0.16); ctx.clip();
-
-    ctx.beginPath();
-    ctx.moveTo(S[0].x, S[0].y);
-    for (let k = 1; k <= nlast; k++) ctx.lineTo(S[k].x, S[k].y);
-    for (let k = nlast; k >= 0; k--) ctx.lineTo(O[k].x, O[k].y);
-    ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
-
-    // underside shade (soft depth, no hard outline)
-    ctx.lineJoin = "round"; ctx.lineCap = "round";
-    ctx.strokeStyle = getVar("--track-lo"); ctx.lineWidth = Math.max(2, cell*0.05);
-    ctx.beginPath(); ctx.moveTo(O[0].x, O[0].y);
-    for (let k = 1; k <= nlast; k++) ctx.lineTo(O[k].x, O[k].y); ctx.stroke();
-
-    ctx.strokeStyle = getVar("--rail"); ctx.lineWidth = Math.max(3, cell*0.06);
-    railPath(S); ctx.stroke();
+    ctx.beginPath(); bodyPath(S); ctx.fillStyle = fill; ctx.fill();   // flat solid body to the tile edge
+    grainFill(cx(n.c), cy(n.r), cell, cell, 0.7);     // paper grain on the platform
     ctx.restore();
   }
-  function railPath(S) {
-    ctx.beginPath(); ctx.moveTo(S[0].x, S[0].y);
+  function drawPlatformRail(n, S) {
+    ctx.save();
+    rrect(cx(n.c), cy(n.r), cell, cell, cell*0.16); ctx.clip();
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.strokeStyle = getVar("--rail"); ctx.lineWidth = Math.max(3, cell*0.06);
+    ctx.beginPath(); railPath(S); ctx.stroke();
+    ctx.restore();
+  }
+  function drawPlatformSurface(n, S, fill) {
+    drawPlatformBody(n, S, fill);
+    drawPlatformRail(n, S);
+  }
+  function railPath(S) {                                // adds a subpath (caller does beginPath/stroke)
+    ctx.moveTo(S[0].x, S[0].y);
     for (let k = 1; k < S.length; k++) ctx.lineTo(S[k].x, S[k].y);
+  }
+
+  // the leading tile renders as a 3-way junction: three real platform pieces
+  // oriented to the travel direction — a flat run forward, plus a curve each way
+  // (up / down relative to travel) — signalling the path isn't set yet.
+  function drawJunction(n, prev, ts) {
+    const din = prev ? axisDir(prev, n) : { x:0, y:-1 };   // travel direction into the tile
+    const left  = { x:-din.y, y:din.x };
+    const right = { x: din.y, y:-din.x };
+    const exits = [din, left, right];                       // forward (flat), then the two curves
+    // draw each option as an actual platform surface (straight for forward, arcs for the turns)
+    const surfaces = exits.map(d => tileSurface(n, prev, { c:n.c + d.x, r:n.r + d.y }));
+    const C = nodeCenter(n), h = cell*0.5;
+    ctx.save();
+    rrect(cx(n.c), cy(n.r), cell, cell, cell*0.16); ctx.clip();
+    // flat, uniform transparent fill for all three path pieces (one fill = single alpha, no overlap build-up)
+    ctx.beginPath();
+    for (const S of surfaces) bodyPath(S);
+    ctx.fillStyle = hexA(getVar("--track"), 0.42); ctx.fill();
+    grainFill(cx(n.c), cy(n.r), cell, cell, 0.4);
+    // rails (the top line of each path), flat & semi-transparent (one stroke = single alpha)
+    const railCol = hexA(getVar("--rail"), 0.7);
+    ctx.beginPath();
+    for (const S of surfaces) railPath(S);
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.strokeStyle = railCol; ctx.lineWidth = Math.max(3, cell*0.06);
+    ctx.stroke();
+    ctx.restore();
+
+    // small direction arrows just OUTSIDE the tile on each open edge
+    ctx.fillStyle = railCol;
+    const gap = cell*0.12, len = cell*0.11, w = cell*0.09;
+    for (const d of exits) {
+      const tx = C.x + d.x*(h + gap + len), ty = C.y + d.y*(h + gap + len);   // tip
+      const bx = C.x + d.x*(h + gap),       by = C.y + d.y*(h + gap);         // base (just past the edge)
+      const px = -d.y, py = d.x;
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.lineTo(bx + px*w, by + py*w);
+      ctx.lineTo(bx - px*w, by - py*w);
+      ctx.closePath(); ctx.fill();
+    }
   }
 
   // permanent start/goal gate: glass cell, a straight platform along `dir`,
@@ -915,17 +1805,13 @@
     g.addColorStop(0, "#868ea0"); g.addColorStop(0.45, "#5c6474");
     g.addColorStop(0.55, "#515867"); g.addColorStop(1, "#363b48");
     rrect(x, y, s, s, rad); ctx.fillStyle = g; ctx.fill();            // full-cell plate, no outline
-    // brushed sheen streak
     ctx.save(); rrect(x, y, s, s, rad); ctx.clip();
-    ctx.fillStyle = "rgba(255,255,255,0.10)";
-    ctx.beginPath(); ctx.moveTo(x, y+s*0.16); ctx.lineTo(x+s*0.5, y);
-    ctx.lineTo(x+s*0.8, y); ctx.lineTo(x, y+s*0.55); ctx.closePath(); ctx.fill();
+    grainFill(x, y, s, s, 0.9);                       // paper grain on the wall tile (no sheen)
     ctx.restore();
-    // corner bolts
+    // corner bolts (matte, no shine)
     const off = s*0.17, br = s*0.05;
     for (const [bx, by] of [[off,off],[s-off,off],[off,s-off],[s-off,s-off]]) {
-      ctx.fillStyle = "rgba(15,17,24,0.9)"; ctx.beginPath(); ctx.arc(x+bx, y+by, br, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,0.20)"; ctx.beginPath(); ctx.arc(x+bx - br*0.3, y+by - br*0.3, br*0.4, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "rgba(74,80,96,0.75)"; ctx.beginPath(); ctx.arc(x+bx, y+by, br, 0, Math.PI*2); ctx.fill();
     }
   }
 
@@ -957,66 +1843,89 @@
     const pulse = 0.5 + 0.5*Math.sin(ts/380 + (c+r));
     ctx.globalAlpha = 0.06 + 0.10*pulse; ctx.fillStyle = "#fff0c4"; ctx.fillRect(x, y, s, s);
     ctx.globalAlpha = 1;
+    grainFill(x, y, s, s, 0.9);                       // paper grain on the stone tile
     ctx.restore();
   }
 
   // ---- parallax procedural backdrop (drawn in screen space) --------------
-  function drawBackground(ts) {
-    const g = ctx.createLinearGradient(0, 0, 0, viewH);
-    g.addColorStop(0, "#141026"); g.addColorStop(1, "#0a0917");
-    ctx.fillStyle = g; ctx.fillRect(0, 0, viewW, viewH);
-    const u = cell || 90;
-    bgLayer(ts, 0.12, u*0.95, u*0.030, "rgba(125,115,205,0.10)", 0);
-    bgLayer(ts, 0.26, u*1.45, u*0.055, "rgba(130,120,215,0.13)", 1);
-    bgLayer(ts, 0.46, u*2.20, u*0.085, "rgba(160,150,235,0.10)", 2);
+  // Paper grain + fibers, pre-rendered once into a TRANSPARENT tile (overlaid on the stripes).
+  let grainPattern = null;
+  function buildPaper() {
+    const S = 220, off = document.createElement("canvas"); off.width = S; off.height = S;
+    const o = off.getContext("2d");
+    for (let i = 0; i < 4600; i++) {                 // fine grain speckle (light so it reads on dark)
+      o.fillStyle = Math.random() < 0.64 ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.07)";
+      const z = Math.random() < 0.14 ? 2 : 1;
+      o.fillRect(Math.random()*S, Math.random()*S, z, z);
+    }
+    o.lineWidth = 1;
+    for (let i = 0; i < 220; i++) {                  // criss-crossing paper fibers
+      const x = Math.random()*S, y = Math.random()*S, a = Math.random()*Math.PI, len = 5 + Math.random()*16;
+      o.strokeStyle = Math.random() < 0.6 ? "rgba(255,255,255,0.045)" : "rgba(0,0,0,0.05)";
+      o.beginPath(); o.moveTo(x, y); o.lineTo(x + Math.cos(a)*len, y + Math.sin(a)*len); o.stroke();
+    }
+    grainPattern = ctx.createPattern(off, "repeat");
   }
   function bgHash(i, j) {
     let n = (Math.imul(i, 73856093) ^ Math.imul(j, 19349663)) >>> 0;
     n = Math.imul(n ^ (n >>> 13), 1274126177) >>> 0;
     return n;
   }
-  function bgLayer(ts, f, S, size, color, shape) {
-    const ox = camX*f + ts*0.004*(1 - f);          // parallax offset + gentle drift
-    const oy = camY*f - ts*0.006*f;
-    const i0 = Math.floor(ox/S)-1, i1 = Math.floor((ox+viewW)/S)+1;
-    const j0 = Math.floor(oy/S)-1, j1 = Math.floor((oy+viewH)/S)+1;
-    ctx.fillStyle = color; ctx.strokeStyle = color;
-    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
-      const h = bgHash(i, j);
-      if ((h & 3) === 0) continue;                 // skip ~1/4 for irregularity
-      const jx = ((h>>>3)&15)/15, jy = ((h>>>7)&15)/15;
-      const px = i*S + jx*S - ox, py = j*S + jy*S - oy;
-      const sz = size * (0.55 + ((h>>>11)&7)/7 * 0.7);
-      bgShape(shape, px, py, sz, h);
+  // deep muted rainbow (red → violet), dark
+  const DEFAULT_THEME = { colors:["#4e2733","#4f331f","#4d4620","#23412f","#1f3a52","#2e2652","#422247"],
+                          angle:Math.PI*0.25, stripeW:0.8, style:"plain", drift:0.5 };
+  function drawStripes(ts, themeOverride) {
+    const T = themeOverride || (state && state.bgTheme) || DEFAULT_THEME;
+    const cols = T.colors, N = cols.length, w = (cell || 90) * T.stripeW;
+    const diag = Math.hypot(viewW, viewH);
+    const period = w * N;                                      // the palette repeats every N bands
+    let off = (ts * 0.001 * T.drift * (cell || 90)) % period;  // continuous scroll, wrapped to one full colour period
+    if (off < 0) off += period;                                // so it loops seamlessly (a whole-period jump is invisible)
+    const nStart = Math.floor((off - diag) / w) - 1;
+    const nEnd   = Math.ceil((off + diag) / w) + 1;
+    ctx.save();
+    ctx.translate(viewW/2, viewH/2); ctx.rotate(T.angle);
+    for (let n = nStart; n <= nEnd; n++) {                     // rotated bands cover the viewport
+      const x = n*w - off, ci = ((n % N) + N) % N;             // colour keyed to absolute band index → no flicker at wrap
+      ctx.fillStyle = cols[ci];
+      ctx.fillRect(x, -diag, w, 2*diag);
+      if (T.style === "lined") {                               // thin separator line between bands
+        ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.fillRect(x, -diag, Math.max(1, w*0.06), 2*diag);
+      }
     }
+    if (T.style === "dotted") {                                // faint dot lattice over the bands
+      ctx.fillStyle = "rgba(255,255,255,0.05)"; const g = w*0.7;
+      for (let a=-diag; a<diag; a+=g) for (let bb=-diag; bb<diag; bb+=g)
+        { ctx.beginPath(); ctx.arc(a, bb, Math.max(1, w*0.06), 0, Math.PI*2); ctx.fill(); }
+    }
+    ctx.restore();
   }
-  function bgShape(shape, x, y, s, h) {
-    if (shape === 0) { ctx.beginPath(); ctx.arc(x, y, s*0.6, 0, Math.PI*2); ctx.fill(); }
-    else if (shape === 1) {
-      ctx.beginPath(); ctx.moveTo(x, y-s); ctx.lineTo(x+s, y); ctx.lineTo(x, y+s); ctx.lineTo(x-s, y); ctx.closePath(); ctx.fill();
-    } else if (h & 0x400000) {
-      ctx.lineWidth = Math.max(1.5, s*0.28); ctx.beginPath(); ctx.arc(x, y, s, 0, Math.PI*2); ctx.stroke();
-    } else {
-      const t = s*0.34; ctx.fillRect(x-t, y-s, t*2, s*2); ctx.fillRect(x-s, y-t, s*2, t*2);
+  function drawBackground(ts, themeOverride) {
+    if (!grainPattern) buildPaper();
+    drawStripes(ts, themeOverride);                              // deep rainbow diagonal stripes
+    ctx.globalAlpha = 0.38; ctx.fillStyle = "#0a0817";            // dark wash -> deepen & unify
+    ctx.fillRect(0, 0, viewW, viewH); ctx.globalAlpha = 1;
+    ctx.fillStyle = grainPattern; ctx.fillRect(0, 0, viewW, viewH); // paper grain/fibers over the stripes
+    if (state && state.beatPulse > 0.02) {                        // soft bloom on each beat
+      ctx.globalAlpha = state.beatPulse * 0.10;
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, viewW, viewH);
+      ctx.globalAlpha = 1;
     }
   }
 
   // frosted-glass tile: full cell, rounded corners, no margin
+  // overlay the paper grain over the current (already-clipped) tile region
+  function grainFill(x, y, w, h, a) {
+    if (!grainPattern) return;
+    ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = grainPattern; ctx.fillRect(x, y, w, h); ctx.restore();
+  }
   function drawGlass(x, y, s) {
     const r = s*0.16;
     ctx.save();
     rrect(x, y, s, s, r); ctx.clip();
-    const g = ctx.createLinearGradient(x, y, x, y + s);
-    g.addColorStop(0, "rgba(201,196,255,0.42)");
-    g.addColorStop(1, "rgba(150,143,220,0.22)");
-    ctx.fillStyle = g; ctx.fillRect(x, y, s, s);
-    ctx.fillStyle = "rgba(255,255,255,0.16)";       // diagonal sheen streaks
-    ctx.beginPath();
-    ctx.moveTo(x, y+s*0.18); ctx.lineTo(x+s*0.55, y);
-    ctx.lineTo(x+s*0.85, y); ctx.lineTo(x, y+s*0.6); ctx.closePath(); ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(x+s*0.78, y+s); ctx.lineTo(x+s, y+s*0.62);
-    ctx.lineTo(x+s, y+s*0.82); ctx.lineTo(x+s*0.9, y+s); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "rgba(180,174,235,0.55)";        // flat matte paper fill (no gloss/sheen)
+    ctx.fillRect(x, y, s, s);
+    grainFill(x, y, s, s, 0.9);                       // paper grain on the tile
     ctx.restore();
   }
 
@@ -1024,33 +1933,21 @@
     const s = cell, r = s*0.16;
     if (lifted) { ctx.fillStyle = "rgba(5,4,13,0.4)"; rrect(x+6, y+9, s, s, r); ctx.fill(); }
     drawGlass(x, y, s);
-    // fingerprint, etched into the glass (the drag affordance — no border/outline)
+    // 3x3 grid of dots in the centre — the "draggable" affordance
     const pulse = 0.5 + 0.5*Math.sin(ts/180);
-    ctx.globalAlpha = 0.7 + 0.3*pulse;
-    drawFingerprint(x + s/2, y + s/2, s*0.27);
+    ctx.globalAlpha = 0.6 + 0.35*pulse;
+    drawDragDots(x + s/2, y + s/2, s);
     ctx.globalAlpha = 1;
   }
 
-  // stylised fingerprint: nested ridges open at the bottom + a central whorl
-  // pixelated fingerprint: concentric ridge bands on a pixel grid, open at bottom
-  function drawFingerprint(fx, fy, R) {
-    const px = Math.max(2, R*0.16);          // pixel size
-    const band = R*0.34;                      // ridge spacing
-    const reach = R*1.02;
-    const cx0 = fx, cy0 = fy - R*0.05;
-    const n = Math.ceil(reach/px);
+  // nine small dots (3x3) centred in the tile, signalling it can be dragged
+  function drawDragDots(fx, fy, s) {
+    const gap = s*0.16, rad = Math.max(1.5, s*0.035);
     ctx.fillStyle = getVar("--shadow");
-    for (let gy = -n; gy <= n; gy++) {
-      for (let gx = -n; gx <= n; gx++) {
-        const x = gx*px, y = gy*px;
-        const rr = Math.hypot(x, y);
-        if (rr > reach) continue;
-        if ((rr/band) % 1 >= 0.5) continue;                       // gap between ridges
-        if (y > band*0.2 && Math.abs(x) < band*0.55) continue;    // opening at the bottom
-        ctx.fillRect(Math.round(cx0 + x - px/2), Math.round(cy0 + y - px/2),
-                     Math.ceil(px), Math.ceil(px));
+    for (let gy = -1; gy <= 1; gy++)
+      for (let gx = -1; gx <= 1; gx++) {
+        ctx.beginPath(); ctx.arc(fx + gx*gap, fy + gy*gap, rad, 0, Math.PI*2); ctx.fill();
       }
-    }
   }
 
   // Ghost of the single cell the dragged tile will snap to (nearest empty cell).
@@ -1104,6 +2001,8 @@
   canvas.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     Sound.unlock();                     // first touch unlocks audio (iOS autoplay policy)
+    if (titleActive) { leaveTitle(); return; }
+    if (editing) { const p = screenXY(e); editorPaint(p.x, p.y); return; }
     if (state.status !== "play") return;
     const { x, y } = screenXY(e);
     const wx = x + camX, wy = y + camY;
@@ -1111,7 +2010,14 @@
     if (!inBounds(c, r)) return;
     const tile = freeTileAt(c, r);
     if (!tile) {
-      if (state.stones.has(key(c, r))) breakStone(c, r);   // tap a stone to smash it
+      if (state.stones.has(key(c, r))) { breakStone(c, r); return; }   // tap a stone to smash it
+      const sw = state.switches.find(s => !s.used && s.c === c && s.r === r);
+      if (sw) {                                            // tap a switch to open its gate(s)
+        sw.used = true;
+        for (const g of sw.gates) { state.gatesClosed.delete(g);
+          const [gc, gr] = g.split(",").map(Number); spawnPop(gc, gr, "#7dff6b"); }
+        spawnPop(c, r, "#7dff6b"); Sound.smash(); state.shake = Math.max(state.shake, cell*0.10); haptic(18);
+      }
       return;
     }
     state.drag = { tile, grabDX: wx - cx(tile.c), grabDY: wy - cy(tile.r), sx: x, sy: y };
@@ -1139,27 +2045,128 @@
     if (!lastTs) lastTs = ts;
     let dt = ts - lastTs; lastTs = ts;
     if (dt > 100) dt = 100;
-    update(dt);
-    if (state.status === "falling") tickFall(dt);
-    updateShards(dt);
+    if (editing) { drawEditor(); requestAnimationFrame(frame); return; }
+    if (titleActive) { tickTitle(dt); drawTitle(ts); requestAnimationFrame(frame); return; }
+    if (!paused) {
+      if (state.status === "intro") tickIntro(dt);
+      update(dt);
+      updateHazards(dt);
+      if (state.status === "falling") tickFall(dt);
+      updateShards(dt);
+      tickFx(dt);
+    }
     updateCamera(dt);
     draw(ts);
+    if (paused) drawPausedOverlay();
     requestAnimationFrame(frame);
   }
+  function drawPausedOverlay() {
+    ctx.save();
+    ctx.fillStyle = "rgba(5,4,13,0.35)"; ctx.fillRect(0, 0, viewW, viewH);
+    ctx.restore();
+  }
+  // moving hazards ping-pong between lo..hi; touching the runner is fatal
+  function updateHazards(dt) {
+    const s = state; if (!s || !s.hazards.length) return;
+    for (const h of s.hazards) {
+      h.t += dt / h.speed * h.dir;
+      if (h.t > 1) { h.t = 1; h.dir = -1; }
+      if (h.t < 0) { h.t = 0; h.dir = 1; }
+      const p = h.lo + (h.hi - h.lo) * h.t;
+      h.pos = p;                                   // smooth position for the slide
+      if (h.axis === "h") { h.cc = Math.round(p); h.cr = h.r; }
+      else                { h.cc = h.c; h.cr = Math.round(p); }
+    }
+    if (s.status === "play") {
+      const rp = visualAt(s.runIdx + s.runT);
+      const rcx = Math.floor(rp.x/cell), rcy = Math.floor(rp.y/cell);
+      for (const h of s.hazards)
+        if (h.cc === rcx && h.cr === rcy) { startFall(); break; }   // struck — the runner goes down
+    }
+  }
+  // decay transient visual feedback (shake, beat pulse, combo flash, pops)
+  function tickFx(dt) {
+    const s = state; if (!s) return;
+    s.shake *= Math.pow(0.86, dt/16); if (s.shake < 0.3) s.shake = 0;
+    s.beatPulse *= Math.pow(0.90, dt/16);
+    s.comboFlash *= Math.pow(0.90, dt/16);
+    if (s.pops && s.pops.length) {
+      for (const p of s.pops) p.life += dt;
+      s.pops = s.pops.filter(p => p.life < p.max);
+    }
+    if (s.lights && s.lights.length) {
+      for (const p of s.lights) p.life += dt;
+      s.lights = s.lights.filter(p => p.life < p.max);
+    }
+  }
 
-  // ---------- Buttons -----------------------------------------------------
+  // ---------- Buttons & menu ---------------------------------------------
   ovBtn.addEventListener("click", () => {
-    if (state.status === "win") levelIdx = (levelIdx + 1) % LEVELS.length;
+    if (state.status === "win") {
+      if (mode === "endless") { overlay.className = ""; nextEndless(); return; }
+      if (mode === "daily")   { openMenu("main"); return; }
+      if (mode === "editor")  { overlay.className = ""; playEditorLevel(); return; }
+      levelIdx = (levelIdx + 1) % LEVELS.length; loadLevel(levelIdx); return;
+    }
+    // lose / retry
+    if (mode === "endless") { overlay.className = ""; beginLevel(genLevel(endlessSeed + endlessN, endlessDiff()), "E" + endlessN); return; }
+    if (mode === "daily")   { startDaily(); return; }
+    if (mode === "editor")  { overlay.className = ""; playEditorLevel(); return; }
     loadLevel(levelIdx);
   });
-  restartBtn.addEventListener("click", () => loadLevel(levelIdx));
-  const muteBtn = document.getElementById("mute");
-  muteBtn.addEventListener("click", () => {
-    Sound.unlock();                          // this tap also serves as the audio unlock
-    const m = !Sound.isMuted();
-    Sound.setMuted(m);
-    muteBtn.textContent = m ? "Sound: Off" : "Sound: On";
-  });
+  document.getElementById("pauseFloat").addEventListener("click", () => { Sound.unlock(); openMenu("main"); });
+  document.getElementById("mech-ok").addEventListener("click", () => { Sound.unlock(); mechQueue.shift(); showNextMech(); });
+
+  const menuEl = document.getElementById("menu");
+  const menuBody = document.getElementById("menu-body");
+  function openMenu(screen) { paused = true; buildMenu(screen || "main"); menuEl.classList.add("show"); }
+  function closeMenu() { paused = false; menuEl.classList.remove("show"); }
+
+  function btn(label, fn) { const b = document.createElement("button"); b.textContent = label; b.onclick = fn; return b; }
+  function toggle(label, on, fn) {
+    const d = document.createElement("div"); d.className = "toggle" + (on ? "" : " off");
+    d.innerHTML = "<span>" + label + "</span><span class='val'>" + (on ? "ON" : "OFF") + "</span>";
+    d.onclick = fn; return d;
+  }
+  function sub(t){ const d = document.createElement("div"); d.className = "menu-sub"; d.textContent = t; return d; }
+
+  function buildMenu(screen) {
+    menuBody.innerHTML = "";
+    const title = document.getElementById("menu-title");
+    if (screen === "levels") {
+      title.textContent = "Levels";
+      const grid = document.createElement("div"); grid.className = "lvl-grid";
+      const best = loadBest();
+      LEVELS.forEach((L, i) => {
+        const b = best["L" + i], stars = b ? b.stars : 0;
+        const el = document.createElement("button");
+        el.innerHTML = "<span>" + (i + 1) + "</span><span class='st" + (stars ? "" : " none") + "'>" +
+          (stars ? "★".repeat(stars) + "☆".repeat(3 - stars) : "— — —") + "</span>";
+        el.onclick = () => { levelIdx = i; loadLevel(i); closeMenu(); };
+        grid.appendChild(el);
+      });
+      menuBody.appendChild(grid);
+      menuBody.appendChild(btn("Back", () => buildMenu("main")));
+      return;
+    }
+    // main / pause screen
+    title.textContent = "Tile Runner";
+    menuBody.appendChild(btn("Resume", closeMenu));
+    menuBody.appendChild(btn("Undo Last Tile", () => { undoLast(); closeMenu(); }));
+    menuBody.appendChild(btn("Restart Level", () => { loadLevel(levelIdx); closeMenu(); }));
+    menuBody.appendChild(btn("Levels", () => buildMenu("levels")));
+    menuBody.appendChild(sub("Modes"));
+    menuBody.appendChild(btn("Endless", () => { startEndless(); closeMenu(); }));
+    menuBody.appendChild(btn("Daily Challenge", () => { startDaily(); closeMenu(); }));
+    menuBody.appendChild(btn("Level Editor", () => { closeMenu(); openEditor(); }));
+    menuBody.appendChild(sub("Options"));
+    menuBody.appendChild(toggle("Sound", !Sound.isMuted(), () => { Sound.unlock(); Sound.setMuted(!Sound.isMuted()); buildMenu(screen); }));
+    menuBody.appendChild(toggle("Colorblind", colorblind, () => { colorblind = !colorblind; settings.colorblind = colorblind; saveSettings(); applyColorblind(); buildMenu(screen); }));
+    menuBody.appendChild(toggle("Zen (no fall)", zen, () => { zen = !zen; settings.zen = zen; saveSettings(); buildMenu(screen); }));
+  }
+
+  applyColorblind();   // apply saved colorblind setting on load
+
   window.addEventListener("resize", () => { computeLayout(); snapCamera(); });
   window.addEventListener("orientationchange", () => setTimeout(() => { computeLayout(); snapCamera(); }, 150));
   document.addEventListener("gesturestart", e => e.preventDefault());
@@ -1176,9 +2183,170 @@
     stones: () => [...state.stones],
     smash: (c, r) => breakStone(c, r),
     sound: Sound,
+    load: (i) => { titleActive = false; const pf = document.getElementById("pauseFloat"); if (pf) pf.style.display = "";
+                   levelIdx = clamp(i, 0, LEVELS.length - 1); loadLevel(levelIdx); },
+    tapCell: (c, r) => {                       // simulate a tap at a grid cell (stone/switch)
+      if (state.stones.has(key(c,r))) { breakStone(c,r); return "stone"; }
+      const sw = state.switches.find(s => !s.used && s.c===c && s.r===r);
+      if (sw) { sw.used = true; for (const g of sw.gates) state.gatesClosed.delete(g); return "switch"; }
+      return null;
+    },
+    occupied: (c, r) => occupiedFor(null).has(key(c, r)),
+    ui: {
+      undo: () => undoLast(),
+      openMenu: (s) => openMenu(s), closeMenu: () => closeMenu(),
+      isPaused: () => paused,
+      setZen: (v) => { zen = v; }, isZen: () => zen,
+      setColorblind: (v) => { colorblind = v; applyColorblind(); }, isColorblind: () => colorblind,
+      menuButtons: () => Array.from(menuBody.querySelectorAll("button,.toggle")).map(e => e.textContent),
+    },
+    modes: { endless: () => startEndless(), daily: () => startDaily(), next: () => nextEndless(),
+             genLevel: (seed, diff) => genLevel(seed, diff), solvable: (L) => solvableGen(L), getMode: () => mode },
+    ed: {
+      open: () => openEditor(), isEditing: () => editing, setTool: (t) => { editor.tool = t; },
+      paint: (c, r) => editorApply(c, r), toLevel: () => editorToLevel(),
+      exportCode: () => editorExport(), importCode: (code) => { const L = editorImport(code); if (L) { editor = editorFromLevel(L); } return !!L; },
+      play: () => playEditorLevel(), state: () => editor,
+    },
   };
 
+  // ---------- Title / attract screen -------------------------------------
+  const TITLE_WORDS = ["TILE", "RUNNER"];
+  const TITLE = { t: 0, u: 0 };
+  let titleTheme = null;
+  function easeOutBack(p){ const c1 = 1.70158, c3 = c1 + 1; return 1 + c3*Math.pow(p-1,3) + c1*Math.pow(p-1,2); }
+
+  function startTitle(){
+    titleActive = true;
+    TITLE.t = 0; TITLE.u = 0;
+    titleTheme = genTheme(hashSeed("TILE RUNNER title"));
+    const pf = document.getElementById("pauseFloat"); if (pf) pf.style.display = "none";
+  }
+  function leaveTitle(){
+    if (!titleActive) return;
+    titleActive = false;
+    const pf = document.getElementById("pauseFloat"); if (pf) pf.style.display = "";
+    Sound.unlock();
+    loadLevel(levelIdx);                 // start the level fresh (with its own intro + any tutorial pop)
+  }
+
+  // the ten letter-tiles that spell the title, each with an assembly order
+  function titleTiles(){
+    const cols = 6;                                            // widest word = RUNNER
+    const T = Math.min((viewW*0.86)/cols, viewH*0.145);
+    const gap = T*0.16;
+    const y0 = viewH*0.17;
+    const out = []; let order = 0;
+    TITLE_WORDS.forEach((w, ri) => {
+      const n = w.length, rowW = n*T + (n-1)*gap, x0 = (viewW - rowW)/2;
+      const y = y0 + ri*(T + gap*1.7);
+      for (let i=0;i<n;i++) out.push({ ch:w[i], x:x0 + i*(T+gap), y, size:T, order:order++ });
+    });
+    return { tiles: out, T, count: out.length };
+  }
+  function titleTrackMetrics(){
+    const s = Math.min(viewW/7.5, viewH*0.095);
+    const x0 = -s*1.5, baseY = viewH*0.70;
+    const span = Math.ceil((viewW - x0)/s) + 3;
+    return { s, x0, baseY, span };
+  }
+
+  const TITLE_STEP = 105;                // ms between each letter-tile landing
+  const TITLE_DROP = 420;                // letter drop duration
+  const TITLE_TRACK_SPEED = 0.0019;      // tiles per ms the little runner travels
+
+  function tickTitle(dt){
+    TITLE.t += dt;
+    TITLE.u += dt * TITLE_TRACK_SPEED;
+    const m = titleTrackMetrics();
+    if (m.x0 + TITLE.u*m.s > viewW + m.s*2) TITLE.u = 0;       // loop the running character
+  }
+
+  function drawTitle(ts){
+    drawBackground(ts, titleTheme);                            // same look as the in-game backdrop
+    ctx.fillStyle = "rgba(8,6,20,0.30)"; ctx.fillRect(0,0,viewW,viewH);   // gentle darken for legibility
+
+    // --- title letters assemble one tile at a time ---
+    const { tiles, count } = titleTiles();
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    for (const t of tiles){
+      const local = TITLE.t - t.order*TITLE_STEP;
+      if (local < 0) continue;
+      const p = clamp(local/TITLE_DROP, 0, 1), e = easeOutBack(p);
+      const idle = Math.sin(ts/520 + t.order*0.6) * t.size*0.02;    // soft bob once settled
+      const dy = (1 - e) * (-viewH*0.22) + (p>=1 ? idle : 0);
+      const a = clamp(local/140, 0, 1);
+      ctx.globalAlpha = a;
+      drawLetterTile(t.x, t.y + dy, t.size, t.ch);
+      ctx.globalAlpha = 1;
+    }
+
+    // --- the runner jogs along tiles that lay themselves just ahead of it ---
+    const m = titleTrackMetrics();
+    const u = TITLE.u, runnerX = m.x0 + u*m.s;
+    const lead = Math.floor(u + 1.4);
+    for (let k=0;k<=Math.min(lead, m.span); k++){
+      const localU = u - (k - 1.4);                            // >0 once this tile has been laid
+      if (localU < 0) continue;
+      const p = clamp(localU/0.55, 0, 1), e = easeOutBack(p);
+      const tx = m.x0 + k*m.s, ty = m.baseY + (1-e)*(-m.s*0.9);
+      ctx.globalAlpha = clamp(localU/0.3, 0, 1);
+      drawTrackTile(tx, ty, m.s);
+      ctx.globalAlpha = 1;
+    }
+    drawTitleRunner(runnerX + m.s*0.5, m.baseY, m.s, ts/95);
+
+    // --- tap-to-play prompt (after the title has landed) ---
+    const assembled = TITLE.t > count*TITLE_STEP + TITLE_DROP*0.6;
+    if (assembled){
+      const pulse = 0.5 + 0.5*Math.sin(ts/380);
+      ctx.globalAlpha = 0.45 + 0.55*pulse;
+      ctx.fillStyle = "#eef0ff";
+      ctx.font = "900 " + Math.round(Math.min(viewW*0.05, 22)) + "px 'Courier New',monospace";
+      ctx.fillText("TAP TO PLAY", viewW/2, viewH*0.90);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawLetterTile(x, y, s, ch){
+    ctx.fillStyle = "rgba(5,4,13,0.35)"; rrect(x+4, y+7, s, s, s*0.18); ctx.fill();   // drop shadow
+    rrect(x, y, s, s, s*0.18); ctx.save(); ctx.clip();
+    const g = ctx.createLinearGradient(x, y, x, y+s);
+    g.addColorStop(0, "rgba(214,210,248,0.97)"); g.addColorStop(1, "rgba(150,146,205,0.97)");
+    ctx.fillStyle = g; ctx.fillRect(x, y, s, s);
+    grainFill(x, y, s, s, 0.5);
+    ctx.restore();
+    ctx.fillStyle = "rgba(255,255,255,0.28)"; rrect(x+s*0.1, y+s*0.09, s*0.8, s*0.12, s*0.06); ctx.fill();  // sheen
+    ctx.fillStyle = "#23204a";
+    ctx.font = "900 " + Math.round(s*0.6) + "px 'Courier New',monospace";
+    ctx.fillText(ch, x + s/2, y + s/2 + s*0.04);
+  }
+  function drawTrackTile(x, y, s){
+    ctx.fillStyle = "rgba(5,4,13,0.3)"; rrect(x+3, y+5, s, s, s*0.16); ctx.fill();
+    rrect(x, y, s, s, s*0.16); ctx.save(); ctx.clip();
+    ctx.fillStyle = "rgba(180,174,235,0.62)"; ctx.fillRect(x, y, s, s);
+    grainFill(x, y, s, s, 0.6);
+    ctx.restore();
+    drawDragDots(x + s/2, y + s/2, s*0.9);
+  }
+  function drawTitleRunner(x, footY, s, phase){
+    const swing = Math.sin(phase)*s*0.16, bob = Math.abs(Math.sin(phase))*s*0.04, pale = "#bfe6ff";
+    ctx.save(); ctx.translate(x, footY);
+    ctx.fillStyle = "rgba(5,4,13,0.26)"; ctx.beginPath(); ctx.ellipse(0, -1, s*0.17, s*0.05, 0, 0, Math.PI*2); ctx.fill();
+    const legL = s*0.22, bodyH = s*0.46, bodyW = s*0.46;
+    ctx.strokeStyle = pale; ctx.lineWidth = Math.max(3, s*0.10); ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-bodyW*0.22, -legL-bob); ctx.lineTo( swing, 0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo( bodyW*0.22, -legL-bob); ctx.lineTo(-swing, 0); ctx.stroke();
+    const byTop = -(legL+bodyH)-bob;
+    ctx.fillStyle = pale; rrect(-bodyW/2, byTop, bodyW, bodyH, s*0.12); ctx.fill();
+    ctx.fillStyle = "#17263f"; const eyeR = s*0.065, eyeY = byTop + bodyH*0.38;
+    ctx.beginPath(); ctx.arc(-bodyW*0.02, eyeY, eyeR, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc( bodyW*0.28, eyeY, eyeR, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
   loadLevel(0);
+  startTitle();
   requestAnimationFrame(frame);
 })();
 </script>
