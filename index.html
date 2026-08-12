@@ -2545,10 +2545,27 @@
   })();
 </script>
 <script>
-  // Offline support when served over https (or localhost). Harmless elsewhere.
+  // Offline support + auto-update. Network-first SW means the newest deploy always
+  // wins when online; this also reloads once a fresh version has activated.
   if ("serviceWorker" in navigator &&
       (location.protocol === "https:" || location.hostname === "localhost")) {
-    window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").then((reg) => {
+        reg.update();                                  // check for a newer worker now
+        setInterval(() => reg.update(), 60 * 60 * 1000);  // ...and hourly while open
+        reg.addEventListener("updatefound", () => {
+          const nw = reg.installing;
+          if (!nw) return;
+          nw.addEventListener("statechange", () => {
+            if (nw.state === "installed" && navigator.serviceWorker.controller) nw.postMessage("skipWaiting");
+          });
+        });
+      }).catch(() => {});
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (reloaded) return; reloaded = true; location.reload();   // a new version took over → show it
+      });
+    });
   }
 </script>
 </body>
