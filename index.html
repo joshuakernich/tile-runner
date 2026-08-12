@@ -95,6 +95,24 @@
   #overlay.win h2 { color:var(--goal); }
   #overlay.lose h2 { color:var(--accent); }
 
+  /* "Add to Home Screen" prompt (mobile browsers only) */
+  #a2hs {
+    position:fixed; left:12px; right:12px; bottom:14px; z-index:28;
+    display:none; align-items:center; gap:11px;
+    background:var(--panel); border:3px solid var(--grid-line);
+    box-shadow:4px 4px 0 var(--shadow); padding:11px 12px 11px 13px;
+  }
+  #a2hs.show { display:flex; animation:a2hsIn .34s ease-out; }
+  @keyframes a2hsIn { from { transform:translateY(26px); opacity:0; } to { transform:none; opacity:1; } }
+  #a2hs-ic { flex:none; color:var(--track); display:flex; align-items:center; }
+  #a2hs-ic svg { display:block; }
+  #a2hs-txt { flex:1; font-size:11.5px; line-height:1.55; letter-spacing:.4px; color:var(--ink); text-transform:none; }
+  #a2hs-txt b { color:var(--track); font-weight:900; }
+  #a2hs .a2hs-acts { flex:none; display:flex; flex-direction:column; gap:6px; }
+  #a2hs .a2hs-acts button { padding:8px 10px; font-size:10px; letter-spacing:1px; box-shadow:2px 2px 0 var(--shadow); }
+  #a2hs .a2hs-x { background:transparent; border-color:transparent; box-shadow:none; color:var(--dim); padding:6px 8px; }
+  #a2hs .a2hs-x:active { transform:none; }
+
   /* colorblind-friendly palette (Okabe–Ito) */
   .cb { --accent:#d55e00; --goal:#009e73; --runner:#56b4e9; }
 
@@ -142,6 +160,15 @@
   <div class="menu-card">
     <h2 id="menu-title">Tile&nbsp;Runner</h2>
     <div id="menu-body"></div>
+  </div>
+</div>
+
+<div id="a2hs" role="dialog" aria-label="Add Tile Runner to your home screen">
+  <div id="a2hs-ic"></div>
+  <div id="a2hs-txt"></div>
+  <div class="a2hs-acts">
+    <button id="a2hs-install" style="display:none">Install</button>
+    <button id="a2hs-close" class="a2hs-x">Not now</button>
   </div>
 </div>
 
@@ -553,6 +580,21 @@
              style:["plain","plain","lined","dotted"][Math.floor(rnd()*4)],
              drift:(rnd()<0.5?1:-1)*(0.2+rnd()*0.5) };
   }
+  // HSL -> "#rrggbb" (so hexA() can add alpha to the platform colours)
+  function hslHex(h, s, l){
+    s/=100; l/=100; const k=n=>(n+h/30)%12, a=s*Math.min(l,1-l);
+    const f=n=>l - a*Math.max(-1, Math.min(k(n)-3, Math.min(9-k(n), 1)));
+    const to=x=>Math.round(x*255).toString(16).padStart(2,"0");
+    return "#"+to(f(0))+to(f(8))+to(f(4));
+  }
+  // per-level platform colour: a vivid beam + a light running-surface highlight
+  function genTrackPal(seed){
+    const rnd=mulberry32((seed^0x2545f491)>>>0 || 5);
+    const h=Math.floor(rnd()*360), s=80+Math.floor(rnd()*15);
+    return { track: hslHex(h, s, 58), rail: hslHex(h, Math.min(96, s+8), 83) };
+  }
+  const curTrack = () => (state && state.trackPal && state.trackPal.track) || getVar("--track");
+  const curRail  = () => (state && state.trackPal && state.trackPal.rail)  || getVar("--rail");
   function solvableGen(L){
     const W=new Set(L.walls.map(w=>key(w[0],w[1])));
     const bfs=(from,to)=>{ const q=[from], seen=new Set([key(from[0],from[1])]);
@@ -738,6 +780,7 @@
     overlay.className = "";
     const seed = hashSeed(label);
     state.bgTheme = genTheme(seed);          // per-level background theme
+    state.trackPal = genTrackPal(seed);      // per-level platform colour
     Sound.setSong(seed);                     // per-level melody
     Sound.resetMelody();
     Sound.setTempo(L.speed);      // backing-track tempo tracks this level's runner speed
@@ -1089,7 +1132,7 @@
     ctx.lineJoin = "round";
     ctx.lineWidth = Math.max(3, size*0.22); ctx.strokeStyle = getVar("--shadow");
     ctx.strokeText(txt, x, y);                       // dark outline for contrast over the track
-    ctx.fillStyle = getVar("--track"); ctx.fillText(txt, x, y);
+    ctx.fillStyle = curTrack(); ctx.fillText(txt, x, y);
     ctx.restore();
   }
   // Every in-bounds unoccupied cell is a legal drop now (free placement).
@@ -1615,7 +1658,7 @@
   // tile's surface polyline (a straight line, or a quarter-circle arc for
   // corners); the body hangs off the down-normal side.
   function drawPlatformTile(n, prev, next) {
-    drawPlatformSurface(n, tileSurface(n, prev, next), getVar("--track"));
+    drawPlatformSurface(n, tileSurface(n, prev, next), curTrack());
   }
 
   // draw a platform body + rail from a surface polyline S, clipped to the cell.
@@ -1649,7 +1692,7 @@
     ctx.save();
     rrect(cx(n.c), cy(n.r), cell, cell, cell*0.16); ctx.clip();
     ctx.lineJoin = "round"; ctx.lineCap = "round";
-    ctx.strokeStyle = getVar("--rail"); ctx.lineWidth = Math.max(3, cell*0.06);
+    ctx.strokeStyle = curRail(); ctx.lineWidth = Math.max(3, cell*0.06);
     ctx.beginPath(); railPath(S); ctx.stroke();
     ctx.restore();
   }
@@ -1678,10 +1721,10 @@
     // flat, uniform transparent fill for all three path pieces (one fill = single alpha, no overlap build-up)
     ctx.beginPath();
     for (const S of surfaces) bodyPath(S);
-    ctx.fillStyle = hexA(getVar("--track"), 0.42); ctx.fill();
+    ctx.fillStyle = hexA(curTrack(), 0.42); ctx.fill();
     grainFill(cx(n.c), cy(n.r), cell, cell, 0.4);
     // rails (the top line of each path), flat & semi-transparent (one stroke = single alpha)
-    const railCol = hexA(getVar("--rail"), 0.7);
+    const railCol = hexA(curRail(), 0.7);
     ctx.beginPath();
     for (const S of surfaces) railPath(S);
     ctx.lineJoin = "round"; ctx.lineCap = "round";
@@ -1713,7 +1756,7 @@
     // straight surface spanning the cell along dir
     const Me = { x:C.x - dir.x*h, y:C.y - dir.y*h };   // open end (track connects here)
     const Mx = { x:C.x + dir.x*h, y:C.y + dir.y*h };   // closed end (door)
-    drawPlatformSurface(node, [Me, { x:C.x, y:C.y }, Mx], getVar(isGoal ? "--goal" : "--track"));
+    drawPlatformSurface(node, [Me, { x:C.x, y:C.y }, Mx], isGoal ? getVar("--goal") : curTrack());
     // door: goal -> at the far end it runs into; start -> at the back it emerges from
     const end = isGoal ? Mx : Me, sgn = isGoal ? -1 : 1;
     const doorPos = { x:end.x + dir.x*(cell*0.2)*sgn, y:end.y + dir.y*(cell*0.2)*sgn };
@@ -2230,116 +2273,167 @@
     loadLevel(levelIdx);                 // start the level fresh (with its own intro + any tutorial pop)
   }
 
-  // the ten letter-tiles that spell the title, each with an assembly order
-  function titleTiles(){
-    const cols = 6;                                            // widest word = RUNNER
-    const T = Math.min((viewW*0.86)/cols, viewH*0.145);
-    const gap = T*0.16;
-    const y0 = viewH*0.17;
-    const out = []; let order = 0;
-    TITLE_WORDS.forEach((w, ri) => {
-      const n = w.length, rowW = n*T + (n-1)*gap, x0 = (viewW - rowW)/2;
-      const y = y0 + ri*(T + gap*1.7);
-      for (let i=0;i<n;i++) out.push({ ch:w[i], x:x0 + i*(T+gap), y, size:T, order:order++ });
-    });
-    return { tiles: out, T, count: out.length };
+  const TITLE_TRACK_SPEED = 0.0019;      // cells per ms the little runner travels
+  // a gently winding 4-connected path: nets rightward while it rises and dips
+  const INTRO_PAT = [[1,0],[1,0],[0,-1],[1,0],[0,1],[1,0],[1,0],[0,1],[1,0],[0,-1],[1,0],[1,0]];
+  const INTRO_PER = INTRO_PAT.length, INTRO_DC = 8;    // one period: +8 columns, row returns to 0
+  function introCellAt(i){                              // {c,r} for any path index (extends both ways)
+    const per = Math.floor(i/INTRO_PER), k = i - per*INTRO_PER;
+    let c = per*INTRO_DC, r = 0;
+    for (let j=0;j<k;j++){ c += INTRO_PAT[j][0]; r += INTRO_PAT[j][1]; }
+    return { c, r };
   }
-  function titleTrackMetrics(){
-    const s = Math.min(viewW/7.5, viewH*0.095);
-    const x0 = -s*1.5, baseY = viewH*0.70;
-    const span = Math.ceil((viewW - x0)/s) + 3;
-    return { s, x0, baseY, span };
+  function introMetrics(){
+    const s = cell || 90;                              // same size as the in-game tiles
+    return { s, x0: -s*1.5, row0Y: viewH*0.46 - s*0.5 };   // band centred on the header; path rises above / dips below
   }
-
-  const TITLE_STEP = 105;                // ms between each letter-tile landing
-  const TITLE_DROP = 420;                // letter drop duration
-  const TITLE_TRACK_SPEED = 0.0019;      // tiles per ms the little runner travels
+  function introCenter(cellObj, m){ return { x: m.x0 + cellObj.c*m.s + m.s/2, y: m.row0Y + cellObj.r*m.s + m.s/2 }; }
+  function introDir(a, b){ return { x: Math.sign(b.c-a.c), y: Math.sign(b.r-a.r) }; }
+  // screen-space version of the game's tileSurface: straight (3 pts) or a quarter-circle corner
+  function introSurface(cellObj, prev, next, m){
+    const C = introCenter(cellObj, m), h = m.s/2;
+    let entry = introDir(cellObj, prev), exit = introDir(cellObj, next);
+    const Me = { x:C.x+entry.x*h, y:C.y+entry.y*h }, Mx = { x:C.x+exit.x*h, y:C.y+exit.y*h };
+    if (entry.x === -exit.x && entry.y === -exit.y) return [Me, { x:C.x, y:C.y }, Mx];   // straight
+    const O = { x:C.x+(entry.x+exit.x)*h, y:C.y+(entry.y+exit.y)*h };                     // corner pivot
+    let a0 = Math.atan2(Me.y-O.y, Me.x-O.x), a1 = Math.atan2(Mx.y-O.y, Mx.x-O.x);
+    let d = a1-a0; while (d>Math.PI) d-=2*Math.PI; while (d<-Math.PI) d+=2*Math.PI;
+    const pts = []; for (let k=0;k<=12;k++){ const a=a0+d*(k/12); pts.push({ x:O.x+h*Math.cos(a), y:O.y+h*Math.sin(a) }); }
+    return pts;
+  }
 
   function tickTitle(dt){
     TITLE.t += dt;
     TITLE.u += dt * TITLE_TRACK_SPEED;
-    const m = titleTrackMetrics();
-    if (m.x0 + TITLE.u*m.s > viewW + m.s*2) TITLE.u = 0;       // loop the running character
+    const m = introMetrics(), i0 = Math.floor(TITLE.u), fr = TITLE.u - i0;
+    const surf = introSurface(introCellAt(i0), introCellAt(i0-1), introCellAt(i0+1), m);
+    const pos = samplePolyline(surf, fr);
+    if (pos.x > viewW + m.s*1.5) TITLE.u = 0;                  // loop once the runner exits the right edge
   }
 
   function drawTitle(ts){
     drawBackground(ts, titleTheme);                            // same look as the in-game backdrop
     ctx.fillStyle = "rgba(8,6,20,0.30)"; ctx.fillRect(0,0,viewW,viewH);   // gentle darken for legibility
 
-    // --- title letters assemble one tile at a time ---
-    const { tiles, count } = titleTiles();
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    for (const t of tiles){
-      const local = TITLE.t - t.order*TITLE_STEP;
-      if (local < 0) continue;
-      const p = clamp(local/TITLE_DROP, 0, 1), e = easeOutBack(p);
-      const idle = Math.sin(ts/520 + t.order*0.6) * t.size*0.02;    // soft bob once settled
-      const dy = (1 - e) * (-viewH*0.22) + (p>=1 ? idle : 0);
-      const a = clamp(local/140, 0, 1);
-      ctx.globalAlpha = a;
-      drawLetterTile(t.x, t.y + dy, t.size, t.ch);
-      ctx.globalAlpha = 1;
-    }
+    const size = Math.min(viewW*0.205, viewH*0.15);
+    const cyT = viewH*0.46;                                    // header vertical centre
+    const y1 = cyT - size*0.5, y2 = cyT + size*0.5;            // two words, centred & close together
 
-    // --- the runner jogs along tiles that lay themselves just ahead of it ---
-    const m = titleTrackMetrics();
-    const u = TITLE.u, runnerX = m.x0 + u*m.s;
-    const lead = Math.floor(u + 1.4);
-    for (let k=0;k<=Math.min(lead, m.span); k++){
-      const localU = u - (k - 1.4);                            // >0 once this tile has been laid
+    // --- the runner maze winds BEHIND the header (drawn first) ---
+    const m = introMetrics();
+    const u = TITLE.u, lead = Math.floor(u + 1.6);
+    ctx.save();
+    ctx.translate(viewW/2, cyT); ctx.rotate(-0.10); ctx.translate(-viewW/2, -cyT);   // tilt the whole stream
+    for (let i=0;i<=lead;i++){                                 // tiles lay themselves just ahead of the runner
+      const localU = u - (i - 1.6);
       if (localU < 0) continue;
-      const p = clamp(localU/0.55, 0, 1), e = easeOutBack(p);
-      const tx = m.x0 + k*m.s, ty = m.baseY + (1-e)*(-m.s*0.9);
-      ctx.globalAlpha = clamp(localU/0.3, 0, 1);
-      drawTrackTile(tx, ty, m.s);
+      ctx.globalAlpha = clamp(localU/0.4, 0, 1);
+      introDrawPlatform(introCellAt(i), introCellAt(i-1), introCellAt(i+1), m);
       ctx.globalAlpha = 1;
     }
-    drawTitleRunner(runnerX + m.s*0.5, m.baseY, m.s, ts/95);
+    // runner follows the winding surface, tilting through the rises, dips and corners
+    const i0 = Math.floor(u), fr = u - i0;
+    const surf = introSurface(introCellAt(i0), introCellAt(i0-1), introCellAt(i0+1), m);
+    const pos = samplePolyline(surf, fr);
+    const pa = samplePolyline(surf, Math.max(0, fr-0.07)), pb = samplePolyline(surf, Math.min(1, fr+0.07));
+    drawTitleRunner(pos.x, pos.y, m.s, ts/95, Math.atan2(pb.y-pa.y, pb.x-pa.x));
+    ctx.restore();
+
+    // --- soft dark halo so the gold header still reads over the gold maze ---
+    const rg = ctx.createRadialGradient(viewW/2, cyT, 0, viewW/2, cyT, viewW*0.72);
+    rg.addColorStop(0, "rgba(6,4,16,0.62)"); rg.addColorStop(0.6, "rgba(6,4,16,0.34)"); rg.addColorStop(1, "rgba(6,4,16,0)");
+    ctx.fillStyle = rg; ctx.fillRect(0, 0, viewW, viewH);
+
+    // --- big dramatic 3D extruded title, centred over the maze ---
+    drawTitleWord(TITLE_WORDS[0], viewW/2, y1, size, TITLE.t - 120, ts);   // TILE   (centred to RUNNER)
+    drawTitleWord(TITLE_WORDS[1], viewW/2, y2, size, TITLE.t - 400, ts);   // RUNNER
 
     // --- tap-to-play prompt (after the title has landed) ---
-    const assembled = TITLE.t > count*TITLE_STEP + TITLE_DROP*0.6;
-    if (assembled){
+    if (TITLE.t > 400 + 520){
       const pulse = 0.5 + 0.5*Math.sin(ts/380);
       ctx.globalAlpha = 0.45 + 0.55*pulse;
       ctx.fillStyle = "#eef0ff";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.font = "900 " + Math.round(Math.min(viewW*0.05, 22)) + "px 'Courier New',monospace";
       ctx.fillText("TAP TO PLAY", viewW/2, viewH*0.90);
       ctx.globalAlpha = 1;
     }
   }
 
-  function drawLetterTile(x, y, s, ch){
-    ctx.fillStyle = "rgba(5,4,13,0.35)"; rrect(x+4, y+7, s, s, s*0.18); ctx.fill();   // drop shadow
-    rrect(x, y, s, s, s*0.18); ctx.save(); ctx.clip();
-    const g = ctx.createLinearGradient(x, y, x, y+s);
-    g.addColorStop(0, "rgba(214,210,248,0.97)"); g.addColorStop(1, "rgba(150,146,205,0.97)");
-    ctx.fillStyle = g; ctx.fillRect(x, y, s, s);
-    grainFill(x, y, s, s, 0.5);
+  // one word of the title, rendered as chunky extruded 3D text with a pop-in
+  function drawTitleWord(word, X, y, size, appearLocal, ts){
+    if (appearLocal < 0) return;
+    const p = clamp(appearLocal/520, 0, 1), e = easeOutBack(p);
+    const k = 0.55 + 0.45*e;                                   // scale up with an overshoot
+    const a = clamp(appearLocal/170, 0, 1);
+    const idle = p >= 1 ? Math.sin(ts/560 + word.length)*size*0.02 : 0;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.translate(X, y + idle); ctx.rotate(-0.13); ctx.scale(k, k);   // ~ -7.5° tilt
+    draw3DText(word, 0, 0, size);
     ctx.restore();
-    ctx.fillStyle = "rgba(255,255,255,0.28)"; rrect(x+s*0.1, y+s*0.09, s*0.8, s*0.12, s*0.06); ctx.fill();  // sheen
-    ctx.fillStyle = "#23204a";
-    ctx.font = "900 " + Math.round(s*0.6) + "px 'Courier New',monospace";
-    ctx.fillText(ch, x + s/2, y + s/2 + s*0.04);
+    ctx.globalAlpha = 1;
   }
-  function drawTrackTile(x, y, s){
-    ctx.fillStyle = "rgba(5,4,13,0.3)"; rrect(x+3, y+5, s, s, s*0.16); ctx.fill();
-    rrect(x, y, s, s, s*0.16); ctx.save(); ctx.clip();
-    ctx.fillStyle = "rgba(180,174,235,0.62)"; ctx.fillRect(x, y, s, s);
-    grainFill(x, y, s, s, 0.6);
+  // extruded 3D text: a stack of offset copies (the "side"), then a gold gradient face
+  function draw3DText(text, X, Y, size){
+    ctx.font = "900 " + Math.round(size) + "px 'Courier New', monospace";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const depth = Math.max(6, Math.round(size*0.17)), dx = 0.82, dy = 0.94;
+    ctx.fillStyle = "rgba(5,4,13,0.5)";                        // soft cast shadow for separation
+    ctx.fillText(text, X + depth*dx + size*0.05, Y + depth*dy + size*0.06);
+    for (let i=depth;i>=1;i--){                                // extruded body, far -> near
+      const t = i/depth;
+      const r = Math.max(0, Math.round(120 - 72*t)), g = Math.max(0, Math.round(82 - 48*t)), b = Math.max(0, Math.round(26 - 15*t));
+      ctx.fillStyle = "rgb(" + r + "," + g + "," + b + ")";
+      ctx.fillText(text, X + i*dx, Y + i*dy);
+    }
+    const grd = ctx.createLinearGradient(0, Y - size*0.55, 0, Y + size*0.55);   // bright top -> gold
+    grd.addColorStop(0, "#fff6d5"); grd.addColorStop(0.45, "#ffe08a"); grd.addColorStop(1, "#f4b52a");
+    ctx.fillStyle = grd; ctx.fillText(text, X, Y);
+    ctx.lineJoin = "round"; ctx.lineWidth = Math.max(1.5, size*0.022);          // crisp dark keyline
+    ctx.strokeStyle = "rgba(70,45,8,0.6)"; ctx.strokeText(text, X, Y);
+  }
+
+  // one path tile carrying the game's own beam+rail, oriented to how the path enters/exits it
+  function introDrawPlatform(cellObj, prev, next, m){
+    const C = introCenter(cellObj, m), s = m.s, tx = C.x - s/2, ty = C.y - s/2;
+    const S = introSurface(cellObj, prev, next, m);
+    ctx.fillStyle = "rgba(5,4,13,0.3)"; rrect(tx+3, ty+5, s, s, s*0.16); ctx.fill();   // drop shadow
+    ctx.save();
+    rrect(tx, ty, s, s, s*0.16); ctx.clip();
+    ctx.fillStyle = "rgba(180,174,235,0.55)"; ctx.fillRect(tx, ty, s, s);              // glass base
+    grainFill(tx, ty, s, s, 0.85);
+    // solid gold beam body hanging from the surface to the tile edge (clipped to the tile)
+    ctx.beginPath(); introBodyPath(S, m); ctx.fillStyle = getVar("--track"); ctx.fill();
+    grainFill(tx, ty, s, s, 0.45);
+    // bright rail along the running surface
+    ctx.strokeStyle = getVar("--rail"); ctx.lineWidth = Math.max(3, s*0.06); ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.moveTo(S[0].x, S[0].y); for (let k=1;k<S.length;k++) ctx.lineTo(S[k].x, S[k].y); ctx.stroke();
     ctx.restore();
-    drawDragDots(x + s/2, y + s/2, s*0.9);
   }
-  function drawTitleRunner(x, footY, s, phase){
-    const swing = Math.sin(phase)*s*0.16, bob = Math.abs(Math.sin(phase))*s*0.04, pale = "#bfe6ff";
-    ctx.save(); ctx.translate(x, footY);
-    ctx.fillStyle = "rgba(5,4,13,0.26)"; ctx.beginPath(); ctx.ellipse(0, -1, s*0.17, s*0.05, 0, 0, Math.PI*2); ctx.fill();
-    const legL = s*0.22, bodyH = s*0.46, bodyW = s*0.46;
-    ctx.strokeStyle = pale; ctx.lineWidth = Math.max(3, s*0.10); ctx.lineCap = "round";
+  // the beam body polygon: the surface, then a far edge offset to the underside, clipped to the tile
+  function introBodyPath(S, m){
+    const nlast = S.length-1;
+    const nrm = S.map((pt,k)=>{ const a=S[Math.max(0,k-1)], b=S[Math.min(nlast,k+1)];
+      let tx=b.x-a.x, ty=b.y-a.y; const mm=Math.hypot(tx,ty)||1; return { x:ty/mm, y:-tx/mm }; });
+    const Obig = S.map((pt,k)=>({ x:pt.x - nrm[k].x*m.s*1.7, y:pt.y - nrm[k].y*m.s*1.7 }));
+    ctx.moveTo(S[0].x, S[0].y);
+    for (let k=1;k<=nlast;k++) ctx.lineTo(S[k].x, S[k].y);
+    for (let k=nlast;k>=0;k--) ctx.lineTo(Obig[k].x, Obig[k].y);
+    ctx.closePath();
+  }
+  // same proportions as the in-game runner (see drawRunner)
+  function drawTitleRunner(x, y, s, phase, angle){
+    const swing = Math.sin(phase)*s*0.09, bob = Math.abs(Math.sin(phase))*s*0.02, pale = "#bfe6ff";
+    ctx.save(); ctx.translate(x, y); if (angle) ctx.rotate(angle);
+    const legL = s*0.12, bodyH = s*0.26, bodyW = s*0.26;
+    ctx.fillStyle = "rgba(5,4,13,0.26)"; ctx.beginPath(); ctx.ellipse(0, -1, bodyW*0.55, s*0.04, 0, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = pale; ctx.lineWidth = Math.max(3, s*0.06); ctx.lineCap = "round";
     ctx.beginPath(); ctx.moveTo(-bodyW*0.22, -legL-bob); ctx.lineTo( swing, 0); ctx.stroke();
     ctx.beginPath(); ctx.moveTo( bodyW*0.22, -legL-bob); ctx.lineTo(-swing, 0); ctx.stroke();
     const byTop = -(legL+bodyH)-bob;
-    ctx.fillStyle = pale; rrect(-bodyW/2, byTop, bodyW, bodyH, s*0.12); ctx.fill();
-    ctx.fillStyle = "#17263f"; const eyeR = s*0.065, eyeY = byTop + bodyH*0.38;
+    ctx.fillStyle = pale; rrect(-bodyW/2, byTop, bodyW, bodyH, s*0.07); ctx.fill();
+    ctx.fillStyle = "#17263f"; const eyeR = s*0.037, eyeY = byTop + bodyH*0.38;
     ctx.beginPath(); ctx.arc(-bodyW*0.02, eyeY, eyeR, 0, Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.arc( bodyW*0.28, eyeY, eyeR, 0, Math.PI*2); ctx.fill();
     ctx.restore();
@@ -2349,6 +2443,81 @@
   startTitle();
   requestAnimationFrame(frame);
 })();
+</script>
+<script>
+  // "Add to Home Screen" prompt — shown only on mobile browsers, not when the
+  // game is already installed (standalone), and not once the user has dismissed it.
+  (function(){
+    const el = document.getElementById("a2hs");
+    if (!el) return;
+    const ic = document.getElementById("a2hs-ic");
+    const txt = document.getElementById("a2hs-txt");
+    const installBtn = document.getElementById("a2hs-install");
+    const closeBtn = document.getElementById("a2hs-close");
+    const KEY = "tilerunner:a2hs";
+
+    const ua = navigator.userAgent || "";
+    const isIOS = /iPad|iPhone|iPod/.test(ua) ||
+                  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);   // iPadOS masquerades as Mac
+    const isAndroid = /Android/.test(ua);
+    const coarse = window.matchMedia && matchMedia("(pointer:coarse)").matches;
+    const isMobile = isIOS || isAndroid || (coarse && matchMedia("(max-width:900px)").matches);
+    const standalone = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) ||
+                       navigator.standalone === true;
+    let dismissed = false; try { dismissed = localStorage.getItem(KEY) === "1"; } catch(_){}
+
+    // little glyphs (currentColor = --track)
+    const SHARE_SVG = '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M8 7l4-4 4 4"/><path d="M7 11H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-1"/></svg>';
+    const ADD_SVG   = '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg>';
+
+    function show(){ if (!el.classList.contains("show")) el.classList.add("show"); }
+    function hide(remember){ el.classList.remove("show"); if (remember){ try { localStorage.setItem(KEY,"1"); } catch(_){} } }
+    closeBtn.addEventListener("click", () => hide(true));
+
+    if (standalone || dismissed || !isMobile) return;
+
+    let deferredPrompt = null;
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();                        // suppress Chrome's mini-infobar; use our own UI
+      deferredPrompt = e;
+      // if the manual banner is already up, upgrade it to a one-tap install
+      if (el.classList.contains("show")) {
+        ic.innerHTML = ADD_SVG;
+        txt.innerHTML = 'Add <b>Tile&nbsp;Runner</b> to your home screen for fullscreen play.';
+        installBtn.style.display = "";
+      }
+    });
+    window.addEventListener("appinstalled", () => hide(true));
+
+    installBtn.addEventListener("click", async () => {
+      if (!deferredPrompt) return;
+      installBtn.disabled = true;
+      deferredPrompt.prompt();
+      try { await deferredPrompt.userChoice; } catch(_){}
+      deferredPrompt = null;
+      hide(true);
+    });
+
+    // one timer decides what to present, after a brief beat so it isn't jarring
+    setTimeout(() => {
+      if (standalone) return;
+      try { if (localStorage.getItem(KEY) === "1") return; } catch(_){}
+      if (deferredPrompt) {                       // Android / Chromium: real install button
+        ic.innerHTML = ADD_SVG;
+        txt.innerHTML = 'Add <b>Tile&nbsp;Runner</b> to your home screen for fullscreen play.';
+        installBtn.style.display = "";
+        show();
+      } else if (isIOS) {                         // iOS Safari: manual Share → Add to Home Screen
+        ic.innerHTML = SHARE_SVG;
+        txt.innerHTML = 'Install <b>Tile&nbsp;Runner</b>: tap the Share icon, then <b>Add&nbsp;to&nbsp;Home&nbsp;Screen</b>.';
+        show();
+      } else if (isAndroid) {                     // Android browser without the install event (e.g. Firefox)
+        ic.innerHTML = ADD_SVG;
+        txt.innerHTML = 'Install <b>Tile&nbsp;Runner</b>: open the browser menu, then <b>Add&nbsp;to&nbsp;Home&nbsp;screen</b>.';
+        show();
+      }
+    }, 1800);
+  })();
 </script>
 <script>
   // Offline support when served over https (or localhost). Harmless elsewhere.
