@@ -52,6 +52,19 @@
   }
   #hud b { color:var(--ink); }
   #ov-stars { font-size:30px; letter-spacing:8px; margin-bottom:10px; color:var(--track); min-height:34px; }
+  /* LEVEL CLEAR: big stars up top, then a white score breakdown that stacks up line-by-line */
+  #overlay.win #ov-stars { font-size:64px; letter-spacing:12px; line-height:1; margin:0 0 18px; min-height:64px; color:#ffd24a;
+    text-shadow:0 3px 0 rgba(120,86,0,0.55), 0 6px 14px rgba(5,4,13,0.6); }
+  #ov-score { display:flex; flex-direction:column; gap:5px; margin:2px auto 20px; max-width:230px; }
+  #ov-score .ov-ln { display:flex; justify-content:space-between; gap:24px; color:#fff; font-size:15px;
+    letter-spacing:1px; text-transform:uppercase; opacity:0; transform:translateY(7px);
+    transition:opacity .26s ease, transform .26s ease; }
+  #ov-score .ov-ln span:last-child { font-weight:900; }
+  #ov-score .ov-ln.show { opacity:1; transform:none; }
+  #ov-score .ov-total { font-size:23px; font-weight:900; color:#fff; margin-top:7px; padding-top:9px;
+    border-top:2px solid rgba(255,255,255,0.25); }
+  #ov-score .ov-best { justify-content:center; color:var(--goal); font-size:12px; margin-top:6px; }
+  #overlay.lose #ov-score { display:none; }
   #pauseFloat {
     position:fixed; z-index:15; padding:0; cursor:pointer;
     top:calc(env(safe-area-inset-top) + 12px); right:calc(env(safe-area-inset-right) + 12px);
@@ -110,7 +123,8 @@
   /* death screen: tighten heading↔byline, bigger/brighter byline, larger retry button */
   #overlay.lose #ov-stars { min-height:0; margin-bottom:0; }
   #overlay.lose p { font-size:19px; line-height:1.5; color:#fff1ea; margin-bottom:26px; }
-  #overlay.lose #ov-btn { font-size:17px; padding:16px 40px; }
+  /* NEXT LEVEL button matches the death-screen RETRY button */
+  #overlay.lose #ov-btn, #overlay.win #ov-btn { font-size:17px; padding:16px 40px; }
 
   /* "Add to Home Screen" prompt (mobile browsers only) */
   #a2hs {
@@ -209,8 +223,9 @@
 
 <div id="overlay">
   <div class="card">
-    <h2 id="ov-title">Level Clear</h2>
     <div id="ov-stars"></div>
+    <h2 id="ov-title">Level Clear</h2>
+    <div id="ov-score"></div>
     <p id="ov-msg"></p>
     <button id="ov-btn">Continue</button>
   </div>
@@ -296,6 +311,7 @@
   const ovBtn = document.getElementById("ov-btn");
   const elScore = document.getElementById("score");
   const ovStars = document.getElementById("ov-stars");
+  const ovScore = document.getElementById("ov-score");
 
   // ---------- Tunables ----------------------------------------------------
   const TILES_TOTAL = 3;
@@ -406,6 +422,25 @@
       g.gain.exponentialRampToValueAtTime(0.0006, t + 0.16);
       o.connect(g); g.connect(master);
       o.start(t); o.stop(t + 0.2);
+    }
+    // Deep bass voice: a sub sine + a triangle body an octave up, through a lowpass so it
+    // stays warm and thick. A short downward pitch glide gives each note punch.
+    function bass(t, semi, dur, vel) {
+      const freq = BASE * Math.pow(2, semi / 12);
+      const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 340; lp.Q.value = 0.9;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vel, t + 0.014);
+      g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+      const sub = ac.createOscillator(); sub.type = "sine";
+      sub.frequency.setValueAtTime(freq * 1.5, t);
+      sub.frequency.exponentialRampToValueAtTime(freq, t + 0.06);     // punchy drop into the note
+      const body = ac.createOscillator(); body.type = "triangle";
+      body.frequency.setValueAtTime(freq * 2, t);
+      const bodyG = ac.createGain(); bodyG.gain.value = 0.45;         // body sits under the sub
+      sub.connect(g); body.connect(bodyG); bodyG.connect(g);
+      g.connect(lp); lp.connect(master);
+      sub.start(t); sub.stop(t + dur + 0.05); body.start(t); body.stop(t + dur + 0.05);
     }
     // Percussion: a filtered noise tick, used on the off-beat.
     function hat(t, vel) {
@@ -603,8 +638,10 @@
       // Lead melody note, on the beat.
       voice(now, MELODY[i], WAVES[step % WAVES.length], 0.9, 0.8, 0.008, true);
       // Backing, locked to the same beat.
-      voice(now, chord.root - 12, "triangle", beatSec * 0.9, 0.40, 0.010, false);  // bass
-      kick(now, 0.5);                                             // pulse on the beat
+      voice(now, chord.root - 12, "triangle", beatSec * 0.9, 0.40, 0.010, false);  // bass body
+      bass(now, chord.root - 24, beatSec * 0.92, 0.85);          // deep sub-bass on the beat
+      bass(now + beatSec * 0.5, chord.root - 24 + 7, beatSec * 0.42, 0.42);  // driving off-beat bass (fifth)
+      kick(now, 0.7);                                             // punchier pulse on the beat
       hat(now + beatSec * 0.5, 0.12);                             // groove on the off-beat
       if (step % 4 === 0)                                         // new bar -> sustained pad bed
         for (const semi of chord.tones)
@@ -636,7 +673,7 @@
   // ---------- Score / feedback helpers -----------------------------------
   function haptic(p){ try { if (navigator.vibrate) navigator.vibrate(p); } catch(_){} }
   const comboMult = c => c >= 30 ? 5 : c >= 20 ? 4 : c >= 12 ? 3 : c >= 5 ? 2 : 1;
-  const VERSION = "v2.4";                    // shown on the title & pause screens
+  const VERSION = "v2.8";                    // shown on the title & pause screens
   // the runner's starting speed (level 1, no combo, no tier) in tiles/second; the
   // whole campaign's speeds scale so level 1 begins here.
   const START_CPS = 0.6;
@@ -934,15 +971,26 @@
     const gx = (state.goal.c + 0.5) * cell, gy = (state.goal.r + 0.5) * cell;
     const gsx = gx - startCam.x, gsy = gy - startCam.y;
     const goalOnScreen = gsx >= 0 && gsx <= viewW && gsy >= 0 && gsy <= viewH;
-    if (!goalOnScreen) {
-      const flagCam = camForPoint(gx, gy);
+    // Hold on the start until any pop-ups are cleared; only THEN run the opening pan +
+    // character intro, so neither plays out behind the tutorial / speed-up cards.
+    state.introPlan = { goalOnScreen, startCam, gx, gy };
+    state.status = "hold";
+    maybeShowMechIntro(L);        // queue any never-seen mechanic / speed pop-up for this level
+    if (!mechQueue.length) beginLevelIntro();   // nothing to show → start the intro right away
+  }
+  // start the opening camera pan (if the flag begins off-screen) and then the character intro
+  function beginLevelIntro() {
+    const pl = state.introPlan; if (!pl) return;
+    state.introPlan = null;
+    if (!pl.goalOnScreen) {
+      const flagCam = camForPoint(pl.gx, pl.gy);
       camX = flagCam.x; camY = flagCam.y;                 // open on the flag
       state.status = "campan";
-      state.pan = { t: 0, hold: 900, dur: 840, from: { x: camX, y: camY }, to: startCam };
+      state.pan = { t: 0, hold: 900, dur: 840, from: { x: camX, y: camY }, to: pl.startCam };
     } else {
-      startIntro();               // flag already visible — go straight to forming the runner
+      camX = pl.startCam.x; camY = pl.startCam.y;         // flag already visible
+      startIntro();               // go straight to forming the runner
     }
-    maybeShowMechIntro(L);        // pop up any never-seen mechanic on this level
   }
 
   function updateReadyHud() {
@@ -1058,7 +1106,9 @@
   }
   function showNextMech() {
     const pop = document.getElementById("mechpop");
-    if (!mechQueue.length) { pop.classList.remove("show", "speed"); paused = false; return; }
+    if (!mechQueue.length) { pop.classList.remove("show", "speed"); paused = false;
+      if (state.status === "hold") beginLevelIntro();   // pop-ups cleared → run the delayed intro
+      return; }
     const type = mechQueue[0], M = MECHS[type];
     const isSpeed = type === "speed";
     pop.classList.toggle("speed", isSpeed);                 // 3D header + hidden icon (see CSS)
@@ -1499,11 +1549,12 @@
   // turning around and running backwards alongside its own track.
   function foldsBack(c, r) {
     const p = state.path;
+    const recent = state.runIdx - 1;           // cells still on, or just behind, the runner
     for (let i = 0; i < p.length - 1; i++) {   // every node except the head
       const n = p[i];
-      // (1) never re-occupy a cell the path has already used — even a just-cleared
-      //     (exited) one — since linking there sends the runner back the way it came.
-      if (n.c === c && n.r === r) return true;
+      // (1) don't re-enter a cell the runner is on or recently left — that's an instant U-turn.
+      //     Cells cleared long ago are fair game again (and their junction arrows show).
+      if (i >= recent && n.c === c && n.r === r) return true;
       // (2) don't run parallel to still-live track ahead of the runner (prevents forks).
       if (!n.exited && i >= state.runIdx &&
           Math.abs(n.c - c) + Math.abs(n.r - r) === 1) return true;
@@ -1594,6 +1645,7 @@
     const s = state;
     const rp = visualAt(s.runIdx + s.runT);
     const near = (c, r) => Math.hypot(rp.x-(c+0.5)*cell, rp.y-(r+0.5)*cell) < cell*0.7;
+    const nearTight = (c, r) => Math.hypot(rp.x-(c+0.5)*cell, rp.y-(r+0.5)*cell) < cell*0.3;  // boost/slow: must nearly overlap
     // coins: grabbed by passing over them
     for (const ck of Array.from(s.coinCells)) {
       const [c, r] = ck.split(",").map(Number);
@@ -1603,12 +1655,12 @@
     // boost / slow pickups: grabbed by passing over them → a time-limited speed effect
     for (const bk of Array.from(s.boost)) {
       const [c, r] = bk.split(",").map(Number);
-      if (near(c, r)) { s.boost.delete(bk); s.speedFx = { kind:"boost", t:BOOST_MS };
+      if (nearTight(c, r)) { s.boost.delete(bk); s.speedFx = { kind:"boost", t:BOOST_MS };
                         spawnPop(c, r, pal("boost")); spawnLight(c, r); (Sound.boost||Sound.coin)(); haptic(12); }
     }
     for (const bk of Array.from(s.slow)) {
       const [c, r] = bk.split(",").map(Number);
-      if (near(c, r)) { s.slow.delete(bk); s.speedFx = { kind:"slow", t:SLOW_MS };
+      if (nearTight(c, r)) { s.slow.delete(bk); s.speedFx = { kind:"slow", t:SLOW_MS };
                         spawnPop(c, r, pal("slow")); (Sound.slow||Sound.coin)(); haptic(12); }
     }
     // colored keys: each opens all doors of its colour; exit unlocks when ALL are held
@@ -1690,6 +1742,28 @@
     f.x += f.vx * dt; f.y += f.vy * dt; f.angle += f.va * dt;
     if (f.t >= FALL_MS) showLose();
   }
+  // Reveal the LEVEL CLEAR score one white line at a time, then the final total.
+  let winAnimToken = 0;
+  function animateWinScore(rows, total, bestText) {
+    const myToken = ++winAnimToken;
+    ovScore.innerHTML = "";
+    const mkLine = (label, val, cls) => {
+      const d = document.createElement("div"); d.className = "ov-ln" + (cls ? " " + cls : "");
+      d.innerHTML = "<span>" + label + "</span><span>" + val + "</span>";
+      ovScore.appendChild(d); return d;
+    };
+    const els = rows.map(([label, val]) => mkLine(label, val));
+    let i = 0;
+    const step = () => {
+      if (myToken !== winAnimToken) return;                 // a newer level started — abort
+      if (i < els.length) { els[i].classList.add("show"); i++; setTimeout(step, 430); return; }
+      const totalEl = mkLine("Score", total, "ov-total");    // …then the final score
+      requestAnimationFrame(() => totalEl.classList.add("show"));
+      if (bestText) { const b = mkLine("", bestText, "ov-best");
+        setTimeout(() => { if (myToken === winAnimToken) b.classList.add("show"); }, 220); }
+    };
+    setTimeout(step, 320);
+  }
   function endWin() {
     state.status = "win";
     // final score = final combo length + coin bonus − number of attempts
@@ -1707,8 +1781,7 @@
       const isBest = state.score > prev.score;
       best[keyId] = { score: Math.max(prev.score, state.score), stars: Math.max(prev.stars, stars) };
       saveBest(best);
-      bestLine = " &nbsp;·&nbsp; Best <b>" + best[keyId].score + "</b>" +
-        (isBest ? " &nbsp;·&nbsp; <b style='color:var(--goal)'>New best!</b>" : "");
+      bestLine = (isBest ? "New best!  " : "Best  ") + best[keyId].score;
     }
     Sound.win();
     haptic([12, 40, 12]);
@@ -1718,8 +1791,11 @@
     ovTitle.textContent = mode === "endless" ? "Level " + endlessN + " Clear"
                         : mode === "daily"   ? "Daily Done!"
                         : last ? "You Win!" : "Level Clear";
-    ovMsg.innerHTML = "Score <b>" + state.score + "</b> &nbsp;·&nbsp; combo <b>" + finalCombo + "</b>" +
-      (coinBonus ? " + coins <b>" + coinBonus + "</b>" : "") + " − tries <b>" + att + "</b>" + bestLine;
+    ovMsg.innerHTML = "";
+    const rows = [["Combo", "+" + finalCombo]];
+    if (coinBonus) rows.push(["Coins", "+" + coinBonus]);
+    rows.push(["Tries", "−" + att]);
+    animateWinScore(rows, state.score, bestLine);
     ovBtn.textContent = mode === "endless" ? "Next (Endless)"
                       : mode === "daily"   ? "Menu"
                       : last ? "Play Again" : "Next Level";
@@ -1763,6 +1839,7 @@
   let _lastQuip = -1;
   function showLose() {
     state.status = "lose";
+    winAnimToken++; ovScore.innerHTML = "";   // cancel any pending win-score reveal
     ovStars.textContent = "";
     overlay.className = "lose show";
     let i = (Math.random() * LOSE_QUIPS.length) | 0;
@@ -2148,35 +2225,30 @@
   }
   // ---- movable wall block: a metal block that slides along a rail off the tunnel mouth ----
   function drawBlocks(ts) {
+    const s = cell;
     for (const b of (state.blocks||[])) {
       const horiz = b.axis === "h";
-      // semi-transparent rail groove across the slide range
-      ctx.save(); ctx.globalAlpha = 0.20; ctx.fillStyle = "#2c3040";
-      for (let i = b.lo; i <= b.hi; i++) {
-        const c = horiz ? i : b.c, r = horiz ? b.r : i;
-        rrect(cx(c)+cell*0.16, cy(r)+cell*0.16, cell*0.68, cell*0.68, cell*0.12); ctx.fill();
-      }
+      // ---- the rail the block slides along (a thin bar, matching the saw's rail) ----
+      const x1 = horiz ? (b.lo+0.5)*cell : (b.c+0.5)*cell;
+      const y1 = horiz ? (b.r+0.5)*cell  : (b.lo+0.5)*cell;
+      const x2 = horiz ? (b.hi+0.5)*cell : (b.c+0.5)*cell;
+      const y2 = horiz ? (b.r+0.5)*cell  : (b.hi+0.5)*cell;
+      ctx.save();
+      ctx.strokeStyle = "rgba(150,156,172,0.55)"; ctx.lineWidth = Math.max(2, cell*0.05); ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      ctx.fillStyle = "rgba(120,126,142,0.65)";
+      for (const [ex, ey] of [[x1,y1],[x2,y2]]) { ctx.beginPath(); ctx.arc(ex, ey, cell*0.09, 0, Math.PI*2); ctx.fill(); }
       ctx.restore();
+      // ---- the block itself (a metal tile) sitting on the rail, with grip dots ----
       const bx = horiz ? b.pos*cell : cx(b.c);
       const by = horiz ? cy(b.r) : b.pos*cell;
-      const s = cell, dragging = state.blockDrag && state.blockDrag.b === b;
-      paintWallInto(ctx, bx, by, s);                          // the block itself is a metal wall tile
+      const dragging = state.blockDrag && state.blockDrag.b === b;
+      paintWallInto(ctx, bx, by, s);
       ctx.save(); rrect(bx, by, s, s, s*0.16); ctx.clip();
       if (dragging) { ctx.fillStyle = "rgba(255,255,255,0.12)"; ctx.fillRect(bx, by, s, s); }
       const pulse = 0.5 + 0.5*Math.sin(ts/280);
       ctx.globalAlpha = 0.5 + 0.35*pulse; drawDragDots(bx + s/2, by + s/2, s); ctx.globalAlpha = 1;
-      // little slide-arrows toward whichever way it can move
-      ctx.strokeStyle = "#eaf0fb"; ctx.lineWidth = Math.max(2, s*0.04); ctx.lineCap = "round"; ctx.lineJoin = "round";
-      ctx.globalAlpha = 0.5 + 0.4*pulse;
-      const aw = s*0.09, mid = s*0.5;
-      const arrow = (ox, oy, dx, dy) => { ctx.beginPath();
-        ctx.moveTo(bx+ox - dx*aw, by+oy - dy*aw); ctx.lineTo(bx+ox + dx*aw, by+oy + dy*aw);
-        ctx.moveTo(bx+ox + dx*aw - dy*aw*0.7, by+oy + dy*aw - dx*aw*0.7);
-        ctx.lineTo(bx+ox + dx*aw, by+oy + dy*aw);
-        ctx.lineTo(bx+ox + dx*aw + dy*aw*0.7, by+oy + dy*aw + dx*aw*0.7); ctx.stroke(); };
-      if (horiz) { if (b.pos > b.lo+0.01) arrow(s*0.2, mid, -1, 0); if (b.pos < b.hi-0.01) arrow(s*0.8, mid, 1, 0); }
-      else       { if (b.pos > b.lo+0.01) arrow(mid, s*0.2, 0, -1); if (b.pos < b.hi-0.01) arrow(mid, s*0.8, 0, 1); }
-      ctx.globalAlpha = 1; ctx.restore();
+      ctx.restore();
     }
   }
   // ---- manual sliding door: drag BOTH panels apart to open ----
@@ -2629,7 +2701,8 @@
     }
     const s = cell;
     const phase = state.runPhase;
-    const swing = moving ? Math.sin(phase) * s*0.09 : 0;
+    // stride reaches past the front of the body on the forward swing, and slides back behind it
+    const swing = moving ? Math.sin(phase) * s*0.16 : 0;
     const bob   = moving ? Math.abs(Math.sin(phase)) * s*0.02 : 0;
 
     // aura while a timed boost/slow effect is active
