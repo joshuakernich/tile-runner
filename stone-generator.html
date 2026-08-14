@@ -12,8 +12,18 @@ function hash(a,b){let h=(a*73856093)^(b*19349663);h=(h^(h>>13))*1274126177;retu
 function resample(path, sub){ const out=[]; for(let i=0;i<path.length-1;i++){ const a=path[i],b=path[i+1];
   for(let j=0;j<sub;j++){ const t=j/sub; out.push([a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t]); } } out.push(path[path.length-1]); return out; }
 function isInside(pt){ return pt[0]>0.04 && pt[0]<0.96 && pt[1]>0.04 && pt[1]<0.96; }
-function widthAt(t, seed, tipStart, tipEnd){ let w=0.56 + 0.16*Math.sin(t*9+seed) + 0.08*Math.sin(t*19+seed*1.7);
-  w=Math.max(0.40, Math.min(0.76, w)); let f=1;
+// ---- crack tuning (mirrored exactly in index.html's STONE_TUNE) ----
+// BASE_W is the crack half-width as a fraction of the tile, by taps remaining.
+// WOB_* are the sine amplitudes that make a crack breathe along its length —
+// small values keep the line an even hairline instead of a lumpy vein.
+const STONE_TUNE = {
+  BASE_W: { 3:0.026, 2:0.029, 1:0.034 },
+  W_MID: 0.58, WOB_A: 0.05, WOB_B: 0.02, W_MIN: 0.52, W_MAX: 0.64,
+  BEVEL: 0.0035, BEVEL_MULT: 1.5,
+};
+function widthAt(t, seed, tipStart, tipEnd){ const T=STONE_TUNE;
+  let w=T.W_MID + T.WOB_A*Math.sin(t*9+seed) + T.WOB_B*Math.sin(t*19+seed*1.7);
+  w=Math.max(T.W_MIN, Math.min(T.W_MAX, w)); let f=1;
   if (tipStart) f=Math.min(f, t/0.30); if (tipEnd) f=Math.min(f, (1-t)/0.30);
   return w*Math.max(0, Math.min(1, f)); }
 function crackPoly(x,y,s,path,baseW,seed,mult){ mult=mult||1;
@@ -30,7 +40,7 @@ function crackPoly(x,y,s,path,baseW,seed,mult){ mult=mult||1;
 }
 // carve a gap, with a little chamfer/bevel: light rim on the upper-left lip, dark rim on the lower-right
 function carveBeveled(x,y,s,path,baseW,seed){
-  const o=s*0.006, m=1.5;
+  const o=s*STONE_TUNE.BEVEL, m=STONE_TUNE.BEVEL_MULT;
   ctx.save(); ctx.translate(o,o);   ctx.fillStyle="rgba(230,221,203,0.34)"; crackPoly(x,y,s,path,baseW,seed,m); ctx.fill(); ctx.restore();   // light lip on the lower-right
   ctx.save(); ctx.translate(-o,-o); ctx.fillStyle="rgba(14,10,7,0.5)";      crackPoly(x,y,s,path,baseW,seed,m); ctx.fill(); ctx.restore();   // shadow on the upper-left
   ctx.globalCompositeOperation="destination-out"; ctx.fillStyle="#000"; crackPoly(x,y,s,path,baseW,seed,1); ctx.fill();
@@ -56,23 +66,20 @@ function fissure(entry, tip, jog, n){ n=n||3; const dx=tip[0]-entry[0], dy=tip[1
 function grow(entry, tipFull, frac, jog){ const tip=[entry[0]+(tipFull[0]-entry[0])*frac, entry[1]+(tipFull[1]-entry[1])*frac];
   return fissure(entry, tip, jog*Math.sqrt(frac), 3); }
 
-// ---- three variations: each = 4 fissures (edge entry -> interior tip) + a couple of offshoots ----
+// ---- three variations: each = 4 fissures (edge entry -> interior tip) ----
 const VARS = [
   { F1:[[0.42,-0.02],[0.52,0.40],0.06], F2:[[0.70,1.02],[0.60,0.56],0.06],
-    F3:[[0.80,-0.02],[0.66,0.40],0.05], F4:[[-0.02,0.52],[0.36,0.50],0.045],
-    o0:[[0.47,0.20],[0.38,0.25]], o1:[[0.47,0.22],[0.35,0.27]] },
+    F3:[[0.80,-0.02],[0.66,0.40],0.05], F4:[[-0.02,0.52],[0.36,0.50],0.045] },
   { F1:[[1.02,0.36],[0.58,0.42],0.06], F2:[[0.46,1.02],[0.48,0.64],0.055],
-    F3:[[0.28,-0.02],[0.36,0.40],0.05], F4:[[-0.02,0.80],[0.24,0.74],0.035],
-    o0:[[0.80,0.38],[0.87,0.44]], o1:[[0.72,0.40],[0.68,0.28]] },
+    F3:[[0.28,-0.02],[0.36,0.40],0.05], F4:[[-0.02,0.80],[0.24,0.74],0.035] },
   { F1:[[-0.02,0.30],[0.42,0.42],0.055], F2:[[0.66,1.02],[0.56,0.60],0.06],
-    F3:[[0.60,-0.02],[0.58,0.36],0.05], F4:[[1.02,0.60],[0.66,0.50],0.045],
-    o0:[[0.22,0.35],[0.27,0.27]], o1:[[0.22,0.36],[0.26,0.24]] },
+    F3:[[0.60,-0.02],[0.58,0.36],0.05], F4:[[1.02,0.60],[0.66,0.50],0.045] },
 ];
 function cracksFor(v, taps){
   const F=(a,frac)=> frac==null ? fissure(a[0],a[1],a[2],3) : grow(a[0],a[1],frac,a[2]);
-  if (taps>=3) return { cracks:[{p:F(v.F1,0.55),wm:0.85},{p:v.o0,wm:0.5}], dark:0, w:0.045 };
-  if (taps===2) return { cracks:[{p:F(v.F1,0.82),wm:1},{p:F(v.F2),wm:0.9},{p:v.o1,wm:0.6}], dark:8, w:0.05 };
-  return { cracks:[{p:F(v.F1),wm:1},{p:F(v.F2),wm:0.9},{p:F(v.F3),wm:0.9},{p:F(v.F4),wm:0.9},{p:v.o1,wm:0.6}], dark:16, w:0.06 };
+  if (taps>=3) return { cracks:[{p:F(v.F1,0.55),wm:0.9}], dark:0, w:STONE_TUNE.BASE_W[3] };
+  if (taps===2) return { cracks:[{p:F(v.F1,0.82),wm:1},{p:F(v.F2),wm:0.95}], dark:8, w:STONE_TUNE.BASE_W[2] };
+  return { cracks:[{p:F(v.F1),wm:1},{p:F(v.F2),wm:0.95},{p:F(v.F3),wm:0.95},{p:F(v.F4),wm:0.95}], dark:16, w:STONE_TUNE.BASE_W[1] };
 }
 
 function drawStone(x,y,s,cfg,seed){

@@ -254,7 +254,7 @@
   // way to the key and the exit.
   // 50-level campaign: each new mechanic is introduced on its own level (see `intro`).
   const LEVELS = [
-    {"start":[2,5],"init":[[2,4],[2,3]],"goal":[2,0],"cols":5,"rows":6,"intro":["recycle"],"walls":[]},
+    {"start":[2,5],"init":[[2,4],[2,3]],"goal":[2,0],"cols":5,"rows":6,"intro":["recycle","flag"],"walls":[]},
     {"start":[0,7],"init":[[0,6],[0,5]],"goal":[4,4],"cols":5,"rows":8,"intro":["turn"],"walls":[]},
     {"start":[0,0],"init":[[0,1],[0,2]],"goal":[5,7],"cols":6,"rows":8,"intro":["offscreen"],"walls":[]},
     {"start":[1,7],"init":[[1,6],[1,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["wall"],"walls":[[0,3],[1,3],[2,3],[4,3]]},
@@ -694,7 +694,7 @@
   // ---------- Score / feedback helpers -----------------------------------
   function haptic(p){ try { if (navigator.vibrate) navigator.vibrate(p); } catch(_){} }
   const comboMult = c => c >= 30 ? 5 : c >= 20 ? 4 : c >= 12 ? 3 : c >= 5 ? 2 : 1;
-  const VERSION = "v4.4";                    // shown on the title & pause screens
+  const VERSION = "v4.6";                    // shown on the title & pause screens
   // the runner's starting speed (level 1, no combo, no tier) in tiles/second; the
   // whole campaign's speeds scale so level 1 begins here.
   const START_CPS = 0.6;
@@ -914,6 +914,9 @@
     markOccDirty(); markWallLayerDirty();      // fresh board — rebuild occupancy + wall-layer caches
     COLS = L.cols || FULL_COLS; ROWS = L.rows || FULL_ROWS;   // this level's board size
     const walls = new Set(L.walls.map(w => key(w[0], w[1])));
+    // where this level starts dealing crack variations, so levels don't all open with Var 1
+    const stoneRot = (L.stone && L.stone.length)
+      ? _sHash(L.stone[0][0] + 1, L.stone[0][1] + 1) % _STONE_VARS.length : 0;
     // the start IS a reusable tile: the 3 tiles start pre-laid from the start cell
     const initCells = [L.start, ...L.init].slice(0, TILES_TOTAL);
     const tiles = initCells.map((cp, idx) => ({ id:idx, c:cp[0], r:cp[1], status:"active" }));
@@ -925,7 +928,11 @@
     state = {
       L, walls, tiles, path,
       speedTier, startSpeedMult, baseSpeed: L.speed,
-      stones: new Map((L.stone || []).map(w => [key(w[0], w[1]), { hp: w[2] || 1, max: w[2] || 1, hit: 0 }])),
+      // Crack variation is dealt round-robin (rotated per level) rather than picked from a
+      // position hash, so ANY level with 3+ stones is guaranteed to show all three sets
+      // instead of leaving it to chance — the old hash gave level 18 four Var-1 stones of five.
+      stones: new Map((L.stone || []).map((w, i) => [key(w[0], w[1]),
+        { hp: w[2] || 1, max: w[2] || 1, hit: 0, vi: (i + stoneRot) % _STONE_VARS.length }])),
       shards: [],
       goal:{ c:L.goal[0], r:L.goal[1] },
       keyCollected:false,
@@ -3066,10 +3073,32 @@
   const _stoneBuf = document.createElement("canvas");
   const _sg = _stoneBuf.getContext("2d");
   function _srr(g,x,y,w,h,r){ g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); }
-  function _sHash(a,b){ let h=(a*73856093)^(b*19349663); h=(h^(h>>13))*1274126177; return (h>>>0); }
+  // 32-bit avalanche. The old version multiplied with `*`, which leaves 32-bit range and
+  // loses the low bits to float rounding — the result was visibly skewed (over a 16x16
+  // board it picked variation 1 ~43% more often than variation 3). Math.imul keeps it exact.
+  function _sHash(a,b){
+    let h = Math.imul(a|0, 0x27d4eb2d) ^ Math.imul(b|0, 0x165667b1);
+    h ^= h >>> 15; h = Math.imul(h, 0x2545f491);
+    h ^= h >>> 13; h = Math.imul(h, 0x3d73373b);
+    h ^= h >>> 16;
+    return h >>> 0;
+  }
   function _sResample(path,sub){ const o=[]; for(let i=0;i<path.length-1;i++){ const a=path[i],b=path[i+1]; for(let j=0;j<sub;j++){ const t=j/sub; o.push([a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t]); } } o.push(path[path.length-1]); return o; }
   function _sInside(p){ return p[0]>0.04&&p[0]<0.96&&p[1]>0.04&&p[1]<0.96; }
-  function _sWidth(t,seed,ts_,te){ let w=0.56+0.16*Math.sin(t*9+seed)+0.08*Math.sin(t*19+seed*1.7); w=Math.max(0.40,Math.min(0.76,w)); let f=1; if(ts_)f=Math.min(f,t/0.30); if(te)f=Math.min(f,(1-t)/0.30); return w*Math.max(0,Math.min(1,f)); }
+  // ---- crack tuning (mirrored exactly in stone-generator.html) -----------
+  // BASE_W is the crack half-width as a fraction of the cell, by taps remaining.
+  // WOB_* are the two sine amplitudes that make a crack breathe along its length —
+  // small values keep the line an even hairline instead of a lumpy vein.
+  const STONE_TUNE = {
+    BASE_W: { 3:0.026, 2:0.029, 1:0.034 },
+    W_MID: 0.58, WOB_A: 0.05, WOB_B: 0.02, W_MIN: 0.52, W_MAX: 0.64,
+    BEVEL: 0.0035, BEVEL_MULT: 1.5,
+  };
+  function _sWidth(t,seed,ts_,te){ const T=STONE_TUNE;
+    let w=T.W_MID+T.WOB_A*Math.sin(t*9+seed)+T.WOB_B*Math.sin(t*19+seed*1.7);
+    w=Math.max(T.W_MIN,Math.min(T.W_MAX,w)); let f=1;
+    if(ts_)f=Math.min(f,t/0.30); if(te)f=Math.min(f,(1-t)/0.30);   // taper to a point at a tip inside the tile
+    return w*Math.max(0,Math.min(1,f)); }
   function _sPoly(g,s,path,baseW,seed,mult){ mult=mult||1; const pts=_sResample(path,6),n=pts.length; const ts_=_sInside(path[0]),te=_sInside(path[path.length-1]);
     const nrm=pts.map((p,k)=>{ const a=pts[Math.max(0,k-1)],b=pts[Math.min(n-1,k+1)]; let tx=b[0]-a[0],ty=b[1]-a[1]; const m=Math.hypot(tx,ty)||1; return [ty/m,-tx/m]; });
     const hw=pts.map((p,k)=>baseW*_sWidth(k/(n-1),seed,ts_,te)*mult);
@@ -3077,7 +3106,7 @@
     for(let k=0;k<n;k++){ const X=pts[k][0]*s+nrm[k][0]*hw[k]*s, Y=pts[k][1]*s+nrm[k][1]*hw[k]*s; k?g.lineTo(X,Y):g.moveTo(X,Y); }
     for(let k=n-1;k>=0;k--){ const X=pts[k][0]*s-nrm[k][0]*hw[k]*s, Y=pts[k][1]*s-nrm[k][1]*hw[k]*s; g.lineTo(X,Y); }
     g.closePath(); }
-  function _sCarve(g,s,path,baseW,seed){ const o=s*0.006,m=1.5;
+  function _sCarve(g,s,path,baseW,seed){ const o=s*STONE_TUNE.BEVEL,m=STONE_TUNE.BEVEL_MULT;
     g.save(); g.translate(o,o);   g.fillStyle="rgba(230,221,203,0.34)"; _sPoly(g,s,path,baseW,seed,m); g.fill(); g.restore();  // lit lip (lower-right)
     g.save(); g.translate(-o,-o);  g.fillStyle="rgba(14,10,7,0.5)";      _sPoly(g,s,path,baseW,seed,m); g.fill(); g.restore();  // shadow (upper-left)
     g.globalCompositeOperation="destination-out"; g.fillStyle="#000"; _sPoly(g,s,path,baseW,seed,1); g.fill();                 // the gap itself
@@ -3092,19 +3121,20 @@
     for(let i=0;i<=n;i++){ const t=i/n; let ox=0,oy=0; if(i>0&&i<n){ const sg=(i%2?1:-1),amp=jog*(0.65+0.35*Math.sin(t*Math.PI)); ox=px*amp*sg; oy=py*amp*sg; } pts.push([entry[0]+dx*t+ox,entry[1]+dy*t+oy]); } return pts; }
   function _sGrow(entry,tipFull,frac,jog){ const tip=[entry[0]+(tipFull[0]-entry[0])*frac, entry[1]+(tipFull[1]-entry[1])*frac]; return _sFiss(entry,tip,jog*Math.sqrt(frac),3); }
   const _STONE_VARS = [
-    { F1:[[0.42,-0.02],[0.52,0.40],0.06], F2:[[0.70,1.02],[0.60,0.56],0.06], F3:[[0.80,-0.02],[0.66,0.40],0.05], F4:[[-0.02,0.52],[0.36,0.50],0.045], o0:[[0.47,0.20],[0.38,0.25]], o1:[[0.47,0.22],[0.35,0.27]] },
-    { F1:[[1.02,0.36],[0.58,0.42],0.06], F2:[[0.46,1.02],[0.48,0.64],0.055], F3:[[0.28,-0.02],[0.36,0.40],0.05], F4:[[-0.02,0.80],[0.24,0.74],0.035], o0:[[0.80,0.38],[0.87,0.44]], o1:[[0.72,0.40],[0.68,0.28]] },
-    { F1:[[-0.02,0.30],[0.42,0.42],0.055], F2:[[0.66,1.02],[0.56,0.60],0.06], F3:[[0.60,-0.02],[0.58,0.36],0.05], F4:[[1.02,0.60],[0.66,0.50],0.045], o0:[[0.22,0.35],[0.27,0.27]], o1:[[0.22,0.36],[0.26,0.24]] },
+    { F1:[[0.42,-0.02],[0.52,0.40],0.06], F2:[[0.70,1.02],[0.60,0.56],0.06], F3:[[0.80,-0.02],[0.66,0.40],0.05], F4:[[-0.02,0.52],[0.36,0.50],0.045] },
+    { F1:[[1.02,0.36],[0.58,0.42],0.06], F2:[[0.46,1.02],[0.48,0.64],0.055], F3:[[0.28,-0.02],[0.36,0.40],0.05], F4:[[-0.02,0.80],[0.24,0.74],0.035] },
+    { F1:[[-0.02,0.30],[0.42,0.42],0.055], F2:[[0.66,1.02],[0.56,0.60],0.06], F3:[[0.60,-0.02],[0.58,0.36],0.05], F4:[[1.02,0.60],[0.66,0.50],0.045] },
   ];
   function _stoneCracks(v, taps){
     const F=(a,frac)=> frac==null ? _sFiss(a[0],a[1],a[2],3) : _sGrow(a[0],a[1],frac,a[2]);
-    if (taps>=3) return { cracks:[[F(v.F1,0.55),0.85],[v.o0,0.5]], dark:0, w:0.045 };
-    if (taps===2) return { cracks:[[F(v.F1,0.82),1],[F(v.F2),0.9],[v.o1,0.6]], dark:8, w:0.05 };
-    return { cracks:[[F(v.F1),1],[F(v.F2),0.9],[F(v.F3),0.9],[F(v.F4),0.9],[v.o1,0.6]], dark:16, w:0.06 }; }
+    const T = STONE_TUNE.BASE_W;
+    if (taps>=3) return { cracks:[[F(v.F1,0.55),0.9]], dark:0, w:T[3] };
+    if (taps===2) return { cracks:[[F(v.F1,0.82),1],[F(v.F2),0.95]], dark:8, w:T[2] };
+    return { cracks:[[F(v.F1),1],[F(v.F2),0.95],[F(v.F3),0.95],[F(v.F4),0.95]], dark:16, w:T[1] }; }
   function drawStone(c, r, ts, st) {
     const x = cx(c), y = cy(r), s = cell, rad = s*0.16;
     const hp = st ? st.hp : 1, taps = Math.max(1, Math.min(3, hp));
-    const v = _STONE_VARS[_sHash(c*7+3, r*13+5) % _STONE_VARS.length];
+    const v = _STONE_VARS[(st && st.vi != null ? st.vi : _sHash(c*7+3, r*13+5)) % _STONE_VARS.length];
     const cfg = _stoneCracks(v, taps), t = cfg.dark;
     const S = Math.ceil(s); _stoneBuf.width = S; _stoneBuf.height = S;   // (re)size clears the buffer
     const g = _sg;

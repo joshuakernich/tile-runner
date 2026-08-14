@@ -1,6 +1,6 @@
 // Tile Runner levels — exported from the editor. Coords [col,row], origin top-left.
 module.exports = [
-  {"n":1,"start":[2,5],"init":[[2,4],[2,3]],"goal":[2,0],"cols":5,"rows":6,"intro":["recycle"],"walls":[]},
+  {"n":1,"start":[2,5],"init":[[2,4],[2,3]],"goal":[2,0],"cols":5,"rows":6,"intro":["recycle","flag"],"walls":[]},
   {"n":2,"start":[0,7],"init":[[0,6],[0,5]],"goal":[4,4],"cols":5,"rows":8,"intro":["turn"],"walls":[]},
   {"n":3,"start":[0,0],"init":[[0,1],[0,2]],"goal":[5,7],"cols":6,"rows":8,"intro":["offscreen"],"walls":[]},
   {"n":4,"start":[1,7],"init":[[1,6],[1,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["wall"],"walls":[[0,3],[1,3],[2,3],[4,3]]},
