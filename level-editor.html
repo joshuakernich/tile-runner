@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Tile Runner — Level Editor</title>
+<style>
+  :root{ --bg:#12102a; --panel:#1b1838; --line:#2b2850; --ink:#cfe9ff; --accent:#7dd0ff; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:10px 14px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;}
+  header h1{font-size:15px;margin:0 12px 0 0;font-weight:700;letter-spacing:.5px;}
+  label{font-size:12px;opacity:.85;}
+  select,input[type=number],input[type=text]{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font:inherit;font-size:12px;}
+  input[type=number]{width:54px;} #introBox{width:150px;}
+  .wrap{display:flex;gap:14px;padding:14px;align-items:flex-start;flex-wrap:wrap;}
+  .tools{display:flex;flex-direction:column;gap:6px;min-width:150px;}
+  .tool{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:7px 9px;cursor:pointer;font-size:13px;user-select:none;}
+  .tool.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+  .tool .k{margin-left:auto;opacity:.5;font-size:11px;}
+  .swab{display:flex;gap:6px;margin:4px 0 2px;}
+  .sw{width:22px;height:22px;border-radius:5px;border:2px solid #0006;cursor:pointer;}
+  .sw.sel{border-color:#fff;}
+  canvas{background:var(--panel);border:1px solid var(--line);border-radius:8px;touch-action:none;cursor:crosshair;}
+  .side{display:flex;flex-direction:column;gap:8px;min-width:320px;flex:1;}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  button.act{background:#233; color:var(--ink); border:1px solid var(--line); border-radius:7px; padding:8px 12px; cursor:pointer; font:inherit; font-size:12px;}
+  button.act:hover{border-color:var(--accent);}
+  button.prim{background:#1c6; color:#04120a; font-weight:700; border:none;}
+  textarea{width:100%;height:220px;background:#0d0b22;color:#bfe;border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit;font-size:11px;line-height:1.45;white-space:pre;}
+  .hint{font-size:11px;opacity:.7;line-height:1.5;}
+  .pill{font-size:11px;background:#0d0b22;border:1px solid var(--line);border-radius:20px;padding:3px 9px;}
+  .warn{color:#ffb454;}
+</style>
+</head>
+<body>
+<header>
+  <h1>TILE RUNNER · LEVEL EDITOR</h1>
+  <label>Load <select id="loadSel"></select></label>
+  <label>n <input type="number" id="nIn" min="1" value="1"></label>
+  <label>cols <input type="number" id="colsIn" min="3" max="40" value="5"></label>
+  <label>rows <input type="number" id="rowsIn" min="3" max="40" value="8"></label>
+  <label>intro <input type="text" id="introBox" placeholder="wall,block …"></label>
+  <span class="pill" id="auto">autosave: on</span>
+  <span class="pill" id="status">ready</span>
+</header>
+
+<div class="wrap">
+  <div class="tools" id="tools">
+    <div class="tool sel" data-tool="wall">Wall <span class="k">1</span></div>
+    <div class="tool" data-tool="erase">Erase <span class="k">0</span></div>
+    <div class="tool" data-tool="start">Start (S) <span class="k">2</span></div>
+    <div class="tool" data-tool="tile">Tile (init·1) <span class="k">3</span></div>
+    <div class="tool" data-tool="head">Head (init·2) <span class="k">4</span></div>
+    <div class="tool" data-tool="goal">Goal (flag) <span class="k">5</span></div>
+    <div class="tool" data-tool="block">Slider block <span class="k">6</span></div>
+    <div class="tool" data-tool="saw">Saw <span class="k">7</span></div>
+    <div class="tool" data-tool="stone">Stone <span class="k">S</span></div>
+    <div class="tool" data-tool="platform">Platform <span class="k">P</span></div>
+    <div class="tool" data-tool="key">Key <span class="k">8</span></div>
+    <div class="tool" data-tool="door">Door <span class="k">9</span></div>
+    <div class="swab" id="swab"></div>
+    <label>saw speed <input type="number" id="sawSpeed" value="4000" step="200" min="800"></label>
+    <label>stone hp <input type="number" id="stoneHp" value="2" step="1" min="1" max="5"></label>
+    <label>platform shape <select id="pfShape">
+      <option value="ns">│ straight N–S</option>
+      <option value="ew">─ straight E–W</option>
+      <option value="ne">└ elbow N–E</option>
+      <option value="es">┌ elbow E–S</option>
+      <option value="sw">┐ elbow S–W</option>
+      <option value="wn">┘ elbow W–N</option>
+    </select></label>
+    <div class="hint" id="toolhint"></div>
+    <div class="row"><button class="act" id="undo">Undo (Z)</button><button class="act" id="clearBtn">Clear</button></div>
+    <button class="act" id="resetBtn">Reset to shipped</button>
+  </div>
+
+  <canvas id="cv" width="400" height="640"></canvas>
+
+  <div class="side">
+    <div class="row">
+      <button class="act prim" id="copyOne">Copy this level</button>
+      <button class="act" id="copyAll">Copy full levels.js</button>
+      <button class="act" id="dlAll">Download levels.js</button>
+      <span class="pill" id="solve">—</span>
+    </div>
+    <textarea id="out" spellcheck="false"></textarea>
+    <div class="hint">
+      Paint <b>walls</b> by dragging. <b>Start / Tile / Head</b> are the 3 pre-laid track cells (Head = init·2, the runner's front).<br>
+      <b>Slider block</b>: click the <i>mouth</i> cell (where it blocks), then click the <i>nook</i> cell it slides into (same row or column).<br>
+      <b>Saw</b>: click one rail end, then the other (same row = horizontal, same column = vertical); uses the speed box.<br>
+      <b>Stone</b>: drag to paint breakable stone blocks (the <i>hp</i> box sets how many taps to smash). Right-drag or drag over a stone to remove.<br>
+      <b>Platform</b>: fixed free track cast into a wall. Click an empty cell to place it in the selected <i>shape</i>; click it again to cycle through the six shapes; right-click to remove. The runner rides it for free but can only enter/leave through the two drawn ends — the reachability check knows this.<br>
+      <b>Key / Door</b>: pick a colour swatch first — a key opens the door of the same colour.<br>
+      <b>Autosave</b> keeps every edit in your browser, so you can close/refresh and pick up where you left off (levels you’ve changed show a <b>*</b> in the Load list). It does <i>not</i> touch the game — when a batch is ready, tell me “take the autosave” and hit <b>Copy full levels.js</b> (or Download) so I can convert it into the real game data. “Reset to shipped” wipes the draft back to the current game levels.
+    </div>
+  </div>
+</div>
+
+<script>
+const LSKEY = "tilerunner_editor_v2";
+let autoAvail = true, autoTimer = null;
+const EMBEDDED = [{"n":1,"start":[2,5],"init":[[2,4],[2,3]],"goal":[2,0],"cols":5,"rows":6,"intro":["recycle"],"walls":[]},{"n":2,"start":[0,7],"init":[[0,6],[0,5]],"goal":[4,4],"cols":5,"rows":8,"intro":["turn"],"walls":[]},{"n":3,"start":[0,0],"init":[[0,1],[0,2]],"goal":[5,7],"cols":6,"rows":8,"intro":["offscreen"],"walls":[]},{"n":4,"start":[1,7],"init":[[1,6],[1,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["wall"],"walls":[[0,3],[1,3],[2,3],[4,3]]},{"n":5,"start":[1,12],"init":[[1,11],[1,10]],"goal":[1,0],"cols":5,"rows":13,"intro":[],"walls":[[0,2],[1,2],[2,2],[4,2],[0,5],[2,5],[3,5],[4,5],[0,8],[1,8],[2,8],[4,8]]},{"n":6,"start":[0,3],"init":[[1,3],[2,3]],"goal":[1,6],"cols":9,"rows":9,"intro":[],"walls":[[4,0],[4,2],[4,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[8,4],[4,5],[4,6],[4,8]]},{"n":7,"start":[4,7],"init":[[4,6],[4,5]],"goal":[1,7],"cols":8,"rows":8,"intro":[],"walls":[[5,0],[2,1],[0,2],[2,2],[3,2],[4,2],[5,2],[7,2],[2,3],[5,3],[2,4],[5,4],[1,5],[2,5],[5,5],[6,5],[2,6],[2,7]]},{"n":8,"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["block"],"walls":[[0,2],[1,2],[3,2],[4,2]],"blocks":[{"axis":"h","r":3,"lo":2,"hi":3,"pos0":2}]},{"n":9,"start":[3,15],"init":[[3,14],[3,13]],"goal":[1,0],"cols":5,"rows":16,"intro":[],"walls":[[0,2],[1,2],[2,2],[4,2],[0,7],[2,7],[3,7],[4,7],[0,10],[1,10],[3,10],[4,10]],"blocks":[{"axis":"h","r":11,"lo":2,"hi":3,"pos0":2},{"axis":"h","r":6,"lo":0,"hi":1,"pos0":1},{"axis":"h","r":3,"lo":3,"hi":4,"pos0":3}]},{"n":10,"start":[0,9],"init":[[1,9],[2,9]],"goal":[6,9],"cols":9,"rows":11,"intro":[],"walls":[[4,0],[4,1],[4,3],[4,4],[0,5],[1,5],[3,5],[4,5],[5,5],[7,5],[8,5],[4,6],[4,7],[4,8],[4,9],[4,10]],"blocks":[{"axis":"h","r":6,"lo":5,"hi":6,"pos0":6},{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"h","r":6,"lo":2,"hi":3,"pos0":2},{"axis":"v","c":3,"lo":1,"hi":2,"pos0":2}]},{"n":11,"start":[1,3],"init":[[1,2],[1,1]],"goal":[13,11],"cols":14,"rows":14,"intro":[],"walls":[[4,0],[8,0],[4,1],[8,2],[4,3],[8,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[10,4],[11,4],[13,4],[5,5],[9,5],[9,6],[5,7],[5,8],[9,8],[0,9],[1,9],[3,9],[4,9],[5,9],[6,9],[7,9],[8,9],[9,9],[10,9],[11,9],[12,9],[13,9],[4,10],[8,10],[8,11],[4,12],[4,13],[8,13]],"blocks":[{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"v","c":9,"lo":0,"hi":1,"pos0":1},{"axis":"h","r":5,"lo":11,"hi":12,"pos0":12},{"axis":"v","c":8,"lo":6,"hi":7,"pos0":7},{"axis":"v","c":4,"lo":5,"hi":6,"pos0":6},{"axis":"h","r":10,"lo":1,"hi":2,"pos0":2},{"axis":"v","c":5,"lo":10,"hi":11,"pos0":11},{"axis":"v","c":9,"lo":11,"hi":12,"pos0":12}]},{"n":12,"start":[2,7],"init":[[2,6],[2,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["saw"],"walls":[],"hazards":[{"kind":"saw","axis":"h","r":3,"lo":0,"hi":4,"speed":4000}]},{"n":13,"start":[2,12],"init":[[2,11],[2,10]],"goal":[2,0],"cols":5,"rows":13,"intro":[],"walls":[],"hazards":[{"kind":"saw","axis":"h","r":8,"lo":0,"hi":4,"speed":3600},{"kind":"saw","axis":"h","r":5,"lo":0,"hi":4,"speed":4400},{"kind":"saw","axis":"h","r":2,"lo":0,"hi":4,"speed":5200}]},{"n":14,"start":[1,8],"init":[[1,7],[1,6]],"goal":[6,0],"cols":7,"rows":9,"intro":[],"walls":[[0,0],[1,1],[3,4],[5,7],[6,8]],"hazards":[{"kind":"saw","axis":"v","c":3,"lo":0,"hi":3,"speed":4000},{"kind":"saw","axis":"v","c":3,"lo":5,"hi":8,"speed":4000},{"kind":"saw","axis":"h","r":4,"lo":0,"hi":2,"speed":4000},{"kind":"saw","axis":"h","r":4,"lo":4,"hi":6,"speed":4000}]},{"n":15,"start":[1,7],"init":[[1,6],[1,5]],"goal":[3,0],"cols":7,"rows":8,"intro":["key","door"],"walls":[[0,3],[1,3],[2,3],[4,3],[5,3],[6,3]],"doors":[[3,3,"#ffd24a"]],"keys":[[6,7,"#ffd24a"]]},{"n":16,"start":[0,0],"init":[[1,0],[2,0]],"goal":[6,9],"cols":8,"rows":11,"intro":[],"walls":[[0,2],[2,2],[3,2],[4,2],[4,3],[5,3],[6,3],[7,3],[0,5],[1,5],[2,5],[3,5],[2,7],[3,7],[4,7],[5,7],[7,7],[4,8],[4,9],[4,10]],"doors":[[1,2,"#ffd24a"],[6,7,"#c77dff"]],"keys":[[6,1,"#ffd24a"],[2,9,"#c77dff"]]},{"n":17,"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["stone"],"walls":[[0,3],[1,3],[2,3],[4,3]],"stone":[[3,3,2]]},{"n":18,"start":[1,0],"init":[[1,1],[1,2]],"goal":[3,10],"cols":7,"rows":12,"intro":[],"walls":[[3,0],[3,1],[3,3],[0,4],[1,4],[2,4],[3,4],[5,4],[6,4],[3,5],[6,5],[1,6],[3,6],[4,6],[6,6],[1,7],[6,7],[1,8],[2,8],[3,8],[4,8],[5,8],[6,8]],"stone":[[3,2,2],[4,4,2],[5,6,2],[2,6,2],[0,8,2]]},{"n":19,"start":[4,9],"init":[[4,8],[4,7]],"goal":[1,0],"cols":6,"rows":10,"intro":["platform"],"walls":[[0,2],[1,2],[2,2],[3,2],[3,4],[0,5],[2,5],[3,5],[4,5],[5,5]],"platforms":[[1,5,"ns"],[3,3,"ew"]]},{"n":20,"start":[2,1],"init":[[3,1],[4,1]],"goal":[5,8],"cols":7,"rows":10,"intro":[],"walls":[[0,3],[1,3],[3,3],[4,3],[5,3],[6,3],[4,4],[1,5],[4,5],[1,6],[4,7],[0,8],[4,8],[4,9]],"platforms":[[2,3,"ns"],[1,4,"ew"],[1,7,"sw"],[4,6,"ew"]]},{"n":21,"start":[0,7],"init":[[1,7],[2,7]],"goal":[1,2],"cols":13,"rows":10,"intro":[],"walls":[[7,0],[9,1],[4,2],[10,2],[4,3],[7,3],[10,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[10,4],[12,4],[4,5],[7,6],[4,7],[5,7],[7,7],[8,7],[9,7],[10,7],[4,8],[10,8],[4,9],[10,9]],"platforms":[[4,6,"ew"],[6,7,"ns"],[7,5,"ew"],[9,4,"ns"],[11,4,"ns"],[10,0,"sw"],[10,1,"ne"],[8,1,"wn"],[7,1,"es"],[7,2,"wn"],[4,1,"ne"],[4,0,"sw"]]}];
+const COLORS = ["#ffd24a","#c77dff","#7dff6b","#ff9e4d","#ff6d6d"];
+const CELL = 40, PAD = 8;
+
+// ---- working state ----
+let edited = {};                     // n -> level object (JSON) with user edits
+let L = null;                        // current working level (live, mutable, walls as Set)
+let tool = "wall", color = COLORS[0];
+let anchor = null;                   // pending first click for block/saw
+let mouseDown = false, lastCell = null;
+let dragEl = null;                   // element currently being dragged on the canvas
+let undoStack = [];
+
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+const $ = id => document.getElementById(id);
+
+function keyOf(c,r){return c+","+r;}
+function cloneLvl(o){return JSON.parse(JSON.stringify(o));}
+
+// convert a stored level (arrays) -> working level (walls Set)
+function toWorking(o){
+  const w = cloneLvl(o);
+  w.walls = new Set((o.walls||[]).map(a=>keyOf(a[0],a[1])));
+  w.blocks = (o.blocks||[]).map(b=>({...b}));
+  w.hazards = (o.hazards||[]).map(h=>({...h}));
+  w.doors = (o.doors||[]).map(d=>d.slice());
+  w.keys = (o.keys||[]).map(k=>k.slice());
+  w.stone = (o.stone||[]).map(s=>s.slice());   // [c,r,hp] breakable stones
+  w.platforms = (o.platforms||[]).map(p=>p.slice());   // [c,r,"ns"] fixed free track
+  w.intro = (o.intro||[]).slice();
+  return w;
+}
+// the six legal platform shapes: two connectors each, in the order the surface is drawn
+const PF_SHAPES = ["ns","ew","ne","es","sw","wn"];
+const PF_OPP = { n:"s", s:"n", e:"w", w:"e" };
+const PF_VEC = { n:[0,-1], s:[0,1], e:[1,0], w:[-1,0] };
+// working -> stored (arrays), omitting empties
+function toStored(w){
+  const o = { n:w.n, start:w.start.slice(), init:[w.init[0].slice(),w.init[1].slice()],
+              goal:w.goal.slice(), cols:w.cols, rows:w.rows, intro:(w.intro||[]).slice() };
+  o.walls = [...w.walls].map(s=>s.split(",").map(Number)).sort((a,b)=>a[1]-b[1]||a[0]-b[0]);
+  if(w.blocks.length)  o.blocks  = w.blocks.map(b=>({...b}));
+  if(w.hazards.length) o.hazards = w.hazards.map(h=>({...h}));
+  if(w.doors.length)   o.doors   = w.doors.map(d=>d.slice());
+  if(w.keys.length)    o.keys    = w.keys.map(k=>k.slice());
+  if((w.stone||[]).length) o.stone = w.stone.map(s=>s.slice());
+  if((w.platforms||[]).length) o.platforms = w.platforms.map(p=>p.slice());
+  return o;
+}
+
+function pushUndo(){ undoStack.push(cloneLvl(toStored(L))); if(undoStack.length>60) undoStack.shift(); }
+
+// ---------- load / resize ----------
+function loadLevel(n){
+  const src = edited[n] || EMBEDDED.find(x=>x.n===n) || {n, start:[2,7],init:[[2,6],[2,5]],goal:[2,0],cols:5,rows:8,intro:[],walls:[]};
+  L = toWorking(src);
+  anchor = null; undoStack = [];
+  $("nIn").value = L.n; $("colsIn").value = L.cols; $("rowsIn").value = L.rows;
+  $("introBox").value = (L.intro||[]).join(",");
+  const ls=$("loadSel"); if(ls && [...ls.options].some(o=>o.value===String(n))) ls.value=String(n);
+  syncSize(); draw(); refreshOut(); setStatus("loaded L"+n);
+}
+function syncSize(){
+  cv.width  = L.cols*CELL + PAD*2;
+  cv.height = L.rows*CELL + PAD*2;
+}
+function resizeGrid(){
+  L.cols = clamp(+$("colsIn").value,3,40); L.rows = clamp(+$("rowsIn").value,3,40);
+  // drop anything out of bounds
+  L.walls = new Set([...L.walls].filter(s=>{const [c,r]=s.split(",").map(Number);return c<L.cols&&r<L.rows;}));
+  syncSize(); commit(); draw(); refreshOut();
+}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+
+// ---------- element removal at a cell ----------
+function eraseAt(c,r){
+  const k = keyOf(c,r); let hit=false;
+  if(L.walls.delete(k)) hit=true;
+  const bBefore=L.blocks.length; L.blocks = L.blocks.filter(b=>!blockCells(b).some(x=>x[0]===c&&x[1]===r)); if(L.blocks.length!==bBefore)hit=true;
+  const hBefore=L.hazards.length; L.hazards = L.hazards.filter(h=>!sawCells(h).some(x=>x[0]===c&&x[1]===r)); if(L.hazards.length!==hBefore)hit=true;
+  const dB=L.doors.length; L.doors = L.doors.filter(d=>!(d[0]===c&&d[1]===r)); if(L.doors.length!==dB)hit=true;
+  const kB=L.keys.length; L.keys = L.keys.filter(x=>!(x[0]===c&&x[1]===r)); if(L.keys.length!==kB)hit=true;
+  const sB=(L.stone||[]).length; L.stone = (L.stone||[]).filter(x=>!(x[0]===c&&x[1]===r)); if(L.stone.length!==sB)hit=true;
+  const pB=(L.platforms||[]).length; L.platforms = (L.platforms||[]).filter(x=>!(x[0]===c&&x[1]===r)); if(L.platforms.length!==pB)hit=true;
+  return hit;
+}
+function blockCells(b){ const h=b.axis!=='v'; const out=[]; for(let i=b.lo;i<=b.hi;i++) out.push(h?[i,b.r]:[b.c,i]); return out; }
+function sawCells(h){ const hz=(h.axis||'h')==='h'; const out=[]; for(let i=h.lo;i<=h.hi;i++) out.push(hz?[i,h.r]:[h.c,i]); return out; }
+
+// ---------- click dispatch ----------
+function applyTool(c,r,isDrag){
+  if(c<0||r<0||c>=L.cols||r>=L.rows) return;
+  switch(tool){
+    case "wall": if(!L.walls.has(keyOf(c,r))){ if(!isDrag)pushUndo(); L.walls.add(keyOf(c,r)); eraseNonWallAt(c,r);} break;
+    case "erase": if(!isDrag)pushUndo(); eraseAt(c,r); break;
+    case "start": pushUndo(); L.start=[c,r]; L.walls.delete(keyOf(c,r)); break;
+    case "tile":  pushUndo(); L.init[0]=[c,r]; L.walls.delete(keyOf(c,r)); break;
+    case "head":  pushUndo(); L.init[1]=[c,r]; L.walls.delete(keyOf(c,r)); break;
+    case "goal":  pushUndo(); L.goal=[c,r]; L.walls.delete(keyOf(c,r)); break;
+    case "key":   pushUndo(); L.keys=L.keys.filter(k=>!(k[0]===c&&k[1]===r)); L.keys.push([c,r,color]); break;
+    case "door":  pushUndo(); L.doors=L.doors.filter(d=>!(d[0]===c&&d[1]===r)); L.doors.push([c,r,color]); L.walls.delete(keyOf(c,r)); break;
+    case "platform": pushUndo(); paintPlatform(c,r); break;
+    case "block": twoClick(c,r,"block"); break;
+    case "saw":   twoClick(c,r,"saw"); break;
+  }
+  if(!["block","saw"].includes(tool)){ commit(); draw(); refreshOut(); }
+}
+// place a platform in the selected shape; clicking one that's already there cycles the shape
+function paintPlatform(c,r){
+  L.platforms = L.platforms || [];
+  const i = L.platforms.findIndex(p=>p[0]===c&&p[1]===r);
+  if(i>=0){
+    const next = PF_SHAPES[(PF_SHAPES.indexOf(L.platforms[i][2]) + 1) % PF_SHAPES.length];
+    L.platforms[i][2] = next; $("pfShape").value = next; setStatus("platform → "+next);
+    return;
+  }
+  L.walls.delete(keyOf(c,r));
+  eraseNonWallAt(c,r);
+  L.platforms.push([c,r,$("pfShape").value||"ns"]);
+}
+function eraseNonWallAt(c,r){ // walls take over a cell — clear conflicting markers
+  L.doors=L.doors.filter(d=>!(d[0]===c&&d[1]===r));
+  L.keys=L.keys.filter(k=>!(k[0]===c&&k[1]===r));
+  L.stone=(L.stone||[]).filter(s=>!(s[0]===c&&s[1]===r));
+  L.platforms=(L.platforms||[]).filter(p=>!(p[0]===c&&p[1]===r));
+}
+function hasStone(c,r){ return (L.stone||[]).some(s=>s[0]===c&&s[1]===r); }
+function paintStone(c,r){
+  const i=(L.stone||[]).findIndex(s=>s[0]===c&&s[1]===r);
+  if(paintMode==="erase"){ if(i>=0) L.stone.splice(i,1); }
+  else if(i<0){ L.walls.delete(keyOf(c,r)); (L.stone||(L.stone=[])).push([c,r, clamp(+$("stoneHp").value||2,1,5)]); }
+}
+function twoClick(c,r,kind){
+  if(!anchor){ anchor={c,r}; setStatus(kind+": now click the "+(kind==="block"?"nook cell it slides into":"other rail end")); draw(); return; }
+  const a=anchor; anchor=null;
+  if(a.c===c && a.r===r){ setStatus("cancelled"); draw(); return; }
+  pushUndo();
+  if(a.r===r){ // horizontal
+    const lo=Math.min(a.c,c), hi=Math.max(a.c,c);
+    if(kind==="block") L.blocks.push({axis:'h', r, lo, hi, pos0:a.c});
+    else L.hazards.push({kind:'saw', axis:'h', r, lo, hi, speed:+$("sawSpeed").value});
+  } else if(a.c===c){ // vertical
+    const lo=Math.min(a.r,r), hi=Math.max(a.r,r);
+    if(kind==="block") L.blocks.push({axis:'v', c, lo, hi, pos0:a.r});
+    else L.hazards.push({kind:'saw', axis:'v', c, lo, hi, speed:+$("sawSpeed").value});
+  } else { setStatus("must share a row or column — try again"); undoStack.pop(); draw(); return; }
+  commit(); draw(); refreshOut(); setStatus(kind+" added");
+}
+
+function commit(){ edited[L.n] = toStored(L); scheduleAuto(); }
+
+// ---------- autosave (browser storage, guarded so a locked-down sandbox can't break the editor) ----------
+function scheduleAuto(){ if(!autoAvail) return; if(autoTimer) clearTimeout(autoTimer); autoTimer=setTimeout(saveAuto,350); }
+function saveAuto(){ try{ localStorage.setItem(LSKEY, JSON.stringify({v:2, edited, current:L?L.n:1, ts:Date.now()})); showAuto("saved"); }catch(e){ autoAvail=false; showAuto(); } }
+function showAuto(kind){ const el=$("auto"); if(!el) return;
+  if(!autoAvail){ el.textContent="autosave: unavailable"; el.className="pill warn"; return; }
+  const t=new Date().toTimeString().slice(0,8);
+  el.textContent = (kind==="restored"?"restored · ":"autosaved ")+t; el.className="pill"; }
+function resetShipped(){ edited={}; try{ localStorage.removeItem(LSKEY); }catch(e){} rebuildLoadSel(); loadLevel(EMBEDDED[0].n); setStatus("reset to shipped"); }
+function boot(){
+  try{ const raw=localStorage.getItem(LSKEY); if(raw){ const d=JSON.parse(raw); if(d&&d.edited){ edited=d.edited; rebuildLoadSel(); loadLevel(d.current||EMBEDDED[0].n); showAuto("restored"); return; } } }
+  catch(e){ autoAvail=false; showAuto(); }
+  rebuildLoadSel(); loadLevel(EMBEDDED[0].n); saveAuto();
+}
+
+// ---------- drawing ----------
+function cellXY(c,r){ return [PAD+c*CELL, PAD+r*CELL]; }
+function draw(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  // grid
+  for(let r=0;r<L.rows;r++)for(let c=0;c<L.cols;c++){ const [x,y]=cellXY(c,r);
+    ctx.fillStyle="#211d44"; ctx.fillRect(x,y,CELL,CELL);
+    ctx.strokeStyle="#2f2b58"; ctx.strokeRect(x+.5,y+.5,CELL,CELL); }
+  // walls
+  L.walls.forEach(s=>{ const [c,r]=s.split(",").map(Number); const [x,y]=cellXY(c,r);
+    rr(x+2,y+2,CELL-4,CELL-4,6,"#6b7185");
+    ctx.fillStyle="#3a3f52"; for(const [a,b] of [[.24,.24],[.76,.24],[.24,.76],[.76,.76]]){ dot(x+CELL*a,y+CELL*b,2.4); } });
+  // stones (breakable) — tan block with cracks + hp
+  (L.stone||[]).forEach(([c,r,hp])=>{ const [x,y]=cellXY(c,r);
+    rr(x+2,y+2,CELL-4,CELL-4,6,"#9a7b53"); rr(x+4,y+4,CELL-8,CELL-8,5,"#b3915f");
+    ctx.strokeStyle="#5f4a2e"; ctx.lineWidth=1.6; ctx.beginPath();
+    ctx.moveTo(x+CELL*0.5,y+4); ctx.lineTo(x+CELL*0.42,y+CELL*0.5); ctx.lineTo(x+CELL*0.6,y+CELL-4);
+    ctx.moveTo(x+CELL*0.42,y+CELL*0.5); ctx.lineTo(x+4,y+CELL*0.62); ctx.stroke();
+    ctx.fillStyle="#3a2c18"; ctx.font="bold 12px monospace"; ctx.textAlign="center"; ctx.fillText(String(hp||1), x+CELL*0.5, y+CELL*0.66); });
+  // platforms — steel plate with the fixed track drawn along its two connectors
+  (L.platforms||[]).forEach(([c,r,shape])=>{ const [x,y]=cellXY(c,r); const cxp=x+CELL/2, cyp=y+CELL/2;
+    rr(x+2,y+2,CELL-4,CELL-4,6,"#5c6474");
+    ctx.fillStyle="#3a3f52"; for(const [a,b] of [[.22,.22],[.78,.22],[.22,.78],[.78,.78]]) dot(x+CELL*a,y+CELL*b,2.2);
+    const ds=(shape||"ns").split("");
+    ctx.strokeStyle="#ffd24a"; ctx.lineWidth=5; ctx.lineCap="round"; ctx.lineJoin="round";
+    ctx.beginPath();
+    const pts=ds.map(d=>[cxp+PF_VEC[d][0]*CELL*0.5, cyp+PF_VEC[d][1]*CELL*0.5]);
+    ctx.moveTo(pts[0][0],pts[0][1]);
+    if(ds[0]===PF_OPP[ds[1]]) ctx.lineTo(pts[1][0],pts[1][1]);      // straight
+    else ctx.quadraticCurveTo(cxp,cyp,pts[1][0],pts[1][1]);          // elbow
+    ctx.stroke();
+    ctx.fillStyle="#12102a"; pts.forEach(p=>dot(p[0],p[1],3));       // the open ends
+  });
+  // blocks
+  L.blocks.forEach(b=>{ const h=b.axis!=='v';
+    const [x1,y1]=centerOf(h?b.lo:b.c, h?b.r:b.lo), [x2,y2]=centerOf(h?b.hi:b.c, h?b.r:b.hi);
+    line(x1,y1,x2,y2,"#9aa0b4",4,.7); ctx.fillStyle="#7a8093"; dot(x2,y2,4);
+    const mc=h?b.pos0:b.c, mr=h?b.r:b.pos0, [mx,my]=cellXY(mc,mr);
+    rr(mx+3,my+3,CELL-6,CELL-6,6,"#4a4f60"); ctx.strokeStyle="#20242e"; ctx.lineWidth=2; ctx.strokeRect(mx+3,my+3,CELL-6,CELL-6);
+    ctx.fillStyle="#8b90a3"; for(const [a,b2] of [[.3,.3],[.7,.3],[.3,.7],[.7,.7]]) dot(mx+CELL*a,my+CELL*b2,2.4);
+    arrow(mx+CELL/2,my+CELL/2); });
+  // saws
+  L.hazards.forEach(h=>{ const hz=(h.axis||'h')==='h';
+    const [x1,y1]=centerOf(hz?h.lo:h.c, hz?h.r:h.lo), [x2,y2]=centerOf(hz?h.hi:h.c, hz?h.r:h.hi);
+    line(x1,y1,x2,y2,"rgba(150,156,172,.6)",4,1); ctx.fillStyle="#7a8093"; dot(x1,y1,4); dot(x2,y2,4);
+    gear((x1+x2)/2,(y1+y2)/2); });
+  // doors + keys
+  L.doors.forEach(d=>{ const [x,y]=cellXY(d[0],d[1]); const co=d[2]||"#ffd24a";
+    rr(x+2,y+2,CELL-4,CELL-4,6,co); padlock(x,y); });
+  L.keys.forEach(k=>{ const [x,y]=cellXY(k[0],k[1]); keyIcon(x,y,k[2]||"#ffd24a"); });
+  // start / tile / head / goal
+  const [hs,hr]=L.init[1]; markTrack(L.start,"S"); markTrack(L.init[0],""); markTrack(L.init[1],"",true); goalFlag(L.goal);
+  // anchor hint
+  if(anchor){ const [x,y]=cellXY(anchor.c,anchor.r); ctx.strokeStyle="#7dd0ff"; ctx.lineWidth=2.5; ctx.strokeRect(x+3,y+3,CELL-6,CELL-6); }
+}
+function centerOf(c,r){ const [x,y]=cellXY(c,r); return [x+CELL/2,y+CELL/2]; }
+function rr(x,y,w,h,rad,fill){ ctx.beginPath(); ctx.moveTo(x+rad,y); ctx.arcTo(x+w,y,x+w,y+h,rad); ctx.arcTo(x+w,y+h,x,y+h,rad); ctx.arcTo(x,y+h,x,y,rad); ctx.arcTo(x,y,x+w,y,rad); ctx.closePath(); ctx.fillStyle=fill; ctx.fill(); }
+function dot(x,y,r){ ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill(); }
+function line(x1,y1,x2,y2,col,w,al){ ctx.globalAlpha=al; ctx.strokeStyle=col; ctx.lineWidth=w; ctx.lineCap="round"; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); ctx.globalAlpha=1; }
+function arrow(cx,cy){ ctx.strokeStyle="#eaf0fb"; ctx.lineWidth=2.5; ctx.lineCap="round"; ctx.lineJoin="round"; ctx.beginPath(); ctx.moveTo(cx-9,cy); ctx.lineTo(cx+9,cy); ctx.moveTo(cx+3,cy-5); ctx.lineTo(cx+9,cy); ctx.lineTo(cx+3,cy+5); ctx.stroke(); }
+function gear(cx,cy){ const R=CELL*0.32; ctx.beginPath(); for(let k=0;k<16;k++){ const a=k/16*Math.PI*2, rr2=(k%2?R:R*.6); const X=cx+Math.cos(a)*rr2, Y=cy+Math.sin(a)*rr2; k?ctx.lineTo(X,Y):ctx.moveTo(X,Y); } ctx.closePath(); ctx.fillStyle="#ff4d6d"; ctx.fill(); ctx.beginPath(); ctx.arc(cx,cy,R*.28,0,7); ctx.fillStyle="#12102a"; ctx.fill(); }
+function padlock(x,y){ const lx=x+CELL*.5, ly=y+CELL*.55, bw=CELL*.3, bh=CELL*.24; ctx.fillStyle="#2a1c00"; ctx.fillRect(lx-bw/2,ly-bh/2,bw,bh); ctx.strokeStyle="#2a1c00"; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(lx,ly-bh/2,bw*0.34,Math.PI,0); ctx.stroke(); }
+function keyIcon(x,y,co){ const kx=x+CELL*.42, ky=y+CELL*.4; ctx.strokeStyle=co; ctx.lineWidth=3.4; ctx.beginPath(); ctx.arc(kx,ky,CELL*.15,0,7); ctx.stroke(); ctx.beginPath(); ctx.moveTo(kx+CELL*.1,ky+CELL*.07); ctx.lineTo(x+CELL*.72,y+CELL*.72); ctx.moveTo(x+CELL*.6,y+CELL*.64); ctx.lineTo(x+CELL*.72,y+CELL*.54); ctx.stroke(); }
+function markTrack(p,label,head){ const [x,y]=cellXY(p[0],p[1]); rr(x+CELL*.28,y+CELL*.28,CELL*.44,CELL*.44,5,"#b8ade8"); if(head){ ctx.strokeStyle="#fff"; ctx.lineWidth=2.5; ctx.strokeRect(x+CELL*.16,y+CELL*.16,CELL*.68,CELL*.68);} if(label){ ctx.fillStyle="#0c0a1e"; ctx.font="bold 15px monospace"; ctx.textAlign="center"; ctx.fillText(label,x+CELL/2,y+CELL*.62);} }
+function goalFlag(p){ const [x,y]=cellXY(p[0],p[1]); rr(x+4,y+4,CELL-8,CELL-8,6,"#2a6d34"); ctx.strokeStyle="#eafff0"; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(x+CELL*.36,y+CELL*.26); ctx.lineTo(x+CELL*.36,y+CELL*.76); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x+CELL*.36,y+CELL*.28); ctx.lineTo(x+CELL*.7,y+CELL*.4); ctx.lineTo(x+CELL*.36,y+CELL*.5); ctx.closePath(); ctx.fillStyle="#8dff78"; ctx.fill(); }
+
+// ---------- solvability (head BFS, walls+start+init0 blocked; ignores blocks/saws) ----------
+// Platforms are passable but only through their two drawn ends, so the walk is
+// edge-constrained rather than cell-constrained.
+function solvable(o){
+  const blocked=new Set((o.walls||[]).map(w=>w[0]+","+w[1]));
+  blocked.add(o.start[0]+","+o.start[1]); blocked.add(o.init[0][0]+","+o.init[0][1]);
+  const K=(c,r)=>c+","+r;
+  const pf=new Map((o.platforms||[]).map(p=>[K(p[0],p[1]), (p[2]||"ns").split("")]));
+  for(const k of pf.keys()) blocked.delete(k);          // a platform is track, not wall
+  const head=o.init[1], inB=(c,r)=>c>=0&&c<o.cols&&r>=0&&r<o.rows;
+  const DIRS=[["n",0,-1],["s",0,1],["w",-1,0],["e",1,0]];
+  const q=[head], seen=new Set([K(head[0],head[1])]);
+  while(q.length){ const [c,r]=q.shift(); if(c===o.goal[0]&&r===o.goal[1]) return true;
+    const here=pf.get(K(c,r));
+    for(const [d,dc,dr] of DIRS){ const nc=c+dc,nr=r+dr; if(!inB(nc,nr))continue;
+      if(here && here.indexOf(d)<0) continue;            // can't leave a platform off-shape
+      const kk=K(nc,nr); const there=pf.get(kk);
+      if(there && there.indexOf(PF_OPP[d])<0) continue;   // can't enter a platform off-shape
+      if(blocked.has(kk)||seen.has(kk))continue; seen.add(kk); q.push([nc,nr]); } }
+  return false;
+}
+
+// ---------- output ----------
+function refreshOut(){
+  L.n = +$("nIn").value; L.intro = $("introBox").value.split(",").map(s=>s.trim()).filter(Boolean);
+  commit();
+  const o = toStored(L);
+  $("out").value = JSON.stringify(o);
+  const ok = solvable(o);
+  $("solve").textContent = ok ? "reachable ✓" : "UNREACHABLE ✗";
+  $("solve").className = "pill" + (ok?"":" warn");
+}
+
+// ---------- direct-manipulation drag ----------
+function draggableAt(c,r){                        // topmost movable element under a cell
+  const eq=p=>p[0]===c&&p[1]===r;
+  if(eq(L.init[1])) return {type:'head'};
+  if(eq(L.init[0])) return {type:'tile'};
+  if(eq(L.start))   return {type:'start'};
+  if(eq(L.goal))    return {type:'goal'};
+  const k=L.keys.find(x=>x[0]===c&&x[1]===r);  if(k) return {type:'key',ref:k};
+  const d=L.doors.find(x=>x[0]===c&&x[1]===r); if(d) return {type:'door',ref:d};
+  const b=L.blocks.find(x=>blockCells(x).some(p=>p[0]===c&&p[1]===r)); if(b) return {type:'block',ref:b,orig:{...b}};
+  const s=L.hazards.find(x=>sawCells(x).some(p=>p[0]===c&&p[1]===r));  if(s) return {type:'saw',ref:s,orig:{...s}};
+  return null;
+}
+function applyDrag(c,r){
+  const d=dragEl;
+  if(d.type==='start'){ L.start=[c,r]; L.walls.delete(keyOf(c,r)); }
+  else if(d.type==='tile'){ L.init[0]=[c,r]; L.walls.delete(keyOf(c,r)); }
+  else if(d.type==='head'){ L.init[1]=[c,r]; L.walls.delete(keyOf(c,r)); }
+  else if(d.type==='goal'){ L.goal=[c,r]; L.walls.delete(keyOf(c,r)); }
+  else if(d.type==='key'){ d.ref[0]=c; d.ref[1]=r; }
+  else if(d.type==='door'){ d.ref[0]=c; d.ref[1]=r; L.walls.delete(keyOf(c,r)); }
+  else if(d.type==='block'||d.type==='saw'){   // translate the whole rail by the drag delta
+    const dc=c-d.grab.c, dr=r-d.grab.r, o=d.orig, horiz=(o.axis!=='v'); let nb;
+    if(horiz){ nb={...o, r:o.r+dr, lo:o.lo+dc, hi:o.hi+dc}; if('pos0' in o) nb.pos0=o.pos0+dc; }
+    else     { nb={...o, c:o.c+dc, lo:o.lo+dr, hi:o.hi+dr}; if('pos0' in o) nb.pos0=o.pos0+dr; }
+    const cells = d.type==='block'?blockCells(nb):sawCells(nb);
+    if(cells.every(p=>p[0]>=0&&p[1]>=0&&p[0]<L.cols&&p[1]<L.rows)) Object.assign(d.ref, nb);
+  }
+}
+
+// ---------- events ----------
+let paintMode=null;                              // 'paint' | 'erase' during a wall drag
+function paintWall(c,r){ const k=keyOf(c,r); if(paintMode==="erase"){ L.walls.delete(k); } else if(!L.walls.has(k)){ L.walls.add(k); eraseNonWallAt(c,r); } }
+function cellsBetween(a,b){                       // DDA so fast drags don't skip cells
+  const out=[]; let x0=a.c,y0=a.r,x1=b.c,y1=b.r; const dx=Math.abs(x1-x0),dy=Math.abs(y1-y0), n=Math.max(dx,dy);
+  for(let i=0;i<=n;i++){ const t=n?i/n:0; out.push({c:Math.round(x0+(x1-x0)*t), r:Math.round(y0+(y1-y0)*t)}); } return out;
+}
+cv.addEventListener("contextmenu", e=>e.preventDefault());   // allow right-drag erase
+cv.addEventListener("mousedown", e=>{
+  mouseDown=true; const c=cellFromEvent(e); if(!c) return;
+  // grab an existing element and drag it (any tool except erase / right-click)
+  if(tool!=="erase" && e.button!==2){ const hit=draggableAt(c.c,c.r); if(hit){ pushUndo(); dragEl={...hit, grab:{c:c.c,r:c.r}}; lastCell=c; cv.style.cursor="grabbing"; return; } }
+  if(tool==="wall"){ paintMode = (e.button===2 || L.walls.has(keyOf(c.c,c.r))) ? "erase" : "paint"; pushUndo(); paintWall(c.c,c.r); lastCell=c; commit(); draw(); refreshOut(); return; }
+  if(tool==="stone"){ paintMode = (e.button===2 || hasStone(c.c,c.r)) ? "erase" : "paint"; pushUndo(); paintStone(c.c,c.r); lastCell=c; commit(); draw(); refreshOut(); return; }
+  if(tool==="erase"){ paintMode="erase"; pushUndo(); eraseAt(c.c,c.r); lastCell=c; commit(); draw(); refreshOut(); return; }
+  // platform: left-click places / cycles the shape, right-click removes
+  if(tool==="platform"){ pushUndo(); if(e.button===2) eraseAt(c.c,c.r); else paintPlatform(c.c,c.r);
+    lastCell=c; commit(); draw(); refreshOut(); return; }
+  lastCell=c; applyTool(c.c,c.r,false);
+});
+cv.addEventListener("mousemove", e=>{
+  const c=cellFromEvent(e);
+  if(!mouseDown){ cv.style.cursor = (c && tool!=="erase" && draggableAt(c.c,c.r)) ? "grab" : "crosshair"; return; }
+  if(!c) return;
+  if(dragEl){ applyDrag(c.c,c.r); lastCell=c; commit(); draw(); refreshOut(); return; }
+  if(tool!=="wall" && tool!=="erase" && tool!=="stone") return;
+  if(lastCell && c.c===lastCell.c && c.r===lastCell.r) return;
+  const path = lastCell ? cellsBetween(lastCell,c) : [c];
+  path.forEach(p=>{ if(p.c<0||p.r<0||p.c>=L.cols||p.r>=L.rows) return; if(tool==="wall") paintWall(p.c,p.r); else if(tool==="stone") paintStone(p.c,p.r); else eraseAt(p.c,p.r); });
+  lastCell=c; commit(); draw(); refreshOut();
+});
+window.addEventListener("mouseup", ()=>{ mouseDown=false; lastCell=null; paintMode=null; if(dragEl){ dragEl=null; commit(); refreshOut(); } cv.style.cursor="crosshair"; });
+function cellFromEvent(e){ const rect=cv.getBoundingClientRect(); const x=e.clientX-rect.left-PAD, y=e.clientY-rect.top-PAD; const c=Math.floor(x/CELL), r=Math.floor(y/CELL); if(c<0||r<0||c>=L.cols||r>=L.rows)return null; return {c,r}; }
+
+document.querySelectorAll(".tool").forEach(t=> t.addEventListener("click", ()=>selTool(t.dataset.tool)));
+function selTool(t){ tool=t; anchor=null; document.querySelectorAll(".tool").forEach(el=>el.classList.toggle("sel",el.dataset.tool===t));
+  const hints={wall:"drag to paint walls",erase:"drag to remove anything",start:"click to place the start",tile:"click to place init·1",head:"click to place the head (init·2)",goal:"click to place the flag",block:"click mouth, then nook",saw:"click one end, then the other",stone:"drag to paint breakable stones (uses hp box)",key:"click to drop a key (current colour)",door:"click to place a door (current colour)",platform:"click to place fixed track; click again to cycle shape"};
+  $("toolhint").textContent = hints[t]||""; draw(); }
+
+// swatches
+const swab=$("swab"); COLORS.forEach((c,i)=>{ const d=document.createElement("div"); d.className="sw"+(i===0?" sel":""); d.style.background=c; d.title=c; d.onclick=()=>{ color=c; document.querySelectorAll(".sw").forEach(s=>s.classList.remove("sel")); d.classList.add("sel"); }; swab.appendChild(d); });
+
+$("colsIn").addEventListener("change",resizeGrid); $("rowsIn").addEventListener("change",resizeGrid);
+$("nIn").addEventListener("change",()=>{ refreshOut(); });
+$("introBox").addEventListener("input",()=>{ refreshOut(); });
+$("undo").onclick=doUndo; $("clearBtn").onclick=()=>{ pushUndo(); L.walls.clear(); L.blocks=[]; L.hazards=[]; L.doors=[]; L.keys=[]; L.stone=[]; L.platforms=[]; commit(); draw(); refreshOut(); };
+function doUndo(){ if(!undoStack.length)return; const prev=undoStack.pop(); L=toWorking(prev); syncSize(); commit(); draw(); refreshOut(); setStatus("undo"); }
+window.addEventListener("keydown",e=>{ if(e.key==="z"&&(e.ctrlKey||e.metaKey||true)&&document.activeElement.tagName!=="INPUT"&&document.activeElement.tagName!=="TEXTAREA"){ doUndo(); }
+  const map={"0":"erase","1":"wall","2":"start","3":"tile","4":"head","5":"goal","6":"block","7":"saw","8":"key","9":"door","s":"stone","p":"platform"};
+  if(map[e.key]&&document.activeElement.tagName!=="INPUT") selTool(map[e.key]); });
+
+// load selector
+const sel=$("loadSel");
+function rebuildLoadSel(){
+  const ns=Array.from(new Set([...EMBEDDED.map(l=>l.n), ...Object.keys(edited).map(Number)])).sort((a,b)=>a-b);
+  const keep=sel.value; sel.innerHTML="";
+  ns.forEach(n=>{ const l=edited[n]||EMBEDDED.find(x=>x.n===n); const emb=EMBEDDED.find(x=>x.n===n);
+    const dirty = edited[n] && (!emb || JSON.stringify(edited[n])!==JSON.stringify(emb));
+    const o=document.createElement("option"); o.value=n; o.textContent="L"+n+" ("+l.cols+"×"+l.rows+")"+(dirty?" *":""); sel.appendChild(o); });
+  const blank=document.createElement("option"); blank.value="new"; blank.textContent="+ New blank"; sel.appendChild(blank);
+  if([...sel.options].some(o=>o.value===keep)) sel.value=keep;
+}
+sel.addEventListener("change",()=>{ if(sel.value==="new"){ const n=Math.max(...EMBEDDED.map(l=>l.n), ...Object.keys(edited).map(Number),0)+1; edited[n]={n,start:[2,7],init:[[2,6],[2,5]],goal:[2,0],cols:5,rows:8,intro:[],walls:[]}; rebuildLoadSel(); loadLevel(n);} else loadLevel(+sel.value); });
+$("resetBtn").onclick=resetShipped;
+
+// exports
+function fullArray(){ const map={}; EMBEDDED.forEach(l=>map[l.n]=l); Object.keys(edited).forEach(n=>map[n]=edited[n]);
+  const ns=Object.keys(map).map(Number).sort((a,b)=>a-b); const lines=ns.map(n=>"  "+JSON.stringify(map[n])).join(",\n");
+  return "// Tile Runner levels — exported from the editor. Coords [col,row], origin top-left.\nmodule.exports = [\n"+lines+",\n];\n"; }
+$("copyOne").onclick=()=>{ commit(); copy($("out").value); setStatus("level JSON copied"); };
+$("copyAll").onclick=()=>{ commit(); copy(fullArray()); setStatus("full levels.js copied"); };
+$("dlAll").onclick=()=>{ commit(); const blob=new Blob([fullArray()],{type:"text/javascript"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="levels.js"; a.click(); setStatus("downloaded levels.js"); };
+function copy(t){ navigator.clipboard&&navigator.clipboard.writeText(t).catch(()=>{}); const ta=$("out"); ta.value=t; ta.select(); try{document.execCommand("copy");}catch(e){} }
+function setStatus(t){ $("status").textContent=t; }
+
+// boot
+boot();
+</script>
+</body>
+</html>

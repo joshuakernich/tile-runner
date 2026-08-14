@@ -1,0 +1,100 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+  body{margin:0;background:#171326;}
+  canvas{display:block;}
+</style></head><body>
+<canvas id="cv" width="760" height="820"></canvas>
+<script>
+const ctx = document.getElementById('cv').getContext('2d');
+function rrect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function hash(a,b){let h=(a*73856093)^(b*19349663);h=(h^(h>>13))*1274126177;return (h>>>0);}
+
+// ---- crack geometry (shared) ----
+function resample(path, sub){ const out=[]; for(let i=0;i<path.length-1;i++){ const a=path[i],b=path[i+1];
+  for(let j=0;j<sub;j++){ const t=j/sub; out.push([a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t]); } } out.push(path[path.length-1]); return out; }
+function isInside(pt){ return pt[0]>0.04 && pt[0]<0.96 && pt[1]>0.04 && pt[1]<0.96; }
+function widthAt(t, seed, tipStart, tipEnd){ let w=0.56 + 0.16*Math.sin(t*9+seed) + 0.08*Math.sin(t*19+seed*1.7);
+  w=Math.max(0.40, Math.min(0.76, w)); let f=1;
+  if (tipStart) f=Math.min(f, t/0.30); if (tipEnd) f=Math.min(f, (1-t)/0.30);
+  return w*Math.max(0, Math.min(1, f)); }
+function crackPoly(x,y,s,path,baseW,seed,mult){ mult=mult||1;
+  const pts=resample(path,6), n=pts.length;
+  const tipStart=isInside(path[0]), tipEnd=isInside(path[path.length-1]);
+  const nrm=pts.map((pt,k)=>{ const a=pts[Math.max(0,k-1)], b=pts[Math.min(n-1,k+1)];
+    let tx=b[0]-a[0], ty=b[1]-a[1]; const m=Math.hypot(tx,ty)||1; return [ty/m,-tx/m]; });
+  // proportional widening (mult) so the bevel tapers to zero exactly where the gap does — no overhang at tips
+  const hw=pts.map((pt,k)=>baseW*widthAt(k/(n-1),seed,tipStart,tipEnd)*mult);
+  ctx.beginPath();
+  for(let k=0;k<n;k++){ const X=x+pts[k][0]*s+nrm[k][0]*hw[k]*s, Y=y+pts[k][1]*s+nrm[k][1]*hw[k]*s; k?ctx.lineTo(X,Y):ctx.moveTo(X,Y); }
+  for(let k=n-1;k>=0;k--){ const X=x+pts[k][0]*s-nrm[k][0]*hw[k]*s, Y=y+pts[k][1]*s-nrm[k][1]*hw[k]*s; ctx.lineTo(X,Y); }
+  ctx.closePath();
+}
+// carve a gap, with a little chamfer/bevel: light rim on the upper-left lip, dark rim on the lower-right
+function carveBeveled(x,y,s,path,baseW,seed){
+  const o=s*0.006, m=1.5;
+  ctx.save(); ctx.translate(o,o);   ctx.fillStyle="rgba(230,221,203,0.34)"; crackPoly(x,y,s,path,baseW,seed,m); ctx.fill(); ctx.restore();   // light lip on the lower-right
+  ctx.save(); ctx.translate(-o,-o); ctx.fillStyle="rgba(14,10,7,0.5)";      crackPoly(x,y,s,path,baseW,seed,m); ctx.fill(); ctx.restore();   // shadow on the upper-left
+  ctx.globalCompositeOperation="destination-out"; ctx.fillStyle="#000"; crackPoly(x,y,s,path,baseW,seed,1); ctx.fill();
+  ctx.globalCompositeOperation="source-over";
+}
+// richer stone texture: mottled tonal blotches + fine dark/light grain (seeded per stone)
+function drawTexture(x,y,s,seed){
+  for(let i=0;i<6;i++){ const h=hash(seed*5+i, i*11+3); const bx=x+(h%100)/100*s, by=y+((h>>7)%100)/100*s, r=s*(0.10+((h>>14)&7)/7*0.13);
+    const g=ctx.createRadialGradient(bx,by,0,bx,by,r);
+    g.addColorStop(0, (i%2)?"rgba(58,50,38,0.20)":"rgba(205,194,172,0.15)"); g.addColorStop(1,"rgba(0,0,0,0)");
+    ctx.fillStyle=g; ctx.fillRect(x,y,s,s); }
+  for(let i=0;i<80;i++){ const h=hash(seed*3+i, i*7+5); const px=x+(h%1000)/1000*s, py=y+((h>>10)%1000)/1000*s;
+    const sz=Math.max(1, s*(0.005+((h>>20)&3)/3*0.02));
+    ctx.fillStyle=(h&1)?"rgba(212,202,182,0.16)":"rgba(33,28,22,0.30)"; ctx.fillRect(px,py,sz,sz); }
+}
+// build a zigzag fissure polyline from an edge `entry` to an interior `tip`
+function fissure(entry, tip, jog, n){ n=n||3; const dx=tip[0]-entry[0], dy=tip[1]-entry[1], L=Math.hypot(dx,dy)||1;
+  const px=-dy/L, py=dx/L, pts=[];
+  for(let i=0;i<=n;i++){ const t=i/n; let ox=0,oy=0;
+    if(i>0&&i<n){ const sgn=(i%2?1:-1), amp=jog*(0.65+0.35*Math.sin(t*Math.PI)); ox=px*amp*sgn; oy=py*amp*sgn; }
+    pts.push([entry[0]+dx*t+ox, entry[1]+dy*t+oy]); }
+  return pts; }
+function grow(entry, tipFull, frac, jog){ const tip=[entry[0]+(tipFull[0]-entry[0])*frac, entry[1]+(tipFull[1]-entry[1])*frac];
+  return fissure(entry, tip, jog*Math.sqrt(frac), 3); }
+
+// ---- three variations: each = 4 fissures (edge entry -> interior tip) + a couple of offshoots ----
+const VARS = [
+  { F1:[[0.42,-0.02],[0.52,0.40],0.06], F2:[[0.70,1.02],[0.60,0.56],0.06],
+    F3:[[0.80,-0.02],[0.66,0.40],0.05], F4:[[-0.02,0.52],[0.36,0.50],0.045],
+    o0:[[0.47,0.20],[0.38,0.25]], o1:[[0.47,0.22],[0.35,0.27]] },
+  { F1:[[1.02,0.36],[0.58,0.42],0.06], F2:[[0.46,1.02],[0.48,0.64],0.055],
+    F3:[[0.28,-0.02],[0.36,0.40],0.05], F4:[[-0.02,0.80],[0.24,0.74],0.035],
+    o0:[[0.80,0.38],[0.87,0.44]], o1:[[0.72,0.40],[0.68,0.28]] },
+  { F1:[[-0.02,0.30],[0.42,0.42],0.055], F2:[[0.66,1.02],[0.56,0.60],0.06],
+    F3:[[0.60,-0.02],[0.58,0.36],0.05], F4:[[1.02,0.60],[0.66,0.50],0.045],
+    o0:[[0.22,0.35],[0.27,0.27]], o1:[[0.22,0.36],[0.26,0.24]] },
+];
+function cracksFor(v, taps){
+  const F=(a,frac)=> frac==null ? fissure(a[0],a[1],a[2],3) : grow(a[0],a[1],frac,a[2]);
+  if (taps>=3) return { cracks:[{p:F(v.F1,0.55),wm:0.85},{p:v.o0,wm:0.5}], dark:0, w:0.045 };
+  if (taps===2) return { cracks:[{p:F(v.F1,0.82),wm:1},{p:F(v.F2),wm:0.9},{p:v.o1,wm:0.6}], dark:8, w:0.05 };
+  return { cracks:[{p:F(v.F1),wm:1},{p:F(v.F2),wm:0.9},{p:F(v.F3),wm:0.9},{p:F(v.F4),wm:0.9},{p:v.o1,wm:0.6}], dark:16, w:0.06 };
+}
+
+function drawStone(x,y,s,cfg,seed){
+  const rad=s*0.16, t=cfg.dark;
+  const g=ctx.createLinearGradient(x,y,x,y+s);
+  g.addColorStop(0,`rgb(${156-t},${146-t},${132-t})`); g.addColorStop(1,`rgb(${101-t},${92-t},${79-t})`);
+  rrect(x,y,s,s,rad); ctx.fillStyle=g; ctx.fill();
+  ctx.save(); rrect(x,y,s,s,rad); ctx.clip();
+  drawTexture(x,y,s,seed);
+  cfg.cracks.forEach((c,idx)=>carveBeveled(x,y,s,c.p,cfg.w*(c.wm||1),idx*3.7+1.3));
+  ctx.restore();
+}
+
+// ---- grid: 3 variations (rows) x 3 states (cols) ----
+const S=180, PADX=90, PADY=60, GX=(760-PADX*2-S*3)/2 + S, GY=S+40;
+ctx.fillStyle="#cfe9ff"; ctx.font="700 18px system-ui,sans-serif"; ctx.textAlign="center";
+["3 TAPS","2 TAPS","1 TAP"].forEach((lab,ci)=> ctx.fillText(lab, PADX+ci*GX+S/2, 34));
+[0,1,2].forEach(ri=>{ const v=VARS[ri];
+  ctx.save(); ctx.translate(0,0);
+  ctx.fillStyle="#8ea6c8"; ctx.font="700 15px system-ui,sans-serif"; ctx.textAlign="left";
+  ctx.fillText("Var "+(ri+1), 12, PADY+ri*GY+S/2);
+  [3,2,1].forEach((taps,ci)=>{ drawStone(PADX+ci*GX, PADY+ri*GY, S, cracksFor(v,taps), ri*97+31); });
+  ctx.restore();
+});
+</script></body></html>
