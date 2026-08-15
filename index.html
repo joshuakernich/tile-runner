@@ -179,15 +179,6 @@
   .lvl-grid .st { font-size:var(--body); color:var(--goal); letter-spacing:1px; font-weight:900; }
   .lvl-grid .st.none { color:var(--dim); font-weight:400; }
 
-  #editbar { position:fixed; left:0; right:0; bottom:0; z-index:25; display:none;
-    flex-direction:column; gap:6px; padding:8px; background:rgba(13,11,26,0.94);
-    border-top:3px solid var(--grid-line); }
-  #editbar.show { display:flex; }
-  #edtools, #edactions { display:flex; flex-wrap:wrap; gap:5px; justify-content:center; }
-  #editbar button { padding:8px 9px; font-size:10px; letter-spacing:1px; box-shadow:2px 2px 0 var(--shadow); }
-  #editbar button.sel { background:var(--track); color:var(--shadow); border-color:var(--track); }
-  #edcode { width:100%; height:44px; resize:none; font-family:inherit; font-size:10px;
-    background:var(--panel); color:var(--ink); border:2px solid var(--grid-line); padding:6px; }
 </style>
 </head>
 <body>
@@ -210,12 +201,6 @@
     <button id="a2hs-install" style="display:none">Install</button>
     <button id="a2hs-close" class="a2hs-x">Not now</button>
   </div>
-</div>
-
-<div id="editbar">
-  <div id="edtools"></div>
-  <div id="edactions"></div>
-  <textarea id="edcode" placeholder="Share code — Export writes it here; paste one and Import to load."></textarea>
 </div>
 
 <div id="mechpop">
@@ -244,7 +229,7 @@
 
   // ---------- Levels ------------------------------------------------------
   let COLS = 7, ROWS = 13;                   // per-level board size (set in beginLevel)
-  const FULL_COLS = 7, FULL_ROWS = 13;       // the maximum board (editor / procedural modes)
+  const FULL_COLS = 7, FULL_ROWS = 13;       // fallback board size if a level omits cols/rows
   // --- TEST LEVEL: breaking stone is REQUIRED to reach the goal -----------
   // Three full-width barriers span the grid; the ONLY opening in each is a
   // stone tile, so the runner physically cannot advance without smashing it.
@@ -254,27 +239,30 @@
   // way to the key and the exit.
   // 50-level campaign: each new mechanic is introduced on its own level (see `intro`).
   const LEVELS = [
-    {"start":[2,5],"init":[[2,4],[2,3]],"goal":[2,0],"cols":5,"rows":6,"intro":["recycle","flag"],"walls":[]},
-    {"start":[0,7],"init":[[0,6],[0,5]],"goal":[4,4],"cols":5,"rows":8,"intro":["turn"],"walls":[]},
-    {"start":[0,0],"init":[[0,1],[0,2]],"goal":[5,7],"cols":6,"rows":8,"intro":["offscreen"],"walls":[]},
-    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["wall"],"walls":[[0,3],[1,3],[2,3],[4,3]]},
-    {"start":[1,12],"init":[[1,11],[1,10]],"goal":[1,0],"cols":5,"rows":13,"intro":[],"walls":[[0,2],[1,2],[2,2],[4,2],[0,5],[2,5],[3,5],[4,5],[0,8],[1,8],[2,8],[4,8]]},
-    {"start":[0,3],"init":[[1,3],[2,3]],"goal":[1,6],"cols":9,"rows":9,"intro":[],"walls":[[4,0],[4,2],[4,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[8,4],[4,5],[4,6],[4,8]]},
-    {"start":[4,7],"init":[[4,6],[4,5]],"goal":[1,7],"cols":8,"rows":8,"intro":[],"walls":[[5,0],[2,1],[0,2],[2,2],[3,2],[4,2],[5,2],[7,2],[2,3],[5,3],[2,4],[5,4],[1,5],[2,5],[5,5],[6,5],[2,6],[2,7]]},
-    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["block"],"walls":[[0,2],[1,2],[3,2],[4,2]],"blocks":[{"axis":"h","r":3,"lo":2,"hi":3,"pos0":2}]},
-    {"start":[3,15],"init":[[3,14],[3,13]],"goal":[1,0],"cols":5,"rows":16,"intro":[],"walls":[[0,2],[1,2],[2,2],[4,2],[0,7],[2,7],[3,7],[4,7],[0,10],[1,10],[3,10],[4,10]],"blocks":[{"axis":"h","r":11,"lo":2,"hi":3,"pos0":2},{"axis":"h","r":6,"lo":0,"hi":1,"pos0":1},{"axis":"h","r":3,"lo":3,"hi":4,"pos0":3}]},
-    {"start":[0,9],"init":[[1,9],[2,9]],"goal":[6,9],"cols":9,"rows":11,"intro":[],"walls":[[4,0],[4,1],[4,3],[4,4],[0,5],[1,5],[3,5],[4,5],[5,5],[7,5],[8,5],[4,6],[4,7],[4,8],[4,9],[4,10]],"blocks":[{"axis":"h","r":6,"lo":5,"hi":6,"pos0":6},{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"h","r":6,"lo":2,"hi":3,"pos0":2},{"axis":"v","c":3,"lo":1,"hi":2,"pos0":2}]},
-    {"start":[1,3],"init":[[1,2],[1,1]],"goal":[13,11],"cols":14,"rows":14,"intro":[],"walls":[[4,0],[8,0],[4,1],[8,2],[4,3],[8,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[10,4],[11,4],[13,4],[5,5],[9,5],[9,6],[5,7],[5,8],[9,8],[0,9],[1,9],[3,9],[4,9],[5,9],[6,9],[7,9],[8,9],[9,9],[10,9],[11,9],[12,9],[13,9],[4,10],[8,10],[8,11],[4,12],[4,13],[8,13]],"blocks":[{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"v","c":9,"lo":0,"hi":1,"pos0":1},{"axis":"h","r":5,"lo":11,"hi":12,"pos0":12},{"axis":"v","c":8,"lo":6,"hi":7,"pos0":7},{"axis":"v","c":4,"lo":5,"hi":6,"pos0":6},{"axis":"h","r":10,"lo":1,"hi":2,"pos0":2},{"axis":"v","c":5,"lo":10,"hi":11,"pos0":11},{"axis":"v","c":9,"lo":11,"hi":12,"pos0":12}]},
-    {"start":[2,7],"init":[[2,6],[2,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["saw"],"walls":[],"hazards":[{"kind":"saw","axis":"h","r":3,"lo":0,"hi":4,"speed":4000}]},
-    {"start":[2,12],"init":[[2,11],[2,10]],"goal":[2,0],"cols":5,"rows":13,"intro":[],"walls":[],"hazards":[{"kind":"saw","axis":"h","r":8,"lo":0,"hi":4,"speed":3600},{"kind":"saw","axis":"h","r":5,"lo":0,"hi":4,"speed":4400},{"kind":"saw","axis":"h","r":2,"lo":0,"hi":4,"speed":5200}]},
-    {"start":[1,8],"init":[[1,7],[1,6]],"goal":[6,0],"cols":7,"rows":9,"intro":[],"walls":[[0,0],[1,1],[3,4],[5,7],[6,8]],"hazards":[{"kind":"saw","axis":"v","c":3,"lo":0,"hi":3,"speed":4000},{"kind":"saw","axis":"v","c":3,"lo":5,"hi":8,"speed":4000},{"kind":"saw","axis":"h","r":4,"lo":0,"hi":2,"speed":4000},{"kind":"saw","axis":"h","r":4,"lo":4,"hi":6,"speed":4000}]},
-    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[3,0],"cols":7,"rows":8,"intro":["key","door"],"walls":[[0,3],[1,3],[2,3],[4,3],[5,3],[6,3]],"doors":[[3,3,"#ffd24a"]],"keys":[[6,7,"#ffd24a"]]},
-    {"start":[0,0],"init":[[1,0],[2,0]],"goal":[6,9],"cols":8,"rows":11,"intro":[],"walls":[[0,2],[2,2],[3,2],[4,2],[4,3],[5,3],[6,3],[7,3],[0,5],[1,5],[2,5],[3,5],[2,7],[3,7],[4,7],[5,7],[7,7],[4,8],[4,9],[4,10]],"doors":[[1,2,"#ffd24a"],[6,7,"#c77dff"]],"keys":[[6,1,"#ffd24a"],[2,9,"#c77dff"]]},
-    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["stone"],"walls":[[0,3],[1,3],[2,3],[4,3]],"stone":[[3,3,2]]},
-    {"start":[1,0],"init":[[1,1],[1,2]],"goal":[3,10],"cols":7,"rows":12,"intro":[],"walls":[[3,0],[3,1],[3,3],[0,4],[1,4],[2,4],[3,4],[5,4],[6,4],[3,5],[6,5],[1,6],[3,6],[4,6],[6,6],[1,7],[6,7],[1,8],[2,8],[3,8],[4,8],[5,8],[6,8]],"stone":[[3,2,2],[4,4,2],[5,6,2],[2,6,2],[0,8,2]]},
-    {"start":[4,9],"init":[[4,8],[4,7]],"goal":[1,0],"cols":6,"rows":10,"intro":["platform"],"walls":[[0,2],[1,2],[2,2],[3,2],[3,4],[0,5],[2,5],[3,5],[4,5],[5,5]],"platforms":[[1,5,"ns"],[3,3,"ew"]]},
-    {"start":[2,1],"init":[[3,1],[4,1]],"goal":[5,8],"cols":7,"rows":10,"intro":[],"walls":[[0,3],[1,3],[3,3],[4,3],[5,3],[6,3],[4,4],[1,5],[4,5],[1,6],[4,7],[0,8],[4,8],[4,9]],"platforms":[[2,3,"ns"],[1,4,"ew"],[1,7,"sw"],[4,6,"ew"]]},
-    {"start":[0,7],"init":[[1,7],[2,7]],"goal":[1,2],"cols":13,"rows":10,"intro":[],"walls":[[7,0],[9,1],[4,2],[10,2],[4,3],[7,3],[10,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[10,4],[12,4],[4,5],[7,6],[4,7],[5,7],[7,7],[8,7],[9,7],[10,7],[4,8],[10,8],[4,9],[10,9]],"platforms":[[4,6,"ew"],[6,7,"ns"],[7,5,"ew"],[9,4,"ns"],[11,4,"ns"],[10,0,"sw"],[10,1,"ne"],[8,1,"wn"],[7,1,"es"],[7,2,"wn"],[4,1,"ne"],[4,0,"sw"]]}
+    {"start":[2,5],"init":[[2,4],[2,3]],"goal":[2,0],"cols":5,"rows":6,"intro":["recycle","flag"],"walls":[],"cps":0.8},
+    {"start":[0,7],"init":[[0,6],[0,5]],"goal":[4,4],"cols":5,"rows":8,"intro":["turn"],"walls":[],"cps":0.8},
+    {"start":[0,0],"init":[[0,1],[0,2]],"goal":[5,7],"cols":6,"rows":8,"intro":["offscreen"],"walls":[],"cps":0.8},
+    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["wall","speed"],"walls":[[0,3],[1,3],[2,3],[4,3]],"cps":0.84},
+    {"start":[1,12],"init":[[1,11],[1,10]],"goal":[1,0],"cols":5,"rows":13,"intro":[],"walls":[[0,2],[1,2],[2,2],[4,2],[0,5],[2,5],[3,5],[4,5],[0,8],[1,8],[2,8],[4,8]],"cps":0.84},
+    {"start":[0,3],"init":[[1,3],[2,3]],"goal":[1,6],"cols":9,"rows":9,"intro":[],"walls":[[4,0],[4,2],[4,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[8,4],[4,5],[4,6],[4,8]],"cps":0.84},
+    {"start":[4,7],"init":[[4,6],[4,5]],"goal":[1,7],"cols":8,"rows":8,"intro":[],"walls":[[5,0],[2,1],[0,2],[2,2],[3,2],[4,2],[5,2],[7,2],[2,3],[5,3],[2,4],[5,4],[1,5],[2,5],[5,5],[6,5],[2,6],[2,7]],"cps":0.84},
+    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["block"],"walls":[[0,2],[1,2],[3,2],[4,2]],"blocks":[{"axis":"h","r":3,"lo":2,"hi":3,"pos0":2}],"cps":0.88},
+    {"start":[3,15],"init":[[3,14],[3,13]],"goal":[1,0],"cols":5,"rows":16,"intro":[],"walls":[[0,2],[1,2],[2,2],[4,2],[0,7],[2,7],[3,7],[4,7],[0,10],[1,10],[3,10],[4,10]],"blocks":[{"axis":"h","r":11,"lo":2,"hi":3,"pos0":2},{"axis":"h","r":6,"lo":0,"hi":1,"pos0":1},{"axis":"h","r":3,"lo":3,"hi":4,"pos0":3}],"cps":0.88},
+    {"start":[0,9],"init":[[1,9],[2,9]],"goal":[6,9],"cols":9,"rows":11,"intro":[],"walls":[[4,0],[4,1],[4,3],[4,4],[0,5],[1,5],[3,5],[4,5],[5,5],[7,5],[8,5],[4,6],[4,7],[4,8],[4,9],[4,10]],"blocks":[{"axis":"h","r":6,"lo":5,"hi":6,"pos0":6},{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"h","r":6,"lo":2,"hi":3,"pos0":2},{"axis":"v","c":3,"lo":1,"hi":2,"pos0":2}],"cps":0.88},
+    {"start":[1,3],"init":[[1,2],[1,1]],"goal":[13,11],"cols":14,"rows":14,"intro":[],"walls":[[4,0],[8,0],[4,1],[8,2],[4,3],[8,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[10,4],[11,4],[13,4],[5,5],[9,5],[9,6],[5,7],[5,8],[9,8],[0,9],[1,9],[3,9],[4,9],[5,9],[6,9],[7,9],[8,9],[9,9],[10,9],[11,9],[12,9],[13,9],[4,10],[8,10],[8,11],[4,12],[4,13],[8,13]],"blocks":[{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"v","c":9,"lo":0,"hi":1,"pos0":1},{"axis":"h","r":5,"lo":11,"hi":12,"pos0":12},{"axis":"v","c":8,"lo":6,"hi":7,"pos0":7},{"axis":"v","c":4,"lo":5,"hi":6,"pos0":6},{"axis":"h","r":10,"lo":1,"hi":2,"pos0":2},{"axis":"v","c":5,"lo":10,"hi":11,"pos0":11},{"axis":"v","c":9,"lo":11,"hi":12,"pos0":12}],"cps":0.88},
+    {"start":[2,7],"init":[[2,6],[2,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["saw"],"walls":[],"hazards":[{"kind":"saw","axis":"h","r":3,"lo":0,"hi":4,"speed":4000,"phase":0}],"cps":0.91},
+    {"start":[2,12],"init":[[2,11],[2,10]],"goal":[2,0],"cols":5,"rows":13,"intro":[],"walls":[],"hazards":[{"kind":"saw","axis":"h","r":8,"lo":0,"hi":4,"speed":3600,"phase":0},{"kind":"saw","axis":"h","r":5,"lo":0,"hi":4,"speed":4400,"phase":0},{"kind":"saw","axis":"h","r":2,"lo":0,"hi":4,"speed":5200,"phase":0}],"cps":0.91},
+    {"start":[1,8],"init":[[1,7],[1,6]],"goal":[6,0],"cols":7,"rows":9,"intro":[],"walls":[[0,0],[1,1],[3,4],[5,7],[6,8]],"hazards":[{"kind":"saw","axis":"v","c":3,"lo":0,"hi":3,"speed":4000,"phase":0},{"kind":"saw","axis":"v","c":3,"lo":5,"hi":8,"speed":4000,"phase":0},{"kind":"saw","axis":"h","r":4,"lo":0,"hi":2,"speed":4000,"phase":0},{"kind":"saw","axis":"h","r":4,"lo":4,"hi":6,"speed":4000,"phase":0}],"cps":0.91},
+    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[3,0],"cols":7,"rows":8,"intro":["key","door"],"walls":[[0,3],[1,3],[2,3],[4,3],[5,3],[6,3]],"doors":[[3,3,"#ffd24a"]],"keys":[[6,7,"#ffd24a"]],"cps":0.94},
+    {"start":[0,0],"init":[[1,0],[2,0]],"goal":[6,9],"cols":8,"rows":11,"intro":[],"walls":[[0,2],[2,2],[3,2],[4,2],[4,3],[5,3],[6,3],[7,3],[0,5],[1,5],[2,5],[3,5],[2,7],[3,7],[4,7],[5,7],[7,7],[4,8],[4,9],[4,10]],"doors":[[1,2,"#ffd24a"],[6,7,"#c77dff"]],"keys":[[6,1,"#ffd24a"],[2,9,"#c77dff"]],"cps":0.94},
+    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["stone"],"walls":[[0,3],[1,3],[2,3],[4,3]],"stone":[[3,3,2]],"cps":0.97},
+    {"start":[1,0],"init":[[1,1],[1,2]],"goal":[3,10],"cols":7,"rows":12,"intro":[],"walls":[[3,0],[3,1],[3,3],[0,4],[1,4],[2,4],[3,4],[5,4],[6,4],[3,5],[6,5],[1,6],[3,6],[4,6],[6,6],[1,7],[6,7],[1,8],[2,8],[3,8],[4,8],[5,8],[6,8]],"stone":[[3,2,2],[4,4,2],[5,6,2],[2,6,2],[0,8,2]],"cps":0.97},
+    {"start":[4,9],"init":[[4,8],[4,7]],"goal":[1,0],"cols":6,"rows":10,"intro":["platform"],"walls":[[0,2],[1,2],[2,2],[3,2],[3,4],[0,5],[2,5],[3,5],[4,5],[5,5]],"platforms":[[1,5,"ns"],[3,3,"ew"]],"cps":1},
+    {"start":[2,1],"init":[[3,1],[4,1]],"goal":[5,8],"cols":7,"rows":10,"intro":[],"walls":[[0,3],[1,3],[3,3],[4,3],[5,3],[6,3],[4,4],[1,5],[4,5],[1,6],[4,7],[0,8],[4,8],[4,9]],"platforms":[[2,3,"ns"],[1,4,"ew"],[1,7,"sw"],[4,6,"ew"]],"cps":1},
+    {"start":[0,8],"init":[[1,8],[2,8]],"goal":[1,2],"cols":14,"rows":10,"intro":[],"cps":1,"walls":[[11,0],[8,1],[9,1],[11,2],[3,3],[11,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[11,4],[13,4],[11,5],[4,6],[8,6],[11,6],[4,7],[5,7],[7,7],[8,7],[11,7],[4,8],[8,8],[4,9],[8,9]],"platforms":[[6,7,"ns"],[10,1,"ne"],[4,5,"ew"],[8,5,"ew"],[10,4,"ns"],[12,4,"ns"],[11,1,"ew"],[7,0,"es"],[7,1,"ns"],[7,2,"ns"],[7,3,"wn"],[3,0,"es"],[3,1,"ns"],[3,2,"wn"]]},
+    {"start":[1,8],"init":[[1,7],[1,6]],"goal":[7,8],"cols":10,"rows":10,"intro":[],"cps":1,"walls":[[5,1],[6,1],[8,1],[9,1],[5,2],[9,2],[5,3],[9,3],[0,4],[1,4],[2,4],[5,4],[9,4],[5,5],[9,5],[5,6],[9,6],[5,7],[9,7],[5,8],[9,8],[5,9],[9,9]],"blocks":[{"axis":"v","c":4,"pos0":4,"lo":3,"hi":5},{"axis":"v","c":3,"pos0":4,"lo":3,"hi":5},{"axis":"h","r":3,"pos0":8,"lo":6,"hi":8},{"axis":"h","r":2,"pos0":7,"lo":6,"hi":8},{"axis":"h","r":4,"pos0":7,"lo":6,"hi":8},{"axis":"h","r":5,"pos0":6,"lo":6,"hi":8}],"stone":[[7,1,2]]},
+    {"start":[2,9],"init":[[2,8],[2,7]],"goal":[2,0],"cols":5,"rows":10,"intro":[],"cps":1,"walls":[],"stone":[[0,4,2],[1,4,2],[2,4,2],[3,4,2],[4,4,2],[4,3,2],[3,3,2],[2,3,2],[1,3,2],[0,3,2],[0,2,2],[1,2,2],[2,2,2],[3,2,2],[0,5,2],[1,5,2],[2,5,2],[3,5,2],[4,5,2],[4,2,2]]},
+    {"start":[1,3],"init":[[1,2],[1,1]],"goal":[10,4],"cols":12,"rows":6,"intro":[],"cps":1,"walls":[],"hazards":[{"kind":"saw","axis":"v","c":3,"lo":0,"hi":5,"speed":4000,"phase":0},{"kind":"saw","axis":"v","c":4,"lo":0,"hi":5,"speed":4000,"phase":0.1},{"kind":"saw","axis":"v","c":5,"lo":0,"hi":5,"speed":4000,"phase":0.2},{"kind":"saw","axis":"v","c":6,"lo":0,"hi":5,"speed":4000,"phase":0.3},{"kind":"saw","axis":"v","c":7,"lo":0,"hi":5,"speed":4000,"phase":0.4},{"kind":"saw","axis":"v","c":8,"lo":0,"hi":5,"speed":4000,"phase":0.5}]}
   ];
 
   // ---------- DOM ---------------------------------------------------------
@@ -694,11 +682,11 @@
   // ---------- Score / feedback helpers -----------------------------------
   function haptic(p){ try { if (navigator.vibrate) navigator.vibrate(p); } catch(_){} }
   const comboMult = c => c >= 30 ? 5 : c >= 20 ? 4 : c >= 12 ? 3 : c >= 5 ? 2 : 1;
-  const VERSION = "v4.6";                    // shown on the title & pause screens
+  const VERSION = "v5.2";                    // shown on the title & pause screens
   // the runner's starting speed (level 1, no combo, no tier) in tiles/second; the
   // whole campaign's speeds scale so level 1 begins here.
   const START_CPS = 0.6;
-  const DEFAULT_CPS = 0.8;                    // every level's fixed pace (cells/second) unless L.cps overrides
+  const DEFAULT_CPS = 0.8;                    // fallback only — every shipped level sets its own L.cps
   const GATE_COLORS = ["#7dff6b", "#ff9e4d", "#c77dff"];   // per switch/door group (button, wire, door seam)
   // collected boost / slow pickups apply a time-limited speed effect
   const BOOST_MULT = 1.8, SLOW_MULT = 0.5, BOOST_MS = 3000, SLOW_MS = 2600;
@@ -719,7 +707,6 @@
   const settings = loadSettings();
   let paused = false;
   let titleActive = true;               // the attract/title screen is up before the first play
-  let zen = !!settings.zen;
   let colorblind = !!settings.colorblind;
   // gameplay colours that need colorblind-safe alternates (Okabe–Ito)
   function pal(k){
@@ -728,7 +715,7 @@
   }
   function applyColorblind(){ document.documentElement.classList.toggle("cb", colorblind); for (const k in _varCache) delete _varCache[k]; }
 
-  // ---------- Procedural levels (endless / daily) ------------------------
+  // ---------- Per-level look (background theme + track colour) -----------
   function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
   function hashSeed(str){ let h=2166136261; str=String(str); for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
   // a distinct background theme per level (colours / stripe width / angle / style)
@@ -757,154 +744,8 @@
   }
   const curTrack = () => (state && state.trackPal && state.trackPal.track) || getVar("--track");
   const curRail  = () => (state && state.trackPal && state.trackPal.rail)  || getVar("--rail");
-  function solvableGen(L){
-    const W=new Set(L.walls.map(w=>key(w[0],w[1])));
-    const bfs=(from,to)=>{ const q=[from], seen=new Set([key(from[0],from[1])]);
-      while(q.length){ const [c,r]=q.shift(); if(c===to[0]&&r===to[1]) return true;
-        for(const [dc,dr] of DIRS){ const nc=c+dc,nr=r+dr; if(nc<0||nc>=COLS||nr<0||nr>=ROWS) continue;
-          const k=key(nc,nr); if(W.has(k)||seen.has(k)) continue; seen.add(k); q.push([nc,nr]); } }
-      return false; };
-    return bfs(L.start,L.key) && bfs(L.key,L.goal);
-  }
-  function genLevel(seed, diff){
-    COLS = FULL_COLS; ROWS = FULL_ROWS;        // procedural modes use the full board
-    const rnd=mulberry32(seed>>>0), ri=n=>Math.floor(rnd()*n);
-    for(let att=0; att<50; att++){
-      const startC=1+ri(COLS-2), goalC=1+ri(COLS-2);
-      const init=[[startC,11],[startC,10],[startC,9]];
-      const used=new Set([key(startC,12),key(goalC,0),...init.map(t=>key(t[0],t[1]))]);
-      const grab=(n,r0,r1)=>{ const out=[]; let tries=0;
-        while(out.length<n && tries++<120){ const c=ri(COLS), r=r0+ri(r1-r0+1), k=key(c,r);
-          if(used.has(k)) continue; used.add(k); out.push([c,r]); } return out; };
-      const walls=grab(6+diff*2, 2,10);
-      const stone=grab(2+diff, 2,10);
-      const keyC=ri(COLS), keyR=3+ri(7); used.add(key(keyC,keyR));
-      const protect=new Set([key(keyC,keyR),key(goalC,0),key(startC,12)]);
-      const walls2=walls.filter(w=>!protect.has(key(w[0],w[1])));
-      const stone2=stone.filter(w=>!protect.has(key(w[0],w[1])));
-      const coins=grab(3+diff, 1,11);
-      const boost=diff>=1?grab(1,3,9):[];
-      const slow=diff>=2?grab(1,3,9):[];
-      const L={ start:[startC,12], goal:[goalC,0], goalDir:[0,-1], key:[keyC,keyR],
-                init, walls:walls2, stone:stone2, coins, boost, slow,
-                speed:Math.max(650,1150-diff*70), par:26000 };
-      if(solvableGen(L)) return L;
-    }
-    return { start:[3,12], goal:[3,0], goalDir:[0,-1], key:[3,6], init:[[3,11],[3,10],[3,9]],
-             walls:[], stone:[], coins:[[3,8],[3,4]], speed:1000, par:26000 };
-  }
-  const endlessDiff = () => Math.min(6, Math.floor((endlessN-1)/2));
-  function startEndless(){ mode="endless"; endlessN=0; endlessSeed=Math.floor(Math.random()*1e9); nextEndless(); }
-  function nextEndless(){ endlessN++; beginLevel(genLevel(endlessSeed+endlessN, endlessDiff()), "E"+endlessN); }
-  function startDaily(){ mode="daily"; const d=new Date(); beginLevel(genLevel(d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate(), 3), "Daily"); }
 
-  // ---------- Level editor -----------------------------------------------
-  let editing = false, editor = null, edLayout = { ecell:40, eox:0, eoy:0 };
-  let edMsg = "", edMsgT = 0;
-  const ED_TOOLS = [["Start","start"],["Goal","goal"],["Key","key"],["Wall","wall"],["Stone","stone"],
-                    ["Coin","coin"],["Boost","boost"],["Slow","slow"],["Crumble","crumble"],["Erase","erase"]];
-  const ED_SETS = ["wall","stone","coin","boost","slow","crumble"];
-  function flashEdMsg(m){ edMsg = m; edMsgT = 2200; }
-
-  function openEditor(fromLevel){
-    COLS = FULL_COLS; ROWS = FULL_ROWS;        // editor uses the full board
-    mode = "editor"; editing = true; paused = false;
-    editor = fromLevel ? editorFromLevel(fromLevel) : {
-      start:[3,12], goal:[3,0], key:[3,6], tool:"wall",
-      wall:new Set(), stone:new Set(), coin:new Set(), boost:new Set(), slow:new Set(), crumble:new Set() };
-    buildEditBar();
-    document.getElementById("editbar").classList.add("show");
-  }
-  function exitEditor(){ editing = false; document.getElementById("editbar").classList.remove("show"); openMenu("main"); }
-  function editorFromLevel(L){
-    const mk = arr => new Set((arr||[]).map(c=>key(c[0],c[1])));
-    return { start:L.start.slice(), goal:L.goal.slice(), key:(L.keys?[L.keys[0][0],L.keys[0][1]]:L.key.slice()), tool:"wall",
-             wall:mk(L.walls), stone:mk(L.stone), coin:mk(L.coins), boost:mk(L.boost), slow:mk(L.slow), crumble:mk(L.crumble) };
-  }
-  function buildEditBar(){
-    const tools = document.getElementById("edtools"); tools.innerHTML = "";
-    ED_TOOLS.forEach(([label,id])=>{ const b=document.createElement("button"); b.textContent=label;
-      if(editor.tool===id) b.className="sel"; b.onclick=()=>{ editor.tool=id; buildEditBar(); }; tools.appendChild(b); });
-    const acts = document.getElementById("edactions"); acts.innerHTML = "";
-    const mkb=(t,fn)=>{ const b=document.createElement("button"); b.textContent=t; b.onclick=fn; return b; };
-    acts.appendChild(mkb("▶ Play", ()=>playEditorLevel()));
-    acts.appendChild(mkb("Export", ()=>{ document.getElementById("edcode").value = editorExport(); flashEdMsg("Share code written below"); }));
-    acts.appendChild(mkb("Import", ()=>{ const L=editorImport(document.getElementById("edcode").value);
-      if(L){ editor=editorFromLevel(L); buildEditBar(); flashEdMsg("Loaded share code"); } else flashEdMsg("Invalid share code"); }));
-    acts.appendChild(mkb("Clear", ()=>{ ED_SETS.forEach(s=>editor[s].clear()); }));
-    acts.appendChild(mkb("Exit", ()=>exitEditor()));
-  }
-  function editorApply(c, r){
-    if (c<0||c>=COLS||r<0||r>=ROWS) return;
-    const k = key(c,r), t = editor.tool; haptic(5);
-    if (t==="start"||t==="goal"||t==="key"){ editor[t]=[c,r]; ED_SETS.forEach(s=>editor[s].delete(k)); return; }
-    if (t==="erase"){ ED_SETS.forEach(s=>editor[s].delete(k)); return; }
-    if (editor[t].has(k)) editor[t].delete(k);
-    else { ED_SETS.forEach(s=>{ if(s!==t) editor[s].delete(k); }); editor[t].add(k); }
-  }
-  function editorPaint(sx, sy){ const { ecell, eox, eoy } = edLayout;
-    editorApply(Math.floor((sx-eox)/ecell), Math.floor((sy-eoy)/ecell)); }
-  function editorInit(s){
-    const occ=new Set([...editor.wall, ...editor.stone]); occ.add(key(editor.goal[0],editor.goal[1]));
-    const init=[]; let cur=s; const pri=[[0,-1],[-1,0],[1,0],[0,1]];
-    for(let n=0;n<3;n++){ let nx=null;
-      for(const [dc,dr] of pri){ const c=cur[0]+dc,r=cur[1]+dr;
-        if(c<0||c>=COLS||r<0||r>=ROWS) continue; const kk=key(c,r);
-        if(occ.has(kk)||(c===s[0]&&r===s[1])) continue; nx=[c,r]; break; }
-      if(!nx) break; init.push(nx); occ.add(key(nx[0],nx[1])); cur=nx; }
-    return init;
-  }
-  function editorToLevel(){ const sp=k=>k.split(",").map(Number);
-    return { start:editor.start.slice(), goal:editor.goal.slice(), goalDir:[0,-1], key:editor.key.slice(),
-             init:editorInit(editor.start),
-             walls:[...editor.wall].map(sp), stone:[...editor.stone].map(sp), coins:[...editor.coin].map(sp),
-             boost:[...editor.boost].map(sp), slow:[...editor.slow].map(sp), crumble:[...editor.crumble].map(sp),
-             speed:900, par:26000 };
-  }
-  function normalizeLevel(L){ L.walls=L.walls||[]; L.stone=L.stone||[]; L.coins=L.coins||[]; L.init=L.init||[];
-    L.platforms=L.platforms||[];
-    L.goalDir=L.goalDir||[0,-1]; if(!L.key && L.keys) L.key=[L.keys[0][0],L.keys[0][1]]; return L; }
-  function editorExport(){ try { return btoa(JSON.stringify(editorToLevel())); } catch(_){ return ""; } }
-  function editorImport(code){ try { return normalizeLevel(JSON.parse(atob((code||"").trim()))); } catch(_){ return null; } }
-  function playEditorLevel(){
-    const L = editorToLevel();
-    if (!L.init.length) { flashEdMsg("Start is boxed in — clear a space next to it."); return; }
-    if (!solvableGen(L)) { flashEdMsg("No route from start → key → exit."); return; }
-    editing = false; mode = "editor";
-    document.getElementById("editbar").classList.remove("show");
-    beginLevel(L, "Edit");
-  }
-  function drawEditor(){
-    const g = ctx.createLinearGradient(0,0,0,viewH); g.addColorStop(0,"#141026"); g.addColorStop(1,"#0a0917");
-    ctx.fillStyle=g; ctx.fillRect(0,0,viewW,viewH);
-    const ecell = Math.min(viewW/(COLS+0.4), (viewH-70)/(ROWS+0.4));
-    const eox = (viewW - ecell*COLS)/2, eoy = 34;
-    edLayout = { ecell, eox, eoy };
-    const X=c=>eox+c*ecell, Y=r=>eoy+r*ecell;
-    ctx.strokeStyle="rgba(120,110,190,0.28)"; ctx.lineWidth=1;
-    for(let c=0;c<=COLS;c++){ ctx.beginPath(); ctx.moveTo(X(c),Y(0)); ctx.lineTo(X(c),Y(ROWS)); ctx.stroke(); }
-    for(let r=0;r<=ROWS;r++){ ctx.beginPath(); ctx.moveTo(X(0),Y(r)); ctx.lineTo(X(COLS),Y(r)); ctx.stroke(); }
-    const fill=(k,col)=>{ const [c,r]=k.split(",").map(Number); ctx.fillStyle=col; ctx.fillRect(X(c)+2,Y(r)+2,ecell-4,ecell-4); };
-    const dot=(c,r,col,rad)=>{ ctx.fillStyle=col; ctx.beginPath(); ctx.arc(X(c)+ecell/2,Y(r)+ecell/2,ecell*rad,0,Math.PI*2); ctx.fill(); };
-    for(const k of editor.wall) fill(k, getVar("--wall"));
-    for(const k of editor.stone) fill(k, "#8a7f63");
-    for(const k of editor.crumble) fill(k, "#5a5470");
-    for(const k of editor.boost){ fill(k,"rgba(125,255,107,0.22)"); const [c,r]=k.split(",").map(Number); dot(c,r,pal("boost"),0.13); }
-    for(const k of editor.slow){ fill(k,"rgba(255,158,77,0.20)"); const [c,r]=k.split(",").map(Number); dot(c,r,pal("slow"),0.13); }
-    for(const k of editor.coin){ const [c,r]=k.split(",").map(Number); dot(c,r,"#ffd24a",0.17); }
-    dot(editor.key[0],editor.key[1],"#ffd24a",0.24);
-    ctx.font="900 "+Math.round(ecell*0.42)+"px 'Fraunces',ui-serif,Georgia,serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
-    ctx.fillStyle=getVar("--runner"); const [sc,sr]=editor.start; ctx.fillRect(X(sc)+ecell*0.24,Y(sr)+ecell*0.24,ecell*0.52,ecell*0.52);
-    ctx.fillStyle=getVar("--goal"); const [gc,gr]=editor.goal; ctx.fillRect(X(gc)+ecell*0.18,Y(gr)+ecell*0.18,ecell*0.64,ecell*0.64);
-    ctx.fillStyle=getVar("--shadow"); ctx.fillText("S",X(sc)+ecell/2,Y(sr)+ecell/2); ctx.fillText("G",X(gc)+ecell/2,Y(gr)+ecell/2);
-    ctx.textBaseline="top"; ctx.fillStyle=getVar("--dim"); ctx.font="700 12px 'Fraunces',ui-serif,Georgia,serif";
-    ctx.fillText("Editing — tool: "+editor.tool.toUpperCase(), viewW/2, 8);
-    if(edMsgT>0){ edMsgT-=16; ctx.fillStyle=getVar("--accent"); ctx.font="900 13px 'Fraunces',ui-serif,Georgia,serif";
-      ctx.fillText(edMsg, viewW/2, viewH-18); }
-  }
-
-  let mode = "normal", endlessN = 0, endlessSeed = 1;
-  function loadLevel(i) { mode = "normal"; levelIdx = clamp(i, 0, LEVELS.length - 1);
+  function loadLevel(i) { levelIdx = clamp(i, 0, LEVELS.length - 1);
     levelAttempts[levelIdx] = (levelAttempts[levelIdx] || 0) + 1;      // count each start (incl. retries)
     beginLevel(LEVELS[levelIdx], String(levelIdx + 1));
     state.attempts = levelAttempts[levelIdx];
@@ -921,7 +762,8 @@
     const initCells = [L.start, ...L.init].slice(0, TILES_TOTAL);
     const tiles = initCells.map((cp, idx) => ({ id:idx, c:cp[0], r:cp[1], status:"active" }));
     const path = tiles.map(t => ({ c:t.c, r:t.r, kind:"tile", tileId:t.id }));
-    // fixed pace: every level runs at L.cps cells/second (default 0.8) — no progressive ramp
+    // starting pace, tiles/sec, declared per level. The shipped set ramps 0.80 -> 1.00
+    // across levels 1-21, stepped at the curriculum arc boundaries.
     const cps = L.cps || DEFAULT_CPS;
     const speedTier = 0, startSpeedMult = 1;
     const effSpeed = Math.max(90, Math.round(1000 / cps));
@@ -969,8 +811,14 @@
           return { kind, speed:h.speed||4600, path, loop:!!h.loop, seg:0, segT:0, mdir:1, pause:0,
                    wx:(A[0]+0.5)*(cell||90), wy:(A[1]+0.5)*(cell||90), cc:A[0], cr:A[1], faceX:1 };
         }
-        return { axis:ax, lo:h.lo, hi:h.hi, c:h.c, r:h.r, speed:h.speed||4800, t:0, dir:1, kind,
-                 cc: ax==="h"?h.lo:h.c, cr: ax==="h"?h.r:h.lo, pos: h.lo }; }),
+        // `phase` (0..1) is how far into the full ping-pong cycle this saw starts:
+        // 0 = parked at lo heading for hi, 0.5 = at hi heading back. Without it, every saw
+        // on a level starts together and a row of them sweeps as one solid line.
+        const ph = (((h.phase || 0) % 1) + 1) % 1, u = ph * 2;
+        const t = u <= 1 ? u : 2 - u, dir = u <= 1 ? 1 : -1;
+        const p0 = h.lo + (h.hi - h.lo) * t, cell0 = Math.round(p0);
+        return { axis:ax, lo:h.lo, hi:h.hi, c:h.c, r:h.r, speed:h.speed||4800, t, dir, kind,
+                 cc: ax==="h"?cell0:h.c, cr: ax==="h"?h.r:cell0, pos: p0 }; }),
       // movable "sliding platform": a wall band whose crossing point the player drags into place
       sliders: (L.sliders||[]).map(sl=>({ axis:sl.axis||"h", c:sl.c!=null?sl.c:0, r:sl.r!=null?sl.r:0,
         lo:sl.lo, hi:sl.hi, pos: sl.pos0!=null?sl.pos0:sl.lo })),
@@ -1747,7 +1595,6 @@
     // no tile ahead: the runner keeps going to the edge of the last tile, then falls off.
     // (visual position across the tile u = runT + 0.5, so the 80% mark is runT = 0.3)
     if (s.runIdx + 1 >= s.path.length) {
-      if (zen) { if (s.runT > 0.3) s.runT = 0.3; return; }   // zen: glide to the 80% mark and wait for track
       if (s.runT >= 0.5) { startFall(); return; }
     }
   }
@@ -1946,7 +1793,7 @@
   function endWin() {
     state.status = "win";
     const att = state.attempts || 1;
-    if (mode === "normal") {                    // remember it's cleared — nothing else to track
+    {                                           // remember it's cleared — nothing else to track
       const best = loadBest(), keyId = "L" + levelIdx;
       best[keyId] = { done: true };
       saveBest(best);
@@ -1957,16 +1804,12 @@
     ovStars.textContent = "";
     ovScore.innerHTML = "";
     overlay.className = "win show";
-    const last = mode === "normal" && levelIdx >= LEVELS.length - 1;
-    ovTitle.textContent = mode === "endless" ? "Level " + endlessN + " Clear"
-                        : mode === "daily"   ? "Daily Done!"
-                        : last ? "That's All of Them" : "Level Clear";
+    const last = levelIdx >= LEVELS.length - 1;
+    ovTitle.textContent = last ? "That's All of Them" : "Level Clear";
     ovMsg.textContent = last
       ? "All " + LEVELS.length + " levels. You've run out of track — and excuses."
       : pickQuip(att > 1 ? WIN_QUIPS_RETRY : WIN_QUIPS);
-    ovBtn.textContent = mode === "endless" ? "Next (Endless)"
-                      : mode === "daily"   ? "Menu"
-                      : last ? "Level Select" : "Next Level";
+    ovBtn.textContent = last ? "Level Select" : "Next Level";
   }
   const LOSE_QUIPS = [
     "Gravity: still undefeated.",
@@ -3317,7 +3160,6 @@
     e.preventDefault();
     Sound.unlock();                     // first touch unlocks audio (iOS autoplay policy)
     if (titleActive) { leaveTitle(); return; }
-    if (editing) { const p = screenXY(e); editorPaint(p.x, p.y); return; }
     if (state.status !== "play") return;
     const { x, y } = screenXY(e);
     const wx = x + camX, wy = y + camY;
@@ -3433,7 +3275,6 @@
     if (!lastTs) lastTs = ts;
     let dt = ts - lastTs; lastTs = ts;
     if (dt > 100) dt = 100;
-    if (editing) { drawEditor(); requestAnimationFrame(frame); return; }
     if (titleActive) { tickTitle(dt); drawTitle(ts); requestAnimationFrame(frame); return; }
     if (!paused) {
       if (state.status === "campan") tickCamPan(dt);
@@ -3455,7 +3296,7 @@
   let _pauseVis = null;
   function updatePauseBtn() {
     const pf = document.getElementById("pauseFloat"); if (!pf) return;
-    const show = !titleActive && !editing && !paused && state && state.status === "play";
+    const show = !titleActive && !paused && state && state.status === "play";
     const v = show ? "" : "none";
     if (v !== _pauseVis) { pf.style.display = v; _pauseVis = v; }
   }
@@ -3544,19 +3385,12 @@
   // ---------- Buttons & menu ---------------------------------------------
   ovBtn.addEventListener("click", () => {
     if (state.status === "win") {
-      if (mode === "endless") { overlay.className = ""; nextEndless(); return; }
-      if (mode === "daily")   { openMenu("main"); return; }
-      if (mode === "editor")  { overlay.className = ""; playEditorLevel(); return; }
       // finished the last level: drop the player into level select rather than
       // silently wrapping them back round to level 1
       if (levelIdx >= LEVELS.length - 1) { overlay.className = ""; openMenu("levels"); return; }
       levelIdx = levelIdx + 1; loadLevel(levelIdx); return;
     }
-    // lose / retry
-    if (mode === "endless") { overlay.className = ""; beginLevel(genLevel(endlessSeed + endlessN, endlessDiff()), "E" + endlessN); return; }
-    if (mode === "daily")   { startDaily(); return; }
-    if (mode === "editor")  { overlay.className = ""; playEditorLevel(); return; }
-    loadLevel(levelIdx);
+    loadLevel(levelIdx);          // lose / retry
   });
   document.getElementById("pauseFloat").addEventListener("click", () => { Sound.unlock(); openMenu("main"); });
   document.getElementById("mech-ok").addEventListener("click", () => { Sound.unlock(); mechQueue.shift(); showNextMech(); });
@@ -3598,14 +3432,9 @@
     menuBody.appendChild(btn("Resume", closeMenu));
     menuBody.appendChild(btn("Restart Level", () => { loadLevel(levelIdx); closeMenu(); }));
     menuBody.appendChild(btn("Levels", () => buildMenu("levels")));
-    menuBody.appendChild(sub("Modes"));
-    menuBody.appendChild(btn("Endless", () => { startEndless(); closeMenu(); }));
-    menuBody.appendChild(btn("Daily Challenge", () => { startDaily(); closeMenu(); }));
-    menuBody.appendChild(btn("Level Editor", () => { closeMenu(); openEditor(); }));
     menuBody.appendChild(sub("Options"));
     menuBody.appendChild(toggle("Sound", !Sound.isMuted(), () => { Sound.unlock(); Sound.setMuted(!Sound.isMuted()); buildMenu(screen); }));
     menuBody.appendChild(toggle("Colorblind", colorblind, () => { colorblind = !colorblind; settings.colorblind = colorblind; saveSettings(); applyColorblind(); buildMenu(screen); }));
-    menuBody.appendChild(toggle("Zen (no fall)", zen, () => { zen = !zen; settings.zen = zen; saveSettings(); buildMenu(screen); }));
     const ver = document.createElement("div"); ver.className = "menu-ver"; ver.textContent = VERSION;
     menuBody.appendChild(ver);
   }
@@ -3642,17 +3471,8 @@
       undo: () => undoLast(),
       openMenu: (s) => openMenu(s), closeMenu: () => closeMenu(),
       isPaused: () => paused,
-      setZen: (v) => { zen = v; }, isZen: () => zen,
       setColorblind: (v) => { colorblind = v; applyColorblind(); }, isColorblind: () => colorblind,
       menuButtons: () => Array.from(menuBody.querySelectorAll("button,.toggle")).map(e => e.textContent),
-    },
-    modes: { endless: () => startEndless(), daily: () => startDaily(), next: () => nextEndless(),
-             genLevel: (seed, diff) => genLevel(seed, diff), solvable: (L) => solvableGen(L), getMode: () => mode },
-    ed: {
-      open: () => openEditor(), isEditing: () => editing, setTool: (t) => { editor.tool = t; },
-      paint: (c, r) => editorApply(c, r), toLevel: () => editorToLevel(),
-      exportCode: () => editorExport(), importCode: (code) => { const L = editorImport(code); if (L) { editor = editorFromLevel(L); } return !!L; },
-      play: () => playEditorLevel(), state: () => editor,
     },
   };
 
