@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Tile Runner — Runner Lab</title>
+<style>
+  :root{ --bg:#12102a; --panel:#1b1838; --line:#2b2850; --ink:#cfe9ff; --accent:#7dd0ff; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:10px 14px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;}
+  header h1{font-size:15px;margin:0 12px 0 0;font-weight:700;letter-spacing:.5px;}
+  .wrap{display:flex;flex-direction:column;gap:12px;padding:14px;align-items:center;}
+  canvas{background:var(--panel);border:1px solid var(--line);border-radius:8px;display:block;}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center;}
+  button.act{background:#233;color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:7px 11px;cursor:pointer;font:inherit;font-size:12px;}
+  button.act:hover{border-color:var(--accent);}
+  button.act.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+  button.prim{background:#1c6;color:#04120a;font-weight:700;border:none;}
+  .sliders{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:4px 18px;width:100%;max-width:900px;}
+  .sl{display:grid;grid-template-columns:88px 1fr 54px;gap:8px;align-items:center;font-size:11px;}
+  .sl label{opacity:.85;}
+  .sl input[type=range]{width:100%;accent-color:var(--accent);}
+  .sl .val{text-align:right;opacity:.75;font-variant-numeric:tabular-nums;}
+  .group{grid-column:1/-1;margin:10px 0 2px;font-size:11px;letter-spacing:1px;text-transform:uppercase;opacity:.5;}
+  textarea{width:100%;max-width:900px;height:230px;background:#0d0b22;color:#bfe;border:1px solid var(--line);
+           border-radius:8px;padding:10px;font:inherit;font-size:11px;line-height:1.45;white-space:pre;}
+  .hint{font-size:11px;opacity:.7;line-height:1.6;max-width:900px;}
+  select,input[type=color]{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:3px 6px;font:inherit;font-size:12px;}
+  .pill{font-size:11px;background:#0d0b22;border:1px solid var(--line);border-radius:20px;padding:3px 9px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>TILE RUNNER · RUNNER LAB</h1>
+  <span class="pill" id="fps">—</span>
+  <label>talisman <select id="tal">
+    <option value="">none</option>
+    <option value="ember">Emberdrop</option>
+    <option value="tide">Tidestone</option>
+    <option value="cog">Brass Cog</option>
+    <option value="sun">Sunwheel</option>
+    <option value="shard">Nightshard</option>
+    <option value="sprig">Green Sprig</option>
+  </select></label>
+  <label>body <input type="color" id="colBody" value="#bfe6ff"></label>
+  <label>ink <input type="color" id="colInk" value="#17263f"></label>
+</header>
+
+<div class="wrap">
+  <canvas id="cv" width="880" height="300"></canvas>
+
+  <div class="row">
+    <button class="act on" id="play">Pause</button>
+    <button class="act on" id="moving">Running</button>
+    <button class="act on" id="knees">Knees</button>
+    <button class="act" id="onion">Onion skin</button>
+    <button class="act" id="grid">Guides</button>
+    <span class="pill">stride</span>
+    <input type="range" id="scrub" min="0" max="6.2832" step="0.01" value="0" style="width:220px;accent-color:var(--accent)">
+    <span class="pill" id="scrubv">live</span>
+  </div>
+
+  <div class="sliders" id="sliders"></div>
+
+  <div class="row">
+    <button class="act prim" id="copy">Copy RUNNER block</button>
+    <button class="act" id="reset">Reset to shipped</button>
+    <button class="act" id="rand">Nudge randomly</button>
+  </div>
+  <textarea id="out" spellcheck="false"></textarea>
+  <div class="hint">
+    This is the <b>same drawing code as the game</b>, reading the same <code>RUNNER</code> block that lives in
+    <code>index.html</code> just above <code>drawRunner</code>. Tweak, then <b>Copy RUNNER block</b> and paste the
+    whole thing over the one in <code>index.html</code> — replace it wholesale rather than hand-patching values.<br>
+    Lengths are fractions of a <i>cell</i>, so the runner scales with the board; the strip on the right of the
+    canvas shows him at real in-game sizes. <b>Onion skin</b> ghosts the stride either side of the current pose,
+    <b>Guides</b> marks the track surface, hip line, body box and knee points, and the <b>stride</b> slider scrubs
+    one full step cycle when paused.<br>
+    <b>Knees</b> bends each leg with two-bone IK, so the bend stays correct as the foot swings rather than
+    being faked per frame. <i>bend amount</i> is slack relative to the hip-to-foot distance, so the bend stays
+    even across the whole stride instead of folding up at mid-step; <i>thigh share</i> slides the knee
+    up or down the leg;
+    <i>forward lead</i> exaggerates the bend past what the IK gives you. As of v5.6 the game draws these
+    too, so what you see here is what ships.
+  </div>
+</div>
+
+<script>
+// ---- shipped defaults: keep in step with index.html's RUNNER ----
+const SHIPPED = {
+  stepMs:110, swing:0.16, bob:0.064,
+  legLen:0.12, legWidth:0.05, legSplay:0.22, hipRise:0.06, footLift:0.098, footLiftPow:1,
+  knees:1, kneeBend:0.045, kneeSplit:0.5, kneeLead:-0.002, kneeR:0,
+  bodyW:0.26, bodyH:0.26, bodyR:0.07, shadow:0.04,
+  eyeR:0.034, eyeY:0.38, eyeAx:-0.02, eyeBx:0.28,
+  glanceMs:5200, glanceX:0.03, glanceY:0.024, blinkMs:3000,
+  talCordY:0.30, talHangY:0.72, talR:0.052,
+  body:"#bfe6ff", ink:"#17263f",
+};
+const RUNNER = {...SHIPPED};
+
+// ---- talisman art (mirrors index.html's TALISMANS) ----
+const TAL = {
+  ember:(g,x,y,r)=>{ g.beginPath(); g.moveTo(x,y-r);
+    g.bezierCurveTo(x+r*0.95,y-r*0.1,x+r*0.72,y+r,x,y+r);
+    g.bezierCurveTo(x-r*0.72,y+r,x-r*0.95,y-r*0.1,x,y-r); g.closePath(); g.fillStyle="#ff8a3d"; g.fill();
+    g.beginPath(); g.moveTo(x,y-r*0.36);
+    g.bezierCurveTo(x+r*0.5,y+r*0.1,x+r*0.34,y+r*0.62,x,y+r*0.62);
+    g.bezierCurveTo(x-r*0.34,y+r*0.62,x-r*0.5,y+r*0.1,x,y-r*0.36); g.closePath(); g.fillStyle="#ffd24a"; g.fill(); },
+  tide:(g,x,y,r)=>{ g.beginPath(); g.arc(x,y,r,0,7); g.fillStyle="#2b7fb8"; g.fill();
+    g.save(); g.beginPath(); g.arc(x,y,r,0,7); g.clip(); g.strokeStyle="#4dd6ff"; g.lineWidth=r*0.26; g.lineCap="round";
+    for(let k=-1;k<=1;k++){ g.beginPath(); g.moveTo(x-r,y+k*r*0.5); g.quadraticCurveTo(x,y+k*r*0.5-r*0.34,x+r,y+k*r*0.5); g.stroke(); } g.restore(); },
+  cog:(g,x,y,r)=>{ g.beginPath();
+    for(let k=0;k<16;k++){ const a=k/16*Math.PI*2, rr=(k%2?r:r*0.66); const X=x+Math.cos(a)*rr, Y=y+Math.sin(a)*rr; k?g.lineTo(X,Y):g.moveTo(X,Y); }
+    g.closePath(); g.fillStyle="#e0a53c"; g.fill(); g.beginPath(); g.arc(x,y,r*0.28,0,7); g.fillStyle="#7a5a18"; g.fill(); },
+  sun:(g,x,y,r)=>{ g.strokeStyle="#ffd24a"; g.lineWidth=r*0.2; g.lineCap="round";
+    for(let k=0;k<8;k++){ const a=k/8*Math.PI*2; g.beginPath(); g.moveTo(x+Math.cos(a)*r*0.52,y+Math.sin(a)*r*0.52); g.lineTo(x+Math.cos(a)*r,y+Math.sin(a)*r); g.stroke(); }
+    g.beginPath(); g.arc(x,y,r*0.46,0,7); g.fillStyle="#ffd24a"; g.fill();
+    g.beginPath(); g.arc(x,y,r*0.2,0,7); g.fillStyle="#b8781a"; g.fill(); },
+  shard:(g,x,y,r)=>{ g.beginPath(); g.moveTo(x,y-r); g.lineTo(x+r*0.62,y-r*0.2); g.lineTo(x+r*0.4,y+r);
+    g.lineTo(x-r*0.4,y+r); g.lineTo(x-r*0.62,y-r*0.2); g.closePath(); g.fillStyle="#7d4bb8"; g.fill();
+    g.beginPath(); g.moveTo(x,y-r); g.lineTo(x+r*0.62,y-r*0.2); g.lineTo(x,y+r); g.closePath(); g.fillStyle="#c77dff"; g.fill(); },
+  sprig:(g,x,y,r)=>{ g.strokeStyle="#3f8f34"; g.lineWidth=r*0.16; g.lineCap="round";
+    g.beginPath(); g.moveTo(x,y+r); g.lineTo(x,y-r*0.2); g.stroke();
+    g.beginPath(); g.moveTo(x,y-r*0.2); g.bezierCurveTo(x+r*0.95,y-r*0.5,x+r*0.5,y-r*1.05,x,y-r);
+    g.bezierCurveTo(x-r*0.5,y-r*1.05,x-r*0.95,y-r*0.5,x,y-r*0.2); g.closePath(); g.fillStyle="#7dff6b"; g.fill();
+    g.strokeStyle="#3f8f34"; g.lineWidth=r*0.1; g.beginPath(); g.moveTo(x,y-r*0.24); g.lineTo(x,y-r*0.92); g.stroke(); },
+};
+
+const cv=document.getElementById("cv"), ctx=cv.getContext("2d");
+const $=id=>document.getElementById(id);
+let playing=true, moving=true, onion=false, guides=false, scrub=null, worn="";
+const lastKnees=[];   // knee points from the most recent full-size draw, for the guides
+const lastFeet=[];    // foot points likewise, so the guide can show the lift arc
+
+// Two-bone IK. The bones are sized RELATIVE to the current hip-to-foot distance —
+// total length = d * (1 + bend) — rather than being a fixed length. A fixed length was the
+// obvious first go and it looks wrong: the gap between bone length and hip-foot distance
+// swings wildly over a stride, so the knee is nearly straight at full reach and folds right
+// under the body at mid-stride. Scaling with d keeps the bend even the whole way round, and
+// makes `bend` a single knob that means what it says.
+// `a` is how far along the hip->foot line the knee projects, `h` how far it stands off it —
+// both straight out of the law of cosines. The offset is rotated to +x so the knee leads.
+function solveKnee(hx, hy, fx, fy, bend, split, lead){
+  const dx=fx-hx, dy=fy-hy;
+  const d=Math.hypot(dx,dy)||1e-4;
+  const total=d*(1+Math.max(0,bend));
+  const thigh=total*split, shin=total-total*split;
+  const a=(thigh*thigh - shin*shin + d*d)/(2*d);
+  const h=Math.sqrt(Math.max(0, thigh*thigh - a*a));
+  const ux=dx/d, uy=dy/d;
+  const px=uy, py=-ux;                           // perpendicular, pointing forward
+  return { x:hx+ux*a+px*(h+lead), y:hy+uy*a+py*(h+lead) };
+}
+function rrect(g,x,y,w,h,r){ r=Math.max(0,Math.min(r,w/2,h/2)); g.beginPath(); g.moveTo(x+r,y);
+  g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); }
+
+// ---- THE RUNNER — a faithful copy of drawRunner() from index.html ----
+// sx,sy = the point where his feet meet the track; s = cell size; phase = stride radians
+function paintRunner(g, sx, sy, s, phase, ts, isMoving, alpha){
+  const R=RUNNER;
+  const swing = isMoving ? Math.sin(phase)*s*R.swing : 0;
+  const bob   = isMoving ? Math.abs(Math.sin(phase))*s*R.bob : 0;
+  g.save(); g.globalAlpha = alpha==null?1:alpha; g.translate(sx,sy);
+  const pale=R.body;
+  const legL=s*R.legLen, bodyH=s*R.bodyH, bodyW=s*R.bodyW;
+  g.fillStyle="rgba(5,4,13,0.26)";
+  g.beginPath(); g.ellipse(0,-1,bodyW*0.55,s*R.shadow,0,0,Math.PI*2); g.fill();
+  g.strokeStyle=pale; g.lineWidth=Math.max(3,s*R.legWidth); g.lineCap="round"; g.lineJoin="round";
+  const hipY=-legL-bob-bodyH*(R.hipRise||0);
+  const lead=s*R.kneeLead;
+  lastKnees.length=0;
+  // a foot lifts while it swings FORWARD (cos(phase) > 0) and is planted on the way back
+  const lift = ph => isMoving ? -s*R.footLift*Math.pow(Math.max(0,Math.cos(ph)), R.footLiftPow) : 0;
+  lastFeet.length=0;
+  for(const [hx,fx,fy] of [[-bodyW*R.legSplay, swing, lift(phase)],
+                           [ bodyW*R.legSplay, -swing, lift(phase+Math.PI)]]){
+    lastFeet.push({x:fx,y:fy});
+    if(R.knees){
+      const k=solveKnee(hx,hipY,fx,fy,R.kneeBend,R.kneeSplit,lead);
+      lastKnees.push(k);
+      g.beginPath(); g.moveTo(hx,hipY); g.lineTo(k.x,k.y); g.lineTo(fx,fy); g.stroke();
+      if(R.kneeR>0){ g.beginPath(); g.arc(k.x,k.y,s*R.kneeR,0,Math.PI*2); g.fillStyle=pale; g.fill(); }
+    } else {
+      g.beginPath(); g.moveTo(hx,hipY); g.lineTo(fx,fy); g.stroke();
+    }
+  }
+  const byTop = -(legL+bodyH)-bob;
+  g.fillStyle=pale; rrect(g,-bodyW/2,byTop,bodyW,bodyH,s*R.bodyR); g.fill();
+  if (worn && TAL[worn]) {
+    const cordY=byTop+bodyH*R.talCordY, hangY=byTop+bodyH*R.talHangY;
+    g.strokeStyle="rgba(23,38,63,0.75)"; g.lineWidth=Math.max(1,s*0.016); g.lineCap="round";
+    g.beginPath(); g.moveTo(-bodyW*0.40,cordY); g.quadraticCurveTo(0,hangY-s*0.005,bodyW*0.40,cordY); g.stroke();
+    TAL[worn](g,0,hangY,s*R.talR);
+  }
+  g.fillStyle=R.ink;
+  const eyeR=s*R.eyeR, eyeY=byTop+bodyH*R.eyeY;
+  const e1x=bodyW*R.eyeAx, e2x=bodyW*R.eyeBx;
+  const G=R.glanceMs, gt=ts%G; let gx=0, gy=0;
+  if(gt<G*0.125) gx=-s*R.glanceX;
+  else if(gt<G*0.25) gx=s*R.glanceX;
+  else if(gt>G*0.654 && gt<G*0.779) gy=-s*R.glanceY;
+  const B=R.blinkMs, bt=ts%B, blink = bt<B*0.04 || (bt>B*0.058 && bt<B*0.085);
+  if(blink){ g.strokeStyle=R.ink; g.lineWidth=Math.max(1.5,s*R.eyeR*0.6); g.lineCap="round";
+    g.beginPath(); g.moveTo(e1x-eyeR,eyeY+gy); g.lineTo(e1x+eyeR,eyeY+gy);
+    g.moveTo(e2x-eyeR,eyeY+gy); g.lineTo(e2x+eyeR,eyeY+gy); g.stroke(); }
+  else { g.beginPath(); g.arc(e1x+gx,eyeY+gy,eyeR,0,Math.PI*2); g.fill();
+         g.beginPath(); g.arc(e2x+gx,eyeY+gy,eyeR,0,Math.PI*2); g.fill(); }
+  g.restore();
+}
+
+function drawGuides(g, sx, sy, s){
+  const R=RUNNER, legL=s*R.legLen, bodyH=s*R.bodyH, bodyW=s*R.bodyW, byTop=sy-(legL+bodyH);
+  g.save(); g.setLineDash([4,4]); g.lineWidth=1;
+  g.strokeStyle="rgba(125,208,255,0.55)";                    // track surface
+  g.beginPath(); g.moveTo(sx-s*0.8,sy); g.lineTo(sx+s*0.8,sy); g.stroke();
+  g.strokeStyle="rgba(255,210,74,0.5)";                      // hip line
+  g.beginPath(); g.moveTo(sx-s*0.5,sy-legL); g.lineTo(sx+s*0.5,sy-legL); g.stroke();
+  g.strokeStyle="rgba(199,125,255,0.55)";                    // body box
+  g.strokeRect(sx-bodyW/2, byTop, bodyW, bodyH);
+  g.setLineDash([]);
+  if(R.footLift>0){                                           // the loop one foot travels in a cycle
+    g.strokeStyle="rgba(255,138,61,0.75)"; g.lineWidth=1.5; g.beginPath();
+    for(let k=0;k<=72;k++){
+      const ph=k/72*Math.PI*2;
+      const x=sx+Math.sin(ph)*s*R.swing;
+      const y=sy-s*R.footLift*Math.pow(Math.max(0,Math.cos(ph)), R.footLiftPow);
+      k?g.lineTo(x,y):g.moveTo(x,y);
+    }
+    g.stroke();
+  }
+  for(const f of lastFeet){                                    // both feet right now
+    g.strokeStyle="rgba(255,138,61,0.95)"; g.lineWidth=1.5;
+    g.beginPath(); g.arc(sx+f.x, sy+f.y, 4, 0, Math.PI*2); g.stroke();
+  }
+  if(RUNNER.knees) for(const k of lastKnees){                 // where the IK put each knee
+    g.strokeStyle="rgba(125,255,107,0.9)"; g.lineWidth=1.5;
+    g.beginPath(); g.arc(sx+k.x, sy+k.y, 5, 0, Math.PI*2); g.stroke();
+  }
+  g.restore();
+}
+
+let t0=performance.now(), phase=0, lastTs=t0, frames=0, fpsT=t0;
+function frame(now){
+  const dt=Math.min(50, now-lastTs); lastTs=now;
+  if(playing && moving) phase += dt/RUNNER.stepMs;
+  const ts=now-t0;
+  const shown = scrub==null ? phase : scrub;
+
+  ctx.clearRect(0,0,cv.width,cv.height);
+  // a strip of "track" to stand on
+  const baseY=Math.round(cv.height*0.72), big=170;
+  ctx.fillStyle="#241f4a"; ctx.fillRect(0,baseY,cv.width,cv.height-baseY);
+  ctx.fillStyle="#ffcf4d"; ctx.fillRect(0,baseY-2,cv.width,3);
+
+  if(onion){
+    for(const d of [-1.1,-0.55,0.55,1.1])
+      paintRunner(ctx, 230, baseY-2, big, shown+d, ts, moving, 0.16);
+  }
+  paintRunner(ctx, 230, baseY-2, big, shown, ts, moving, 1);
+  if(guides) drawGuides(ctx, 230, baseY-2, big);
+
+  // real in-game sizes down the right-hand side
+  ctx.save(); ctx.font="10px ui-monospace,monospace"; ctx.fillStyle="rgba(207,233,255,0.45)"; ctx.textAlign="center";
+  let x=470;
+  for(const s of [56,80,110,133]){
+    paintRunner(ctx, x, baseY-2, s, shown, ts, moving, 1);
+    ctx.fillText(s+"px cell", x, baseY+16);
+    x += s*1.15 + 18;
+  }
+  ctx.restore();
+
+  frames++;
+  if(now-fpsT>500){ $("fps").textContent = Math.round(frames*1000/(now-fpsT))+" fps"; frames=0; fpsT=now; }
+  requestAnimationFrame(frame);
+}
+
+// ---- sliders ----
+const SPEC=[
+  ["Motion"],
+  ["stepMs","ms / radian",40,300,1],
+  ["swing","stride reach",0,0.5,0.005],
+  ["bob","body bob",0,0.12,0.002],
+  ["Body"],
+  ["bodyW","body width",0.1,0.5,0.005],
+  ["bodyH","body height",0.1,0.5,0.005],
+  ["bodyR","corner radius",0,0.2,0.002],
+  ["shadow","ground shadow",0,0.12,0.002],
+  ["Legs"],
+  ["legLen","hip height",0.02,0.35,0.005],
+  ["legWidth","leg width",0.01,0.16,0.002],
+  ["legSplay","hip spread",0,0.5,0.005],
+  ["hipRise","hip rise",0,0.85,0.01],
+  ["footLift","foot lift",0,0.14,0.002],
+  ["footLiftPow","lift shape",0.4,4,0.05],
+  ["Knees"],
+  ["kneeBend","bend amount",0,0.6,0.005],
+  ["kneeSplit","thigh share",0.15,0.85,0.01],
+  ["kneeLead","forward lead",-0.06,0.12,0.002],
+  ["kneeR","knee cap",0,0.05,0.001],
+  ["Face"],
+  ["eyeR","eye radius",0.005,0.09,0.001],
+  ["eyeY","eye height",0,1,0.01],
+  ["eyeAx","rear eye x",-0.5,0.5,0.01],
+  ["eyeBx","front eye x",-0.5,0.6,0.01],
+  ["glanceMs","glance cycle",1200,12000,100],
+  ["glanceX","glance x",0,0.09,0.002],
+  ["glanceY","glance y",0,0.09,0.002],
+  ["blinkMs","blink cycle",800,9000,100],
+  ["Talisman"],
+  ["talCordY","cord height",0,1,0.01],
+  ["talHangY","pendant drop",0,1.4,0.01],
+  ["talR","pendant size",0.01,0.14,0.002],
+];
+const box=$("sliders");
+for(const row of SPEC){
+  if(row.length===1){ const d=document.createElement("div"); d.className="group"; d.textContent=row[0]; box.appendChild(d); continue; }
+  const [k,label,min,max,step]=row;
+  const d=document.createElement("div"); d.className="sl";
+  d.innerHTML='<label for="s_'+k+'">'+label+'</label>'+
+              '<input type="range" id="s_'+k+'" min="'+min+'" max="'+max+'" step="'+step+'" value="'+RUNNER[k]+'">'+
+              '<span class="val" id="v_'+k+'"></span>';
+  box.appendChild(d);
+  const inp=d.querySelector("input"), val=d.querySelector(".val");
+  const show=()=>{ val.textContent = (step>=1? RUNNER[k] : (+RUNNER[k]).toFixed(3)); };
+  inp.addEventListener("input",()=>{ RUNNER[k]= step>=1 ? +inp.value : +(+inp.value).toFixed(4); show(); refresh(); });
+  show();
+}
+function syncSliders(){ for(const row of SPEC){ if(row.length===1) continue; const k=row[0];
+  const inp=$("s_"+k); if(inp){ inp.value=RUNNER[k]; $("v_"+k).textContent = row[4]>=1? RUNNER[k] : (+RUNNER[k]).toFixed(3); } }
+  $("colBody").value=RUNNER.body; $("colInk").value=RUNNER.ink;
+  $("knees").classList.toggle("on", !!RUNNER.knees); }
+
+// ---- output ----
+const ORDER=[["stepMs","ms per radian of stride phase — lower = faster legs"],
+  ["swing","how far a foot reaches, fraction of a cell"],["bob","body rise and fall per stride"],
+  ["legLen","hip height above the track"],["legWidth","stroke width of a leg"],
+  ["legSplay","hip separation, fraction of body width"],
+  ["hipRise","hips move UP inside the body, fraction of body height (0 = bottom edge, 1 = top)"],
+  ["footLift","peak height of the swinging foot, fraction of a cell; 0 = feet pinned to the track"],
+  ["footLiftPow","shape of that lift: 1 = broad cosine hump, higher = a later, snappier kick"],
+  ["knees","1 bends each leg at a knee (two-bone IK), 0 is a straight hip-to-foot line"],
+  ["kneeBend","how bent, as slack relative to hip-foot distance; 0 = straight"],
+  ["kneeSplit","how much of that is thigh"],
+  ["kneeLead","extra forward push on the knee, 0 = pure IK"],
+  ["kneeR","knee cap radius, 0 = none"],
+  ["bodyW",""],["bodyH",""],
+  ["bodyR","corner radius of the body"],["shadow","ground shadow height"],
+  ["eyeR",""],["eyeY","down the body from its top, fraction of body height"],
+  ["eyeAx","rear eye, fraction of body width from centre"],["eyeBx","front eye"],
+  ["glanceMs","one full look-around cycle"],["glanceX","how far the pupils dart"],["glanceY",""],
+  ["blinkMs","one blink cycle (it's a double-blink)"],
+  ["talCordY","talisman cord, fraction of body height from its top"],
+  ["talHangY","where the pendant hangs"],["talR","pendant radius, fraction of a cell"]];
+function refresh(){
+  let out="  const RUNNER = {\n";
+  for(const [k,note] of ORDER){
+    const v = typeof RUNNER[k]==="number" && RUNNER[k]%1!==0 ? +(+RUNNER[k]).toFixed(4) : RUNNER[k];
+    out += "    "+(k+":").padEnd(10)+(String(v)+",").padEnd(9)+(note?"// "+note:"").trimEnd()+"\n";
+  }
+  out += '    body:  "'+RUNNER.body+'",\n    ink:   "'+RUNNER.ink+'",\n  };\n';
+  $("out").value=out;
+}
+$("copy").onclick=()=>{ $("out").select(); document.execCommand("copy");
+  $("copy").textContent="Copied!"; setTimeout(()=>$("copy").textContent="Copy RUNNER block",1100); };
+$("reset").onclick=()=>{ Object.assign(RUNNER,SHIPPED); syncSliders(); refresh(); };
+$("rand").onclick=()=>{ for(const row of SPEC){ if(row.length===1) continue; const [k,,min,max]=row;
+    const span=(max-min)*0.10, v=Math.min(max,Math.max(min,RUNNER[k]+(Math.random()*2-1)*span));
+    RUNNER[k]= row[4]>=1 ? Math.round(v) : +v.toFixed(4); } syncSliders(); refresh(); };
+$("play").onclick=e=>{ playing=!playing; e.target.classList.toggle("on",playing); e.target.textContent=playing?"Pause":"Play"; };
+$("moving").onclick=e=>{ moving=!moving; e.target.classList.toggle("on",moving); e.target.textContent=moving?"Running":"Standing"; };
+$("knees").onclick=e=>{ RUNNER.knees = RUNNER.knees?0:1; e.target.classList.toggle("on",!!RUNNER.knees); refresh(); };
+$("onion").onclick=e=>{ onion=!onion; e.target.classList.toggle("on",onion); };
+$("grid").onclick=e=>{ guides=!guides; e.target.classList.toggle("on",guides); };
+$("scrub").addEventListener("input",e=>{ scrub=+e.target.value; $("scrubv").textContent=scrub.toFixed(2)+" rad";
+  playing=false; $("play").classList.remove("on"); $("play").textContent="Play"; });
+$("scrub").addEventListener("dblclick",()=>{ scrub=null; $("scrubv").textContent="live"; });
+$("tal").addEventListener("change",e=>{ worn=e.target.value; });
+$("colBody").addEventListener("input",e=>{ RUNNER.body=e.target.value; refresh(); });
+$("colInk").addEventListener("input",e=>{ RUNNER.ink=e.target.value; refresh(); });
+
+refresh();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

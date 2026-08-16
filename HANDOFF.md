@@ -2,7 +2,7 @@
 
 This doc is written so a fresh Claude session can pick up **level creation** without re-deriving anything. Paste it (or point the new chat at the project doc `claude/HANDOFF.md`) at the start of a new conversation.
 
-_Last shipped: **v5.2**, service-worker cache `tile-runner-v53`, **24 levels**._
+_Last shipped: **v6.1**, service-worker cache `tile-runner-v62`, **24 levels**, 6 talismans._
 
 **Local project directory:** `/Users/josh/Documents/tile-runner` (on `joshuas-macbook-air-local`). This is a git repo — all the files below live here. In a new chat, connect this folder so Claude can read/write it directly.
 
@@ -22,6 +22,8 @@ Everything is in **`index.html`** (game + logic + audio, one file). **`sw.js`** 
 | `sw.js` | Service worker. `const CACHE = "tile-runner-vNN"` must be bumped every ship so clients fetch fresh. |
 | `level-editor.html` | Visual level editor (open in a browser). Paint walls/stones, drag every element, exports the exact `levels.js` format. Autosaves to the browser. |
 | `stone-generator.html` | Design reference that renders the 3 stone crack variations × 3 damage states. Not needed to make levels; keep for tweaking stone art. |
+| `runner-lab.html` | Live editor for the runner's animation. Sliders for every number in `index.html`'s `RUNNER` block, onion-skin, stride scrub, real-size previews, and a **Copy RUNNER block** button. Paste its output over the block in `index.html` **wholesale**. |
+| `icon-lab.html` | Composer for the app icon. Places the runner on a single tile-with-platform over a Tile Runner backdrop; drag on the canvas to move the runner or the tile, sliders for every colour and position, mask preview (square/rounded/circle), safe-area ring, live 180/120/64/32 previews, and PNG export at 1024/512/192/180 named to match `manifest.webmanifest`. The config is a flat JSON block of fractions, so one setup renders identically at every size — Copy it into the handoff when a look is settled. |
 | `levels.js` | The current 24 levels as a CommonJS module (source of truth, mirrors what's in `index.html`). |
 | `TILE-REFERENCE.md` | Older feature reference (some parts predate the manual levels; treat this HANDOFF as authoritative). |
 
@@ -58,14 +60,15 @@ Coordinates are `[col, row]`, origin **top-left**. One level object:
   doors:  [[c,r,"#hex"], …],  // colored key-doors (optional)
   keys:   [[c,r,"#hex"], …],  // colored keys (optional; a key opens the door of the SAME hex)
   stone:  [[c,r,hp], …],      // breakable stone blocks, hp = taps to smash (optional)
-  platforms:[[c,r,"ns"], …]   // fixed FREE track cast into a wall plinth (optional)
+  platforms:[[c,r,"ns"], …], // fixed FREE track cast into a wall plinth (optional)
+  talismans:[[c,r,"ember"], …] // one-off collectibles (optional; ids below)
 }
 ```
 
 Notes / gotchas that matter for design:
 
-- **Pace is per level** via `cps` (tiles/sec), set explicitly on all 21. As of v4.7 it **ramps 0.80 → 1.00**, stepped at the curriculum arc boundaries: 1–3 `0.80`, 4–7 `0.84`, 8–11 `0.88`, 12–14 `0.91`, 15–16 `0.94`, 17–18 `0.97`, 19–21 `1.00`. `DEFAULT_CPS` (0.8) is now only a fallback for generated/editor levels. The editor has a **speed** box that round-trips `cps`. New levels should continue the ramp or hold at `1.00`. No progressive board-size growth — keep maps “just big enough” for the puzzle, but **≥ 5×8** so they fill the screen.
-- **Saw levels are timing-tuned to their pace.** 12–14 run at `0.91`; changing a saw level's `cps` shifts every collision window, so re-play them by hand after touching it. **Pace can make a saw level literally unsolvable.** Simulating level 24 (six saws, cols 3–8, rows 0–5, speed 4000) against the engine's own saw maths: with the saws **in phase** a route survives from all 32 sampled start offsets at `cps 1.00` and from **none** at `cps 0.80`; after staggering them `0 → 0.5` it's 24/32 at `1.00`, 21/32 at `0.91`, still **0/32 at `0.80`**. A slower runner dwells in each column longer than the saws take to sweep a row, so it can never get ahead — faster is not always harder here. Note the <32/32 figures mean some start offsets have *no* route, and saws keep ticking through the intro animation, so the offset at play-start isn't fixed. If a saw level ever feels randomly impossible, that's the cause; giving the saws slightly different `speed` values de-syncs them permanently and removes the cliff.
+- **Pace is per level** via `cps` (tiles/sec), set explicitly on all 24. As of v4.7 it **ramps 0.80 → 1.00**, stepped at the curriculum arc boundaries: 1–3 `0.80`, 4–7 `0.84`, 8–11 `0.88`, 12–14 `0.91`, 15–16 `0.94`, 17–18 `0.97`, 19–24 `1.00`. `DEFAULT_CPS` (0.8) is now only a fallback for generated/editor levels. The editor has a **speed** box that round-trips `cps`. New levels should continue the ramp or hold at `1.00`. No progressive board-size growth — keep maps “just big enough” for the puzzle, but **≥ 5×8** so they fill the screen.
+- **Saw levels are timing-tuned to their pace.** 12–14 run at `0.91`; changing a saw level's `cps` shifts every collision window, so re-play them by hand after touching it. **Pace can make a saw level literally unsolvable.** Simulating level 24 (six saws, cols 3–8, rows 0–5, speed 4000) against the engine's own saw maths: with the saws **in phase** a route survives from all 32 sampled start offsets at `cps 1.00` and from **none** at `cps 0.80`; after staggering them `0 → 0.5` it was 24/32 at `1.00` and still **0/32 at `0.80`**. The shipped v5.4 layout — a taller 13×8 board, two banks of three with a clean column between them, phases `.07/.14/.21` and `.43/.36/.29` — is solvable from **32/32 offsets at every speed tested**, including 0.80, so the geometry matters as much as the phases. A slower runner dwells in each column longer than the saws take to sweep a row, so it can never get ahead — faster is not always harder here. Note the <32/32 figures mean some start offsets have *no* route, and saws keep ticking through the intro animation, so the offset at play-start isn't fixed. If a saw level ever feels randomly impossible, that's the cause; giving the saws slightly different `speed` values de-syncs them permanently and removes the cliff.
 - **New levels default to the last level's pace.** The editor's "+ New blank" used to hand out `cps 0.8`, which silently broke the ramp on every new level; as of v5.0 it inherits the highest-numbered level's `cps` instead.
 - **The 3 pre-laid tiles** are `start`, `init[0]`, `init[1]`. `init[1]` (the head) seeds the runner’s heading — point it toward where you want the runner to go first.
 - **No U-turns.** The runner can’t re-enter the cell it’s on or the one it just left (foldsBack rule). So a **dead-end pocket doesn’t work** — the runner must be able to *flow through*. A key/coin/etc. must sit on a pass-through path, not at the end of a spur. To make the runner “come back,” give it a loop (e.g. an open band it can serpentine through).
@@ -78,8 +81,65 @@ Notes / gotchas that matter for design:
 - **Platforms auto-link, so never leave an OPEN cell with two platform mouths facing it.** `linkParkedTiles` checks platforms before parked tiles and takes the first match in array order, so the runner is *forced* onto a platform the moment one touches the front — the player gets no say. Two candidates at once looks like randomness. A platform's own two ends are fine (one is always behind the runner). Corollary for verification: plain reachability BFS is not enough, because it will happily route through a turn the engine would override — model the forced chain (see `claude/` scratch scripts or ask for `forced.js` again).
 - **Fixed platform (`platforms`)** is pre-laid track bolted into the level: the cell is a **wall for placement** (you can never drop a tile on it) but the runner **rides it for free**, spending nothing from the 3-tile pool, and it never wears out — a level can legitimately route the runner back across the same platform on a later loop. The third field is its **shape**: exactly two compass connectors, `"ns"`/`"ew"` for a straight or `"ne"`/`"es"`/`"sw"`/`"wn"` for an elbow. The path may only enter or leave through a drawn end — a tile parked against a closed face simply never links, which is the whole puzzle. A platform touching the track's front **latches on by itself** (there's nothing to place), so it can steal a route you wanted: check what's adjacent to the front before you place. The editor's reachability check is connector-aware, so it will catch a platform pointed the wrong way. **Art:** deliberately just the rail line in a recessed groove on the steel plate — no coloured body fill, so the plinth stays visible and it never reads as a tile you could have placed. Live vs idle lives entirely on the line (dim → bright + bloom), never as a wash over the cell.
 
+## Talismans (added v5.3)
+
+Six unique collectibles: `ember` (Emberdrop), `tide` (Tidestone), `cog` (Brass Cog), `sun` (Sunwheel), `shard` (Nightshard), `sprig` (Green Sprig). Defined in one `TALISMANS` table near the top of `index.html` — id, name, colour, a `draw(g,x,y,r)` function, and **`perk: null`**, the hook for giving one a gameplay effect later without reshaping any of this. They're cosmetic today.
+
+- **Collecting:** run over the cell and it's unlocked **forever**, even if that run then fails. Stored in `localStorage` under `tilerunner:talismans`; the worn one is `settings.talisman`. A "NEW TALISMAN" banner flashes on pickup.
+- **Wearing:** menu → **Talismans** shows all six, locked ones as grey silhouettes with `???`. Click an unlocked one to wear it, click again (or "Take it off") to remove. The worn one is drawn as a pendant on a cord across the runner's chest, and rotates with him.
+- **A talisman does NOT block track** — it's a floor pickup, so it never enters the occupancy set.
+- **Placement is the fiddly part.** The runner can't U-turn and can't revisit a live cell, so "reachable" is *not* the same as "collectable": a cell in a far corner is often impossible to route through and back out of. Three of my first six picks failed this. Verify with a simple-path search for `head → talisman → goal` (no revisits, no U-turns, connector-aware) rather than a plain BFS. The six shipped placements are all confirmed collectable, each on a real detour: L3 `5,2`, L6 `8,1`, L10 `8,0`, L16 `7,0`, L20 `0,0`, L23 `4,7`.
+- The editor has a **Talisman** tool (`T`) with a dropdown; click to place, click again to cycle which one, right-click to remove.
+
+## The runner's animation
+
+Everything the runner's look and motion depends on lives in one **`RUNNER`** object in `index.html`, immediately above `drawRunner` — stride speed and reach, body/leg proportions, eye placement, glance and blink cycles, the talisman pendant, and the two colours. All lengths are fractions of the cell, so he scales with the board.
+
+Edit it with **`runner-lab.html`**: it runs a faithful copy of `drawRunner` against the same values, with a slider per knob, onion-skinned stride ghosts, a scrub slider for one step cycle, guides for the track surface / hip line / body box, a talisman picker to check the pendant, and a strip showing him at real in-game cell sizes. Hit **Copy RUNNER block** and paste the whole block over the one in `index.html`.
+
+**Feet lift in v5.9.** Before this the feet were pinned to `y = 0` and only their x swung, so he skated. `footLift` is the peak height of the *swinging* foot as a fraction of a cell, and `footLiftPow` shapes the arc. The rule is: a foot lifts while it travels **forward** and is planted while it travels back. Foot x is `sin(phase)`, so its direction of travel is `cos(phase)` — hence `lift = footLift * max(0, cos(phase))^footLiftPow`, with the second leg reading the same curve at `phase + PI`. That guarantees exactly one foot is up at a time and both touch down at the extremes of the stride, with no discontinuity. `footLiftPow` of 1 is a broad hump; higher keeps the foot down longer and snaps it up late.
+
+The lifted foot is passed into `solveKnee` as a real `fy`, so the knee re-solves against the shorter hip-to-foot distance instead of the leg stretching. Turn on **Guides** in the lab to see the orange loop the foot travels in one cycle, with a ring on each foot's current position.
+
+One thing this does *not* fix: the planted foot still slides, because foot x is a sine of the animation phase rather than being locked to ground the runner has actually covered. True no-slip planting would mean driving the foot from distance travelled, not from `stepMs` — a bigger change, and at these cell sizes the slide is not really visible once the foot lifts.
+
+**Hips shipped in v5.8.** `hipRise` moves the hip joint **up inside the body**, as a fraction of body height — 0 puts it on the body's bottom edge (the original), 1 puts it at the top. The body itself doesn't move; the legs simply get longer upward and their tops are hidden behind the body, which is drawn after them. Two things follow from that: the leg is measured hip-to-foot, so raising the hips lengthens the stride's apparent leg without touching `legLen`, and the knee IK re-solves against the new distance so `kneeBend` still means what it says. The lab's slider stops at 0.85 on purpose — above that the leg stroke's round cap pokes out over the body's top edge.
+
+**Knees shipped in v5.6.** `drawRunner` bends each leg with two-bone IK via `solveKnee`, controlled by `knees` (0/1), `kneeBend`, `kneeSplit` (thigh's share of the leg), `kneeLead` (extra forward push past what the IK gives) and `kneeR` (optional knee cap). Set `knees: 0` for the old straight hip-to-foot line.
+
+The bones are sized **relative to the current hip-to-foot distance** (`total = d * (1 + kneeBend)`) rather than being a fixed length. Fixed-length bones were the obvious first attempt and they look wrong: over a stride that distance nearly doubles (about 23px to 42px at a 170px cell), so a fixed bone gives an almost-straight leg at full reach and a knee folded right under the body at mid-step. Scaling with `d` holds the knee at a constant fraction of the leg's length — 0.274 across every phase — and makes `kneeBend` mean what it says.
+
+## The app icon
+
+**`icon-lab.html`** composes it. It re-uses the game's own drawing code, not a lookalike: `tileSurface` + `drawTile` are lifted from `drawPlatformTile`/`drawPlatformBody`/`drawPlatformRail`, and `paintRunner` carries the same `RUNNER` block and `solveKnee` the game ships. That means the icon can't drift from the game's art — but it also means the `RUNNER` block at the top of `icon-lab.html` is a **third copy** (game, runner-lab, icon-lab). If you retune the runner, paste the block into all three.
+
+Two things worth knowing before you fiddle with it:
+
+- **Every position and size is a fraction of the icon's width**, so one config renders identically at 1024 and at 32. Never hard-code a pixel.
+- **The tile's solid body fills the side away from the running surface**, and which side that is depends on the *order* of the two directions in `SHAPES`. `ew` is `["w","e"]`, not `["e","w"]` — reverse them and the yellow fills the top half and the runner appears to be standing in a box rather than on a platform. Same trap in the game's `tileSurface`, where `entry` is the direction toward the *previous* node.
+
+**The shipped icon** is a red field, a single east-west platform tile filling most of the square, and the runner mid-stride on the rail. Its exact config — paste into the lab's Config box and hit **Load from box** to get it back:
+
+```json
+{
+ "bgStyle": "flat", "bg1": "#b42d2d", "bg2": "#241f4a", "bgAngle": 35, "stripes": 5, "vignette": 0.25,
+ "tileOn": 1, "tileX": 0.5, "tileY": 0.5, "tileSize": 0.765, "tileRot": 0, "tileShape": "ew",
+ "track": "#ffcf4d", "rail": "#fff2c4", "glass": 0.55, "glassCol": "#b4aeeb", "tileR": 0.16,
+ "runOn": 1, "runX": 0.5, "runY": 0.5, "runScale": 0.685, "runRot": 0, "runStride": 5.38,
+ "knees": 1, "body": "#bfe6ff", "ink": "#17263f", "runShadow": 1, "talisman": ""
+}
+```
+
+Regenerating: load that config, hit **Save all four**, and drop `icon-1024/512/192/180.png` into the folder. `manifest.webmanifest` points at 192 and 512, `index.html` links 180 (apple-touch) and 192, and `sw.js` precaches 180/192/512 — so bump the cache string or the old icons stay installed on anyone's home screen.
+
+One caveat baked into this composition: the manifest declares `"purpose": "any maskable"`, and Android crops maskable icons to roughly the centre 80% circle. At `tileSize: 0.765` the tile's *corners* sit outside that circle (0.54 from centre vs a 0.40 safe radius), so on Android the rounded tile bleeds to the edge and loses its corner radius. Everything that matters — runner, rail, the yellow band — survives. Drop `tileSize` to about 0.62 if you'd rather keep the tile reading as a discrete tile under the crop.
+
+The composition autosaves to `localStorage` under `tilerunner:icon` (same pattern as the level editor), merged over `DEFAULT` on load so an older save can't break a newer tool; **Reset** clears it. Exports are always full-bleed squares regardless of the mask preview, because iOS and Android round the corners themselves. The four sizes and filenames match what `manifest.webmanifest` already asks for, so the PNGs drop straight into the project folder.
+
+The shipped tune is deliberately restrained: `kneeBend: 0.045` with a hair of *negative* `kneeLead`, so the bend reads as a soft articulation rather than a cartoon crouch, alongside a heavier `bob: 0.064` and thinner `legWidth: 0.05`. **v6.0 added `hipRise: 0.06` and `footLift: 0.098` at `footLiftPow: 1`** — a barely-there hip raise, and a foot lift that is large relative to the other numbers because the runner is small on screen and a subtle lift simply doesn't read at a 56px cell.
+
 ### Mechanic intro keys (`intro`)
-`recycle`, `turn`, `offscreen`, `flag`, `wall`, `block`, `saw`, `key`, `door`, `stone`, `platform`, `mdoor`, `coin`, `boost`, `slow`, `crumble`, `switch`, `monster`, `slider`, plus `tile` and `speed`. Put the key on the first level that teaches that mechanic; leave `[]` otherwise.
+`recycle`, `turn`, `offscreen`, `flag`, `wall`, `block`, `saw`, `key`, `door`, `stone`, `platform`, `talisman`, `mdoor`, `coin`, `boost`, `slow`, `crumble`, `switch`, `monster`, `slider`, plus `tile` and `speed`. Put the key on the first level that teaches that mechanic; leave `[]` otherwise.
 
 **Every level here sets `intro` explicitly, which disables the auto-detect fallback in `levelMechs`** — so a mechanic with no key on its first level is simply never taught. Audit after adding levels. Two prompts are deliberately unused: `tile` (its text is a strict subset of `recycle`, so showing both would be two near-identical cards back to back) and `speed` (nothing sets the per-level `cps` override, so it can never fire).
 
@@ -87,7 +147,7 @@ Notes / gotchas that matter for design:
 
 ## Current 24 levels (curriculum)
 
-1–3 movement basics (recycle / turn / off-screen goal) · 4–7 walls (single gap → 3 gaps → cross-maze → 8×8 room maze) · 8–11 sliding blocks (intro → 3 gates → vertical climb → 14×14 room maze) · 12–14 saws (one sweeper → 3 stacked → 4-saw cross) · 15–16 keys & doors (intro → 2×3 room puzzle, two color pairs) · 17–18 stone (intro → stone maze) · 19–21 fixed platforms (intro, then two that route the runner through chained elbows) · 22 blocks + stone gauntlet · 23 a solid 4-row stone wall to chew through · 24 six saws staggered `0 → 0.5` into a rolling wave.
+1–3 movement basics (recycle / turn / off-screen goal) · 4–7 walls (single gap → 3 gaps → cross-maze → 8×8 room maze) · 8–11 sliding blocks (intro → 3 gates → vertical climb → 14×14 room maze) · 12–14 saws (one sweeper → 3 stacked → 4-saw cross) · 15–16 keys & doors (intro → 2×3 room puzzle, two color pairs) · 17–18 stone (intro → stone maze) · 19–21 fixed platforms (intro, then two that route the runner through chained elbows) · 22 blocks + stone gauntlet · 23 a solid 4-row stone wall to chew through · 24 two banks of three phase-staggered saws with a safe column between them.
 
 ## Modes (removed in v4.8)
 

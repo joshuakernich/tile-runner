@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Tile Runner — Icon Lab</title>
+<style>
+  :root{ --bg:#12102a; --panel:#1b1838; --line:#2b2850; --ink:#cfe9ff; --accent:#7dd0ff; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:10px 14px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;}
+  header h1{font-size:15px;margin:0 12px 0 0;font-weight:700;letter-spacing:.5px;}
+  .wrap{display:flex;gap:18px;padding:14px;align-items:flex-start;flex-wrap:wrap;justify-content:center;}
+  .stage{display:flex;flex-direction:column;gap:10px;align-items:center;}
+  canvas#cv{background:#0d0b22;border:1px solid var(--line);border-radius:10px;cursor:grab;touch-action:none;}
+  canvas#cv.drag{cursor:grabbing;}
+  .minis{display:flex;gap:14px;align-items:flex-end;}
+  .mini{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;opacity:.75;}
+  .panel{width:330px;display:flex;flex-direction:column;gap:2px;}
+  .group{margin:12px 0 3px;font-size:11px;letter-spacing:1px;text-transform:uppercase;opacity:.5;
+         border-top:1px solid var(--line);padding-top:9px;}
+  .group:first-child{border-top:0;margin-top:0;}
+  .sl{display:grid;grid-template-columns:74px 1fr 46px;gap:8px;align-items:center;font-size:11px;}
+  .sl label{opacity:.85;}
+  .sl input[type=range]{width:100%;accent-color:var(--accent);}
+  .sl .val{text-align:right;opacity:.7;font-variant-numeric:tabular-nums;}
+  .rowline{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px;margin:3px 0;}
+  .rowline label{opacity:.85;}
+  button.act{background:#233;color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:6px 10px;cursor:pointer;font:inherit;font-size:11px;}
+  button.act:hover{border-color:var(--accent);}
+  button.act.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+  button.prim{background:#1c6;color:#04120a;font-weight:700;border:none;}
+  select,input[type=color],input[type=number]{background:var(--panel);color:var(--ink);border:1px solid var(--line);
+    border-radius:6px;padding:3px 5px;font:inherit;font-size:11px;}
+  input[type=color]{width:34px;height:24px;padding:1px;}
+  textarea{width:100%;height:120px;background:#0d0b22;color:#bfe;border:1px solid var(--line);
+           border-radius:8px;padding:9px;font:inherit;font-size:10px;line-height:1.45;white-space:pre;}
+  .hint{font-size:11px;opacity:.7;line-height:1.6;max-width:700px;}
+  .pill{font-size:11px;background:#0d0b22;border:1px solid var(--line);border-radius:20px;padding:3px 9px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>TILE RUNNER · ICON LAB</h1>
+  <span class="pill" id="pos">—</span>
+  <span class="pill" id="saved" style="opacity:.35;transition:opacity .3s">saved</span>
+  <button class="act" id="mask">Mask: rounded</button>
+  <button class="act" id="safe">Safe area</button>
+  <button class="act" id="anim">Animate</button>
+</header>
+
+<div class="wrap">
+  <div class="stage">
+    <canvas id="cv" width="512" height="512"></canvas>
+    <div class="minis">
+      <div class="mini"><canvas id="m180" width="180" height="180" style="width:90px;height:90px"></canvas>180</div>
+      <div class="mini"><canvas id="m120" width="120" height="120" style="width:60px;height:60px"></canvas>120</div>
+      <div class="mini"><canvas id="m64"  width="64"  height="64"  style="width:44px;height:44px"></canvas>64</div>
+      <div class="mini"><canvas id="m32"  width="32"  height="32"  style="width:32px;height:32px"></canvas>32</div>
+    </div>
+    <div class="rowline">
+      <button class="act prim" id="dl1024">Save 1024</button>
+      <button class="act" id="dl512">512</button>
+      <button class="act" id="dl192">192</button>
+      <button class="act" id="dl180">180</button>
+      <button class="act" id="dlall">Save all four</button>
+    </div>
+  </div>
+
+  <div class="panel" id="panel"></div>
+
+  <div class="panel" style="width:340px">
+    <div class="group">Config</div>
+    <textarea id="out" spellcheck="false"></textarea>
+    <div class="rowline">
+      <button class="act" id="copy">Copy</button>
+      <button class="act" id="paste">Load from box</button>
+      <button class="act" id="reset">Reset</button>
+    </div>
+    <div class="hint">
+      <b>Drag on the canvas</b> to move whichever element you last touched — grab the runner or the tile
+      directly. Everything else is on the sliders. The little previews are the real sizes an icon gets used at;
+      if he stops reading at 32 the composition is too busy.<br><br>
+      <b>Mask</b> cycles square → rounded → circle so you can check iOS and Android cropping, and
+      <b>Safe area</b> rings the region every platform keeps. Keep the runner inside it.<br><br>
+      <b>Save</b> writes PNGs named <code>icon-1024.png</code> and so on, matching what the manifest already
+      expects — drop them straight into the project folder. Exports are always full-bleed squares, whatever the
+      mask preview is showing, because iOS and Android round the corners themselves.<br><br>
+      The composition <b>autosaves to this browser</b>, so closing the tab doesn't lose it. <b>Reset</b> clears
+      the save and goes back to the shipped defaults.
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- the shipped runner (mirrors index.html's RUNNER) ----------
+const RUNNER = {
+  stepMs:110, swing:0.16, bob:0.064,
+  legLen:0.12, legWidth:0.05, legSplay:0.22, hipRise:0.06, footLift:0.098, footLiftPow:1,
+  knees:1, kneeBend:0.045, kneeSplit:0.5, kneeLead:-0.002, kneeR:0,
+  bodyW:0.26, bodyH:0.26, bodyR:0.07, shadow:0.04,
+  eyeR:0.034, eyeY:0.38, eyeAx:-0.02, eyeBx:0.28,
+  glanceMs:5200, glanceX:0.03, glanceY:0.024, blinkMs:3000,
+  talCordY:0.30, talHangY:0.72, talR:0.052,
+  body:"#bfe6ff", ink:"#17263f",
+};
+
+const TAL = {
+  ember:(g,x,y,r)=>{ g.beginPath(); g.moveTo(x,y-r);
+    g.bezierCurveTo(x+r*0.95,y-r*0.1,x+r*0.72,y+r,x,y+r);
+    g.bezierCurveTo(x-r*0.72,y+r,x-r*0.95,y-r*0.1,x,y-r); g.closePath(); g.fillStyle="#ff8a3d"; g.fill();
+    g.beginPath(); g.moveTo(x,y-r*0.36);
+    g.bezierCurveTo(x+r*0.5,y+r*0.1,x+r*0.34,y+r*0.62,x,y+r*0.62);
+    g.bezierCurveTo(x-r*0.34,y+r*0.62,x-r*0.5,y+r*0.1,x,y-r*0.36); g.closePath(); g.fillStyle="#ffd24a"; g.fill(); },
+  tide:(g,x,y,r)=>{ g.beginPath(); g.arc(x,y,r,0,7); g.fillStyle="#2b7fb8"; g.fill();
+    g.save(); g.beginPath(); g.arc(x,y,r,0,7); g.clip(); g.strokeStyle="#4dd6ff"; g.lineWidth=r*0.26; g.lineCap="round";
+    for(let k=-1;k<=1;k++){ g.beginPath(); g.moveTo(x-r,y+k*r*0.5); g.quadraticCurveTo(x,y+k*r*0.5-r*0.34,x+r,y+k*r*0.5); g.stroke(); } g.restore(); },
+  cog:(g,x,y,r)=>{ g.beginPath();
+    for(let k=0;k<16;k++){ const a=k/16*Math.PI*2, rr=(k%2?r:r*0.66); const X=x+Math.cos(a)*rr, Y=y+Math.sin(a)*rr; k?g.lineTo(X,Y):g.moveTo(X,Y); }
+    g.closePath(); g.fillStyle="#e0a53c"; g.fill(); g.beginPath(); g.arc(x,y,r*0.28,0,7); g.fillStyle="#7a5a18"; g.fill(); },
+  sun:(g,x,y,r)=>{ g.strokeStyle="#ffd24a"; g.lineWidth=r*0.2; g.lineCap="round";
+    for(let k=0;k<8;k++){ const a=k/8*Math.PI*2; g.beginPath(); g.moveTo(x+Math.cos(a)*r*0.52,y+Math.sin(a)*r*0.52); g.lineTo(x+Math.cos(a)*r,y+Math.sin(a)*r); g.stroke(); }
+    g.beginPath(); g.arc(x,y,r*0.46,0,7); g.fillStyle="#ffd24a"; g.fill();
+    g.beginPath(); g.arc(x,y,r*0.2,0,7); g.fillStyle="#b8781a"; g.fill(); },
+  shard:(g,x,y,r)=>{ g.beginPath(); g.moveTo(x,y-r); g.lineTo(x+r*0.62,y-r*0.2); g.lineTo(x+r*0.4,y+r);
+    g.lineTo(x-r*0.4,y+r); g.lineTo(x-r*0.62,y-r*0.2); g.closePath(); g.fillStyle="#7d4bb8"; g.fill();
+    g.beginPath(); g.moveTo(x,y-r); g.lineTo(x+r*0.62,y-r*0.2); g.lineTo(x,y+r); g.closePath(); g.fillStyle="#c77dff"; g.fill(); },
+  sprig:(g,x,y,r)=>{ g.strokeStyle="#3f8f34"; g.lineWidth=r*0.16; g.lineCap="round";
+    g.beginPath(); g.moveTo(x,y+r); g.lineTo(x,y-r*0.2); g.stroke();
+    g.beginPath(); g.moveTo(x,y-r*0.2); g.bezierCurveTo(x+r*0.95,y-r*0.5,x+r*0.5,y-r*1.05,x,y-r);
+    g.bezierCurveTo(x-r*0.5,y-r*1.05,x-r*0.95,y-r*0.5,x,y-r*0.2); g.closePath(); g.fillStyle="#7dff6b"; g.fill();
+    g.strokeStyle="#3f8f34"; g.lineWidth=r*0.1; g.beginPath(); g.moveTo(x,y-r*0.24); g.lineTo(x,y-r*0.92); g.stroke(); },
+};
+
+// ---------- the icon, described entirely by numbers ----------
+// x/y/size are FRACTIONS of the icon's width, so one config renders at every export size.
+const DEFAULT = {
+  bgStyle:"stripes", bg1:"#3b2f6e", bg2:"#241f4a", bgAngle:35, stripes:5, vignette:0.25,
+  tileOn:1, tileX:0.50, tileY:0.58, tileSize:0.58, tileRot:0, tileShape:"ew",
+  track:"#ffcf4d", rail:"#fff2c4", glass:0.55, glassCol:"#b4aeeb", tileR:0.16,
+  runOn:1, runX:0.50, runY:0.58, runScale:0.58, runRot:0, runStride:0.9,
+  knees:1, body:"#bfe6ff", ink:"#17263f", runShadow:1, talisman:"",
+};
+// The composition survives a reload — same idea as the level editor's autosave.
+// Unknown/renamed keys fall back to DEFAULT, so an older save can't break a newer tool.
+const LSKEY = "tilerunner:icon";
+let C = {...DEFAULT};
+try { const raw = localStorage.getItem(LSKEY);
+      if (raw) C = {...DEFAULT, ...JSON.parse(raw)}; } catch(e) {}
+let saveT = 0;
+function saveC(){
+  clearTimeout(saveT);
+  saveT = setTimeout(()=>{ try{ localStorage.setItem(LSKEY, JSON.stringify(C)); flagSaved(); }catch(e){} }, 200);
+}
+
+// entry first, exit second — the order decides which side the solid body fills,
+// exactly as in the game (body sits on the far side of the running surface).
+const SHAPES = { ew:["w","e"], ns:["n","s"], ne:["n","e"], es:["e","s"], sw:["s","w"], wn:["w","n"] };
+const VEC = { n:{x:0,y:-1}, s:{x:0,y:1}, e:{x:1,y:0}, w:{x:-1,y:0} };
+
+function rrect(g,x,y,w,h,r){ r=Math.max(0,Math.min(r,w/2,h/2)); g.beginPath(); g.moveTo(x+r,y);
+  g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); }
+
+// the platform's running surface across a tile — straight, or a quarter turn (from the game)
+function tileSurface(size, shape){
+  const [a,b]=SHAPES[shape]||SHAPES.ew, h=size/2, C0={x:0,y:0};
+  const entry=VEC[a], exit=VEC[b];
+  const Me={x:entry.x*h, y:entry.y*h}, Mx={x:exit.x*h, y:exit.y*h};
+  if(entry.x===-exit.x && entry.y===-exit.y) return [Me, C0, Mx];
+  const O={x:(entry.x+exit.x)*h, y:(entry.y+exit.y)*h};
+  let a0=Math.atan2(Me.y-O.y,Me.x-O.x), a1=Math.atan2(Mx.y-O.y,Mx.x-O.x);
+  let d=a1-a0; while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI;
+  const pts=[]; for(let k=0;k<=14;k++){ const ang=a0+d*(k/14); pts.push({x:O.x+h*Math.cos(ang), y:O.y+h*Math.sin(ang)}); }
+  return pts;
+}
+// solid body from the surface out to the tile edge, then the rail on top
+function hexA(hex,a){ const n=parseInt(String(hex).replace("#",""),16);
+  return "rgba("+((n>>16)&255)+","+((n>>8)&255)+","+(n&255)+","+a+")"; }
+function drawTile(g, cx, cy, size, rot, shape, track, rail, glass, tileR, glassCol){
+  const S=tileSurface(size, shape), h=size/2;
+  g.save(); g.translate(cx,cy); g.rotate(rot*Math.PI/180);
+  rrect(g,-h,-h,size,size,size*tileR); g.save(); g.clip();
+  if(glass>0){ g.fillStyle=hexA(glassCol||"#b4aeeb", glass); g.fillRect(-h,-h,size,size); }
+  const n=S.length-1;
+  const nrm=S.map((pt,k)=>{ const a=S[Math.max(0,k-1)], b=S[Math.min(n,k+1)];
+    let tx=b.x-a.x, ty=b.y-a.y; const m=Math.hypot(tx,ty)||1; return {x:ty/m, y:-tx/m}; });
+  const far=S.map((pt,k)=>({x:pt.x-nrm[k].x*size*1.7, y:pt.y-nrm[k].y*size*1.7}));
+  g.beginPath(); g.moveTo(S[0].x,S[0].y);
+  for(let k=1;k<=n;k++) g.lineTo(S[k].x,S[k].y);
+  for(let k=n;k>=0;k--) g.lineTo(far[k].x,far[k].y);
+  g.closePath(); g.fillStyle=track; g.fill();
+  g.lineJoin="round"; g.lineCap="round"; g.strokeStyle=rail; g.lineWidth=size*0.06;
+  g.beginPath(); g.moveTo(S[0].x,S[0].y); for(let k=1;k<=n;k++) g.lineTo(S[k].x,S[k].y); g.stroke();
+  g.restore(); g.restore();
+}
+
+function solveKnee(hx,hy,fx,fy,bend,split,lead){
+  const dx=fx-hx, dy=fy-hy, d=Math.hypot(dx,dy)||1e-4;
+  const total=d*(1+Math.max(0,bend)), thigh=total*split, shin=total-total*split;
+  const a=(thigh*thigh-shin*shin+d*d)/(2*d);
+  const h=Math.sqrt(Math.max(0,thigh*thigh-a*a));
+  const ux=dx/d, uy=dy/d;
+  return { x:hx+ux*a+uy*(h+lead), y:hy+uy*a-ux*(h+lead) };
+}
+// the game's runner, feet at (sx,sy), rotated by `rot` degrees
+function paintRunner(g, sx, sy, s, phase, ts, rot, cfg){
+  const R=RUNNER;
+  const swing=Math.sin(phase)*s*R.swing, bob=Math.abs(Math.sin(phase))*s*R.bob;
+  g.save(); g.translate(sx,sy); g.rotate(rot*Math.PI/180);
+  const pale=cfg.body, legL=s*R.legLen, bodyH=s*R.bodyH, bodyW=s*R.bodyW;
+  if(cfg.runShadow){ g.fillStyle="rgba(5,4,13,0.26)";
+    g.beginPath(); g.ellipse(0,-1,bodyW*0.55,s*R.shadow,0,0,Math.PI*2); g.fill(); }
+  g.strokeStyle=pale; g.lineWidth=Math.max(2,s*R.legWidth); g.lineCap="round"; g.lineJoin="round";
+  const hipY=-legL-bob-bodyH*(R.hipRise||0), lead=s*R.kneeLead;
+  const lift = ph => -s*R.footLift*Math.pow(Math.max(0,Math.cos(ph)), R.footLiftPow);
+  for(const [hx,fx,fy] of [[-bodyW*R.legSplay,swing,lift(phase)],[bodyW*R.legSplay,-swing,lift(phase+Math.PI)]]){
+    if(cfg.knees){
+      const k=solveKnee(hx,hipY,fx,fy,R.kneeBend,R.kneeSplit,lead);
+      g.beginPath(); g.moveTo(hx,hipY); g.lineTo(k.x,k.y); g.lineTo(fx,fy); g.stroke();
+    } else { g.beginPath(); g.moveTo(hx,hipY); g.lineTo(fx,fy); g.stroke(); }
+  }
+  const byTop=-(legL+bodyH)-bob;
+  g.fillStyle=pale; rrect(g,-bodyW/2,byTop,bodyW,bodyH,s*R.bodyR); g.fill();
+  if(cfg.talisman && TAL[cfg.talisman]){
+    const cordY=byTop+bodyH*R.talCordY, hangY=byTop+bodyH*R.talHangY;
+    g.strokeStyle="rgba(23,38,63,0.75)"; g.lineWidth=Math.max(1,s*0.016); g.lineCap="round";
+    g.beginPath(); g.moveTo(-bodyW*0.40,cordY); g.quadraticCurveTo(0,hangY-s*0.005,bodyW*0.40,cordY); g.stroke();
+    TAL[cfg.talisman](g,0,hangY,s*R.talR);
+  }
+  g.fillStyle=cfg.ink;
+  const eyeR=s*R.eyeR, eyeY=byTop+bodyH*R.eyeY;
+  const e1x=bodyW*R.eyeAx, e2x=bodyW*R.eyeBx;
+  const G=R.glanceMs, gt=ts%G; let gx=0, gy=0;
+  if(gt<G*0.125) gx=-s*R.glanceX; else if(gt<G*0.25) gx=s*R.glanceX;
+  else if(gt>G*0.654&&gt<G*0.779) gy=-s*R.glanceY;
+  g.beginPath(); g.arc(e1x+gx,eyeY+gy,eyeR,0,Math.PI*2); g.fill();
+  g.beginPath(); g.arc(e2x+gx,eyeY+gy,eyeR,0,Math.PI*2); g.fill();
+  g.restore();
+}
+
+// ---------- the whole icon at any size ----------
+function paintIcon(g, W, ts){
+  g.clearRect(0,0,W,W);
+  // background
+  if(C.bgStyle==="flat"){ g.fillStyle=C.bg1; g.fillRect(0,0,W,W); }
+  else if(C.bgStyle==="gradient"){
+    const a=C.bgAngle*Math.PI/180, dx=Math.cos(a)*W, dy=Math.sin(a)*W;
+    const gr=g.createLinearGradient(W/2-dx/2,W/2-dy/2,W/2+dx/2,W/2+dy/2);
+    gr.addColorStop(0,C.bg1); gr.addColorStop(1,C.bg2); g.fillStyle=gr; g.fillRect(0,0,W,W);
+  } else {                                        // the game's diagonal stripe backdrop
+    g.fillStyle=C.bg2; g.fillRect(0,0,W,W);
+    g.save(); g.translate(W/2,W/2); g.rotate(C.bgAngle*Math.PI/180); g.translate(-W,-W);
+    const band=W*2/Math.max(1,C.stripes);
+    for(let i=0;i<C.stripes*2+2;i+=2){ g.fillStyle=C.bg1; g.fillRect(0,i*band,W*3,band); }
+    g.restore();
+  }
+  if(C.vignette>0){
+    const vg=g.createRadialGradient(W/2,W/2,W*0.25,W/2,W/2,W*0.72);
+    vg.addColorStop(0,"rgba(0,0,0,0)"); vg.addColorStop(1,"rgba(0,0,0,"+C.vignette+")");
+    g.fillStyle=vg; g.fillRect(0,0,W,W);
+  }
+  if(C.tileOn) drawTile(g, C.tileX*W, C.tileY*W, C.tileSize*W, C.tileRot, C.tileShape, C.track, C.rail, C.glass, C.tileR, C.glassCol);
+  if(C.runOn)  paintRunner(g, C.runX*W, C.runY*W, C.runScale*W, C.runStride, ts, C.runRot, C);
+}
+
+const cv=document.getElementById("cv"), ctx=cv.getContext("2d");
+const $=id=>document.getElementById(id);
+const minis=[["m180",180],["m120",120],["m64",64],["m32",32]];
+let maskMode=1, showSafe=false, animate=false, t0=performance.now();
+const MASKS=["square","rounded","circle"];
+
+function applyMask(g,W){
+  if(MASKS[maskMode]==="square") return;
+  g.globalCompositeOperation="destination-in";
+  g.fillStyle="#fff";
+  if(MASKS[maskMode]==="circle"){ g.beginPath(); g.arc(W/2,W/2,W/2,0,Math.PI*2); g.fill(); }
+  else { rrect(g,0,0,W,W,W*0.2237); g.fill(); }      // iOS squircle, near enough
+  g.globalCompositeOperation="source-over";
+}
+function frame(now){
+  const ts=animate?(now-t0):2000;
+  paintIcon(ctx,cv.width,ts); applyMask(ctx,cv.width);
+  if(showSafe){
+    ctx.save(); ctx.setLineDash([6,6]); ctx.lineWidth=1.5; ctx.strokeStyle="rgba(125,208,255,0.7)";
+    ctx.beginPath(); ctx.arc(cv.width/2,cv.width/2,cv.width*0.40,0,Math.PI*2); ctx.stroke();
+    ctx.strokeStyle="rgba(255,210,74,0.5)";
+    ctx.strokeRect(cv.width*0.10,cv.width*0.10,cv.width*0.80,cv.width*0.80);
+    ctx.setLineDash([]); ctx.restore();
+  }
+  for(const [id,W] of minis){ const c=$(id), g=c.getContext("2d"); paintIcon(g,W,ts); applyMask(g,W); }
+  requestAnimationFrame(frame);
+}
+
+// ---------- controls ----------
+const SPEC=[
+  ["group","Background"],
+  ["pick","bgStyle","style",["stripes","gradient","flat"]],
+  ["col","bg1","colour A"], ["col","bg2","colour B"],
+  ["num","bgAngle","angle",0,180,1],
+  ["num","stripes","stripes",2,14,1],
+  ["num","vignette","vignette",0,0.7,0.01],
+  ["group","Tile"],
+  ["tog","tileOn","show tile"],
+  ["pick","tileShape","platform",["ew","ns","ne","es","sw","wn"]],
+  ["num","tileX","x",0,1,0.005], ["num","tileY","y",0,1,0.005],
+  ["num","tileSize","size",0.1,1.1,0.005], ["num","tileRot","rotate",-180,180,1],
+  ["num","tileR","corner",0,0.5,0.005], ["num","glass","glass",0,1,0.01],
+  ["col","glassCol","tile"], ["col","track","track"], ["col","rail","rail"],
+  ["group","Runner"],
+  ["tog","runOn","show runner"], ["tog","knees","knees"], ["tog","runShadow","shadow"],
+  ["num","runX","x",0,1,0.005], ["num","runY","y",0,1,0.005],
+  ["num","runScale","scale",0.1,1.2,0.005], ["num","runRot","rotate",-180,180,1],
+  ["num","runStride","stride",0,6.2832,0.01],
+  ["col","body","body"], ["col","ink","ink"],
+  ["pick","talisman","talisman",["","ember","tide","cog","sun","shard","sprig"]],
+];
+const panel=$("panel");
+for(const row of SPEC){
+  const kind=row[0];
+  if(kind==="group"){ const d=document.createElement("div"); d.className="group"; d.textContent=row[1]; panel.appendChild(d); continue; }
+  const key=row[1], label=row[2];
+  if(kind==="num"){
+    const [,,,min,max,step]=row;
+    const d=document.createElement("div"); d.className="sl";
+    d.innerHTML='<label>'+label+'</label><input type="range" id="i_'+key+'" min="'+min+'" max="'+max+'" step="'+step+'" value="'+C[key]+'"><span class="val" id="v_'+key+'"></span>';
+    panel.appendChild(d);
+    const inp=d.querySelector("input"), val=d.querySelector(".val");
+    const show=()=>val.textContent = step>=1 ? C[key] : (+C[key]).toFixed(3);
+    inp.addEventListener("input",()=>{ C[key]=+inp.value; show(); refresh(); }); show();
+  } else if(kind==="col"){
+    const d=document.createElement("div"); d.className="rowline";
+    d.innerHTML='<label style="width:74px">'+label+'</label><input type="color" id="i_'+key+'" value="'+C[key]+'">';
+    panel.appendChild(d);
+    d.querySelector("input").addEventListener("input",e=>{ C[key]=e.target.value; refresh(); });
+  } else if(kind==="pick"){
+    const d=document.createElement("div"); d.className="rowline";
+    d.innerHTML='<label style="width:74px">'+label+'</label><select id="i_'+key+'">'+
+      row[3].map(o=>'<option value="'+o+'">'+(o||"none")+'</option>').join("")+'</select>';
+    panel.appendChild(d);
+    const sel=d.querySelector("select"); sel.value=C[key];
+    sel.addEventListener("change",e=>{ C[key]=e.target.value; refresh(); });
+  } else if(kind==="tog"){
+    const d=document.createElement("div"); d.className="rowline";
+    d.innerHTML='<button class="act'+(C[key]?" on":"")+'" id="i_'+key+'">'+label+'</button>';
+    panel.appendChild(d);
+    const btn=d.querySelector("button");
+    btn.addEventListener("click",()=>{ C[key]=C[key]?0:1; btn.classList.toggle("on",!!C[key]); refresh(); });
+  }
+}
+function syncUI(){
+  for(const row of SPEC){
+    if(row[0]==="group") continue;
+    const key=row[1], el=$("i_"+key); if(!el) continue;
+    if(row[0]==="tog") el.classList.toggle("on",!!C[key]);
+    else el.value=C[key];
+    if(row[0]==="num") $("v_"+key).textContent = row[5]>=1 ? C[key] : (+C[key]).toFixed(3);
+  }
+}
+let savedT=0;
+function flagSaved(){
+  const p=$("saved"); if(!p) return;
+  p.textContent="saved"; p.style.opacity="1";
+  clearTimeout(savedT); savedT=setTimeout(()=>{ p.style.opacity="0.35"; }, 900);
+}
+function refresh(){ $("out").value=JSON.stringify(C,null,1); saveC(); }
+
+// ---------- drag to place ----------
+let dragging=null;
+function hit(mx,my){
+  const W=cv.width;
+  const dr=Math.hypot(mx-C.runX*W, my-C.runY*W), dt=Math.hypot(mx-C.tileX*W, my-C.tileY*W);
+  if(C.runOn && dr < C.runScale*W*0.42) return "run";
+  if(C.tileOn && dt < C.tileSize*W*0.6) return "tile";
+  return C.runOn ? "run" : (C.tileOn ? "tile" : null);
+}
+cv.addEventListener("pointerdown",e=>{
+  const r=cv.getBoundingClientRect(), sc=cv.width/r.width;
+  const mx=(e.clientX-r.left)*sc, my=(e.clientY-r.top)*sc;
+  dragging=hit(mx,my); cv.classList.add("drag"); cv.setPointerCapture(e.pointerId);
+});
+cv.addEventListener("pointermove",e=>{
+  const r=cv.getBoundingClientRect(), sc=cv.width/r.width;
+  const mx=(e.clientX-r.left)*sc/cv.width, my=(e.clientY-r.top)*sc/cv.width;
+  $("pos").textContent = mx.toFixed(3)+", "+my.toFixed(3);
+  if(!dragging) return;
+  if(dragging==="run"){ C.runX=+mx.toFixed(4); C.runY=+my.toFixed(4); }
+  else { C.tileX=+mx.toFixed(4); C.tileY=+my.toFixed(4); }
+  syncUI(); refresh();
+});
+addEventListener("pointerup",()=>{ dragging=null; cv.classList.remove("drag"); });
+
+// ---------- export ----------
+function png(W){
+  const c=document.createElement("canvas"); c.width=c.height=W;
+  const g=c.getContext("2d");
+  paintIcon(g,W,2000);                       // export is always a still, never mid-blink
+  return c.toDataURL("image/png");
+}
+function save(W){
+  const a=document.createElement("a");
+  a.href=png(W); a.download="icon-"+W+".png"; a.click();
+}
+$("dl1024").onclick=()=>save(1024);
+$("dl512").onclick=()=>save(512);
+$("dl192").onclick=()=>save(192);
+$("dl180").onclick=()=>save(180);
+$("dlall").onclick=()=>{ [1024,512,192,180].forEach((w,i)=>setTimeout(()=>save(w), i*350)); };
+$("copy").onclick=()=>{ $("out").select(); document.execCommand("copy");
+  $("copy").textContent="Copied!"; setTimeout(()=>$("copy").textContent="Copy",1000); };
+$("paste").onclick=()=>{ try{ C={...DEFAULT, ...JSON.parse($("out").value)}; syncUI(); refresh(); }
+  catch(_){ $("paste").textContent="Bad JSON"; setTimeout(()=>$("paste").textContent="Load from box",1200); } };
+$("reset").onclick=()=>{ C={...DEFAULT}; try{ localStorage.removeItem(LSKEY); }catch(e){}
+  syncUI(); refresh(); };
+$("mask").onclick=()=>{ maskMode=(maskMode+1)%3; $("mask").textContent="Mask: "+MASKS[maskMode]; };
+$("safe").onclick=e=>{ showSafe=!showSafe; e.target.classList.toggle("on",showSafe); };
+$("anim").onclick=e=>{ animate=!animate; e.target.classList.toggle("on",animate); t0=performance.now(); };
+
+syncUI(); refresh();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
