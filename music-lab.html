@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Tile Runner — Music Lab</title>
+<style>
+  :root{ --bg:#12102a; --panel:#1b1838; --line:#2b2850; --ink:#cfe9ff; --accent:#7dd0ff; --gold:#ffd24a; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:10px 14px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;}
+  header h1{font-size:15px;margin:0 10px 0 0;font-weight:700;letter-spacing:.5px;}
+  .wrap{display:flex;gap:18px;padding:14px;align-items:flex-start;flex-wrap:wrap;}
+  .col{display:flex;flex-direction:column;gap:8px;}
+  canvas{background:#0d0b22;border:1px solid var(--line);border-radius:9px;display:block;}
+  .panel{width:335px;display:flex;flex-direction:column;gap:2px;}
+  .group{margin:12px 0 3px;font-size:11px;letter-spacing:1px;text-transform:uppercase;opacity:.5;
+         border-top:1px solid var(--line);padding-top:9px;}
+  .group:first-child{border-top:0;margin-top:0;}
+  .sl{display:grid;grid-template-columns:92px 1fr 50px;gap:8px;align-items:center;font-size:11px;}
+  .sl label{opacity:.85;}
+  .sl input[type=range]{width:100%;accent-color:var(--accent);}
+  .sl .val{text-align:right;opacity:.7;font-variant-numeric:tabular-nums;}
+  .rowline{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px;margin:3px 0;}
+  .rowline label{opacity:.85;}
+  .togs{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0;}
+  button.act{background:#233;color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:6px 10px;cursor:pointer;font:inherit;font-size:11px;}
+  button.act:hover{border-color:var(--accent);}
+  button.act.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+  button.prim{background:#1c6;color:#04120a;font-weight:700;border:none;}
+  button.warn{background:#c34;color:#fff;border:none;}
+  select,input[type=number]{background:var(--panel);color:var(--ink);border:1px solid var(--line);
+    border-radius:6px;padding:3px 5px;font:inherit;font-size:11px;}
+  textarea{width:100%;height:150px;background:#0d0b22;color:#bfe;border:1px solid var(--line);
+           border-radius:8px;padding:9px;font:inherit;font-size:10px;line-height:1.45;white-space:pre;}
+  .hint{font-size:11px;opacity:.72;line-height:1.65;}
+  .hint b{opacity:1;}
+  .pill{font-size:11px;background:#0d0b22;border:1px solid var(--line);border-radius:20px;padding:3px 9px;}
+  .pill.live{border-color:var(--gold);color:var(--gold);}
+  table.lv{border-collapse:collapse;font-size:10px;width:100%;}
+  table.lv td,table.lv th{border-bottom:1px solid var(--line);padding:2px 5px;text-align:left;}
+  table.lv th{opacity:.5;font-weight:400;}
+  table.lv tr.has td:first-child{color:var(--gold);}
+</style>
+</head>
+<body>
+<header>
+  <h1>TILE RUNNER · MUSIC LAB</h1>
+  <button class="act prim" id="play">▶ Play</button>
+  <span class="pill" id="beat">—</span>
+  <span class="pill" id="saved" style="opacity:.35;transition:opacity .3s">saved</span>
+  <label>level <select id="lv"></select></label>
+  <label>pace <input type="number" id="cps" min="0.3" max="2" step="0.01" value="1" style="width:64px"> tiles/s</label>
+</header>
+
+<div class="wrap">
+  <div class="col">
+    <canvas id="roll" width="620" height="300"></canvas>
+    <div class="rowline">
+      <button class="act" id="dice">🎲 New seed</button>
+      <label>seed <input type="number" id="seed" value="1" style="width:88px"></label>
+      <span class="pill" id="seedinfo">—</span>
+    </div>
+    <div class="rowline">
+      <button class="act prim" id="savelv">Save for this level</button>
+      <button class="act" id="clearlv">Clear this level</button>
+      <button class="act warn" id="clearall">Clear all overrides</button>
+    </div>
+    <table class="lv" id="lvtab"></table>
+  </div>
+
+  <div class="panel" id="panel"></div>
+
+  <div class="panel" style="width:360px">
+    <div class="group">Export</div>
+    <textarea id="out" spellcheck="false"></textarea>
+    <div class="rowline">
+      <button class="act" id="copy">Copy</button>
+      <button class="act" id="paste">Load from box</button>
+      <button class="act" id="reset">Reset to shipped</button>
+    </div>
+    <div class="hint" id="notes"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================================
+// The shipped engine's constants. Anything not exposed below is hard-coded in
+// index.html's Sound module and is the same on every level.
+// ============================================================================
+const SHIPPED = {
+  // --- song ---
+  seed: 0,               // 0 = derive from the level index, as the game does today
+  scale: "pentaMajor",
+  keyLock: 0, key: 0,    // keyLock 1 forces `key`; else the seed picks a transpose
+  prog: -1,              // -1 = seed picks; 0..N forces one
+  chordType: "auto",
+  melodyLeap: 0.15,      // chance a step takes an extra jump
+  melodyStart: -1,       // -1 = seed picks the opening degree
+  // --- groove ---
+  swing: 0,              // pushes every off-beat later, as a fraction of a beat
+  beatsPerTile: 4,       // melody notes per cleared tile; only the 1st is the two-tone voice
+  midVel: 0.42,          // level of the single-tone notes filling the gaps
+  barLen: 4,             // beats per chord
+  // --- layers ---
+  leadOn: 1, padOn: 1, kickOn: 1, hatOn: 1, subOn: 1, offBassOn: 1,
+  leadVel: 0.80, padVel: 0.14, kickVel: 0.70, hatVel: 0.12, subVel: 0.85, offBassVel: 0.42,
+  leadOct: 0, padOct: -12,
+  // --- tone ---
+  master: 0.16, baseHz: 220,
+  waveA: "sine", waveB: "sine",
+  delayTime: 0.24, feedback: 0.34, damp: 2400, wet: 0.30,
+  bassLpf: 340, kickHz: 130, kickDrop: 46, hatHz: 7000,
+};
+let M = {...SHIPPED};
+
+// Scales as semitone offsets. The game currently only knows the first one.
+const SCALES = {
+  pentaMajor:[0,2,4,7,9,12,14],       // the shipped sound: open, bright, no wrong notes
+  pentaMinor:[0,3,5,7,10,12,15],      // instantly tense — the saw-level sound
+  dorian:    [0,2,3,5,7,9,10,12],     // minor with a raised 6th: melancholy but not grim
+  aeolian:   [0,2,3,5,7,8,10,12],     // natural minor, the darkest of these
+  lydian:    [0,2,4,6,7,9,11,12],     // major with a #4: floaty, dreamlike
+  hirajoshi: [0,2,3,7,8,12,14,15],    // Japanese pentatonic, very distinctive
+  blues:     [0,3,5,6,7,10,12,15],
+  wholeTone: [0,2,4,6,8,10,12,14],    // no home note at all — unsettling, use sparingly
+};
+const PROGS = [
+  [0,5,7,5], [0,7,9,7], [0,5,9,7], [0,9,5,7], [0,4,5,7],   // the five the game ships
+  [0,3,8,7], [0,10,5,7], [0,8,3,5], [0,0,5,5],             // minor-leaning + a static one
+];
+const CHORDS_T = {
+  triad:[0,4,7], minor:[0,3,7], sus4:[0,5,7], sus2:[0,2,7],
+  min7:[0,3,7,10], maj7:[0,4,7,11], add9:[0,4,7,14], fifth:[0,7],
+};
+const MINORISH = { pentaMinor:1, dorian:1, aeolian:1, blues:1, hirajoshi:1 };
+function chordIvls(){
+  if (M.chordType !== "auto") return CHORDS_T[M.chordType] || CHORDS_T.triad;
+  return MINORISH[M.scale] ? CHORDS_T.minor : CHORDS_T.triad;
+}
+
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t;
+  return ((t^t>>>14)>>>0)/4294967296; }; }
+
+// The generator. With everything at shipped defaults and the same seed this
+// makes byte-identical MELODY/CHORDS to index.html — same rnd() call order.
+let MELODY=[], CHORDS=[], KEY=0, PROGUSED=0;
+function buildSong(seed){
+  const rnd = mulberry32((seed>>>0)||1);
+  const SC = SCALES[M.scale] || SCALES.pentaMajor;
+  const tr0 = [-5,-3,0,0,2,4,5,7][Math.floor(rnd()*8)];
+  KEY = M.keyLock ? M.key : tr0;
+  let d = M.melodyStart >= 0 ? M.melodyStart : 2 + Math.floor(rnd()*3);
+  if (M.melodyStart >= 0) rnd();                       // keep the call order stable
+  MELODY = [];
+  for (let i=0;i<32;i++){
+    d += Math.floor(rnd()*3)-1;
+    if (rnd() < M.melodyLeap) d += Math.floor(rnd()*3)-1;
+    d = Math.max(0, Math.min(SC.length-1, d));
+    MELODY.push(SC[d] + KEY);
+  }
+  const pi = Math.floor(rnd()*5);
+  PROGUSED = M.prog >= 0 ? (M.prog % PROGS.length) : pi;
+  const iv = chordIvls();
+  CHORDS = PROGS[PROGUSED].map(r => ({ root:r+KEY, tones: iv.map(x=>r+KEY+x) }));
+}
+
+// ============================================================================
+// Audio — the same voices as the game, with the knobs above patched in
+// ============================================================================
+let ac=null, master=null, sendBus=null, noiseBuf=null, delayN=null, fbN=null, dampN=null, wetN=null;
+function ensure(){
+  if (ac) return true;
+  const AC = window.AudioContext || window.webkitAudioContext; if(!AC) return false;
+  ac = new AC();
+  master = ac.createGain(); master.gain.value = M.master; master.connect(ac.destination);
+  delayN = ac.createDelay(1.0); delayN.delayTime.value = M.delayTime;
+  fbN = ac.createGain(); fbN.gain.value = M.feedback;
+  dampN = ac.createBiquadFilter(); dampN.type="lowpass"; dampN.frequency.value = M.damp;
+  wetN = ac.createGain(); wetN.gain.value = M.wet;
+  delayN.connect(dampN); dampN.connect(fbN); fbN.connect(delayN);
+  delayN.connect(wetN); wetN.connect(master);
+  sendBus = delayN;
+  noiseBuf = ac.createBuffer(1, Math.floor(ac.sampleRate*0.2), ac.sampleRate);
+  const d = noiseBuf.getChannelData(0);
+  for (let i=0;i<d.length;i++) d[i] = Math.random()*2-1;
+  return true;
+}
+function applyTone(){
+  if(!ac) return;
+  master.gain.value = M.master;
+  delayN.delayTime.value = M.delayTime;
+  fbN.gain.value = Math.min(0.85, M.feedback);
+  dampN.frequency.value = M.damp;
+  wetN.gain.value = M.wet;
+}
+const hz = semi => M.baseHz * Math.pow(2, semi/12);
+
+function voice(t, semi, wave, dur, vel, attack, wet, mono){
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002,vel), t+attack);
+  g.gain.exponentialRampToValueAtTime(0.0006, t+dur);
+  // two detuned oscillators beat against each other and read as "thicker"; mono is one
+  for (const cents of (mono ? [0] : [-6,6])){
+    const o = ac.createOscillator(); o.type = wave;
+    o.frequency.setValueAtTime(hz(semi), t); o.detune.setValueAtTime(cents, t);
+    o.connect(g); o.start(t); o.stop(t+dur+0.05);
+  }
+  g.connect(master); if(wet) g.connect(sendBus);
+}
+function kick(t, vel){
+  const o=ac.createOscillator(), g=ac.createGain();
+  o.type="sine"; o.frequency.setValueAtTime(M.kickHz,t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(20,M.kickDrop), t+0.11);
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002,vel),t+0.005);
+  g.gain.exponentialRampToValueAtTime(0.0006,t+0.16);
+  o.connect(g); g.connect(master); o.start(t); o.stop(t+0.2);
+}
+function bass(t, semi, dur, vel){
+  const f = hz(semi);
+  const lp=ac.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=M.bassLpf; lp.Q.value=0.9;
+  const g=ac.createGain();
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002,vel),t+0.014);
+  g.gain.exponentialRampToValueAtTime(0.0008,t+dur);
+  const sub=ac.createOscillator(); sub.type="sine";
+  sub.frequency.setValueAtTime(f*1.5,t); sub.frequency.exponentialRampToValueAtTime(f,t+0.06);
+  const body=ac.createOscillator(); body.type="triangle"; body.frequency.setValueAtTime(f*2,t);
+  const bg=ac.createGain(); bg.gain.value=0.45;
+  sub.connect(g); body.connect(bg); bg.connect(g); g.connect(lp); lp.connect(master);
+  sub.start(t); sub.stop(t+dur+0.05); body.start(t); body.stop(t+dur+0.05);
+}
+function hat(t, vel){
+  const src=ac.createBufferSource(); src.buffer=noiseBuf;
+  const hp=ac.createBiquadFilter(); hp.type="highpass"; hp.frequency.value=M.hatHz;
+  const g=ac.createGain();
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002,vel),t+0.003);
+  g.gain.exponentialRampToValueAtTime(0.0006,t+0.05);
+  src.connect(hp); hp.connect(g); g.connect(master); src.start(t); src.stop(t+0.08);
+}
+
+// One beat == one cleared tile in the game. Everything here mirrors clearTile().
+let step = 0;
+function beatAt(t, s){
+  const beatSec = beatLen();
+  const sw = beatSec * (0.5 + M.swing);                  // where the off-beat lands
+  const chord = CHORDS[Math.floor(s / M.barLen) % CHORDS.length];
+  // Only the cleared-tile downbeat gets the full two-tone voice. Everything filling
+  // the gap is a single oscillator at midVel, so the clear still reads as the beat.
+  const wave = s%2 ? M.waveB : M.waveA;
+  for (let k = 0; k < M.beatsPerTile; k++){
+    if (!M.leadOn) break;
+    const idx = (s * M.beatsPerTile + k) % MELODY.length;
+    if (k === 0) voice(t, MELODY[idx] + M.leadOct, wave, 0.9, M.leadVel, 0.008, true);
+    else voice(t + beatSec*(k/M.beatsPerTile), MELODY[idx] + M.leadOct, wave,
+               beatSec*(0.9/M.beatsPerTile), M.midVel, 0.006, true, true);
+  }
+  if (M.subOn){
+    voice(t, chord.root-12, "triangle", beatSec*0.9, M.subVel*0.47, 0.010, false);
+    bass(t, chord.root-24, beatSec*0.92, M.subVel);
+  }
+  if (M.offBassOn) bass(t + sw, chord.root-24+7, beatSec*0.42, M.offBassVel);
+  if (M.kickOn) kick(t, M.kickVel);
+  if (M.hatOn)  hat(t + sw, M.hatVel);
+  if (M.padOn && s % M.barLen === 0)
+    for (const semi of chord.tones)
+      voice(t, semi + M.padOct, "sine", beatSec*(M.barLen-0.1), M.padVel, beatSec*0.25, true);
+}
+
+// ---- transport: a lookahead scheduler on the audio clock ----
+const beatLen = () => Math.max(0.15, 1 / (+$("cps").value || 1));
+let playing=false, nextT=0, timer=null;
+function tick(){
+  if(!playing) return;
+  while (nextT < ac.currentTime + 0.15){
+    if (nextT < ac.currentTime) nextT = ac.currentTime + 0.02;
+    beatAt(nextT, step);
+    lastBeat = { s: step, t: nextT };
+    step++; nextT += beatLen();
+  }
+}
+let lastBeat = null;
+function start(){
+  if(!ensure()) return;
+  if(ac.state !== "running") ac.resume();
+  applyTone();
+  playing = true; step = 0; nextT = ac.currentTime + 0.06;
+  $("play").textContent = "■ Stop"; $("play").classList.remove("prim");
+  clearInterval(timer); timer = setInterval(tick, 25); tick();
+}
+function stop(){
+  playing = false; clearInterval(timer); lastBeat = null;
+  $("play").textContent = "▶ Play"; $("play").classList.add("prim");
+}
+const $ = id => document.getElementById(id);
+$("play").onclick = () => playing ? stop() : start();
+
+// ============================================================================
+// Piano roll — the 16-step melody over the chord bars, with a playhead
+// ============================================================================
+const roll = $("roll"), rg = roll.getContext("2d");
+function drawRoll(){
+  const W=roll.width, H=roll.height, padL=34, padB=22, padT=26;
+  rg.clearRect(0,0,W,H);
+  const all = MELODY.concat(CHORDS.flatMap(c=>c.tones.map(t=>t+M.padOct)));
+  const lo = Math.min(...all)-2, hi = Math.max(...all)+2, span = Math.max(6, hi-lo);
+  const N = MELODY.length;
+  const colW = (W-padL-8)/N, rowH = (H-padT-padB)/span;
+  const yOf = s => padT + (hi - s)*rowH;
+  // chord bands
+  for(let b=0;b<Math.ceil(N/(M.barLen*M.beatsPerTile));b++){
+    const c = CHORDS[b % CHORDS.length]; if(!c) continue;
+    const bw = M.barLen*M.beatsPerTile*colW;
+    const x = padL + b*bw, w = Math.min(bw, W-8-x);
+    if (w <= 0) continue;
+    rg.fillStyle = b%2 ? "rgba(125,208,255,0.05)" : "rgba(125,208,255,0.09)";
+    rg.fillRect(x, padT, w, H-padT-padB);
+    for(const t of c.tones){
+      rg.fillStyle="rgba(199,125,255,0.34)";
+      rg.fillRect(x+1, yOf(t+M.padOct)-rowH*0.42, w-2, Math.max(2,rowH*0.84));
+    }
+    rg.fillStyle="rgba(207,233,255,0.5)"; rg.font="10px ui-monospace,monospace";
+    rg.fillText(noteName(c.root), x+3, padT-8);
+  }
+  // grid
+  rg.strokeStyle="rgba(43,40,80,0.9)"; rg.lineWidth=1;
+  for(let i=0;i<=N;i+=M.beatsPerTile){ const x=padL+i*colW; rg.beginPath(); rg.moveTo(x,padT); rg.lineTo(x,H-padB); rg.stroke(); }
+  // melody blocks
+  for(let i=0;i<MELODY.length;i++){
+    const x=padL+i*colW, y=yOf(MELODY[i]+M.leadOct);
+    const down = i % M.beatsPerTile === 0;            // a cleared tile — the two-tone note
+    const here = lastBeat && ((lastBeat.s*M.beatsPerTile) % N) === i;
+    rg.fillStyle = here ? "#ffd24a" : (down ? "#7dd0ff" : "rgba(125,208,255,0.42)");
+    rg.fillRect(x+1, y-rowH*(down?0.46:0.32), Math.max(2,colW-2), Math.max(2,rowH*(down?0.92:0.64)));
+  }
+  // axis
+  rg.fillStyle="rgba(207,233,255,0.45)"; rg.font="9px ui-monospace,monospace";
+  rg.fillText(noteName(hi), 3, yOf(hi)+3); rg.fillText(noteName(lo), 3, yOf(lo)+3);
+  rg.fillText("tile 1", padL, H-7);
+  const cap = M.scale+" · key "+noteName(KEY)+" · prog "+PROGUSED+" · "
+            + (M.chordType==="auto" ? (MINORISH[M.scale]?"minor":"triad") : M.chordType)
+            + (M.swing?" · swing "+M.swing.toFixed(2):"")
+            + (M.beatsPerTile>1?" · "+M.beatsPerTile+"×":"");
+  rg.fillStyle="rgba(255,210,74,0.75)"; rg.textAlign="right";
+  rg.fillText(cap, W-6, H-7); rg.textAlign="left";
+}
+const NAMES=["A","A#","B","C","C#","D","D#","E","F","F#","G","G#"];
+function noteName(s){ const n=((s%12)+12)%12; return NAMES[n]+(3+Math.floor((s+ (s<0?-11:0))/12)); }
+
+function frame(){
+  if(playing && lastBeat) $("beat").textContent = "tile "+(lastBeat.s%(MELODY.length/M.beatsPerTile)+1)+"/"+(MELODY.length/M.beatsPerTile)+" · bar "+(Math.floor(lastBeat.s/M.barLen)%CHORDS.length+1);
+  else $("beat").textContent = (60/beatLen()).toFixed(0)+" bpm";
+  drawRoll();
+  requestAnimationFrame(frame);
+}
+
+// ============================================================================
+// Controls
+// ============================================================================
+const SPEC=[
+  ["group","Song"],
+  ["pick","scale","scale",Object.keys(SCALES)],
+  ["pick","chordType","chords",["auto"].concat(Object.keys(CHORDS_T))],
+  ["pick","prog","progression",[-1,0,1,2,3,4,5,6,7,8],v=>v==-1?"seeded":("#"+v+" ["+PROGS[v]+"]")],
+  ["tog","keyLock","lock key"],
+  ["num","key","key",-12,12,1],
+  ["num","melodyLeap","leap chance",0,0.6,0.01],
+  ["num","melodyStart","start degree",-1,6,1],
+  ["group","Groove"],
+  ["num","swing","swing",0,0.35,0.01],
+  ["num","beatsPerTile","notes / tile",1,4,1],
+  ["num","barLen","beats / chord",1,8,1],
+  ["group","Layers"],
+  ["togrow","leadOn","lead","padOn","pad","kickOn","kick","hatOn","hat","subOn","bass","offBassOn","off-bass"],
+  ["num","leadVel","lead vol",0,1.2,0.02],
+  ["num","midVel","in-between vol",0,1.0,0.02],
+  ["num","padVel","pad vol",0,0.5,0.01],
+  ["num","kickVel","kick vol",0,1.2,0.02],
+  ["num","hatVel","hat vol",0,0.5,0.01],
+  ["num","subVel","bass vol",0,1.4,0.02],
+  ["num","offBassVel","off-bass vol",0,1.0,0.02],
+  ["num","leadOct","lead octave",-24,24,12],
+  ["num","padOct","pad octave",-24,12,12],
+  ["group","Tone"],
+  ["num","master","master",0,0.4,0.005],
+  ["num","baseHz","base A",110,440,1],
+  ["pick","waveA","wave A",["triangle","square","sawtooth","sine"]],
+  ["pick","waveB","wave B",["triangle","square","sawtooth","sine"]],
+  ["num","delayTime","echo time",0.05,0.6,0.005],
+  ["num","feedback","echo feed",0,0.8,0.01],
+  ["num","wet","echo level",0,0.7,0.01],
+  ["num","damp","echo damp",400,8000,50],
+  ["num","bassLpf","bass filter",80,1200,10],
+  ["num","kickHz","kick pitch",60,300,1],
+  ["num","kickDrop","kick drop",20,120,1],
+  ["num","hatHz","hat filter",2000,12000,100],
+];
+const panel=$("panel");
+for(const row of SPEC){
+  const kind=row[0];
+  if(kind==="group"){ const d=document.createElement("div"); d.className="group"; d.textContent=row[1]; panel.appendChild(d); continue; }
+  if(kind==="togrow"){
+    const d=document.createElement("div"); d.className="togs";
+    for(let i=1;i<row.length;i+=2){
+      const k=row[i], lab=row[i+1];
+      const b=document.createElement("button"); b.className="act"+(M[k]?" on":""); b.id="i_"+k; b.textContent=lab;
+      b.onclick=()=>{ M[k]=M[k]?0:1; b.classList.toggle("on",!!M[k]); refresh(); };
+      d.appendChild(b);
+    }
+    panel.appendChild(d); continue;
+  }
+  const key=row[1], label=row[2];
+  if(kind==="num"){
+    const [,,,min,max,stp]=row;
+    const d=document.createElement("div"); d.className="sl";
+    d.innerHTML='<label>'+label+'</label><input type="range" id="i_'+key+'" min="'+min+'" max="'+max+'" step="'+stp+'" value="'+M[key]+'"><span class="val" id="v_'+key+'"></span>';
+    panel.appendChild(d);
+    const inp=d.querySelector("input"), val=d.querySelector(".val");
+    const show=()=>val.textContent = stp>=1 ? M[key] : (+M[key]).toFixed(3);
+    inp.oninput=()=>{ M[key]=+inp.value; show(); refresh(); }; show();
+  } else if(kind==="pick"){
+    const fmt=row[4]||(v=>v);
+    const d=document.createElement("div"); d.className="rowline";
+    d.innerHTML='<label style="width:92px">'+label+'</label><select id="i_'+key+'">'+
+      row[3].map(o=>'<option value="'+o+'">'+fmt(o)+'</option>').join("")+'</select>';
+    panel.appendChild(d);
+    const sel=d.querySelector("select"); sel.value=M[key];
+    sel.onchange=e=>{ const v=e.target.value; M[key] = isNaN(+v)||v==="" ? v : +v; refresh(); };
+  } else if(kind==="tog"){
+    const d=document.createElement("div"); d.className="rowline";
+    d.innerHTML='<button class="act'+(M[key]?" on":"")+'" id="i_'+key+'">'+label+'</button>';
+    panel.appendChild(d);
+    const b=d.querySelector("button");
+    b.onclick=()=>{ M[key]=M[key]?0:1; b.classList.toggle("on",!!M[key]); refresh(); };
+  }
+}
+function syncUI(){
+  for(const row of SPEC){
+    if(row[0]==="group") continue;
+    if(row[0]==="togrow"){ for(let i=1;i<row.length;i+=2){ const el=$("i_"+row[i]); if(el) el.classList.toggle("on",!!M[row[i]]); } continue; }
+    const key=row[1], el=$("i_"+key); if(!el) continue;
+    if(row[0]==="tog") el.classList.toggle("on",!!M[key]);
+    else el.value=M[key];
+    if(row[0]==="num") $("v_"+key).textContent = row[5]>=1 ? M[key] : (+M[key]).toFixed(3);
+  }
+  $("seed").value = M.seed || curSeed();
+}
+
+// ============================================================================
+// Per-level overrides
+// ============================================================================
+const LSKEY="tilerunner:music";
+let overrides = {}, curLevel = 1;
+try{ const raw=localStorage.getItem(LSKEY);
+     if(raw){ const d=JSON.parse(raw); overrides=d.overrides||{}; if(d.M) M={...SHIPPED,...d.M}; if(d.level) curLevel=d.level; } }catch(e){}
+let saveT=0, savedT=0;
+function persist(){
+  clearTimeout(saveT);
+  saveT=setTimeout(()=>{ try{
+    localStorage.setItem(LSKEY, JSON.stringify({overrides, M, level:curLevel}));
+    const p=$("saved"); p.style.opacity="1"; clearTimeout(savedT);
+    savedT=setTimeout(()=>p.style.opacity="0.35",900);
+  }catch(e){} },200);
+}
+// The game seeds each level's song with hashSeed(String(levelIndex + 1)) — the same
+// FNV-1a it uses for the background theme. Mirror it exactly, or "seeded" here plays
+// a different tune to the one that actually ships.
+function hashSeed(str){ let h=2166136261; str=String(str);
+  for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
+const curSeed = () => M.seed || hashSeed(String(curLevel));
+
+const LEVEL_CPS=[0.8,0.8,0.8,0.84,0.84,0.84,0.84,0.88,0.88,0.88,0.88,0.91,0.91,0.91,0.94,0.94,0.97,0.97,1,1,1,1,1,0.8];
+const lvSel=$("lv");
+LEVEL_CPS.forEach((c,i)=>{ const o=document.createElement("option"); o.value=i+1; o.textContent="L"+(i+1)+"  ("+c+")"; lvSel.appendChild(o); });
+function loadLevel(n){
+  curLevel=+n; lvSel.value=n; $("cps").value=LEVEL_CPS[n-1];
+  M = {...SHIPPED, ...(overrides[n]||{})};
+  syncUI(); refresh();
+}
+lvSel.onchange=e=>loadLevel(e.target.value);
+$("cps").oninput=()=>refresh();
+$("savelv").onclick=()=>{
+  const diff={}; for(const k in M) if(M[k]!==SHIPPED[k]) diff[k]=M[k];
+  if(Object.keys(diff).length) overrides[curLevel]=diff; else delete overrides[curLevel];
+  drawTable(); refresh();
+};
+$("clearlv").onclick=()=>{ delete overrides[curLevel]; loadLevel(curLevel); drawTable(); };
+$("clearall").onclick=()=>{ overrides={}; loadLevel(curLevel); drawTable(); };
+$("dice").onclick=()=>{ M.seed = 1+Math.floor(Math.random()*99999); $("seed").value=M.seed; refresh(); };
+$("seed").oninput=e=>{ M.seed=+e.target.value||0; refresh(); };
+
+function drawTable(){
+  const rows=Object.keys(overrides).sort((a,b)=>a-b);
+  $("lvtab").innerHTML = "<tr><th>level</th><th>overrides</th></tr>" + (rows.length
+    ? rows.map(n=>'<tr class="has"><td>L'+n+'</td><td>'+Object.entries(overrides[n]).map(([k,v])=>k+":"+v).join(", ")+'</td></tr>').join("")
+    : '<tr><td colspan="2" style="opacity:.4">no per-level overrides yet — tune, then “Save for this level”</td></tr>');
+}
+
+function exportText(){
+  const defs={}; for(const k in M) if(M[k]!==SHIPPED[k]) defs[k]=M[k];
+  return "// paste over MUSIC_DEFAULTS in index.html\nconst MUSIC_DEFAULTS = "
+    + JSON.stringify(SHIPPED,null,2).replace(/"(\w+)":/g,'$1:') + ";\n\n"
+    + "// per-level: add `music: {...}` to the level object in levels.js\n"
+    + (Object.keys(overrides).length
+        ? Object.keys(overrides).sort((a,b)=>a-b).map(n=>"L"+n+"  music: "+JSON.stringify(overrides[n])).join("\n")
+        : "(none)")
+    + "\n\n// this level, live:\nmusic: " + JSON.stringify(defs);
+}
+function refresh(){
+  buildSong(curSeed());
+  applyTone();
+  $("seedinfo").textContent = "seed "+curSeed()+(M.seed?" (pinned)":" (from level)");
+  $("out").value = exportText();
+  persist();
+}
+$("copy").onclick=()=>{ $("out").select(); document.execCommand("copy");
+  $("copy").textContent="Copied!"; setTimeout(()=>$("copy").textContent="Copy",1000); };
+$("paste").onclick=()=>{ try{ M={...SHIPPED, ...JSON.parse($("out").value)}; syncUI(); refresh(); }
+  catch(_){ $("paste").textContent="Bad JSON"; setTimeout(()=>$("paste").textContent="Load from box",1200); } };
+$("reset").onclick=()=>{ M={...SHIPPED}; syncUI(); refresh(); };
+
+$("notes").innerHTML = [
+  "<b>One cleared tile is one beat.</b> The game never runs a music clock — every note is fired by a real tile event, ",
+  "so tempo <i>is</i> the runner's pace and can never drift. That is why <b>pace</b> here is per level and read-only-ish: ",
+  "it comes from the level's <code>cps</code>.<br><br>",
+  "<b>The three big levers</b>, roughly in order of how much they change the feel:<br>",
+  "· <b>scale</b> — pentaMajor is the shipped, can't-sound-wrong sound. pentaMinor or aeolian instantly reads as danger; ",
+  "hirajoshi reads as somewhere else entirely. This is the one to vary by chapter, not by level.<br>",
+  "· <b>layers</b> — dropping the pad makes a level feel exposed and tense; dropping the kick makes it float. ",
+  "Cheaper and more legible than changing notes.<br>",
+  "· <b>swing</b> — pushes the off-beat hat and bass later. Even 0.06 stops it sounding like a machine.<br><br>",
+  "<b>notes / tile</b> is the one that decouples music from movement: at 2 the melody double-times without the runner ",
+  "speeding up, so late fast levels don't all sound the same tempo.<br><br>",
+  "<b>seed</b> picks the melody and progression. Dice until a phrase you like, then it is pinned in the export; ",
+  "leave it 0 and each level derives its own, as today."
+].join("");
+
+drawTable(); loadLevel(curLevel); syncUI(); refresh(); frame();
+</script>
+</body>
+</html>

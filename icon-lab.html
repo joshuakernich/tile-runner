@@ -98,10 +98,12 @@ const RUNNER = {
   stepMs:110, swing:0.16, bob:0.064,
   legLen:0.12, legWidth:0.05, legSplay:0.22, hipRise:0.06, footLift:0.098, footLiftPow:1,
   knees:1, kneeBend:0.045, kneeSplit:0.5, kneeLead:-0.002, kneeR:0,
-  bodyW:0.26, bodyH:0.26, bodyR:0.07, shadow:0.04,
+  bodyW:0.26, bodyH:0.26, bodyR:0.07,
+  shadow:0.026, shadowW:0.65, shadowA:0.26, shadowY:0.01, shadowBob:0.48,
   eyeR:0.034, eyeY:0.38, eyeAx:-0.02, eyeBx:0.28,
   glanceMs:5200, glanceX:0.03, glanceY:0.024, blinkMs:3000,
-  talCordY:0.30, talHangY:0.72, talR:0.052,
+  talCordY:0.77, talHangY:1.01, talR:0.052,
+  talX:0.165, talCordW:0.02, talCordA:0.75, talSpan:0.485, talSag:-0.003,
   body:"#bfe6ff", ink:"#17263f",
 };
 
@@ -208,8 +210,9 @@ function paintRunner(g, sx, sy, s, phase, ts, rot, cfg){
   const swing=Math.sin(phase)*s*R.swing, bob=Math.abs(Math.sin(phase))*s*R.bob;
   g.save(); g.translate(sx,sy); g.rotate(rot*Math.PI/180);
   const pale=cfg.body, legL=s*R.legLen, bodyH=s*R.bodyH, bodyW=s*R.bodyW;
-  if(cfg.runShadow){ g.fillStyle="rgba(5,4,13,0.26)";
-    g.beginPath(); g.ellipse(0,-1,bodyW*0.55,s*R.shadow,0,0,Math.PI*2); g.fill(); }
+  if(cfg.runShadow){ const shk = 1 - R.shadowBob*(bob/Math.max(1e-6, s*R.bob || 1e-6))*0.5;
+    g.fillStyle="rgba(5,4,13,"+R.shadowA+")";
+    g.beginPath(); g.ellipse(0,-1+s*R.shadowY,bodyW*R.shadowW*shk,s*R.shadow*shk,0,0,Math.PI*2); g.fill(); }
   g.strokeStyle=pale; g.lineWidth=Math.max(2,s*R.legWidth); g.lineCap="round"; g.lineJoin="round";
   const hipY=-legL-bob-bodyH*(R.hipRise||0), lead=s*R.kneeLead;
   const lift = ph => -s*R.footLift*Math.pow(Math.max(0,Math.cos(ph)), R.footLiftPow);
@@ -223,9 +226,10 @@ function paintRunner(g, sx, sy, s, phase, ts, rot, cfg){
   g.fillStyle=pale; rrect(g,-bodyW/2,byTop,bodyW,bodyH,s*R.bodyR); g.fill();
   if(cfg.talisman && TAL[cfg.talisman]){
     const cordY=byTop+bodyH*R.talCordY, hangY=byTop+bodyH*R.talHangY;
-    g.strokeStyle="rgba(23,38,63,0.75)"; g.lineWidth=Math.max(1,s*0.016); g.lineCap="round";
-    g.beginPath(); g.moveTo(-bodyW*0.40,cordY); g.quadraticCurveTo(0,hangY-s*0.005,bodyW*0.40,cordY); g.stroke();
-    TAL[cfg.talisman](g,0,hangY,s*R.talR);
+    const px=bodyW*R.talX, span=bodyW*R.talSpan;          // the cord's dip follows the pendant
+    g.strokeStyle="rgba(23,38,63,"+R.talCordA+")"; g.lineWidth=Math.max(1,s*R.talCordW); g.lineCap="round";
+    g.beginPath(); g.moveTo(-span,cordY); g.quadraticCurveTo(px,hangY+s*R.talSag,span,cordY); g.stroke();
+    TAL[cfg.talisman](g,px,hangY,s*R.talR);
   }
   g.fillStyle=cfg.ink;
   const eyeR=s*R.eyeR, eyeY=byTop+bodyH*R.eyeY;

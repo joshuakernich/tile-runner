@@ -1,8 +1,8 @@
 # Tile Runner — Handoff (for continuing level design in a new chat)
 
-This doc is written so a fresh Claude session can pick up **level creation** without re-deriving anything. Paste it (or point the new chat at the project doc `claude/HANDOFF.md`) at the start of a new conversation.
+The long-form design doc: the *why* behind the level rules, the saw maths, the runner and the audio engine. **`CLAUDE.md` is the short operational one** — Claude Code reads that automatically every session; this is what it points at for depth. Paste this doc (or connect the folder) at the start of a new Cowork chat.
 
-_Last shipped: **v6.1**, service-worker cache `tile-runner-v62`, **24 levels**, 6 talismans._
+_Last shipped: **v6.6**, service-worker cache `tile-runner-v67`, **24 levels**, 6 talismans._
 
 **Local project directory:** `/Users/josh/Documents/tile-runner` (on `joshuas-macbook-air-local`). This is a git repo — all the files below live here. In a new chat, connect this folder so Claude can read/write it directly.
 
@@ -24,7 +24,11 @@ Everything is in **`index.html`** (game + logic + audio, one file). **`sw.js`** 
 | `stone-generator.html` | Design reference that renders the 3 stone crack variations × 3 damage states. Not needed to make levels; keep for tweaking stone art. |
 | `runner-lab.html` | Live editor for the runner's animation. Sliders for every number in `index.html`'s `RUNNER` block, onion-skin, stride scrub, real-size previews, and a **Copy RUNNER block** button. Paste its output over the block in `index.html` **wholesale**. |
 | `icon-lab.html` | Composer for the app icon. Places the runner on a single tile-with-platform over a Tile Runner backdrop; drag on the canvas to move the runner or the tile, sliders for every colour and position, mask preview (square/rounded/circle), safe-area ring, live 180/120/64/32 previews, and PNG export at 1024/512/192/180 named to match `manifest.webmanifest`. The config is a flat JSON block of fractions, so one setup renders identically at every size — Copy it into the handoff when a look is settled. |
+| `music-lab.html` | Live editor for the backing track, per level. Runs the game's own synth voices against an exposed parameter block, with a piano roll of the 16-step melody over the chord bars, a seed dice, per-level overrides, and an export block. Autosaves to the browser. |
 | `levels.js` | The current 24 levels as a CommonJS module (source of truth, mirrors what's in `index.html`). |
+| `CLAUDE.md` | Project instructions for Claude Code — the ship ritual, the check commands, the traps, and how Josh works. Claude Code reads this automatically every session; keep it short and operational, and put depth here in HANDOFF.md instead. |
+| `tools/check.mjs` | Static checks, zero dependencies: every HTML file parses, the `RUNNER` block matches across all three copies, the music lab's generator still matches the game's for all 24 levels, `levels.js` matches `index.html` and the editor, every level has a valid `cps`/`intro`/bounds, and `sw.js` precaches only files that exist. `node tools/check.mjs` |
+| `tools/check_browser.py` | Headless smoke test: boots all 24 levels and opens every tool, failing on any page error. Needs Playwright; skips cleanly without it. Catches what a parser can't — a renamed function with a stale call site. `python3 tools/check_browser.py` |
 | `TILE-REFERENCE.md` | Older feature reference (some parts predate the manual levels; treat this HANDOFF as authoritative). |
 
 ## The workflow (how to create levels in a new chat)
@@ -95,7 +99,7 @@ Six unique collectibles: `ember` (Emberdrop), `tide` (Tidestone), `cog` (Brass C
 
 Everything the runner's look and motion depends on lives in one **`RUNNER`** object in `index.html`, immediately above `drawRunner` — stride speed and reach, body/leg proportions, eye placement, glance and blink cycles, the talisman pendant, and the two colours. All lengths are fractions of the cell, so he scales with the board.
 
-Edit it with **`runner-lab.html`**: it runs a faithful copy of `drawRunner` against the same values, with a slider per knob, onion-skinned stride ghosts, a scrub slider for one step cycle, guides for the track surface / hip line / body box, a talisman picker to check the pendant, and a strip showing him at real in-game cell sizes. Hit **Copy RUNNER block** and paste the whole block over the one in `index.html`.
+Edit it with **`runner-lab.html`**: it runs a faithful copy of `drawRunner` against the same values, with a slider per knob, onion-skinned stride ghosts, a scrub slider for one step cycle, guides for the track surface / hip line / body box / knee and foot points, a talisman picker to check the pendant, and a strip showing him at real in-game cell sizes. **Each of those stands on real track** — `drawPathTile` is lifted from the game's `drawGlass` + `drawPlatformBody` + `drawPlatformRail`, so the tile, the body fill and the rail (at `cell*0.06`) all scale with the cell. That matters more than it sounds: the rail is *proportionally* much fatter under the 56px runner than the 133px one, and a leg width or foot lift that looks right against a 1px line can vanish against the real thing. Hit **Copy RUNNER block** and paste the whole block over the one in `index.html`.
 
 **Feet lift in v5.9.** Before this the feet were pinned to `y = 0` and only their x swung, so he skated. `footLift` is the peak height of the *swinging* foot as a fraction of a cell, and `footLiftPow` shapes the arc. The rule is: a foot lifts while it travels **forward** and is planted while it travels back. Foot x is `sin(phase)`, so its direction of travel is `cos(phase)` — hence `lift = footLift * max(0, cos(phase))^footLiftPow`, with the second leg reading the same curve at `phase + PI`. That guarantees exactly one foot is up at a time and both touch down at the extremes of the stride, with no discontinuity. `footLiftPow` of 1 is a broad hump; higher keeps the foot down longer and snaps it up late.
 
@@ -108,6 +112,44 @@ One thing this does *not* fix: the planted foot still slides, because foot x is 
 **Knees shipped in v5.6.** `drawRunner` bends each leg with two-bone IK via `solveKnee`, controlled by `knees` (0/1), `kneeBend`, `kneeSplit` (thigh's share of the leg), `kneeLead` (extra forward push past what the IK gives) and `kneeR` (optional knee cap). Set `knees: 0` for the old straight hip-to-foot line.
 
 The bones are sized **relative to the current hip-to-foot distance** (`total = d * (1 + kneeBend)`) rather than being a fixed length. Fixed-length bones were the obvious first attempt and they look wrong: over a stride that distance nearly doubles (about 23px to 42px at a 170px cell), so a fixed bone gives an almost-straight leg at full reach and a knee folded right under the body at mid-step. Scaling with `d` holds the knee at a constant fraction of the leg's length — 0.274 across every phase — and makes `kneeBend` mean what it says.
+
+## The music
+
+**One cleared tile is one beat.** There is no music clock anywhere in the game — `Sound.clearTile()` is called by the tile-clear event and fires the melody note, the bass, the kick and (every 4th beat) the pad, all at `ac.currentTime`. The hat and off-beat bass are scheduled half a beat ahead on the *audio* clock. Two consequences worth holding onto:
+
+- **Tempo is the runner's pace**, and it can never drift out of sync, because there is nothing to drift against. `setTempo(msPerCell)` doesn't set a tempo — it only tells the sub-beat events where "half a beat" is.
+- **A level's `cps` is also its BPM.** The speed ramp 0.80 → 1.00 is a 48 → 60 bpm ramp across the campaign.
+
+`setSong(seed)` derives the song from `hashSeed(String(levelIndex+1))` — the same FNV-1a that seeds the background theme. From that one number it picks a transpose, walks a 16-note melody over a major pentatonic, and picks one of five chord progressions. Everything else — key centre A3/220 Hz, the triangle/square lead alternation, the echo send, the kick and hat tuning — is hard-coded and identical on every level.
+
+### Subdivided lead (v6.3)
+
+A cleared tile is still one beat, but the lead now plays **`SUBDIV` (4) melody notes per tile**. Only the note on the clear itself gets the full detuned two-oscillator `voice()`; the other three are scheduled ahead on the audio clock at 1/4, 2/4, 3/4 of a beat and drawn as a **single oscillator** at `MID_VEL` (0.42 vs 0.8). That timbre difference — two detuned oscillators beating against each other versus one dead-straight tone — is what keeps the clear reading as the downbeat now that the gaps are filled. `voice()` gained a trailing `mono` flag for it.
+
+The melody generator went **16 → 32 notes** at the same time. At 16 the tune looped every 4 cleared tiles, which is unlistenable once the gaps are filled; 32 gives an 8-tile phrase. Both `WAVES` entries are now `sine`.
+
+`music-lab.html` mirrors all of this (`beatsPerTile: 4`, `midVel`, sine/sine) and its piano roll draws the downbeats full-height and the in-between notes at reduced height, so you can see the 4-to-1 grouping. Parity against the game's `setSong` is re-verified across all 24 levels.
+
+### Per-tile speed ramp (v6.3)
+
+`RAMP_PER_TILE = 0.005` tiles/sec is added to `state.cpsNow` on every clear, and `msPerCell` is derived back from it (`1000 / cpsNow`), then handed to `Sound.setTempo` so the sub-beat notes track. `RAMP_MAX_CPS = 3.0` is a hard ceiling — past that the runner animation stops reading. A level's `cps` is now a **starting** pace, not its pace: 40 tiles adds 0.2 tiles/sec. The speed HUD went to **3 decimals** because a single tile's ramp is invisible at 2.
+
+The combo multiplier tag is gone — `drawCombo` and `comboFlash` were deleted with it. `state.combo` still exists and still drives the score.
+
+The **speed-up and talisman intro pop-ups** were removed in v6.3, along with `SPEED_QUIPS`, the `#mechpop.speed` CSS, and both mechanics' icon branches. `intro: ["speed"]` / `["talisman"]` are dead keys now — the shipped levels had them stripped.
+
+### `music-lab.html`
+
+Reproduces that generator **byte-for-byte at its shipped defaults** — verified against all 24 levels' melodies and chords — so it can be trusted as a reference, and then exposes the parts the game currently fixes: scale, chord quality, progression, key lock, swing, notes-per-tile, beats-per-chord, per-layer on/off and volume, and the whole tone section (echo, filters, kick and hat tuning). Per-level overrides are stored as a diff against the defaults, so a level's block only ever lists what it actually changes.
+
+Ordered by how much they change the feel:
+
+1. **scale** — `pentaMajor` is the shipped can't-sound-wrong sound. `pentaMinor` or `aeolian` reads as danger instantly; `hirajoshi` reads as somewhere else entirely. Best varied by chapter, not by level, or it stops meaning anything.
+2. **layers** — muting the pad makes a level feel exposed; muting the kick makes it float. Cheaper and far more legible than changing notes.
+3. **swing** — pushes the off-beat hat and bass later. Even 0.06 stops it sounding like a machine.
+4. **notes/tile** — the only knob that decouples music from movement. At 2 the melody double-times without the runner speeding up, so the six levels at `cps 1.00` needn't all sound the same tempo.
+
+**Not yet wired into the game.** `index.html` still has the original fixed `Sound` module; the lab defines the extended generator and parameter block that a `MUSIC_DEFAULTS` + per-level `music: {...}` would use. Porting it means replacing `setSong`/`clearTile` with the lab's versions and reading `L.music` in `beginLevel`.
 
 ## The app icon
 
@@ -137,6 +179,25 @@ One caveat baked into this composition: the manifest declares `"purpose": "any m
 The composition autosaves to `localStorage` under `tilerunner:icon` (same pattern as the level editor), merged over `DEFAULT` on load so an older save can't break a newer tool; **Reset** clears it. Exports are always full-bleed squares regardless of the mask preview, because iOS and Android round the corners themselves. The four sizes and filenames match what `manifest.webmanifest` already asks for, so the PNGs drop straight into the project folder.
 
 The shipped tune is deliberately restrained: `kneeBend: 0.045` with a hair of *negative* `kneeLead`, so the bend reads as a soft articulation rather than a cartoon crouch, alongside a heavier `bob: 0.064` and thinner `legWidth: 0.05`. **v6.0 added `hipRise: 0.06` and `footLift: 0.098` at `footLiftPow: 1`** — a barely-there hip raise, and a foot lift that is large relative to the other numbers because the runner is small on screen and a subtle lift simply doesn't read at a 56px cell.
+
+**The worn talisman** is a cord quadratic-curved across the chest with the pendant hanging off it. `talCordY` sets where the cord meets the body, `talHangY` how far the pendant drops, `talR` its size. v6.2 unpicked the rest of it from the hard-coded numbers: `talCordW` (cord thickness), `talCordA` (its opacity), `talSpan` (how far apart the cord's two ends sit, as a fraction of body width) and `talX` (the pendant's offset from centre — negative is behind him, positive toward the direction of travel).
+
+The one coupling worth knowing: **the cord's dip follows the pendant.** `talX` moves the quadratic's control point as well as the pendant, so sliding the pendant off-centre drags the cord's low point with it. Draw them independently and the pendant appears to have come off its string.
+
+### Wall squash (v6.5)
+
+The run used to end one way: track runs out, runner walks to the edge, gravity. But there are two *different* endings hiding in that, and they should not look the same — running off a ledge is a fall, running into a wall is an impact. `endRun()` now splits them with `wallAhead()`, which checks the cell the runner is about to enter for a wall, a stone, or a sliding block currently parked there. Off the board is deliberately **not** a wall — the edge of the world is a ledge.
+
+When there is something to hit, `state.status` goes to `"squash"` for `SQUASH_MS` (260) before `startFall()`. Two things make that work without touching the movement code:
+
+- `update()` already returns early unless status is `"play"`, so the runner freezes in place for the squash on its own.
+- `drawRunner`'s local frame has **+x as the direction of travel**, so the squash is just `ctx.scale(kx, ky)` with `kx < 1 < ky` — "compressed along travel, bulged across it" without caring which way he was going. It scales about the feet (y=0) so he stays on the track, and translates forward by what the width lost so he stays flush with the wall face rather than floating off it.
+
+`squashK()` is the profile: compress over the first 45%, then relax to 55% of full as he peels off. `SQUASH_X` (0.52) and `SQUASH_Y` (1.26) are the extremes. A saw strike still calls `startFall()` directly — being cut down is not the same beat as running into a wall.
+
+### Shadow (v6.5)
+
+Was one number and three hard-coded ones. Now `shadow` (vertical radius), `shadowW` (width, fraction of body width), `shadowA` (opacity), `shadowY` (offset below the track), and `shadowBob` — which ties the shadow's size to the body's rise, so at 1 it shrinks as he bobs up and he reads as leaving the ground rather than sliding along it. **v6.6 shipped `shadowBob: 0.48`** — a flatter, wider, slightly dropped shadow (0.026 / 0.65 / +0.01) that shrinks about halfway in step with the bob. Combined with `footLift`, that is what sells him as pushing off the track rather than gliding over it: the feet leave the ground and the shadow acknowledges it.
 
 ### Mechanic intro keys (`intro`)
 `recycle`, `turn`, `offscreen`, `flag`, `wall`, `block`, `saw`, `key`, `door`, `stone`, `platform`, `talisman`, `mdoor`, `coin`, `boost`, `slow`, `crumble`, `switch`, `monster`, `slider`, plus `tile` and `speed`. Put the key on the first level that teaches that mechanic; leave `[]` otherwise.

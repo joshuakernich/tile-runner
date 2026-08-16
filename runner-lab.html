@@ -92,10 +92,12 @@ const SHIPPED = {
   stepMs:110, swing:0.16, bob:0.064,
   legLen:0.12, legWidth:0.05, legSplay:0.22, hipRise:0.06, footLift:0.098, footLiftPow:1,
   knees:1, kneeBend:0.045, kneeSplit:0.5, kneeLead:-0.002, kneeR:0,
-  bodyW:0.26, bodyH:0.26, bodyR:0.07, shadow:0.04,
+  bodyW:0.26, bodyH:0.26, bodyR:0.07,
+  shadow:0.026, shadowW:0.65, shadowA:0.26, shadowY:0.01, shadowBob:0.48,
   eyeR:0.034, eyeY:0.38, eyeAx:-0.02, eyeBx:0.28,
   glanceMs:5200, glanceX:0.03, glanceY:0.024, blinkMs:3000,
-  talCordY:0.30, talHangY:0.72, talR:0.052,
+  talCordY:0.77, talHangY:1.01, talR:0.052,
+  talX:0.165, talCordW:0.02, talCordA:0.75, talSpan:0.485, talSag:-0.003,
   body:"#bfe6ff", ink:"#17263f",
 };
 const RUNNER = {...SHIPPED};
@@ -165,8 +167,9 @@ function paintRunner(g, sx, sy, s, phase, ts, isMoving, alpha){
   g.save(); g.globalAlpha = alpha==null?1:alpha; g.translate(sx,sy);
   const pale=R.body;
   const legL=s*R.legLen, bodyH=s*R.bodyH, bodyW=s*R.bodyW;
-  g.fillStyle="rgba(5,4,13,0.26)";
-  g.beginPath(); g.ellipse(0,-1,bodyW*0.55,s*R.shadow,0,0,Math.PI*2); g.fill();
+  const shk = 1 - R.shadowBob * (bob / Math.max(1e-6, s*R.bob || 1e-6)) * 0.5;
+  g.fillStyle="rgba(5,4,13,"+R.shadowA+")";
+  g.beginPath(); g.ellipse(0,-1+s*R.shadowY,bodyW*R.shadowW*shk,s*R.shadow*shk,0,0,Math.PI*2); g.fill();
   g.strokeStyle=pale; g.lineWidth=Math.max(3,s*R.legWidth); g.lineCap="round"; g.lineJoin="round";
   const hipY=-legL-bob-bodyH*(R.hipRise||0);
   const lead=s*R.kneeLead;
@@ -190,9 +193,10 @@ function paintRunner(g, sx, sy, s, phase, ts, isMoving, alpha){
   g.fillStyle=pale; rrect(g,-bodyW/2,byTop,bodyW,bodyH,s*R.bodyR); g.fill();
   if (worn && TAL[worn]) {
     const cordY=byTop+bodyH*R.talCordY, hangY=byTop+bodyH*R.talHangY;
-    g.strokeStyle="rgba(23,38,63,0.75)"; g.lineWidth=Math.max(1,s*0.016); g.lineCap="round";
-    g.beginPath(); g.moveTo(-bodyW*0.40,cordY); g.quadraticCurveTo(0,hangY-s*0.005,bodyW*0.40,cordY); g.stroke();
-    TAL[worn](g,0,hangY,s*R.talR);
+    const px=bodyW*R.talX, span=bodyW*R.talSpan;          // the cord's dip follows the pendant
+    g.strokeStyle="rgba(23,38,63,"+R.talCordA+")"; g.lineWidth=Math.max(1,s*R.talCordW); g.lineCap="round";
+    g.beginPath(); g.moveTo(-span,cordY); g.quadraticCurveTo(px,hangY+s*R.talSag,span,cordY); g.stroke();
+    TAL[worn](g,px,hangY,s*R.talR);
   }
   g.fillStyle=R.ink;
   const eyeR=s*R.eyeR, eyeY=byTop+bodyH*R.eyeY;
@@ -241,6 +245,31 @@ function drawGuides(g, sx, sy, s){
   g.restore();
 }
 
+// ---- the in-game path, drawn at a real cell size ----
+// Lifted from index.html's drawGlass + drawPlatformBody + drawPlatformRail: a lavender
+// tile, the track body filling from the running surface down to the tile's edge, and the
+// rail stroked along the surface at cell*0.06. Everything scales with the cell, which is
+// the whole point — the rail under the 56px runner is genuinely the rail he'd stand on.
+const TRACK="#ffcf4d", RAIL="#fff2c4", GLASS="rgba(180,174,235,0.55)";
+// one straight east-west tile whose running surface passes through (cx, surfaceY)
+function drawPathTile(g, cx, surfaceY, s){
+  const h=s/2;
+  g.save();
+  rrect(g, cx-h, surfaceY-h, s, s, s*0.16); g.clip();
+  g.fillStyle=GLASS; g.fillRect(cx-h, surfaceY-h, s, s);        // the tile itself
+  g.fillStyle=TRACK; g.fillRect(cx-h, surfaceY, s, h);          // body, surface down to the edge
+  g.strokeStyle=RAIL; g.lineWidth=Math.max(3, s*0.06); g.lineCap="round";
+  g.beginPath(); g.moveTo(cx-h, surfaceY); g.lineTo(cx+h, surfaceY); g.stroke();
+  g.restore();
+}
+// a run of them filling x0..x1, clipped so runs never bleed into each other
+function drawPathRun(g, cx, surfaceY, s, x0, x1){
+  g.save(); g.beginPath(); g.rect(x0, 0, x1-x0, 100000); g.clip();
+  const n = Math.ceil((x1-x0)/s) + 2;
+  for (let i = -Math.ceil(n/2); i <= Math.ceil(n/2); i++) drawPathTile(g, cx + i*s, surfaceY, s);
+  g.restore();
+}
+
 let t0=performance.now(), phase=0, lastTs=t0, frames=0, fpsT=t0;
 function frame(now){
   const dt=Math.min(50, now-lastTs); lastTs=now;
@@ -249,10 +278,10 @@ function frame(now){
   const shown = scrub==null ? phase : scrub;
 
   ctx.clearRect(0,0,cv.width,cv.height);
-  // a strip of "track" to stand on
+  // real track to stand on, at the same cell size as the runner standing on it
   const baseY=Math.round(cv.height*0.72), big=170;
   ctx.fillStyle="#241f4a"; ctx.fillRect(0,baseY,cv.width,cv.height-baseY);
-  ctx.fillStyle="#ffcf4d"; ctx.fillRect(0,baseY-2,cv.width,3);
+  drawPathRun(ctx, 230, baseY-2, big, 0, 440);   // the big runner's own stretch of track
 
   if(onion){
     for(const d of [-1.1,-0.55,0.55,1.1])
@@ -265,9 +294,10 @@ function frame(now){
   ctx.save(); ctx.font="10px ui-monospace,monospace"; ctx.fillStyle="rgba(207,233,255,0.45)"; ctx.textAlign="center";
   let x=470;
   for(const s of [56,80,110,133]){
+    drawPathTile(ctx, x, baseY-2, s);              // exactly one tile, at that cell size
     paintRunner(ctx, x, baseY-2, s, shown, ts, moving, 1);
-    ctx.fillText(s+"px cell", x, baseY+16);
-    x += s*1.15 + 18;
+    ctx.fillText(s+"px cell", x, baseY - s*0.5 - 8);   // above the tile, clear of the track
+    x += s + 26;
   }
   ctx.restore();
 
@@ -286,7 +316,11 @@ const SPEC=[
   ["bodyW","body width",0.1,0.5,0.005],
   ["bodyH","body height",0.1,0.5,0.005],
   ["bodyR","corner radius",0,0.2,0.002],
-  ["shadow","ground shadow",0,0.12,0.002],
+  ["shadow","shadow height",0,0.12,0.002],
+  ["shadowW","shadow width",0,1.6,0.01],
+  ["shadowA","shadow opacity",0,0.8,0.01],
+  ["shadowY","shadow drop",-0.06,0.10,0.002],
+  ["shadowBob","shadow bob link",0,1,0.02],
   ["Legs"],
   ["legLen","hip height",0.02,0.35,0.005],
   ["legWidth","leg width",0.01,0.16,0.002],
@@ -312,6 +346,11 @@ const SPEC=[
   ["talCordY","cord height",0,1,0.01],
   ["talHangY","pendant drop",0,1.4,0.01],
   ["talR","pendant size",0.01,0.14,0.002],
+  ["talX","pendant offset",-0.5,0.5,0.005],
+  ["talCordW","cord thickness",0.002,0.05,0.001],
+  ["talCordA","cord opacity",0,1,0.02],
+  ["talSpan","cord span",0.1,0.55,0.005],
+  ["talSag","cord droop",-0.05,0.06,0.001],
 ];
 const box=$("sliders");
 for(const row of SPEC){
@@ -346,13 +385,20 @@ const ORDER=[["stepMs","ms per radian of stride phase — lower = faster legs"],
   ["kneeLead","extra forward push on the knee, 0 = pure IK"],
   ["kneeR","knee cap radius, 0 = none"],
   ["bodyW",""],["bodyH",""],
-  ["bodyR","corner radius of the body"],["shadow","ground shadow height"],
+  ["bodyR","corner radius of the body"],["shadow","ground shadow height (its vertical radius), fraction of a cell"],
+  ["shadowW","ground shadow width, fraction of body width"],["shadowA","ground shadow opacity"],
+  ["shadowY","shadow offset below the track, fraction of a cell"],
+  ["shadowBob","how much the shadow shrinks as he rises — 0 keeps it fixed, 1 in proportion to the bob"],
   ["eyeR",""],["eyeY","down the body from its top, fraction of body height"],
   ["eyeAx","rear eye, fraction of body width from centre"],["eyeBx","front eye"],
   ["glanceMs","one full look-around cycle"],["glanceX","how far the pupils dart"],["glanceY",""],
   ["blinkMs","one blink cycle (it's a double-blink)"],
   ["talCordY","talisman cord, fraction of body height from its top"],
-  ["talHangY","where the pendant hangs"],["talR","pendant radius, fraction of a cell"]];
+  ["talHangY","where the pendant hangs"],["talR","pendant radius, fraction of a cell"],
+  ["talX","pendant offset from centre, fraction of body width (- = back, + = forward)"],
+  ["talCordW","cord thickness, fraction of a cell"],["talCordA","cord opacity"],
+  ["talSpan","where the cord meets the body's sides, fraction of body width"],
+  ["talSag","cord droop past the pendant, fraction of a cell (- pulls it taut)"]];
 function refresh(){
   let out="  const RUNNER = {\n";
   for(const [k,note] of ORDER){

@@ -93,14 +93,6 @@
   .mech-card h3 { font-size:18px; letter-spacing:2px; text-transform:uppercase; color:var(--track); margin:2px 0 8px; }
   .mech-card p { font-size:var(--body); line-height:1.6; color:var(--ink); margin-bottom:16px; }
   .mech-card button { width:100%; }
-  /* the "speed up" popup styled like the death screen: 3D extruded header, no icon/tag */
-  #mechpop.speed .mech-card { max-width:340px; }
-  #mechpop.speed .mech-tag, #mechpop.speed #mech-icon { display:none; }
-  #mechpop.speed #mech-name {
-    font-size:40px; font-weight:900; letter-spacing:2px; text-transform:uppercase;
-    transform:rotate(-4deg); line-height:1.05; margin:8px 0 18px; color:#ffd24a;
-    text-shadow:1px 1px 0 #c79320, 2px 2px 0 #a87b17, 3px 3px 0 #8a6310, 4px 4px 0 #6b4c0b, 5px 6px 10px rgba(5,4,13,0.65); }
-  #mechpop.speed .mech-card p { font-size:var(--body); line-height:1.5; color:#fff1ea; margin-bottom:22px; }
   #ready { color:var(--free); }
   #board-wrap { flex:1; width:100%; display:flex; align-items:stretch; justify-content:center; min-height:0; overflow:hidden; }
   canvas { image-rendering:pixelated; touch-action:none; display:block; }
@@ -177,9 +169,12 @@
   .lvl-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
   .lvl-grid button { display:flex; flex-direction:column; gap:3px; padding:12px 0; line-height:1.1; }
   .tal-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
-  .tal-grid .tal { display:flex; flex-direction:column; align-items:center; gap:4px; padding:9px 4px; }
+  .tal-grid .tal { display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 3px; }
   .tal-grid .tal canvas { width:46px; height:46px; }
-  .tal-grid .tal span { font-size:var(--body); letter-spacing:0.5px; }
+  /* names are long ("Nightshard", "Green Sprig") and the cells are a third of a narrow
+     menu — well below body size, tight leading, and allowed to wrap to two lines. */
+  .tal-grid .tal span { font-size:11px; letter-spacing:0.2px; line-height:1.15;
+                        text-align:center; hyphens:none; }
   .tal-grid .tal.locked span { color:var(--dim); }
   .tal-grid .tal.on { border-color:var(--goal); box-shadow:0 0 0 2px var(--goal) inset; }
   .lvl-grid .st { font-size:var(--body); color:var(--goal); letter-spacing:1px; font-weight:900; }
@@ -247,8 +242,8 @@
   const LEVELS = [
     {"start":[2,5],"init":[[2,4],[2,3]],"goal":[2,0],"cols":5,"rows":6,"intro":["recycle","flag"],"walls":[],"cps":0.8},
     {"start":[0,7],"init":[[0,6],[0,5]],"goal":[4,4],"cols":5,"rows":8,"intro":["turn"],"walls":[],"cps":0.8},
-    {"start":[0,0],"init":[[0,1],[0,2]],"goal":[5,7],"cols":6,"rows":8,"intro":["offscreen","talisman"],"walls":[],"cps":0.8,"talismans":[[5,2,"ember"]]},
-    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["wall","speed"],"walls":[[0,3],[1,3],[2,3],[4,3]],"cps":0.84},
+    {"start":[0,0],"init":[[0,1],[0,2]],"goal":[5,7],"cols":6,"rows":8,"intro":["offscreen"],"walls":[],"cps":0.8,"talismans":[[5,2,"ember"]]},
+    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["wall"],"walls":[[0,3],[1,3],[2,3],[4,3]],"cps":0.84},
     {"start":[1,12],"init":[[1,11],[1,10]],"goal":[1,0],"cols":5,"rows":13,"intro":[],"walls":[[0,2],[1,2],[2,2],[4,2],[0,5],[2,5],[3,5],[4,5],[0,8],[1,8],[2,8],[4,8]],"cps":0.84},
     {"start":[0,3],"init":[[1,3],[2,3]],"goal":[1,6],"cols":9,"rows":9,"intro":[],"walls":[[4,0],[4,2],[4,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[8,4],[4,5],[4,6],[4,8]],"cps":0.84,"talismans":[[8,1,"tide"]]},
     {"start":[4,7],"init":[[4,6],[4,5]],"goal":[1,7],"cols":8,"rows":8,"intro":[],"walls":[[5,0],[2,1],[0,2],[2,2],[3,2],[4,2],[5,2],[7,2],[2,3],[5,3],[2,4],[5,4],[1,5],[2,5],[5,5],[6,5],[2,6],[2,7]],"cps":0.84},
@@ -294,6 +289,11 @@
   const TRACK_T = 0.44;        // platform thickness as fraction of cell (hangs below centre)
   const SAMPLE_D = 0.42;       // tangent smoothing window (path-param units)
   const FALL_G = 0.0022, FALL_MS = 850;   // gravity fall on lose
+  // Running into a wall reads differently to running off a ledge, so it gets its own
+  // beat: the runner concertinas against the face, then peels off and falls.
+  const SQUASH_MS = 260;                  // how long the squash holds before gravity
+  const SQUASH_X  = 0.52;                 // compression along travel at full squash
+  const SQUASH_Y  = 1.26;                 // matching bulge across it (keeps the mass honest)
 
   // ---------- Sound engine ------------------------------------------------
   // A tiny Web Audio synth + backing band. Every cleared tile is one BEAT: the
@@ -306,7 +306,12 @@
   // drift, and its tempo tracks each level's speed. Resets each level.
   const Sound = (() => {
     const BASE = 220;                          // A3, in Hz
-    const WAVES  = ["triangle", "square"];     // lead timbre alternates per step
+    const WAVES  = ["sine", "sine"];           // lead timbre alternates per step
+    // Melody notes per cleared tile. The tile clear itself gets the full detuned
+    // two-oscillator voice; the three notes between clears are single-oscillator
+    // and quieter, so the ear still hears the clear as the downbeat.
+    const SUBDIV  = 4;
+    const MID_VEL = 0.42;                      // in-between note level, vs 0.8 on the clear
     // Lead melody + chord loop — regenerated per level by setSong(seed).
     let MELODY = [0, 4, 7, 4,  9, 7, 4, 2,  0, 4, 7, 12,  9, 7, 4, 2];
     let CHORDS = [ {root:0,tones:[0,4,7]}, {root:5,tones:[5,9,12]}, {root:9,tones:[9,12,16]}, {root:7,tones:[7,11,14]} ];
@@ -318,8 +323,10 @@
       const rnd = mulberry32((seed>>>0) || 1);
       const SC = [0,2,4,7,9,12,14];            // major pentatonic over ~2 octaves
       const tr = [-5,-3,0,0,2,4,5,7][Math.floor(rnd()*8)];   // transpose (key)
+      // 32 notes = 8 cleared tiles per phrase at SUBDIV 4. (At 16 the tune looped every
+      // 4 tiles, which is far too tight once the gaps are filled in.)
       MELODY = []; let d = 2 + Math.floor(rnd()*3);
-      for (let i=0;i<16;i++){ d += Math.floor(rnd()*3)-1; if (rnd()<0.15) d += Math.floor(rnd()*3)-1;
+      for (let i=0;i<32;i++){ d += Math.floor(rnd()*3)-1; if (rnd()<0.15) d += Math.floor(rnd()*3)-1;
         d = Math.max(0, Math.min(SC.length-1, d)); MELODY.push(SC[d] + tr); }
       const progs = [[0,5,7,5],[0,7,9,7],[0,5,9,7],[0,9,5,7],[0,4,5,7]];
       CHORDS = progs[Math.floor(rnd()*progs.length)].map(r => ({ root:r+tr, tones:[r+tr, r+tr+4, r+tr+7] }));
@@ -367,13 +374,16 @@
     }
     // A tonal voice: two detuned oscillators through a long-release envelope,
     // started at absolute time `t`. Optionally fed into the resonant echo tail.
-    function voice(t, semi, wave, dur, vel, attack, wet) {
+    function voice(t, semi, wave, dur, vel, attack, wet, mono) {
       const freq = BASE * Math.pow(2, semi / 12);
       const g = ac.createGain();
       g.gain.setValueAtTime(0.0001, t);
       g.gain.exponentialRampToValueAtTime(vel, t + attack);       // attack
       g.gain.exponentialRampToValueAtTime(0.0006, t + dur);       // release / ring-out
-      for (const cents of [-6, 6]) {                              // detuned pair = fuller tone
+      // Two detuned oscillators beat against each other and read as "thicker". A mono
+      // voice is one oscillator, dead straight — that difference is what separates the
+      // tile clear from the notes filling the gap.
+      for (const cents of (mono ? [0] : [-6, 6])) {
         const o = ac.createOscillator();
         o.type = wave;
         o.frequency.setValueAtTime(freq, t);
@@ -605,10 +615,16 @@
     function clearTile() {
       if (muted || !ac || ac.state !== "running") return;        // silent until unlocked
       const now = ac.currentTime;
-      const i = step % MELODY.length;
       const chord = CHORDS[Math.floor(step / 4) % CHORDS.length];
-      // Lead melody note, on the beat.
-      voice(now, MELODY[i], WAVES[step % WAVES.length], 0.9, 0.8, 0.008, true);
+      // Lead: the cleared tile is the downbeat and gets the full two-tone voice; the
+      // notes between clears are scheduled ahead on the audio clock as single tones.
+      const wave = WAVES[step % WAVES.length];
+      for (let k = 0; k < SUBDIV; k++) {
+        const semi = MELODY[(step*SUBDIV + k) % MELODY.length];
+        if (k === 0) voice(now, semi, wave, 0.9, 0.8, 0.008, true);
+        else voice(now + beatSec*(k/SUBDIV), semi, wave,
+                   beatSec*(0.9/SUBDIV), MID_VEL, 0.006, true, true);
+      }
       // Backing, locked to the same beat.
       voice(now, chord.root - 12, "triangle", beatSec * 0.9, 0.40, 0.010, false);  // bass body
       bass(now, chord.root - 24, beatSec * 0.92, 0.85);          // deep sub-bass on the beat
@@ -688,7 +704,11 @@
   // ---------- Score / feedback helpers -----------------------------------
   function haptic(p){ try { if (navigator.vibrate) navigator.vibrate(p); } catch(_){} }
   const comboMult = c => c >= 30 ? 5 : c >= 20 ? 4 : c >= 12 ? 3 : c >= 5 ? 2 : 1;
-  const VERSION = "v6.1";                    // shown on the title & pause screens
+  // Every cleared tile winds the runner on a little. Small enough to be invisible
+  // tile to tile, large enough that a long level noticeably tightens by the end.
+  const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
+  const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
+  const VERSION = "v6.6";                    // shown on the title & pause screens
   // the runner's starting speed (level 1, no combo, no tier) in tiles/second; the
   // whole campaign's speeds scale so level 1 begins here.
   const START_CPS = 0.6;
@@ -843,11 +863,11 @@
       shards: [],
       goal:{ c:L.goal[0], r:L.goal[1] },
       keyCollected:false,
-      runIdx:0, runT:0, msPerCell:effSpeed, speedMult:1,
+      runIdx:0, runT:0, msPerCell:effSpeed, speedMult:1, cpsNow: 1000/effSpeed,
       status:"play", drag:null, fall:null, runPhase:0,
       score:0, combo:0, maxCombo:0, coins:0, elapsed:0, flowClears:0,
       par: L.par || 24000,
-      shake:0, beatPulse:0, comboFlash:0, pops:[], lights:[],
+      shake:0, beatPulse:0, pops:[], lights:[],
       // --- Batch 2: optional extra cell types & hazards ---
       coinCells: new Set((L.coins||[]).map(c=>key(c[0],c[1]))),
       // [c, r, id] — a talisman sits on the floor and is grabbed by passing over it
@@ -1004,7 +1024,6 @@
   const MECHS = {
     tile:   { name:"Track Tiles", desc:"The runner never stops! Drag the dotted tiles to lay track ahead of it." },
     key:    { name:"Colour Key", desc:"Grab a coloured key to open its matching door." },
-    speed:  { name:"Speed Up!", desc:"The runner's starting speed just increased. It also quickens as your combo climbs — keep laying track ahead!" },
     flag:   { name:"The Exit", desc:"Lay a tile on the flag to finish the level." },
     wall:   { name:"Metal Wall", desc:"Solid — you can't build on it. Route around." },
     stone:  { name:"Stone Block", desc:"Tap to smash it, then build through the gap." },
@@ -1018,7 +1037,6 @@
     monster:{ name:"Flying Menace", desc:"A little monster flitting to and fro. Time your run so the runner never touches it!" },
     slider: { name:"Sliding Platform", desc:"The wall only opens where this platform sits. Drag it along its rail to line up the crossing, then build across it." },
     block:  { name:"Movable Block", desc:"A heavy block plugging the tunnel. Drag it aside along its rail to clear the way, then build through." },
-    talisman:{ name:"Talisman", desc:"A one-off trinket. Run over it and it's yours for good — even if the run ends badly. Wear it round your neck from the Talismans menu." },
     platform:{ name:"Fixed Platform", desc:"Track already bolted to the level. You can't build on it — but run your path into one of its open ends and the runner rides across for FREE, no tile spent. It only connects where the rails are drawn." },
     mdoor:  { name:"Sliding Door", desc:"Slide it open by dragging BOTH panels apart — push each side away from the centre." },
     // ---- tutorial prompts for the hand-built levels ----
@@ -1040,7 +1058,6 @@
     if (L.gates && L.gates.length) m.push("switch");
     if (L.blocks && L.blocks.length) m.push("block");
     if (L.platforms && L.platforms.length) m.push("platform");
-    if (L.talismans && L.talismans.length) m.push("talisman");
     if (L.mdoors && L.mdoors.length) m.push("mdoor");
     if (L.hazards && L.hazards.some(h=>(h.kind||"saw")==="saw")) m.push("saw");
     if (L.hazards && L.hazards.some(h=>h.kind==="monster")) m.push("monster");
@@ -1062,17 +1079,15 @@
   }
   function showNextMech() {
     const pop = document.getElementById("mechpop");
-    if (!mechQueue.length) { pop.classList.remove("show", "speed"); paused = false;
+    if (!mechQueue.length) { pop.classList.remove("show"); paused = false;
       if (state.status === "hold") beginLevelIntro();   // pop-ups cleared → run the delayed intro
       return; }
     const type = mechQueue[0], M = MECHS[type];
-    const isSpeed = type === "speed";
-    pop.classList.toggle("speed", isSpeed);                 // 3D header + hidden icon (see CSS)
     document.getElementById("mech-name").textContent = M.name;
     document.getElementById("mech-desc").textContent =
-      isSpeed ? SPEED_QUIPS[(Math.random()*SPEED_QUIPS.length)|0] : M.desc;
+      M.desc;
     const cv = document.getElementById("mech-icon"), g = cv.getContext("2d");
-    if (!isSpeed) drawMechIcon(g, type, cv.width);          // speed popup omits the icon
+    drawMechIcon(g, type, cv.width);
     document.getElementById("mech-ok").textContent = mechQueue.length > 1 ? "Next" : "Got it";
     pop.classList.add("show");
   }
@@ -1150,14 +1165,6 @@
       g.fillStyle="rgba(255,255,255,0.16)"; rr(cx-bw/2+S*0.03,bt+S*0.02,bw*0.9,S*0.06,S*0.03); g.fill();
       g.fillStyle="#2a0f47"; const er=S*0.05, ey=bt+bh*0.4;
       g.beginPath(); g.arc(cx-bw*0.02,ey,er,0,7); g.fill(); g.beginPath(); g.arc(cx+bw*0.28,ey,er,0,7); g.fill(); }
-    else if (type==="speed") {
-      // a forward chevron burst with motion streaks
-      g.strokeStyle="#ffd24a"; g.lineWidth=S*0.075; g.lineCap="round"; g.lineJoin="round";
-      for(let k=0;k<3;k++){ const ox=cx-S*0.18+k*S*0.16; g.beginPath();
-        g.moveTo(ox,cy-S*0.16); g.lineTo(ox+S*0.14,cy); g.lineTo(ox,cy+S*0.16); g.stroke(); }
-      g.strokeStyle="rgba(255,210,74,0.5)"; g.lineWidth=S*0.045;
-      for(let k=0;k<3;k++){ const yy=cy-S*0.1+k*S*0.1; g.beginPath(); g.moveTo(cx-S*0.34,yy); g.lineTo(cx-S*0.22,yy); g.stroke(); }
-    }
     else if (type==="slider") {
       g.strokeStyle="rgba(150,156,172,0.7)"; g.lineWidth=S*0.04; g.lineCap="round";
       g.beginPath(); g.moveTo(S*0.16,cy+S*0.16); g.lineTo(S*0.84,cy+S*0.16); g.stroke();
@@ -1167,11 +1174,6 @@
       g.fillStyle=V("--rail"); for(const dx of [-1,0,1]){ g.beginPath(); g.arc(bx+dx*S*0.1,cy+S*0.02,S*0.02,0,7); g.fill(); }
       g.strokeStyle=V("--track"); g.lineWidth=S*0.035; g.lineCap="round";
       g.beginPath(); g.moveTo(bx+S*0.26,cy); g.lineTo(bx+S*0.36,cy); g.moveTo(bx+S*0.33,cy-S*0.03); g.lineTo(bx+S*0.37,cy); g.lineTo(bx+S*0.33,cy+S*0.03); g.stroke(); }
-    else if (type==="talisman") {
-      const t = TALISMANS[0];
-      g.strokeStyle="rgba(214,218,240,0.8)"; g.lineWidth=S*0.035; g.lineCap="round";
-      g.beginPath(); g.arc(cx, cy-S*0.10, S*0.22, Math.PI*0.12, Math.PI*0.88, true); g.stroke();
-      t.draw(g, cx, cy+S*0.16, S*0.24); }
     else if (type==="platform") {
       // a steel plate with an elbow of fixed track cast into it, open at two ends
       tile("#5c6474");
@@ -1524,25 +1526,6 @@
     }
     ctx.globalAlpha = 1;
   }
-  // floating "×N" combo tag above the runner
-  function drawCombo() {
-    const s = state;
-    if (s.combo < 2 || s.status !== "play") return;
-    const ri = runnerInfo();
-    const size = Math.round(cell * 0.52 * (1 + s.comboFlash * 0.5));   // bigger
-    const x = ri.sx, y = ri.sy - cell*1.1, txt = "×" + s.combo;
-    if (!grainPattern) buildPaper();
-    ctx.save();
-    ctx.font = "900 " + size + "px 'Fraunces',ui-serif,Georgia,serif";
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    // soft drop shadow lifts it off the background (no hard outline)
-    ctx.shadowColor = "rgba(5,4,13,0.6)"; ctx.shadowBlur = Math.max(4, size*0.18);
-    ctx.shadowOffsetX = size*0.05; ctx.shadowOffsetY = size*0.10;
-    ctx.fillStyle = curTrack(); ctx.fillText(txt, x, y);              // colour fill (casts the shadow)
-    ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
-    if (grainPattern) { ctx.globalAlpha = 0.55; ctx.fillStyle = grainPattern; ctx.fillText(txt, x, y); ctx.globalAlpha = 1; }  // paper texture on the glyphs
-    ctx.restore();
-  }
   // Every in-bounds unoccupied cell is a legal drop now (free placement).
   function validTargets(dragTile) {
     const occ = occupiedFor(dragTile), out = [];
@@ -1669,7 +1652,7 @@
     // no tile ahead: the runner keeps going to the edge of the last tile, then falls off.
     // (visual position across the tile u = runT + 0.5, so the 80% mark is runT = 0.3)
     if (s.runIdx + 1 >= s.path.length) {
-      if (s.runT >= 0.5) { startFall(); return; }
+      if (s.runT >= 0.5) { endRun(); return; }
     }
   }
 
@@ -1787,6 +1770,12 @@
     const s = state;
     s.combo++;                       // the combo IS the running score's core (final combo length)
     if (s.combo > s.maxCombo) s.maxCombo = s.combo;
+    // wind the pace on. msPerCell is what actually drives movement, so derive it back
+    // from the ramped cps, and hand the new beat length to the backing track — the
+    // sub-beat notes between clears are scheduled off it.
+    s.cpsNow = Math.min(RAMP_MAX_CPS, s.cpsNow + RAMP_PER_TILE);
+    s.msPerCell = 1000 / s.cpsNow;
+    Sound.setTempo(s.msPerCell);
     // track "flow" clears (a healthy buffer of track ahead) for the star rating
     let ahead = 0;
     for (let j = clearedIdx + 1; j < s.path.length; j++)
@@ -1795,8 +1784,50 @@
     s.score = computeScore();
     updateScoreHud();
     s.beatPulse = 1;                 // pulse the visuals on the beat
-    s.comboFlash = 1;
     haptic(6);
+  }
+
+  // Is the cell the runner is about to enter solid? Walls, stones and closed blocks
+  // all stop him dead; open air means there is nothing to hit and he just drops.
+  function wallAhead() {
+    const s = state, last = s.path[s.path.length - 1];
+    if (!last) return false;
+    const ri = runnerInfo();
+    const dc = Math.abs(ri.tx) > Math.abs(ri.ty) ? Math.sign(ri.tx) : 0;
+    const dr = dc ? 0 : Math.sign(ri.ty);
+    const c = last.c + dc, r = last.r + dr;
+    if (!inBounds(c, r)) return false;                    // off the board is a fall, not a wall
+    if (s.walls.has(key(c, r))) return true;
+    if (s.stones && s.stones.has(key(c, r))) return true;
+    for (const b of (s.blocks || [])) {                   // a sliding block counts while it's there
+      const bc = b.axis === "h" ? b.pos : b.c, br = b.axis === "h" ? b.r : b.pos;
+      if (Math.round(bc) === c && Math.round(br) === r) return true;
+    }
+    return false;
+  }
+  // End of the track: hit a wall and he squashes first, otherwise he just runs off.
+  function endRun() {
+    if (state.status !== "play") return;
+    if (!wallAhead()) { startFall(); return; }
+    const ri = runnerInfo();
+    state.status = "squash";
+    state.combo = 0;
+    state.squash = { t:0, x:ri.sx, y:ri.sy, angle:ri.angle };
+    state.shake = Math.max(state.shake, cell * 0.16);
+    Sound.smash();                    // the existing impact voice — thud plus grit
+    haptic([18, 40, 10]);
+    state.drag = null;
+  }
+  // squash profile: compress hard, then relax part-way as he peels off the wall
+  function squashK() {
+    const q = state.squash; if (!q) return 0;
+    const u = Math.min(1, q.t / SQUASH_MS);
+    return u < 0.45 ? u/0.45 : 1 - 0.45*((u - 0.45)/0.55);
+  }
+  function tickSquash(dt) {
+    const q = state.squash; if (!q) return;
+    q.t += dt;
+    if (q.t >= SQUASH_MS) { startFall(); state.squash = null; }
   }
 
   function startFall() {
@@ -1918,19 +1949,6 @@
     "The abyss says thanks for the snack.",
   ];
   const LOSE_TITLES = ["You Fell", "Wipeout!", "Splat.", "Down You Go", "Ouch.", "Gap Year"];
-  // shown on the "speed up" popup — a jab at the player's odds of keeping up
-  const SPEED_QUIPS = [
-    "Good luck keeping up. You'll need it.",
-    "The runner just got faster. You? We'll see.",
-    "Hope those thumbs are warmed up.",
-    "Statistically, you're about to lose track. Literally.",
-    "Faster now. Your reflexes remain… optimistic.",
-    "Blink and it's over. So maybe don't.",
-    "Try to keep up. No promises expected.",
-    "The runner believes in you. The runner is naive.",
-    "Speed up! Your odds just went down.",
-    "This is the part where you start sweating.",
-  ];
   let _lastQuip = -1;
   function showLose() {
     state.status = "lose";
@@ -1982,7 +2000,6 @@
     if (state.status === "intro") drawIntro(ts);
     else if (state.status === "campan") { /* runner not formed yet — flag fly-in */ }
     else drawRunner(ts);
-    drawCombo();
     drawHazards(ts);
 
     if (state.drag) {
@@ -2012,7 +2029,7 @@
     const fs = Math.max(15, Math.round(Math.min(viewW, viewH) * 0.045));
     ctx.save();
     ctx.textBaseline = "middle";
-    const label = "SPEED", val = cps.toFixed(2), unit = " tiles/s";   // two decimals + unit
+    const label = "SPEED", val = cps.toFixed(3), unit = " tiles/s";   // three decimals — the per-tile ramp is small
     const smallF = "700 " + Math.round(fs*0.52) + "px 'Fraunces',ui-serif,Georgia,serif";
     const bigF   = "900 " + fs + "px 'Fraunces',ui-serif,Georgia,serif";
     ctx.font = smallF; const lw = ctx.measureText(label).width;
@@ -2869,7 +2886,11 @@
     bodyW:    0.26,
     bodyH:    0.26,
     bodyR:    0.07,    // corner radius of the body
-    shadow:   0.04,    // ground shadow height
+    shadow:   0.026,   // ground shadow height (its vertical radius), fraction of a cell
+    shadowW:  0.65,    // ground shadow width, fraction of body width
+    shadowA:  0.26,    // ground shadow opacity
+    shadowY:  0.01,    // shadow offset below the track, fraction of a cell
+    shadowBob:0.48,    // how much the shadow shrinks as he rises — 0 keeps it fixed, 1 in proportion to the bob
     eyeR:     0.034,
     eyeY:     0.38,    // down the body from its top, fraction of body height
     eyeAx:    -0.02,   // rear eye, fraction of body width from centre
@@ -2878,9 +2899,14 @@
     glanceX:  0.03,    // how far the pupils dart
     glanceY:  0.024,
     blinkMs:  3000,    // one blink cycle (it's a double-blink)
-    talCordY: 0.3,     // talisman cord, fraction of body height from its top
-    talHangY: 0.72,    // where the pendant hangs
+    talCordY: 0.77,    // talisman cord, fraction of body height from its top
+    talHangY: 1.01,    // where the pendant hangs
     talR:     0.052,   // pendant radius, fraction of a cell
+    talX:     0.165,   // pendant offset from centre, fraction of body width (- = back, + = forward)
+    talCordW: 0.02,    // cord thickness, fraction of a cell
+    talCordA: 0.75,    // cord opacity
+    talSpan:  0.485,   // where the cord meets the body's sides, fraction of body width
+    talSag:   -0.003,  // cord droop past the pendant, fraction of a cell (- pulls it taut)
     body:  "#bfe6ff",
     ink:   "#17263f",
   };
@@ -2927,12 +2953,25 @@
     }
     ctx.save();
     ctx.translate(sx, sy); ctx.rotate(angle);
+    // Wall squash: in the local frame +x is travel, so compressing x and bulging y is
+    // exactly "flattened against the face". Scale about the feet (y=0) so he stays on
+    // the track, and nudge him forward by what he lost so he stays flush with the wall.
+    const sq = (state.status === "squash") ? squashK() : 0;
+    if (sq > 0) {
+      const kx = 1 - (1 - SQUASH_X)*sq, ky = 1 + (SQUASH_Y - 1)*sq;
+      ctx.translate(s*RUNNER.bodyW*0.5*(1 - kx), 0);
+      ctx.scale(kx, ky);
+    }
     // local frame: +x = travel, feet at y=0, body toward -y (surface "up")
     const pale = RUNNER.body;
     const legL = s*RUNNER.legLen, bodyH = s*RUNNER.bodyH, bodyW = s*RUNNER.bodyW;
-    // soft ground shadow (not an outline)
-    ctx.fillStyle = "rgba(5,4,13,0.26)";
-    ctx.beginPath(); ctx.ellipse(0, -1, bodyW*0.55, s*RUNNER.shadow, 0, 0, Math.PI*2); ctx.fill();
+    // soft ground shadow (not an outline). shadowBob ties it to the body's rise, so a
+    // high bob can read as him actually leaving the ground rather than sliding along it.
+    const shk = 1 - RUNNER.shadowBob * (bob / Math.max(1e-6, s*RUNNER.bob || 1e-6)) * 0.5;
+    ctx.fillStyle = "rgba(5,4,13," + RUNNER.shadowA + ")";
+    ctx.beginPath();
+    ctx.ellipse(0, -1 + s*RUNNER.shadowY, bodyW*RUNNER.shadowW*shk, s*RUNNER.shadow*shk, 0, 0, Math.PI*2);
+    ctx.fill();
     // legs — same colour as body, no outline
     ctx.strokeStyle = pale; ctx.lineWidth = Math.max(3, s*RUNNER.legWidth); ctx.lineCap = "round"; ctx.lineJoin = "round";
     const hipY = -legL - bob - bodyH*(RUNNER.hipRise||0), kneeLead = s*RUNNER.kneeLead;
@@ -2958,10 +2997,12 @@
     const worn = wornTalisman();
     if (worn) {
       const cordY = byTop + bodyH*RUNNER.talCordY, hangY = byTop + bodyH*RUNNER.talHangY;
-      ctx.strokeStyle = "rgba(23,38,63,0.75)"; ctx.lineWidth = Math.max(1, s*0.016); ctx.lineCap = "round";
-      ctx.beginPath(); ctx.moveTo(-bodyW*0.40, cordY);
-      ctx.quadraticCurveTo(0, hangY - s*0.005, bodyW*0.40, cordY); ctx.stroke();
-      worn.draw(ctx, 0, hangY, s*RUNNER.talR);
+      const px = bodyW*RUNNER.talX, span = bodyW*RUNNER.talSpan;   // the cord's dip follows the pendant
+      ctx.strokeStyle = "rgba(23,38,63," + RUNNER.talCordA + ")";
+      ctx.lineWidth = Math.max(1, s*RUNNER.talCordW); ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(-span, cordY);
+      ctx.quadraticCurveTo(px, hangY + s*RUNNER.talSag, span, cordY); ctx.stroke();
+      worn.draw(ctx, px, hangY, s*RUNNER.talR);
     }
     // little round eyes (facing +x = travel direction) — they blink and glance around
     ctx.fillStyle = RUNNER.ink;
@@ -3487,6 +3528,7 @@
     if (!paused) {
       if (state.status === "campan") tickCamPan(dt);
       else if (state.status === "intro") tickIntro(dt);
+      else if (state.status === "squash") tickSquash(dt);
       update(dt);
       updateHazards(dt);
       if (state.status === "falling") tickFall(dt);
@@ -3579,7 +3621,6 @@
     const s = state; if (!s) return;
     s.shake *= Math.pow(0.86, dt/16); if (s.shake < 0.3) s.shake = 0;
     s.beatPulse *= Math.pow(0.90, dt/16);
-    s.comboFlash *= Math.pow(0.90, dt/16);
     if (s.pops && s.pops.length) {
       for (const p of s.pops) p.life += dt;
       s.pops = s.pops.filter(p => p.life < p.max);
