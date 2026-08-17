@@ -883,7 +883,6 @@
       score:0, combo:0, maxCombo:0, coins:0, elapsed:0, flowClears:0,
       par: L.par || 24000,
       shake:0, beatPulse:0, pops:[], lights:[],
-      cheers:[], cheerBag:null, lastCheer:null,   // little notes thrown off each cleared tile
       // --- Batch 2: optional extra cell types & hazards ---
       coinCells: new Set((L.coins||[]).map(c=>key(c[0],c[1]))),
       // [c, r, id] — a talisman sits on the floor and is grabbed by passing over it
@@ -989,60 +988,6 @@
   // a burst of light that pulses out from a cell (tile cleared)
   function spawnLight(c, r) {
     state.lights.push({ x:(c+0.5)*cell, y:(r+0.5)*cell, life:0, max:520 });
-  }
-  // Little cheers that spring off a tile as the runner clears it. Deliberately NOT on
-  // every clear: a tile clears on every beat, so one word per clear is a wall of text.
-  // One fires on EVERY cleared tile, so the list has to be long enough that a run never
-  // feels like it is repeating: half straight encouragement, half smart-alec. Everything
-  // here is kept SHORT — the word is scaled down to fit inside one tile, so a long phrase
-  // just renders tiny and unreadable rather than looking clever.
-  const CHEERS = [
-    // — meant it —
-    "cool", "great", "nice", "yes", "smooth", "tidy", "lovely", "sharp", "clean", "neat",
-    "superb", "ace", "class", "crisp", "slick", "fluid", "poetry", "sublime", "elegant",
-    "deft", "precise", "graceful", "steady", "composed", "assured", "clinical", "exact",
-    "true", "proper", "solid", "ideal", "prime", "choice", "fine", "keen", "bright",
-    "tight", "apt", "sound", "expert", "adept", "able", "nimble", "agile", "fleet",
-    "bold", "sure", "easy", "silky", "glossy", "grand", "mint", "peachy", "beaut",
-    "tops", "magic", "boss", "golden", "stellar", "polished", "keep going", "on you go",
-    // — smart-alec —
-    "finally", "barely", "lucky", "hmm", "adequate", "passable", "ok then", "allowed",
-    "generous", "dubious", "curious", "brave", "showy", "calm down", "steady on", "wow",
-    "big deal", "again", "next", "still", "oh", "right", "noted", "quaint", "cute",
-    "bless", "aww", "really", "amazing", "iconic", "legend", "historic", "genius",
-    "titan", "colossal", "immense", "epic", "unreal", "no way", "get out", "please",
-    "stop it", "too much", "show off", "flex", "smug", "cocky", "modest", "humble",
-    "quiet", "at last", "took ages", "slowly", "eh", "meh", "so-so", "fair", "decent",
-    "alright", "not bad", "nearly", "almost", "warmer", "closer", "better", "sure sure",
-    "if you say", "as ever", "moving on", "a classic", "arguably", "allegedly", "noted."
-  ];
-  // Drawn from a shuffled bag rather than at random: with a word on every tile, true
-  // random repeats itself embarrassingly fast. A bag runs the whole list before any
-  // word comes round again.
-  function nextCheer(s) {
-    if (!s.cheerBag || !s.cheerBag.length) {
-      s.cheerBag = CHEERS.map((_, i) => i);
-      for (let i = s.cheerBag.length - 1; i > 0; i--) {          // Fisher-Yates
-        const j = Math.floor(Math.random() * (i + 1));
-        [s.cheerBag[i], s.cheerBag[j]] = [s.cheerBag[j], s.cheerBag[i]];
-      }
-      if (s.cheerBag[s.cheerBag.length - 1] === s.lastCheer)     // don't straddle a refill
-        [s.cheerBag[0], s.cheerBag[s.cheerBag.length - 1]] = [s.cheerBag[s.cheerBag.length - 1], s.cheerBag[0]];
-    }
-    const i = s.cheerBag.pop();
-    s.lastCheer = i;
-    return CHEERS[i];
-  }
-  // How far above the track surface the word sits, in cells. The runner's head reaches
-  // about legLen + bodyH + bob (~0.44) above the surface, so this clears him with air.
-  const CHEER_LIFT = 0.70;
-  function spawnCheer() {
-    const s = state; if (!s || !s.cheers) return;
-    // Pinned to where the RUNNER is on this beat, not to the tile that cleared — the two
-    // differ by half a tile, and the runner is where the eye already is. The point is
-    // captured once, here: the word then stays put while he runs on out from under it.
-    const p = visualAt(s.runIdx + s.runT);
-    s.cheers.push({ x:p.x, y:p.y - cell*CHEER_LIFT, text:nextCheer(s), life:0, max:520 });
   }
 
   // ---------- Level-start intro (pixels assemble into the character) ------
@@ -1599,46 +1544,6 @@
     }
     ctx.globalAlpha = 1;
   }
-  // The cheers. Springs open on a back-out ease (overshoots full size, then settles) dead
-  // centre on the cleared tile and fades from there — it never travels, so the eye reads it
-  // as belonging to that tile instead of tracking a moving word. Drawn in WORLD space with
-  // the board, so it holds its tile as the camera moves.
-  function drawCheers() {
-    const s = state; if (!s || !s.cheers || !s.cheers.length) return;
-    ctx.save();
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    for (const p of s.cheers) {
-      const k = p.life / p.max;
-      const u = Math.min(1, k / 0.34);                    // the spring is over in the first third
-      const sc = 1 + 2.70158*Math.pow(u-1,3) + 1.70158*Math.pow(u-1,2);   // easeOutBack
-      const a = k < 0.35 ? 1 : 1 - (k - 0.35) / 0.65;     // brief hold, then out
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.scale(sc, sc);
-      ctx.globalAlpha = Math.max(0, a);
-      // Styled as the menu's header: Fraunces 900, uppercase, 2px tracking at 18px — but
-      // flat, with no extrusion. Painted in the level's rail colour, the bright path line,
-      // so the word reads as coming off the track the runner just crossed.
-      const txt = p.text.toUpperCase();
-      let fs = cell*0.26;
-      const sizeFont = v => "900 " + Math.round(v) + "px 'Fraunces',ui-serif,Georgia,serif";
-      ctx.font = sizeFont(fs);
-      if ("letterSpacing" in ctx) ctx.letterSpacing = (fs*0.111).toFixed(1) + "px";
-      // One tile width is the budget, whatever the word. Longer words simply come out
-      // smaller rather than sprawling across the board.
-      const maxW = cell*0.86;
-      const wpx = ctx.measureText(txt).width;
-      if (wpx > maxW) {
-        fs = fs * maxW / wpx;
-        ctx.font = sizeFont(fs);
-        if ("letterSpacing" in ctx) ctx.letterSpacing = (fs*0.111).toFixed(1) + "px";
-      }
-      ctx.fillStyle = curRail(); ctx.fillText(txt, 0, 0);
-      ctx.restore();
-    }
-    ctx.restore();
-    ctx.globalAlpha = 1;
-  }
   // Every in-bounds unoccupied cell is a legal drop now (free placement).
   function validTargets(dragTile) {
     const occ = occupiedFor(dragTile), out = [];
@@ -1859,7 +1764,6 @@
         node.exited = true;                                 // this placement is done
         Sound.clearTile();                                  // play a tone as the tile clears
         spawnLight(node.c, node.r);                         // burst of light from the cleared tile
-        spawnCheer();                                       // and a word, over the runner's head
         scoreClear(i);                                      // score, combo, juice on the beat
         if (node.tileId != null) {
           const t = s.tiles[node.tileId];
@@ -2111,7 +2015,6 @@
     drawShards();
     drawPops();
     drawLights();
-    drawCheers();                                 // over the light burst, under the HUD
     if (state.status === "intro") drawIntro(ts);
     else if (state.status === "campan") { /* runner not formed yet — flag fly-in */ }
     else drawRunner(ts);
@@ -3791,10 +3694,6 @@
     if (s.lights && s.lights.length) {
       for (const p of s.lights) p.life += dt;
       s.lights = s.lights.filter(p => p.life < p.max);
-    }
-    if (s.cheers && s.cheers.length) {
-      for (const p of s.cheers) p.life += dt;
-      s.cheers = s.cheers.filter(p => p.life < p.max);
     }
   }
 
