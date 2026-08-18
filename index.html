@@ -15,6 +15,13 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&display=swap" rel="stylesheet">
 <title>Tile Runner</title>
 <style>
+  /* Headings and the title logo. Local file, so it works offline and needs no network
+     round-trip — sw.js precaches it. It is the face for the whole UI. */
+  @font-face {
+    font-family:"SquareFont";
+    src:url("./Square.ttf") format("truetype");
+    font-weight:normal; font-style:normal; font-display:swap;
+  }
   :root {
     --bg:        #0d0b1a;
     --panel:     #17142b;
@@ -30,12 +37,15 @@
     --goal:      #7dff6b;
     --wall:      #3a2a55;
     --shadow:    #05040d;
+    /* the whole UI. Fraunces stays in the stack only as a glyph fallback:
+       SquareFont has no checkmark or arrow, and the level grid uses both. */
+    --font: "SquareFont", "Fraunces", ui-serif, Georgia, serif;
   }
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body {
     height:100%; width:100%; overflow:hidden;
     background:var(--bg); color:var(--ink);
-    font-family:"Fraunces", ui-serif, Georgia, "Times New Roman", serif;
+    font-family:var(--font);
     -webkit-user-select:none; user-select:none;
     -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent;
     touch-action:none; overscroll-behavior:none;
@@ -74,7 +84,8 @@
   #pauseFloat {
     position:fixed; z-index:15; padding:0; cursor:pointer;
     top:calc(env(safe-area-inset-top) + 12px); right:calc(env(safe-area-inset-right) + 12px);
-    width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; gap:5px;
+    /* square, like every other button in the UI — the circle was the odd one out */
+    width:44px; height:44px; border-radius:0; display:flex; align-items:center; justify-content:center; gap:5px;
     background:rgba(23,20,43,0.72); border:2px solid var(--grid-line); box-shadow:2px 2px 0 var(--shadow);
   }
   #pauseFloat span { width:4px; height:16px; background:var(--ink); border-radius:1px; }
@@ -156,6 +167,15 @@
   .menu-ver { font-size:var(--body); letter-spacing:2px; color:var(--dim); margin-top:14px; opacity:0.7; }
   .menu-card h2 { font-size:18px; font-weight:900; letter-spacing:2px; text-transform:uppercase; color:var(--track);
     text-shadow:2px 2px var(--shadow); margin-bottom:16px; }
+  /* the main menu's header is the title logo in miniature — same stacked gold extrusion and
+     -4° tilt as the canvas one in draw3DText, just built out of text-shadow instead */
+  .menu-card h2.logo {
+    font-size:40px; line-height:0.9; letter-spacing:1px; margin-bottom:24px;
+    transform:rotate(-4deg);
+    text-shadow:
+      1px 1px 0 #c79320, 2px 2px 0 #b8871c, 3px 4px 0 #a87b18, 4px 5px 0 #916a14,
+      5px 6px 0 #7d5b10, 6px 7px 0 #6b4c0b, 7px 9px 10px rgba(5,4,13,0.6);
+  }
   #menu-body { display:flex; flex-direction:column; gap:9px; }
   #menu-body button { width:100%; }
   .menu-sub { font-size:var(--btn); font-weight:900; letter-spacing:2px; text-transform:uppercase; color:var(--dim);
@@ -714,6 +734,12 @@
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
   const VERSION = "v6.7";                    // shown on the title & pause screens
+  // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
+  // only DOM text does — and most of the UI text lives inside panels that are hidden
+  // at boot, so without this nudge the canvas would draw in the fallback face until some
+  // DOM text forced the fetch. Everything redraws each frame, so it swaps in on arrival.
+  const UI_FONT = "'SquareFont','Fraunces',ui-serif,Georgia,serif";
+  if (document.fonts && document.fonts.load) document.fonts.load("900 100px SquareFont");
   // the runner's starting speed (level 1, no combo, no tier) in tiles/second; the
   // whole campaign's speeds scale so level 1 begins here.
   const START_CPS = 0.6;
@@ -959,8 +985,24 @@
     // character intro, so neither plays out behind the tutorial / speed-up cards.
     state.introPlan = { goalOnScreen, startCam, gx, gy };
     state.status = "hold";
-    maybeShowMechIntro(L);        // queue any never-seen mechanic / speed pop-up for this level
-    if (!mechQueue.length) beginLevelIntro();   // nothing to show → start the intro right away
+    // A tutorial card explains a level the player has not seen yet. Hold on the board for a
+    // beat first so they have something to attach the explanation to; levels with nothing to
+    // teach skip the wait entirely and open as they always did.
+    const pending = levelMechs(L).filter(m => !loadSeen().has(m));
+    if (pending.length) state.peekT = LEVEL_PEEK_MS;
+    else beginLevelIntro();       // nothing to show → start the intro right away
+  }
+  const LEVEL_PEEK_MS = 700;      // how long the board is shown before a tutorial card lands
+  // Counts out the peek. Runs on "hold", where update() is already inert, so the board sits
+  // still and unobstructed for the duration.
+  function tickHold(dt) {
+    const s = state;
+    if (s.peekT == null) return;
+    s.peekT -= dt;
+    if (s.peekT > 0) return;
+    s.peekT = null;
+    maybeShowMechIntro(s.L);      // queue any never-seen mechanic pop-up for this level
+    if (!mechQueue.length) beginLevelIntro();
   }
   // start the opening camera pan (if the flag begins off-screen) and then the character intro
   function beginLevelIntro() {
@@ -2048,15 +2090,15 @@
     ctx.save();
     ctx.textBaseline = "middle";
     const label = "SPEED", val = cps.toFixed(3), unit = " tiles/s";   // three decimals — the per-tile ramp is small
-    const smallF = "700 " + Math.round(fs*0.52) + "px 'Fraunces',ui-serif,Georgia,serif";
-    const bigF   = "900 " + fs + "px 'Fraunces',ui-serif,Georgia,serif";
+    const smallF = "700 " + Math.round(fs*0.52) + "px " + UI_FONT;
+    const bigF   = "900 " + fs + "px " + UI_FONT;
     ctx.font = smallF; const lw = ctx.measureText(label).width;
     ctx.font = bigF;   const vw = ctx.measureText(val).width;
     ctx.font = smallF; const uw = ctx.measureText(unit).width;
     const padX = Math.round(fs*0.55), gap = Math.round(fs*0.4);
     const boxW = padX*2 + lw + gap + vw + uw, boxH = Math.round(fs*1.5);
-    // pill
-    rrect(m, m, boxW, boxH, boxH*0.32);
+    // square plate, matching the DOM buttons (which carry no radius at all)
+    rrect(m, m, boxW, boxH, 0);
     ctx.fillStyle = "rgba(10,8,22,0.62)"; ctx.fill();
     ctx.lineWidth = Math.max(1, fs*0.05); ctx.strokeStyle = "rgba(255,255,255,0.10)"; ctx.stroke();
     const midY = m + boxH/2;
@@ -2499,10 +2541,10 @@
     talFlash.def.draw(ctx, x + h*0.55, y + h/2, h*0.30);
     ctx.textAlign = "left"; ctx.textBaseline = "middle";
     ctx.fillStyle = "rgba(214,218,240,0.8)";
-    ctx.font = "700 " + Math.round(h*0.22) + "px 'Fraunces',ui-serif,Georgia,serif";
+    ctx.font = "700 " + Math.round(h*0.22) + "px " + UI_FONT;
     ctx.fillText("NEW TALISMAN", x + h, y + h*0.36);
     ctx.fillStyle = talFlash.def.col;
-    ctx.font = "900 " + Math.round(h*0.32) + "px 'Fraunces',ui-serif,Georgia,serif";
+    ctx.font = "900 " + Math.round(h*0.32) + "px " + UI_FONT;
     ctx.fillText(talFlash.def.name, x + h, y + h*0.66);
     ctx.restore();
   }
@@ -2956,9 +2998,6 @@
     }
     const s = cell;
     const phase = state.runPhase;
-    // stride reaches past the front of the body on the forward swing, and slides back behind it
-    const swing = moving ? Math.sin(phase) * s*RUNNER.swing : 0;
-    const bob   = moving ? Math.abs(Math.sin(phase)) * s*RUNNER.bob : 0;
 
     // aura while a timed boost/slow effect is active
     if (state.speedFx && state.speedFx.t > 0) {
@@ -2969,12 +3008,19 @@
       ctx.beginPath(); ctx.arc(sx, sy - s*0.2, s*0.42, 0, Math.PI*2); ctx.fill();
       ctx.restore();
     }
+    paintRunner(sx, sy, s, phase, angle, moving, ts, (state.status === "squash") ? squashK() : 0);
+  }
+  // The runner himself, at an arbitrary place and size — knees, foot lift, bob, talisman and
+  // all. Split out of drawRunner so the title screen and the opening cinematic can draw the
+  // real character instead of a lookalike, and so there is only ever one of him to retune.
+  function paintRunner(sx, sy, s, phase, angle, moving, ts, sq) {
+    const swing = moving ? Math.sin(phase) * s*RUNNER.swing : 0;
+    const bob   = moving ? Math.abs(Math.sin(phase)) * s*RUNNER.bob : 0;
     ctx.save();
     ctx.translate(sx, sy); ctx.rotate(angle);
     // Wall squash: in the local frame +x is travel, so compressing x and bulging y is
     // exactly "flattened against the face". Scale about the feet (y=0) so he stays on
     // the track, and nudge him forward by what he lost so he stays flush with the wall.
-    const sq = (state.status === "squash") ? squashK() : 0;
     if (sq > 0) {
       const kx = 1 - (1 - SQUASH_X)*sq, ky = 1 + (SQUASH_Y - 1)*sq;
       ctx.translate(s*RUNNER.bodyW*0.5*(1 - kx), 0);
@@ -3314,19 +3360,23 @@
   // order makes each stripe a neighbour of the last, and reversing at the ends avoids
   // the one hard jump a wrap would put in (last colour straight back to the first).
   //
-  // Rasterised ONCE into a screen-sized buffer per theme / cell / viewport and blitted,
-  // exactly as buildGrainScreen() does with the paper grain — one drawImage per frame.
-  const BG_SCROLL = 0;                                 // 0 = quilt parked; 1 = continuous drift
+  // The pattern is genuinely PERIODIC, which is what lets it scroll forever. The colour
+  // repeats every `span` stripes, so a tile of span*stripeW patches square tiles seamlessly
+  // in both axes — and because the tile is painted over exactly that patch range, the
+  // lightness jitter repeats with it instead of breaking the seam. Held as a CanvasPattern,
+  // so the whole backdrop is one fillRect a frame at any offset.
+  //
   // A background patch must always read as SMALLER than a foreground tile, or the quilt
   // starts competing with the board. Capped at 70% of a cell — i.e. at least 30% smaller.
   // Enforced here rather than only in genTheme, so DEFAULT_THEME and the title theme
   // (and any hand-written override) can't slip past it.
   const PATCH_MAX = 0.70;
-  let patchBuf = null, patchKey = "";
+  const PATCH_TILE_MAX = 2048;                         // px ceiling on the repeat tile
+  let patchPat = null, patchKey = "", patchPeriodPx = 0;
   function patchColor(T, i, j) {
     const N = T.colors.length;
-    const k = Math.floor((i + T.dir*j) / T.stripeW);   // constant along a 45° diagonal
     if (N < 2) return T.colors[0];
+    const k = Math.floor((i + T.dir*j) / T.stripeW);   // constant along a 45° diagonal
     const span = 2*N - 2, m = ((k % span) + span) % span;
     return T.colors[m < N ? m : span - m];             // ping-pong, so the ramp never jumps
   }
@@ -3339,32 +3389,57 @@
     if (jit) { o.globalAlpha = Math.abs(jit)*0.018; o.fillStyle = jit > 0 ? "#ffffff" : "#000000";
                o.fillRect(x, y, w + 1, w + 1); o.globalAlpha = 1; }
   }
-  function buildPatchBuffer(T, w) {
-    // Nothing is rotated any more, so the buffer only has to cover the viewport plus a
-    // patch of margin. Rasterised at CSS resolution rather than device pixels — these are
-    // flat blocks under a wash and a grain layer, and at dpr 3 the device-pixel version
-    // costs nine times the memory for a difference you cannot see.
-    const nx = Math.ceil(viewW / w) + 2, ny = Math.ceil(viewH / w) + 2;
-    const off = document.createElement("canvas");
-    off.width = Math.max(2, Math.ceil(nx * w)); off.height = Math.max(2, Math.ceil(ny * w));
+  function buildPatchPattern(T, w) {
+    const P = 2*(T.colors.length - 1) * T.stripeW;     // patches in one full cycle
+    const full = P * w;                                // the tile at true size, in px
+    // On a big cell that tile can run to several thousand pixels a side, which is far too
+    // much canvas to hold. Rather than shortening the colour cycle to fit — which costs
+    // hues on exactly the largest, most visible screens — rasterise SMALL and let the
+    // pattern transform scale it back up. These are flat blocks under a 0.22 wash and a
+    // grain layer, so the softened patch edges are not detectable; a missing colour would be.
+    const k = Math.min(1, PATCH_TILE_MAX / Math.max(1, full));
+    const S = Math.max(2, Math.round(full * k)), step = S / P;
+    const off = document.createElement("canvas"); off.width = off.height = S;
     const o = off.getContext("2d");
-    for (let j = 0; j < ny; j++)
-      for (let i = 0; i < nx; i++) paintPatch(o, i*w, j*w, w, T, i, j);
-    patchBuf = off;
+    for (let j = 0; j < P; j++)
+      for (let i = 0; i < P; i++) paintPatch(o, i*step, j*step, step, T, i, j);
+    patchPat = ctx.createPattern(off, "repeat");
+    patchPeriodPx = S;
+    if (k < 1 && patchPat.setTransform && window.DOMMatrix) {
+      patchPat.setTransform(new DOMMatrix().scale(1/k));
+      patchPeriodPx = full;                            // the on-screen period is the full size
+    }
+  }
+  // Scroll while an overlay is up (pause / win / fail). Now that the pattern tiles, this is
+  // a real scroll rather than the bounded wander it used to be: a position that only ever
+  // accumulates, wrapped to one tile so the number stays small. The SPEED eases in and out
+  // — easing the offset instead would drag the quilt back to where it started.
+  const BG_SCROLL_CPS = 0.22;                // cells/sec along x; y follows at 0.45 of it
+  let bgScrollX = 0, bgScrollY = 0, bgScrollK = 0, bgScrollTs = 0;
+  function bgScrollOffset(ts, active) {
+    const dt = bgScrollTs ? Math.min(120, ts - bgScrollTs) : 0;
+    bgScrollTs = ts;
+    bgScrollK += ((active ? 1 : 0) - bgScrollK) * Math.min(1, dt / 600);
+    const v = BG_SCROLL_CPS * (cell || 90) * bgScrollK * dt / 1000;
+    const per = patchPeriodPx || 1;
+    bgScrollX = (bgScrollX + v) % per;
+    bgScrollY = (bgScrollY + v*0.45) % per;
+    return { x: bgScrollX, y: bgScrollY };
   }
   function drawPatchwork(ts, themeOverride) {
     const T = themeOverride || (state && state.bgTheme) || DEFAULT_THEME;
     const w = (cell || 90) * Math.min(T.patchW || 0.55, PATCH_MAX);
-    const key = T.colors.join("|") + "|" + T.dir + "/" + T.stripeW + "@" + Math.round(w)
-              + "x" + Math.round(viewW) + "x" + Math.round(viewH);
-    if (key !== patchKey) { buildPatchBuffer(T, w); patchKey = key; }
-    // BG_SCROLL 0 parks it. NOTE: the buffer is a one-off rasterisation, so it cannot
-    // wrap — turning the drift back on slides its edge into view once the offset passes
-    // the one-patch margin. Scrolling this means re-rasterising as it moves.
-    const ox = ts * 0.001 * T.drift * BG_SCROLL * (cell || 90);
+    const key = T.colors.join("|") + "|" + T.dir + "/" + T.stripeW + "@" + Math.round(w);
+    if (key !== patchKey) { buildPatchPattern(T, w); patchKey = key; }
+    // The quilt only moves while an overlay is up: paused, or on the win / fail card. The
+    // title screen passes a theme override and is deliberately excluded.
+    const scrolling = titleActive ||
+      (!themeOverride && (paused || (state && (state.status === "win" || state.status === "lose"))));
+    const off = bgScrollOffset(ts, scrolling);
     ctx.save();
-    ctx.translate(-w - ox, -w - ox*0.42);
-    ctx.drawImage(patchBuf, 0, 0);
+    ctx.translate(-off.x, -off.y);
+    ctx.fillStyle = patchPat;
+    ctx.fillRect(0, 0, viewW + patchPeriodPx, viewH + patchPeriodPx);
     ctx.restore();
     if (T.style === "dotted") {                        // faint dot lattice over the quilt
       ctx.fillStyle = "rgba(255,255,255,0.05)"; const g = w*0.7;
@@ -3474,6 +3549,7 @@
   canvas.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     Sound.unlock();                     // first touch unlocks audio (iOS autoplay policy)
+    if (cineActive)  { endCine(); return; }     // tap anywhere to skip the opening
     if (titleActive) { leaveTitle(); return; }
     if (state.status !== "play") return;
     const { x, y } = screenXY(e);
@@ -3590,9 +3666,11 @@
     if (!lastTs) lastTs = ts;
     let dt = ts - lastTs; lastTs = ts;
     if (dt > 100) dt = 100;
+    if (cineActive)  { tickCine(dt);  drawCine(ts);  requestAnimationFrame(frame); return; }
     if (titleActive) { tickTitle(dt); drawTitle(ts); requestAnimationFrame(frame); return; }
     if (!paused) {
-      if (state.status === "campan") tickCamPan(dt);
+      if (state.status === "hold") tickHold(dt);
+      else if (state.status === "campan") tickCamPan(dt);
       else if (state.status === "intro") tickIntro(dt);
       else if (state.status === "squash") tickSquash(dt);
       update(dt);
@@ -3726,6 +3804,7 @@
   function buildMenu(screen) {
     menuBody.innerHTML = "";
     const title = document.getElementById("menu-title");
+    title.className = "";                      // only the main screen wears the logo treatment
     if (screen === "talismans") {
       title.textContent = "Talismans";
       const grid = document.createElement("div"); grid.className = "tal-grid";
@@ -3760,6 +3839,7 @@
     }
     if (screen === "levels") {
       title.textContent = "Levels";
+      menuBody.appendChild(btn("Intro", () => { closeMenu(); startCine("menu"); }));   // first item
       const grid = document.createElement("div"); grid.className = "lvl-grid";
       const best = loadBest();
       LEVELS.forEach((L, i) => {
@@ -3775,12 +3855,13 @@
       return;
     }
     // main / pause screen
-    title.textContent = "Tile Runner";
+    // the menu header IS the title, small: stacked over two lines, tilted and extruded
+    title.innerHTML = "Tile<br>Runner";
+    title.className = "logo";
     menuBody.appendChild(btn("Resume", closeMenu));
     menuBody.appendChild(btn("Restart Level", () => { loadLevel(levelIdx); closeMenu(); }));
     menuBody.appendChild(btn("Levels", () => buildMenu("levels")));
     menuBody.appendChild(btn("Talismans", () => buildMenu("talismans")));
-    menuBody.appendChild(sub("Options"));
     menuBody.appendChild(toggle("Sound", !Sound.isMuted(), () => { Sound.unlock(); Sound.setMuted(!Sound.isMuted()); buildMenu(screen); }));
     menuBody.appendChild(toggle("Colorblind", colorblind, () => { colorblind = !colorblind; settings.colorblind = colorblind; saveSettings(); applyColorblind(); buildMenu(screen); }));
     const ver = document.createElement("div"); ver.className = "menu-ver"; ver.textContent = VERSION;
@@ -3801,6 +3882,9 @@
     freeTiles: () => state.tiles.filter(t => t.status === "free"),
     drop: (id, c, r) => dropTileOn(state.tiles[id], c, r),
     cam: () => ({ camX, camY, cell, viewW, viewH, worldW, worldH }),
+    // scrub the opening cinematic: cine() reads the clock, cine(ms) jumps to a beat.
+    // Handy for retiming CINE without sitting through the whole thing.
+    cine: (ms) => { if (ms == null) return cineT; startCine(cineNext); cineT = ms; return cineT; },
     runner: () => runnerInfo(),
     stones: () => [...state.stones],
     smash: (c, r) => breakStone(c, r),
@@ -3831,6 +3915,11 @@
 
   // ---------- Title / attract screen -------------------------------------
   const TITLE_WORDS = ["TILE", "RUNNER"];
+  const TITLE_TILE_DX = 0.13;            // how far left TILE sits, as a fraction of its size
+  const TITLE_BYLINE = "or how I learned to stop worrying and love the run";
+  const TITLE_SPECTRUM = (function(){ const c = [];
+    for (let i = 0; i < 8; i++) c.push("hsl(" + (i*45) + ",55%,33%)");
+    return c; })();
   const TITLE = { t: 0, u: 0 };
   let titleTheme = null;
   function easeOutBack(p){ const c1 = 1.70158, c3 = c1 + 1; return 1 + c3*Math.pow(p-1,3) + c1*Math.pow(p-1,2); }
@@ -3839,6 +3928,11 @@
     titleActive = true;
     TITLE.t = 0; TITLE.u = 0;
     titleTheme = genTheme(hashSeed("TILE RUNNER title"));
+    // The title wears the whole colour wheel rather than genTheme's 50-330° slice: eight
+    // hues at 45° apart, walked out and back. Eight (not twelve) keeps one full cycle of
+    // stripes inside the repeat tile's budget, so it never has to be rasterised down.
+    titleTheme.colors = TITLE_SPECTRUM;
+    titleTheme.stripeW = 2;
     const pf = document.getElementById("pauseFloat"); if (pf) pf.style.display = "none";
   }
   function leaveTitle(){
@@ -3846,10 +3940,181 @@
     titleActive = false;
     const pf = document.getElementById("pauseFloat"); if (pf) pf.style.display = "";
     Sound.unlock();
-    loadLevel(levelIdx);                 // start the level fresh (with its own intro + any tutorial pop)
+    // Level one opens with the cinematic; it loads the level itself when it ends. Resuming
+    // further in skips straight to the board — the creation myth only fits in front of the
+    // first level, not in front of level 14.
+    if (levelIdx === 0) startCine("level");
+    else loadLevel(levelIdx);            // start the level fresh (with its own intro + any tutorial pop)
   }
 
-  const TITLE_TRACK_SPEED = 0.0019;      // cells per ms the little runner travels
+  // ---------- Opening cinematic -------------------------------------------
+  // A creation myth in six beats. Plays ahead of level one every time the game is started
+  // from the title there, and is always replayable from the top of the Levels menu.
+  // Tap anywhere to skip.
+  // Every beat is a timestamp in ms so the whole thing can be retimed by reading down
+  // this one table; nothing below hard-codes a duration.
+  const CINE = {
+    line1:  [ 600, 1300, 2900, 3500],    // "At first, there was nothing."
+    and1:   [3700, 4100, 4700, 5100],    // "And then"
+    boom1:  4950,                        // ...a tile
+    line2:  [5150, 5600, 7000, 7500],    // "A tile came into the cosmos"
+    and2:   [7700, 8100, 8700, 9100],    // "And then"
+    boom2:  8950,                        // ...a runner, who assembles out of streaming pixels
+                                         // over INTRO_CONVERGE — the game's own level-start effect
+    line3:  [9750, 10200, 11500, 12000], // "A runner appeared"
+    bg:     [12100, 13400],              // the quilt fades up out of the black
+    line4:  [13300, 13800, 15400, 16000],// "And so he ran..."
+    run:    13500,                       // and off he goes
+    fade:   [15800, 16800],              // back to black
+    end:    17100
+  };
+  const CINE_RUN_SPD = 0.0008;           // tiles per ms once he sets off (~the game's own pace)
+  const CINE_LINES = { line1:"At first, there was nothing.", and1:"And then",
+                       line2:"A tile came into the cosmos", and2:"And then",
+                       line3:"A runner appeared", line4:"And so he ran..." };
+  const CINE_SETTLE = 620;               // how long he flickers after forming, before going solid
+  let cineActive = false, cineNext = "level", cineT = 0, cineTheme = null, cineFired = 0, cineParts = [];
+  function startCine(next){
+    cineActive = true; cineNext = next || "level"; cineT = 0; cineFired = 0;
+    cineTheme = genTheme(hashSeed("TILE RUNNER title"));
+    // Stored as angle + distance rather than absolute points, so the field still aims at the
+    // tile if the window is resized mid-cinematic. 90 of them, as in startIntro().
+    cineParts = [];
+    for (let i = 0; i < 90; i++) cineParts.push({
+      ang: Math.random()*Math.PI*2, dist: 0.55 + Math.random()*0.6,
+      sz: 0.05 + Math.random()*0.07,
+      col: Math.random() < 0.7 ? getVar("--runner") : "#ffffff" });
+    const pf = document.getElementById("pauseFloat"); if (pf) pf.style.display = "none";
+  }
+  function endCine(){
+    if (!cineActive) return;
+    cineActive = false;
+    if (cineNext === "menu") openMenu("levels");        // replayed from the menu — go back to it
+    else loadLevel(levelIdx);                           // opening run — straight into the level
+  }
+  function tickCine(dt){
+    cineT += dt;
+    // one-shot bangs — drawCine runs every frame, so the sound can't live in there
+    if (!(cineFired & 1) && cineT >= CINE.boom1) { cineFired |= 1; if (Sound.introFlash) Sound.introFlash(); }
+    if (!(cineFired & 2) && cineT >= CINE.boom2) { cineFired |= 2; if (Sound.introGather) Sound.introGather(); }
+    if (!(cineFired & 4) && cineT >= CINE.boom2 + INTRO_CONVERGE) { cineFired |= 4; if (Sound.introFlash) Sound.introFlash(); }
+    if (cineT >= CINE.end) endCine();
+  }
+  // 0 before a, ramps to 1 by b, holds to c, back to 0 by d
+  function cineEnv(t, e){
+    if (t <= e[0] || t >= e[3]) return 0;
+    if (t < e[1]) return (t - e[0]) / (e[1] - e[0]);
+    if (t <= e[2]) return 1;
+    return 1 - (t - e[2]) / (e[3] - e[2]);
+  }
+  function cineText(str, cy, alpha, big){
+    if (alpha <= 0.001) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    let fs = Math.min(viewW * (big ? 0.075 : 0.058), viewH * 0.05);
+    ctx.font = "900 " + Math.round(fs) + "px " + UI_FONT;
+    const maxW = viewW * 0.84, wpx = ctx.measureText(str).width;
+    if (wpx > maxW) { fs = fs * maxW / wpx; ctx.font = "900 " + Math.round(fs) + "px " + UI_FONT; }
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(str, viewW/2, cy);
+    ctx.restore();
+  }
+  function drawCine(ts){
+    const t = cineT;
+    // the quilt is always drawn, then blacked out by however much of the fade is left —
+    // painting it under black is what lets beat 5 simply lift the black away
+    drawBackground(ts, cineTheme);
+    const bgA = t < CINE.bg[0] ? 0 : Math.min(1, (t - CINE.bg[0]) / (CINE.bg[1] - CINE.bg[0]));
+    ctx.globalAlpha = 1 - bgA; ctx.fillStyle = "#000000";
+    ctx.fillRect(0, 0, viewW, viewH); ctx.globalAlpha = 1;
+
+    const s = Math.min(viewW*0.30, viewH*0.17);        // the one tile, centre stage
+    const cx = viewW/2, cy = viewH*0.60;
+    const m = { s, x0: cx - s/2, row0Y: cy - s/2 };
+    const here = { c:0, r:0 }, prev = { c:-1, r:0 }, next = { c:1, r:0 };   // a straight east-west tile
+
+    let shake = 0;                                      // both booms punch the frame
+    for (const b of [CINE.boom1, CINE.boom2]) {
+      const k = (t - b) / 260;
+      if (k > 0 && k < 1) shake = Math.max(shake, (1-k) * s*0.06);
+    }
+    ctx.save();
+    if (shake) ctx.translate((Math.random()*2-1)*shake, (Math.random()*2-1)*shake);
+
+    if (t >= CINE.boom1 && t <= CINE.run) {             // the tile, springing in
+      const k = Math.min(1, (t - CINE.boom1) / 420), e = easeOutBack(k);
+      ctx.save();
+      ctx.translate(cx, cy); ctx.scale(e, e); ctx.translate(-cx, -cy);
+      introDrawPlatform(here, prev, next, m);
+      ctx.restore();
+    }
+    // Once he sets off, the same three-tile queue the player cycles: two on the ground and
+    // one arcing over his head from the back to the front. This is the game's whole premise,
+    // and it is also what stops him running off the end of the one tile into mid-air.
+    if (t > CINE.run) {
+      const u = (t - CINE.run) * CINE_RUN_SPD, i0 = Math.floor(u), f = u - i0;
+      const rowAt = (c) => ({ c, r:0 });
+      for (let k = 0; k < TITLE_QUEUE - 1; k++)
+        introDrawPlatform(rowAt(i0+k), rowAt(i0+k-1), rowAt(i0+k+1), m);
+      dragPlatform(rowAt, i0 - 1, i0 - 1 + TITLE_QUEUE, f, m);
+    }
+    if (t >= CINE.boom2) {
+      // He arrives the way he arrives in game: pixels streaming in from every side, easing
+      // onto the tile, with the character fading up underneath them. Same particle count,
+      // same ease, same INTRO_CONVERGE window and the same two sounds as drawIntro().
+      const ct = t - CINE.boom2;
+      let rx = cx;
+      if (t > CINE.run) rx = cx + (t - CINE.run) * CINE_RUN_SPD * s;   // and away to the right
+      const phase = t > CINE.run ? (t - CINE.run)*CINE_RUN_SPD*Math.PI*3 : 0;   // stride follows distance
+      if (ct < INTRO_CONVERGE) {
+        const u = ct / INTRO_CONVERGE, e = 1 - Math.pow(1-u, 3), reach = Math.max(viewW, viewH);
+        for (const p of cineParts) {
+          const x0 = cx + Math.cos(p.ang)*p.dist*reach, y0 = cy + Math.sin(p.ang)*p.dist*reach;
+          const px = x0 + (cx - x0)*e, py = y0 + (cy - y0)*e, sz = p.sz*s*(1 - u*0.4);
+          ctx.globalAlpha = 0.35 + 0.65*u; ctx.fillStyle = p.col;
+          ctx.fillRect(px - sz/2, py - sz/2, sz, sz);
+        }
+        ctx.globalAlpha = u*0.6; paintRunner(rx, cy, s, phase, 0, t > CINE.run, ts, 0); ctx.globalAlpha = 1;
+      } else {
+        const fl = ct < INTRO_CONVERGE + CINE_SETTLE
+          ? 0.25 + 0.75*(0.5 + 0.5*Math.sin(ct/60)) : 1;                // brief flicker, then solid
+        ctx.globalAlpha = fl; paintRunner(rx, cy, s, phase, 0, t > CINE.run, ts, 0); ctx.globalAlpha = 1;
+      }
+    }
+    ctx.restore();
+
+    for (const b of [CINE.boom1, CINE.boom2]) {         // white flash on each arrival
+      const k = (t - b) / 300;
+      if (k > 0 && k < 1) {
+        ctx.globalAlpha = (1-k) * 0.85; ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, viewW, viewH); ctx.globalAlpha = 1;
+      }
+    }
+
+    cineText(CINE_LINES.line1, viewH*0.46, cineEnv(t, CINE.line1), true);
+    cineText(CINE_LINES.and1,  viewH*0.30, cineEnv(t, CINE.and1));
+    cineText(CINE_LINES.line2, viewH*0.30, cineEnv(t, CINE.line2));
+    cineText(CINE_LINES.and2,  viewH*0.30, cineEnv(t, CINE.and2));
+    cineText(CINE_LINES.line3, viewH*0.30, cineEnv(t, CINE.line3));
+    cineText(CINE_LINES.line4, viewH*0.30, cineEnv(t, CINE.line4));
+
+    // faint skip prompt — drawn before the fade, so the fade takes it with everything else
+    if (t > 900 && t < CINE.fade[0]) {
+      ctx.save();
+      ctx.globalAlpha = 0.26 * Math.min(1, (t - 900) / 700);
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillStyle = "#eef0ff";
+      ctx.font = "900 " + Math.round(Math.min(viewW*0.034, 14)) + "px " + UI_FONT;
+      ctx.fillText("TAP TO SKIP", viewW/2, viewH*0.93);
+      ctx.restore();
+    }
+    const fk = t < CINE.fade[0] ? 0 : Math.min(1, (t - CINE.fade[0]) / (CINE.fade[1] - CINE.fade[0]));
+    if (fk > 0) { ctx.globalAlpha = fk; ctx.fillStyle = "#000000";
+                  ctx.fillRect(0, 0, viewW, viewH); ctx.globalAlpha = 1; }
+  }
+
+  const TITLE_TRACK_SPEED = 0.0009;      // cells per ms the little runner travels (~the game's own pace)
   // a gently winding 4-connected path: nets rightward while it rises and dips
   const INTRO_PAT = [[1,0],[1,0],[0,-1],[1,0],[0,1],[1,0],[1,0],[0,1],[1,0],[0,-1],[1,0],[1,0]];
   const INTRO_PER = INTRO_PAT.length, INTRO_DC = 8;    // one period: +8 columns, row returns to 0
@@ -3859,9 +4124,60 @@
     for (let j=0;j<k;j++){ c += INTRO_PAT[j][0]; r += INTRO_PAT[j][1]; }
     return { c, r };
   }
+  // Where the title sits, as a fraction of the viewport height. The title logo, the halo
+  // behind it and the maze band the runner travels along all key off this one number, so
+  // they move as one composition — shift it and nothing comes unstuck from anything else.
+  const TITLE_CY = 0.36;
+  // The tile band used to sit on TITLE_CY, directly behind the logo. It now has its own
+  // anchor further down the screen, so the lettering reads clean and the track runs beneath
+  // it rather than through it.
+  const TITLE_BAND_CY = 0.64;
   function introMetrics(){
     const s = cell || 90;                              // same size as the in-game tiles
-    return { s, x0: -s*1.5, row0Y: viewH*0.46 - s*0.5 };   // band centred on the header; path rises above / dips below
+    return { s, x0: -s*1.5, row0Y: viewH*TITLE_BAND_CY - s*0.5 };  // path rises above / dips below the band
+  }
+  // The game's actual mechanic, played back as animation: the tile the runner has just left
+  // lifts off the back of the queue and flies to the front of it. Drawn as the DESTINATION
+  // tile (so its connectors already match where it is going) offset back along the flight
+  // path, which is how it can arc without its shape popping when it lands.
+  const TITLE_QUEUE = 3;                               // same three tiles the player cycles
+  const DRAG_FILL_AT = 0.86;                           // where in the flight the track casts back in
+  // The same burst the board throws when a tile clears (see drawLights), in screen space and
+  // driven straight off the drag's progress rather than off a particle list — nothing here
+  // has any state to keep between frames.
+  function dragPulse(x, y, k, s){
+    if (k <= 0 || k >= 1) return;
+    const rad = s * (0.25 + k*1.3), fade = (1-k)*(1-k);
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const g = ctx.createRadialGradient(x, y, rad*0.2, x, y, rad);
+    g.addColorStop(0, "rgba(255,248,220," + (0.42*fade) + ")");
+    g.addColorStop(0.6, "rgba(255,224,160," + (0.24*fade) + ")");
+    g.addColorStop(1, "rgba(255,224,160,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 0.9*fade;
+    ctx.strokeStyle = "#fff7d6"; ctx.lineWidth = Math.max(1.5, s*0.05*(1-k));
+    ctx.beginPath(); ctx.arc(x, y, rad*0.9, 0, Math.PI*2); ctx.stroke();
+    ctx.restore();
+  }
+  function dragPlatform(cellAt, srcIdx, dstIdx, f, m){
+    const src = introCenter(cellAt(srcIdx), m), dst = introCenter(cellAt(dstIdx), m);
+    const e = f < 0.5 ? 2*f*f : 1 - Math.pow(-2*f + 2, 2)/2;          // easeInOutQuad
+    const x = src.x + (dst.x - src.x)*e;
+    const y = src.y + (dst.y - src.y)*e - Math.sin(f*Math.PI)*m.s*0.8;  // arcs up and over
+    const k = 1 + 0.1*Math.sin(f*Math.PI);                            // and a touch nearer the eye
+    // The cell it leaves flashes as it clears, and the cell it lands on flashes as it takes.
+    dragPulse(src.x, src.y, Math.min(1, f/0.40), m.s);
+    ctx.save();
+    // In hand it is a held tile, not laid track: drop it back toward the glass-only look the
+    // board gives a tile you are dragging, and let it come solid again as it sets down.
+    ctx.globalAlpha = 0.68 + 0.32*Math.pow(f, 3);
+    ctx.translate(x, y); ctx.scale(k, k); ctx.translate(-dst.x, -dst.y);
+    // Empty for the whole carry; the track only appears as it reaches the front, which is
+    // the moment the landing pulse fires, so the two read as one event.
+    introDrawPlatform(cellAt(dstIdx), cellAt(dstIdx-1), cellAt(dstIdx+1), m, f >= DRAG_FILL_AT);
+    ctx.restore();
+    dragPulse(dst.x, dst.y, Math.max(0, (f - 0.78)/0.22), m.s);
   }
   function introCenter(cellObj, m){ return { x: m.x0 + cellObj.c*m.s + m.s/2, y: m.row0Y + cellObj.r*m.s + m.s/2 }; }
   function introDir(a, b){ return { x: Math.sign(b.c-a.c), y: Math.sign(b.r-a.r) }; }
@@ -3892,7 +4208,7 @@
     ctx.fillStyle = "rgba(8,6,20,0.12)"; ctx.fillRect(0,0,viewW,viewH);   // very light darken for legibility
 
     const size = Math.min(viewW*0.195, viewH*0.14);
-    const cyT = viewH*0.46;                                    // header vertical centre
+    const cyT = viewH*TITLE_CY;                                // header vertical centre
     const y1 = cyT - size*0.5, y2 = cyT + size*0.5;            // two words, centred & close together
 
     // --- the runner maze winds BEHIND the header (drawn first) ---
@@ -3900,21 +4216,19 @@
     const u = TITLE.u, lead = Math.floor(u + 1.6);
     ctx.save();
     ctx.translate(viewW/2, cyT); ctx.rotate(-0.10); ctx.translate(-viewW/2, -cyT);   // tilt the whole stream
-    for (let i=Math.max(0, Math.floor(u)-3); i<=lead; i++){    // tiles lay ahead, then clear once the runner exits
-      const aIn = clamp((u - (i - 1.6))/0.4, 0, 1);            // fade in just ahead of the runner
-      const aOut = clamp((i + 2.0 - u)/0.5, 0, 1);            // fade out ~2 tiles behind, as the runner leaves
-      const a = aIn * aOut;
-      if (a <= 0) continue;
-      ctx.globalAlpha = a;
-      introDrawPlatform(introCellAt(i), introCellAt(i-1), introCellAt(i+1), m);
-      ctx.globalAlpha = 1;
-    }
+    // Only ever three tiles, exactly as in play: two under and ahead of the runner, and the
+    // third in the air on its way from the back of the queue to the front.
+    const i0 = Math.floor(u), f = u - i0;
+    for (let k = 0; k < TITLE_QUEUE - 1; k++)
+      introDrawPlatform(introCellAt(i0+k), introCellAt(i0+k-1), introCellAt(i0+k+1), m);
+    dragPlatform(introCellAt, i0 - 1, i0 - 1 + TITLE_QUEUE, f, m);
     // runner follows the winding surface, tilting through the rises, dips and corners
-    const i0 = Math.floor(u), fr = u - i0;
     const surf = introSurface(introCellAt(i0), introCellAt(i0-1), introCellAt(i0+1), m);
-    const pos = samplePolyline(surf, fr);
-    const pa = samplePolyline(surf, Math.max(0, fr-0.07)), pb = samplePolyline(surf, Math.min(1, fr+0.07));
-    drawTitleRunner(pos.x, pos.y, m.s, ts/95, Math.atan2(pb.y-pa.y, pb.x-pa.x));
+    const pos = samplePolyline(surf, f);
+    const pa = samplePolyline(surf, Math.max(0, f-0.07)), pb = samplePolyline(surf, Math.min(1, f+0.07));
+    // Stride is driven by ground covered rather than by the clock: change the travel speed
+    // and the legs follow, instead of him sprinting on the spot.
+    paintRunner(pos.x, pos.y, m.s, u*Math.PI*3, Math.atan2(pb.y-pa.y, pb.x-pa.x), true, ts, 0);
     ctx.restore();
 
     // --- soft dark halo so the gold header still reads over the gold maze ---
@@ -3923,23 +4237,40 @@
     ctx.fillStyle = rg; ctx.fillRect(0, 0, viewW, viewH);
 
     // --- big dramatic 3D extruded title, centred over the maze ---
-    drawTitleWord(TITLE_WORDS[0], viewW/2, y1, size, TITLE.t - 120, ts);   // TILE   (centred to RUNNER)
+    // TILE is the short word and sits above the long one; optically it needs to come back
+    // left of dead centre for the stack to look balanced.
+    drawTitleWord(TITLE_WORDS[0], viewW/2 - size*TITLE_TILE_DX, y1, size, TITLE.t - 120, ts);
     drawTitleWord(TITLE_WORDS[1], viewW/2, y2, size, TITLE.t - 400, ts);   // RUNNER
 
+    // --- byline, sitting just under the logo ---
+    if (TITLE.t > 400 + 300){
+      const a = clamp((TITLE.t - 700) / 500, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = a * 0.72;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillStyle = "#cfd3e6";
+      let bf = Math.min(viewW*0.040, 17);
+      const txt = TITLE_BYLINE.toUpperCase();
+      ctx.font = "900 " + Math.round(bf) + "px " + UI_FONT;
+      const maxW = viewW*0.86, tw = ctx.measureText(txt).width;   // it is a long line; shrink to fit
+      if (tw > maxW) { bf = bf * maxW / tw; ctx.font = "900 " + Math.round(bf) + "px " + UI_FONT; }
+      ctx.fillText(txt, viewW/2, viewH*0.525);
+      ctx.restore();
+    }
     // --- tap-to-play prompt (after the title has landed) ---
     if (TITLE.t > 400 + 520){
       const pulse = 0.5 + 0.5*Math.sin(ts/380);
       ctx.globalAlpha = 0.45 + 0.55*pulse;
       ctx.fillStyle = "#eef0ff";
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.font = "900 " + Math.round(Math.min(viewW*0.05, 19)) + "px 'Fraunces',ui-serif,Georgia,serif";   // match the byline size
+      ctx.font = "900 " + Math.round(Math.min(viewW*0.05, 19)) + "px " + UI_FONT;   // match the byline size
       ctx.fillText("TAP TO PLAY", viewW/2, viewH*0.90);
       ctx.globalAlpha = 1;
     }
     // small version number, bottom-right corner
     ctx.globalAlpha = 0.5; ctx.fillStyle = "#cfd3e6";
     ctx.textAlign = "right"; ctx.textBaseline = "bottom";
-    ctx.font = "900 " + Math.round(Math.min(viewW*0.032, 14)) + "px 'Fraunces',ui-serif,Georgia,serif";
+    ctx.font = "900 " + Math.round(Math.min(viewW*0.032, 14)) + "px " + UI_FONT;
     ctx.fillText(VERSION, viewW - viewW*0.05, viewH - viewH*0.02);
     ctx.globalAlpha = 1;
   }
@@ -3960,7 +4291,7 @@
   }
   // extruded 3D text: a stack of offset copies (the "side"), then a gold gradient face
   function draw3DText(text, X, Y, size){
-    ctx.font = "900 " + Math.round(size) + "px 'Fraunces',ui-serif,Georgia,serif";
+    ctx.font = "900 " + Math.round(size) + "px " + UI_FONT;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     // styled like the other headers (e.g. the gold "SPEED UP" name): flat gold face over a
     // stepped gold 3D shadow, just scaled up big — shallower & cleaner than the old shiny logo.
@@ -3980,7 +4311,10 @@
   }
 
   // one path tile carrying the game's own beam+rail, oriented to how the path enters/exits it
-  function introDrawPlatform(cellObj, prev, next, m){
+  // `content` false draws the bare glass tile — no beam, no rail. That is what a tile the
+  // runner has just left looks like while it is being carried: an empty pane, with its track
+  // only cast back into it once it reaches the front of the queue.
+  function introDrawPlatform(cellObj, prev, next, m, content){
     const C = introCenter(cellObj, m), s = m.s, tx = C.x - s/2, ty = C.y - s/2;
     const S = introSurface(cellObj, prev, next, m);
     ctx.fillStyle = "rgba(5,4,13,0.3)"; rrect(tx+3, ty+5, s, s, s*0.16); ctx.fill();   // drop shadow
@@ -3988,6 +4322,7 @@
     rrect(tx, ty, s, s, s*0.16); ctx.clip();
     ctx.fillStyle = "rgba(180,174,235,0.55)"; ctx.fillRect(tx, ty, s, s);              // glass base
     grainFill(tx, ty, s, s, 0.85);
+    if (content === false) { ctx.restore(); return; }
     // solid gold beam body hanging from the surface to the tile edge (clipped to the tile)
     ctx.beginPath(); introBodyPath(S, m); ctx.fillStyle = getVar("--track"); ctx.fill();
     grainFill(tx, ty, s, s, 0.45);
@@ -4008,21 +4343,6 @@
     ctx.closePath();
   }
   // same proportions as the in-game runner (see drawRunner)
-  function drawTitleRunner(x, y, s, phase, angle){
-    const swing = Math.sin(phase)*s*0.09, bob = Math.abs(Math.sin(phase))*s*0.02, pale = "#bfe6ff";
-    ctx.save(); ctx.translate(x, y); if (angle) ctx.rotate(angle);
-    const legL = s*0.12, bodyH = s*0.26, bodyW = s*0.26;
-    ctx.fillStyle = "rgba(5,4,13,0.26)"; ctx.beginPath(); ctx.ellipse(0, -1, bodyW*0.55, s*0.04, 0, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = pale; ctx.lineWidth = Math.max(3, s*0.06); ctx.lineCap = "round";
-    ctx.beginPath(); ctx.moveTo(-bodyW*0.22, -legL-bob); ctx.lineTo( swing, 0); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo( bodyW*0.22, -legL-bob); ctx.lineTo(-swing, 0); ctx.stroke();
-    const byTop = -(legL+bodyH)-bob;
-    ctx.fillStyle = pale; rrect(-bodyW/2, byTop, bodyW, bodyH, s*0.07); ctx.fill();
-    ctx.fillStyle = "#17263f"; const eyeR = s*0.037, eyeY = byTop + bodyH*0.38;
-    ctx.beginPath(); ctx.arc(-bodyW*0.02, eyeY, eyeR, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc( bodyW*0.28, eyeY, eyeR, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
-  }
 
   loadLevel(0);
   startTitle();
