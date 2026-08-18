@@ -97,6 +97,21 @@ head("TILE block parity");
   }
 }
 
+// -------------------------------------------------- 2d. the coin block
+head("COIN block parity");
+{
+  const game = runnerBlock("index.html", "COIN");
+  const lab  = runnerBlock("coin-lab.html", "SHIPPED");
+  if (!game || !lab) bad("could not extract the COIN block from index.html or coin-lab.html");
+  else {
+    const diff = [...new Set([...Object.keys(game), ...Object.keys(lab)])]
+      .filter((k) => game[k] !== lab[k])
+      .map((k) => `${k}: game=${game[k]} lab=${lab[k]}`);
+    if (diff.length) bad(`coin-lab differs from the game — ${diff.join("; ")}`);
+    else ok(`coin-lab matches the game (${Object.keys(game).length} keys)`);
+  }
+}
+
 // -------------------------------------------------- 3. the song generator
 // music-lab.html reimplements setSong so it can extend it. At its shipped
 // defaults it must still produce the exact tune the game plays, or the lab is

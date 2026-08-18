@@ -133,14 +133,35 @@ function tileSurface(n,prev,next){
   let d=a1-a0; while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI;
   const pts=[]; for(let k=0;k<=12;k++){const a=a0+d*(k/12); pts.push({x:O.x+h*Math.cos(a),y:O.y+h*Math.sin(a)});}
   return pts; }
-function bodyPath(S){
-  const nl=S.length-1;
-  const nrm=S.map((pt,k)=>{ const a=S[Math.max(0,k-1)],b=S[Math.min(nl,k+1)];
-    let tx=b.x-a.x,ty=b.y-a.y; const m=Math.hypot(tx,ty)||1; return {x:ty/m,y:-tx/m}; });
-  const Ob=S.map((pt,k)=>({x:pt.x-nrm[k].x*cell*1.7,y:pt.y-nrm[k].y*cell*1.7}));
-  ctx.moveTo(S[0].x,S[0].y);
-  for(let k=1;k<=nl;k++) ctx.lineTo(S[k].x,S[k].y);
-  for(let k=nl;k>=0;k--) ctx.lineTo(Ob[k].x,Ob[k].y);
+// Simple polygon: the surface, then closed along the cell's edges. Offsetting every point
+// 1.7 cells down its own normal shot through a concave corner's arc centre and out the far
+// side, and the self-intersection ate slivers along the tile edge.
+function bodyPath(S, C){
+  const h = cell/2, last = S.length - 1, mid = last >> 1;
+  const a = S[Math.max(0, mid-1)], b = S[Math.min(last, mid+1)];
+  let tx = b.x - a.x, ty = b.y - a.y; const mm = Math.hypot(tx, ty) || 1; tx /= mm; ty /= mm;
+  const bx = -ty, by = tx;
+  ctx.moveTo(S[0].x, S[0].y);
+  for (let k = 1; k <= last; k++) ctx.lineTo(S[k].x, S[k].y);
+  if (last === 2) {
+    ctx.lineTo(S[last].x + bx*h, S[last].y + by*h);
+    ctx.lineTo(S[0].x    + bx*h, S[0].y    + by*h);
+  } else {
+    const O = { x: S[0].x + S[last].x - C.x, y: S[0].y + S[last].y - C.y };
+    const M = S[mid];
+    if ((O.x - M.x)*bx + (O.y - M.y)*by > 0) ctx.lineTo(O.x, O.y);
+    else {
+      const cs = [{x:C.x-h,y:C.y-h},{x:C.x+h,y:C.y-h},{x:C.x+h,y:C.y+h},{x:C.x-h,y:C.y+h}];
+      let k0 = 0, best = Infinity;
+      for (let i = 0; i < 4; i++) { const d = Math.hypot(cs[i].x-O.x, cs[i].y-O.y); if (d < best) { best = d; k0 = i; } }
+      const n1 = (k0+1)%4, n3 = (k0+3)%4;
+      const first = Math.hypot(cs[n1].x-S[last].x, cs[n1].y-S[last].y)
+                  < Math.hypot(cs[n3].x-S[last].x, cs[n3].y-S[last].y) ? n1 : n3;
+      ctx.lineTo(cs[first].x, cs[first].y);
+      ctx.lineTo(cs[(k0+2)%4].x, cs[(k0+2)%4].y);
+      ctx.lineTo(cs[first === n1 ? n3 : n1].x, cs[first === n1 ? n3 : n1].y);
+    }
+  }
   ctx.closePath(); }
 function railPath(S){ ctx.moveTo(S[0].x,S[0].y); for(let k=1;k<S.length;k++) ctx.lineTo(S[k].x,S[k].y); }
 function drawGlass(x,y,s){
@@ -150,7 +171,7 @@ function drawGlass(x,y,s){
 function drawPlatformTile(n,prev,next){
   const S=tileSurface(n,prev,next);
   ctx.save(); rrect(cx(n.c),cy(n.r),cell,cell,tileR(cell)); ctx.clip();
-  ctx.beginPath(); bodyPath(S); ctx.fillStyle=curTrack(); ctx.fill();
+  ctx.beginPath(); bodyPath(S, nodeCenter(n)); ctx.fillStyle=curTrack(); ctx.fill();
   grainFill(cx(n.c),cy(n.r),cell,cell,T.bodyGrain);
   ctx.restore();
   ctx.save(); rrect(cx(n.c),cy(n.r),cell,cell,tileR(cell)); ctx.clip();

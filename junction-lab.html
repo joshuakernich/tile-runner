@@ -38,12 +38,12 @@
 <body>
 <header>
   <h1>Junction Lab</h1>
-  <p>The leading tile's 3-way junction. All three options are filled in one path and stroked in
-     one stroke, so the tile holds a single flat opacity — they overlap near the centre, and a
-     second fill at a second alpha builds up there and goes blotchy. Geometry, body and rail
-     drawing are lifted from <code>index.html</code>, so what you see is what the game draws.
-     Tune, then <b>Copy JUNCTION block</b> and paste it over the block above
-     <code>drawJunction</code>.</p>
+  <p>The leading tile's 3-way junction. Still one fill and one stroke — the three options
+     overlap near the centre, and a second pass at a second alpha builds up there and goes
+     blotchy — but each is ramped by a radial gradient from the edge the runner enters
+     through, so the track reads solid where he is arriving and fades to the pale value as
+     the options run out to their own edges. Geometry and drawing are lifted from
+     <code>index.html</code>. Tune, then <b>Copy JUNCTION block</b>.</p>
 </header>
 
 <div class="wrap">
@@ -51,14 +51,18 @@
 
   <div class="panel">
     <div class="grp">
-      <h2>Track</h2>
+      <h2>Entry edge</h2>
+      <div class="row"><label>body</label><input type="range" id="bodyIn" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>rail</label><input type="range" id="railIn" min="0" max="1" step="0.01"><output></output></div>
+    </div>
+    <div class="grp">
+      <h2>Out at the exits</h2>
       <div class="row"><label>body</label><input type="range" id="body" min="0" max="1" step="0.01"><output></output></div>
       <div class="row"><label>rail</label><input type="range" id="rail" min="0" max="1" step="0.01"><output></output></div>
     </div>
     <div class="grp">
       <h2>Shared</h2>
       <div class="row"><label>arrows</label><input type="range" id="arrow" min="0" max="1" step="0.01"><output></output></div>
-      <div class="row"><label>rail width</label><input type="range" id="railW" min="0.01" max="0.16" step="0.005"><output></output></div>
       <div class="row"><label>grain</label><input type="range" id="grain" min="0" max="1" step="0.01"><output></output></div>
     </div>
     <div class="grp">
@@ -86,12 +90,23 @@
 <script>
 // ---- the shipped defaults (mirror of index.html's JUNCTION) -------------------------
 const SHIPPED = {
-  body:  0.42,
-  rail:  0.70,
-  arrow: 0.70,
-  railW: 0.06,
-  grain: 0.40,
+  bodyIn: 1.00,
+  body:   0.32,
+  railIn: 1.00,
+  rail:   0.00,
+  arrow:  0.70,
+  grain:  0.40,
 };
+// Mirror of the game's TILE block. The junction is a tile: it takes the same corner and the
+// same rail weight as laid track, so both have to come from here rather than being retyped.
+const TILE = {
+  radius:     0.075,
+  glassA:     0.50,
+  glassGrain: 1.00,
+  bodyGrain:  1.00,
+  railW:      0.085,
+};
+const tileR = s => s * TILE.radius;
 const J = Object.assign({}, SHIPPED);
 let DIR = "n", APPROACH = "straight", HUE = 45, CELL = 170, GUIDES = false;
 
@@ -166,28 +181,48 @@ function tileSurface(n, prev, next){
   for (let k=0;k<=N;k++){ const a=a0+d*(k/N); pts.push({x:O.x+h*Math.cos(a), y:O.y+h*Math.sin(a)}); }
   return pts;
 }
-function bodyPath(S){
-  const nlast = S.length-1;
-  const nrm = S.map((pt,k)=>{
-    const a=S[Math.max(0,k-1)], b=S[Math.min(nlast,k+1)];
-    let tx=b.x-a.x, ty=b.y-a.y; const m=Math.hypot(tx,ty)||1;
-    return { x: ty/m, y: -tx/m };
-  });
-  const Obig = S.map((pt,k)=>({ x:pt.x - nrm[k].x*cell*1.7, y:pt.y - nrm[k].y*cell*1.7 }));
-  ctx.moveTo(S[0].x, S[0].y);
-  for (let k=1;k<=nlast;k++) ctx.lineTo(S[k].x, S[k].y);
-  for (let k=nlast;k>=0;k--) ctx.lineTo(Obig[k].x, Obig[k].y);
-  ctx.closePath();
+function bodyPath(S, C){
+  // Simple polygon: the surface, then closed along the cell's edges. The old version pushed
+  // every point 1.7 cells down its own normal, which on a CONCAVE corner shoots through the
+  // arc's centre and out the far side — a self-intersecting polygon whose winding cancelled,
+  // eating slivers along the tile edge. Nothing is offset now, so nothing can overshoot.
+    const h = cell/2, last = S.length - 1, mid = last >> 1;
+    const a = S[Math.max(0, mid-1)], b = S[Math.min(last, mid+1)];
+    let tx = b.x - a.x, ty = b.y - a.y; const mm = Math.hypot(tx, ty) || 1; tx /= mm; ty /= mm;
+    const bx = -ty, by = tx;
+    ctx.moveTo(S[0].x, S[0].y);
+    for (let k = 1; k <= last; k++) ctx.lineTo(S[k].x, S[k].y);
+    if (last === 2) {
+      ctx.lineTo(S[last].x + bx*h, S[last].y + by*h);
+      ctx.lineTo(S[0].x    + bx*h, S[0].y    + by*h);
+    } else {
+      const O = { x: S[0].x + S[last].x - C.x, y: S[0].y + S[last].y - C.y };
+      const M = S[mid];
+      if ((O.x - M.x)*bx + (O.y - M.y)*by > 0) ctx.lineTo(O.x, O.y);
+      else {
+        const cs = [{x:C.x-h,y:C.y-h},{x:C.x+h,y:C.y-h},{x:C.x+h,y:C.y+h},{x:C.x-h,y:C.y+h}];
+        let k0 = 0, best = Infinity;
+        for (let i = 0; i < 4; i++) { const d = Math.hypot(cs[i].x-O.x, cs[i].y-O.y); if (d < best) { best = d; k0 = i; } }
+        const n1 = (k0+1)%4, n3 = (k0+3)%4;
+        const first = Math.hypot(cs[n1].x-S[last].x, cs[n1].y-S[last].y)
+                    < Math.hypot(cs[n3].x-S[last].x, cs[n3].y-S[last].y) ? n1 : n3;
+        ctx.lineTo(cs[first].x, cs[first].y);
+        ctx.lineTo(cs[(k0+2)%4].x, cs[(k0+2)%4].y);
+        ctx.lineTo(cs[first === n1 ? n3 : n1].x, cs[first === n1 ? n3 : n1].y);
+      }
+    }
+    ctx.closePath();
 }
+
 function railPath(S){
   ctx.moveTo(S[0].x, S[0].y);
   for (let k=1;k<S.length;k++) ctx.lineTo(S[k].x, S[k].y);
 }
 function drawGlass(x,y,s){
   ctx.save();
-  rrect(x,y,s,s,s*0.16); ctx.clip();
-  ctx.fillStyle = "rgba(180,174,235,0.55)"; ctx.fillRect(x,y,s,s);
-  grainFill(x,y,s,s,0.85);
+  rrect(x,y,s,s,tileR(s)); ctx.clip();
+  ctx.fillStyle = "rgba(180,174,235,"+TILE.glassA+")"; ctx.fillRect(x,y,s,s);
+  grainFill(x,y,s,s,TILE.glassGrain);
   ctx.restore();
 }
 // a laid tile, full opacity — the track the junction is being approached along
@@ -195,12 +230,12 @@ function drawLaid(n, prev, next){
   drawGlass(cx(n.c), cy(n.r), cell);
   const S = tileSurface(n, prev, next);
   ctx.save();
-  rrect(cx(n.c), cy(n.r), cell, cell, cell*0.16); ctx.clip();
-  ctx.beginPath(); bodyPath(S); ctx.fillStyle = curTrack(); ctx.fill();
-  grainFill(cx(n.c), cy(n.r), cell, cell, 0.45);
+  rrect(cx(n.c), cy(n.r), cell, cell, tileR(cell)); ctx.clip();
+  ctx.beginPath(); bodyPath(S, nodeCenter(n)); ctx.fillStyle = curTrack(); ctx.fill();
+  grainFill(cx(n.c), cy(n.r), cell, cell, TILE.bodyGrain);
   ctx.beginPath(); railPath(S);
   ctx.lineJoin="round"; ctx.lineCap="round";
-  ctx.strokeStyle = curRail(); ctx.lineWidth = Math.max(3, cell*0.06); ctx.stroke();
+  ctx.strokeStyle = curRail(); ctx.lineWidth = Math.max(3, cell*TILE.railW); ctx.stroke();
   ctx.restore();
 }
 
@@ -213,16 +248,21 @@ function drawJunction(n, prev){
   const surfaces = exits.map(d => tileSurface(n, prev, { c:n.c+d.x, r:n.r+d.y }));
   const C = nodeCenter(n), h = cell*0.5;
 
+  // one fill and one stroke, each ramped from the entry edge outward (see index.html)
+  const E = { x: C.x - din.x*h, y: C.y - din.y*h };
+  const ramp = (col, a0, a1) => {
+    const g = ctx.createRadialGradient(E.x, E.y, 0, E.x, E.y, cell);
+    g.addColorStop(0, hexA(col, a0)); g.addColorStop(1, hexA(col, a1)); return g;
+  };
   ctx.save();
-  rrect(cx(n.c), cy(n.r), cell, cell, cell*0.16); ctx.clip();
-  // one path, one fill — a single flat alpha with no build-up where the options overlap
-  ctx.beginPath(); for (const S of surfaces) bodyPath(S);
-  ctx.fillStyle = hexA(curTrack(), J.body); ctx.fill();
+  rrect(cx(n.c), cy(n.r), cell, cell, tileR(cell)); ctx.clip();
+  ctx.beginPath(); for (const S of surfaces) bodyPath(S, C);
+  ctx.fillStyle = ramp(curTrack(), J.bodyIn, J.body); ctx.fill();
   grainFill(cx(n.c), cy(n.r), cell, cell, J.grain);
   ctx.beginPath(); for (const S of surfaces) railPath(S);
   ctx.lineJoin="round"; ctx.lineCap="round";
-  ctx.strokeStyle = hexA(curRail(), J.rail);
-  ctx.lineWidth = Math.max(3, cell*J.railW);
+  ctx.strokeStyle = ramp(curRail(), J.railIn, J.rail);
+  ctx.lineWidth = Math.max(3, cell*TILE.railW);
   ctx.stroke();
   ctx.restore();
 
@@ -272,16 +312,16 @@ function render(){
 }
 
 // ---- wiring ------------------------------------------------------------------------
-const KEYS = ["body","rail","arrow","railW","grain"];
+const KEYS = ["bodyIn","body","railIn","rail","arrow","grain"];
 function syncOut(){
-  const lines = KEYS.map(k => "    " + (k+":").padEnd(11) + " " + J[k].toFixed(k==="railW"?3:2) + ",");
+  const lines = KEYS.map(k => "    " + (k+":").padEnd(11) + " " + J[k].toFixed(2) + ",");
   document.getElementById("out").value = "  const JUNCTION = {\n" + lines.join("\n") + "\n  };";
 }
 function sync(){
   for (const k of KEYS){
     const el = document.getElementById(k);
     el.value = J[k];
-    el.parentElement.querySelector("output").textContent = (+J[k]).toFixed(k==="railW"?3:2);
+    el.parentElement.querySelector("output").textContent = (+J[k]).toFixed(2);
   }
   document.getElementById("hue").value = HUE;
   document.getElementById("hue").parentElement.querySelector("output").textContent = HUE;

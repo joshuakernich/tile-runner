@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tile Runner — Coin Lab</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{ --bg:#0d0b1a; --panel:#17142b; --line:#2b2650; --ink:#e8e6ff; --dim:#8f88c8; --hi:#ffcf4d; }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--bg); color:var(--ink);
+        font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+  header{ padding:14px 18px; border-bottom:2px solid var(--line); }
+  h1{ margin:0; font-size:16px; letter-spacing:2px; text-transform:uppercase; color:var(--hi); }
+  header p{ margin:6px 0 0; font-size:12px; color:var(--dim); max-width:76ch; line-height:1.5; }
+  .wrap{ display:flex; gap:18px; padding:18px; align-items:flex-start; flex-wrap:wrap; }
+  .stage{ background:#0a0817; border:2px solid var(--line); border-radius:10px; padding:12px; }
+  canvas{ display:block; border-radius:6px; }
+  .panel{ background:var(--panel); border:2px solid var(--line); border-radius:10px; padding:14px; width:340px; }
+  .grp{ margin-bottom:14px; }
+  .grp h2{ margin:0 0 8px; font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--dim); }
+  .row{ display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:12px; }
+  .row label{ width:104px; color:var(--dim); }
+  .row input[type=range]{ flex:1; }
+  .row output{ width:54px; text-align:right; font-variant-numeric:tabular-nums; }
+  .btns{ display:flex; gap:8px; flex-wrap:wrap; }
+  button{ font:inherit; font-size:12px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+          background:#241f4a; color:var(--ink); border:2px solid var(--line); border-radius:6px;
+          padding:8px 12px; cursor:pointer; }
+  button:hover{ border-color:var(--hi); }
+  button.on{ background:var(--hi); color:#241f4a; border-color:var(--hi); }
+  textarea{ width:100%; height:190px; background:#0a0817; color:var(--ink); border:2px solid var(--line);
+            border-radius:6px; padding:8px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+            font-size:11px; line-height:1.45; }
+  .hint{ font-size:11px; color:var(--dim); line-height:1.5; margin:8px 0 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Coin Lab</h1>
+  <p>The little golden tile. <b>Shine is four separate things</b>, which is why one slider was
+     never going to do it: a fixed diagonal <b>gloss</b> that gives it a lit side, a <b>rim</b>
+     along the top edge, a <b>sweep</b> that travels across the face on a timer, and a
+     <b>spark</b> that twinkles off one corner. Drawing is lifted from <code>index.html</code>,
+     so what you see is what the board draws. Tune, then <b>Copy COIN block</b>.</p>
+</header>
+<div class="wrap">
+  <div class="stage"><canvas id="cv" width="620" height="360"></canvas></div>
+  <div class="panel">
+    <div class="grp"><h2>Shape &amp; float</h2>
+      <div class="row"><label>size</label><input type="range" id="size" min="0.12" max="0.7" step="0.005"><output></output></div>
+      <div class="row"><label>float</label><input type="range" id="float" min="0" max="0.2" step="0.005"><output></output></div>
+      <div class="row"><label>float ms</label><input type="range" id="floatMs" min="200" max="2000" step="20"><output></output></div>
+      <div class="row"><label>rock</label><input type="range" id="rock" min="0" max="0.5" step="0.005"><output></output></div>
+      <div class="row"><label>shadow</label><input type="range" id="shadowA" min="0" max="1" step="0.01"><output></output></div>
+    </div>
+    <div class="grp"><h2>Shine</h2>
+      <div class="row"><label>gloss</label><input type="range" id="gloss" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>rim</label><input type="range" id="rim" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>sweep</label><input type="range" id="sweep" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>sweep ms</label><input type="range" id="sweepMs" min="400" max="6000" step="50"><output></output></div>
+      <div class="row"><label>spark</label><input type="range" id="spark" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>spark ms</label><input type="range" id="sparkMs" min="400" max="6000" step="50"><output></output></div>
+    </div>
+    <div class="grp"><h2>Scene</h2>
+      <div class="row"><label>cell</label><input type="range" id="cellPx" min="70" max="200" step="2"><output></output></div>
+      <div class="btns"><button id="bg">Dark board</button><button id="reset">Reset</button></div>
+    </div>
+    <div class="grp"><h2>Block</h2>
+      <div class="btns"><button id="copy">Copy COIN block</button></div>
+      <textarea id="out" spellcheck="false"></textarea>
+      <p class="hint">Paste over the <code>const COIN = { … }</code> block in <code>index.html</code>.</p>
+    </div>
+  </div>
+</div>
+<script>
+const SHIPPED = {
+  size: 0.34,
+  float: 0.07,
+  floatMs: 620,
+  rock: 0.08,
+  shadowA: 0.28,
+  gloss: 0.45,
+  rim: 0.55,
+  sweep: 0.55,
+  sweepMs: 2200,
+  spark: 0.80,
+  sparkMs: 2600,
+};
+const COIN = Object.assign({}, SHIPPED);
+// mirror of the game's TILE — the coin's corner and rail weight come from it
+const TILE = { radius: 0.075, railW: 0.085 };
+let CELL = 130, DARK = true;
+
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+let cell = CELL;
+const tileR = s => s * TILE.radius;
+function rrect(x,y,w,h,r){ r=Math.max(0,Math.min(r,w/2,h/2));
+  ctx.beginPath(); ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);     ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+function drawCoin(x, y, ts) {
+  const s2 = cell * COIN.size, r = tileR(s2), h = s2/2;
+  const t = ts / COIN.floatMs;
+  const lift = (0.5 + 0.5*Math.sin(t)) * cell * COIN.float;
+  const tilt = Math.sin(t*0.8) * COIN.rock;
+  ctx.save();
+  // ground shadow, tied to the lift
+  const k = 1 - (COIN.float ? (lift / (cell*COIN.float)) * 0.35 : 0);
+  ctx.globalAlpha = COIN.shadowA * k; ctx.fillStyle = "#05040d";
+  ctx.beginPath(); ctx.ellipse(x, y + cell*0.13, s2*0.42*k, s2*0.12*k, 0, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.translate(x, y - lift); ctx.rotate(tilt);
+  ctx.fillStyle = "#c78b16";                                    // the edge it sits on
+  rrect(-h + s2*0.06, -h + s2*0.10, s2, s2, r); ctx.fill();
+  ctx.fillStyle = "#ffd24a";                                    // the face
+  rrect(-h, -h, s2, s2, r); ctx.fill();
+  ctx.save();
+  rrect(-h, -h, s2, s2, r); ctx.clip();                         // everything below stays on the tile
+  if (COIN.gloss > 0) {                                         // lit from the top-left
+    const g = ctx.createLinearGradient(-h, -h, h, h);
+    g.addColorStop(0,    "rgba(255,255,255," + COIN.gloss + ")");
+    g.addColorStop(0.45, "rgba(255,255,255,0)");
+    g.addColorStop(1,    "rgba(120,72,0," + (COIN.gloss*0.5) + ")");
+    ctx.fillStyle = g; ctx.fillRect(-h, -h, s2, s2);
+  }
+  if (COIN.sweep > 0) {                                         // a glint travelling across
+    const u = (ts % COIN.sweepMs) / COIN.sweepMs;
+    const px = (-1.6 + 3.2*u) * h;
+    ctx.save(); ctx.rotate(-0.6);
+    const g2 = ctx.createLinearGradient(px - s2*0.30, 0, px + s2*0.30, 0);
+    g2.addColorStop(0,   "rgba(255,255,255,0)");
+    g2.addColorStop(0.5, "rgba(255,255,255," + COIN.sweep + ")");
+    g2.addColorStop(1,   "rgba(255,255,255,0)");
+    ctx.fillStyle = g2; ctx.fillRect(-s2, -s2, s2*2, s2*2);
+    ctx.restore();
+  }
+  ctx.restore();
+  if (COIN.rim > 0) {                                           // bright top edge
+    ctx.strokeStyle = "rgba(255,255,255," + COIN.rim + ")";
+    ctx.lineWidth = Math.max(1, s2*0.05);
+    ctx.beginPath(); ctx.moveTo(-h + r, -h + ctx.lineWidth*0.5);
+    ctx.lineTo(h - r, -h + ctx.lineWidth*0.5); ctx.stroke();
+  }
+  if (COIN.spark > 0) {                                         // corner twinkle
+    const u = (ts % COIN.sparkMs) / COIN.sparkMs;
+    const a = Math.pow(Math.max(0, Math.sin(u*Math.PI*2)), 8) * COIN.spark;
+    if (a > 0.01) {
+      const sx = h*0.62, sy = -h*0.66, L = s2*0.30*(0.6 + 0.4*a);
+      ctx.strokeStyle = "rgba(255,255,255," + a + ")";
+      ctx.lineWidth = Math.max(1, s2*0.05); ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(sx - L, sy); ctx.lineTo(sx + L, sy);
+      ctx.moveTo(sx, sy - L); ctx.lineTo(sx, sy + L); ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function frame(ts){
+  cell = CELL;
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.fillStyle = DARK ? "#0a0817" : "#3d6b46";     // the quilt is usually mid-tone, not black
+  ctx.fillRect(0,0,cv.width,cv.height);
+  // three at different phases, so the sweep and spark can be judged against each other
+  drawCoin(cv.width*0.25, cv.height*0.5, ts);
+  drawCoin(cv.width*0.50, cv.height*0.5, ts + COIN.sweepMs*0.33);
+  drawCoin(cv.width*0.75, cv.height*0.5, ts + COIN.sweepMs*0.66);
+  // and one at real in-game size for reference
+  const keep = cell; cell = 116;
+  drawCoin(cv.width*0.5, cv.height*0.86, ts);
+  cell = keep;
+  ctx.fillStyle = "#8f88c8"; ctx.font = "10px ui-sans-serif,system-ui,sans-serif";
+  ctx.textAlign = "center"; ctx.fillText("at a real 116px cell", cv.width*0.5, cv.height*0.97);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+const KEYS = ["size","float","floatMs","rock","shadowA","gloss","rim","sweep","sweepMs","spark","sparkMs"];
+const DP = k => /Ms$/.test(k) ? 0 : (k==="size"||k==="float"||k==="rock" ? 3 : 2);
+function sync(){
+  for (const k of KEYS){
+    const el=document.getElementById(k); el.value=COIN[k];
+    el.parentElement.querySelector("output").textContent = (+COIN[k]).toFixed(DP(k));
+  }
+  document.getElementById("cellPx").value=CELL;
+  document.getElementById("cellPx").parentElement.querySelector("output").textContent=CELL;
+  document.getElementById("bg").classList.toggle("on", !DARK);
+  document.getElementById("out").value =
+    "  const COIN = {\n" + KEYS.map(k => "    " + (k+":").padEnd(9) + " " + (+COIN[k]).toFixed(DP(k)) + ",").join("\n") + "\n  };";
+}
+for (const k of KEYS) document.getElementById(k).addEventListener("input", e => { COIN[k]=+e.target.value; sync(); });
+document.getElementById("cellPx").addEventListener("input", e => { CELL=+e.target.value; sync(); });
+document.getElementById("bg").addEventListener("click", () => { DARK=!DARK; sync(); });
+document.getElementById("reset").addEventListener("click", () => { Object.assign(COIN,SHIPPED); sync(); });
+document.getElementById("copy").addEventListener("click", async () => {
+  const t=document.getElementById("out");
+  try { await navigator.clipboard.writeText(t.value); } catch(_) { t.select(); document.execCommand("copy"); }
+  const b=document.getElementById("copy"), was=b.textContent;
+  b.textContent="Copied"; setTimeout(()=>b.textContent=was,900);
+});
+sync();
+</script>
+</body>
+</html>

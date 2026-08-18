@@ -198,6 +198,21 @@
                         text-align:center; hyphens:none; }
   .tal-grid .tal.locked span { color:var(--dim); }
   .tal-grid .tal.on { border-color:var(--goal); box-shadow:0 0 0 2px var(--goal) inset; }
+  /* the character map: a picture of the runner with a label wired to each changeable part */
+  .char-map { position:relative; width:300px; height:300px; margin:0 auto 6px; }
+  .char-map canvas { display:block; width:300px; height:300px; }
+  /* #menu-body button sets width:100%, and an id beats a class — so these have to match it */
+  #menu-body .char-map .hot { position:absolute; width:27%; padding:4px 3px; display:flex;
+    flex-direction:column; gap:0; line-height:1.1; border-width:2px;
+    box-shadow:2px 2px 0 var(--shadow); text-align:center; }
+  #menu-body .char-map .hot b { font-size:9px; letter-spacing:1px; color:var(--track); }
+  #menu-body .char-map .hot span { font-size:9px; letter-spacing:0.3px; color:var(--dim);
+    text-transform:none; font-weight:700; }
+  #menu-body .char-map .hot:active { transform:translate(2px,2px); box-shadow:none; }
+  /* can't afford it yet — a short shake rather than a dialog */
+  .tal-grid .tal.nope { animation:nope 0.4s; border-color:#ff8f74; }
+  @keyframes nope { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-4px);}
+                    50%{transform:translateX(4px);} 75%{transform:translateX(-2px);} }
   .lvl-grid .st { font-size:var(--body); color:var(--goal); letter-spacing:1px; font-weight:900; }
   .lvl-grid .st.none { color:var(--dim); font-weight:400; }
 
@@ -261,30 +276,30 @@
   // way to the key and the exit.
   // 50-level campaign: each new mechanic is introduced on its own level (see `intro`).
   const LEVELS = [
-    {"start":[2,5],"init":[[2,4],[2,3]],"goal":[2,0],"cols":5,"rows":6,"intro":["recycle","flag"],"walls":[],"cps":0.8},
-    {"start":[0,7],"init":[[0,6],[0,5]],"goal":[4,4],"cols":5,"rows":8,"intro":["turn"],"walls":[],"cps":0.8},
-    {"start":[0,0],"init":[[0,1],[0,2]],"goal":[5,7],"cols":6,"rows":8,"intro":["offscreen"],"walls":[],"cps":0.8,"talismans":[[5,2,"ember"]]},
-    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["wall"],"walls":[[0,3],[1,3],[2,3],[4,3]],"cps":0.8},
-    {"start":[1,12],"init":[[1,11],[1,10]],"goal":[1,0],"cols":5,"rows":13,"intro":[],"walls":[[0,2],[1,2],[2,2],[4,2],[0,5],[2,5],[3,5],[4,5],[0,8],[1,8],[2,8],[4,8]],"cps":0.8},
-    {"start":[0,3],"init":[[1,3],[2,3]],"goal":[1,6],"cols":9,"rows":9,"intro":[],"walls":[[4,0],[4,2],[4,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[8,4],[4,5],[4,6],[4,8]],"cps":0.8,"talismans":[[8,1,"tide"]]},
-    {"start":[4,7],"init":[[4,6],[4,5]],"goal":[1,7],"cols":8,"rows":8,"intro":[],"walls":[[5,0],[2,1],[0,2],[2,2],[3,2],[4,2],[5,2],[7,2],[2,3],[5,3],[2,4],[5,4],[1,5],[2,5],[5,5],[6,5],[2,6],[2,7]],"cps":0.8},
-    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["block"],"walls":[[0,2],[1,2],[3,2],[4,2]],"blocks":[{"axis":"h","r":3,"lo":2,"hi":3,"pos0":2}],"cps":0.8},
-    {"start":[3,15],"init":[[3,14],[3,13]],"goal":[1,0],"cols":5,"rows":16,"intro":[],"walls":[[0,2],[1,2],[2,2],[4,2],[0,7],[2,7],[3,7],[4,7],[0,10],[1,10],[3,10],[4,10]],"blocks":[{"axis":"h","r":11,"lo":2,"hi":3,"pos0":2},{"axis":"h","r":6,"lo":0,"hi":1,"pos0":1},{"axis":"h","r":3,"lo":3,"hi":4,"pos0":3}],"cps":0.8},
-    {"start":[0,9],"init":[[1,9],[2,9]],"goal":[6,9],"cols":9,"rows":11,"intro":[],"walls":[[4,0],[4,1],[4,3],[4,4],[0,5],[1,5],[3,5],[4,5],[5,5],[7,5],[8,5],[4,6],[4,7],[4,8],[4,9],[4,10]],"blocks":[{"axis":"h","r":6,"lo":5,"hi":6,"pos0":6},{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"h","r":6,"lo":2,"hi":3,"pos0":2},{"axis":"v","c":3,"lo":1,"hi":2,"pos0":2}],"cps":0.8,"talismans":[[8,0,"cog"]]},
-    {"start":[1,3],"init":[[1,2],[1,1]],"goal":[13,11],"cols":14,"rows":14,"intro":[],"walls":[[4,0],[8,0],[4,1],[8,2],[4,3],[8,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[10,4],[11,4],[13,4],[5,5],[9,5],[9,6],[5,7],[5,8],[9,8],[0,9],[1,9],[3,9],[4,9],[5,9],[6,9],[7,9],[8,9],[9,9],[10,9],[11,9],[12,9],[13,9],[4,10],[8,10],[8,11],[4,12],[4,13],[8,13]],"blocks":[{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"v","c":9,"lo":0,"hi":1,"pos0":1},{"axis":"h","r":5,"lo":11,"hi":12,"pos0":12},{"axis":"v","c":8,"lo":6,"hi":7,"pos0":7},{"axis":"v","c":4,"lo":5,"hi":6,"pos0":6},{"axis":"h","r":10,"lo":1,"hi":2,"pos0":2},{"axis":"v","c":5,"lo":10,"hi":11,"pos0":11},{"axis":"v","c":9,"lo":11,"hi":12,"pos0":12}],"cps":0.8},
-    {"start":[2,7],"init":[[2,6],[2,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["saw"],"walls":[],"hazards":[{"kind":"saw","axis":"h","r":3,"lo":0,"hi":4,"speed":4000,"phase":0}],"cps":0.8},
-    {"start":[2,12],"init":[[2,11],[2,10]],"goal":[2,0],"cols":5,"rows":13,"intro":[],"walls":[],"hazards":[{"kind":"saw","axis":"h","r":8,"lo":0,"hi":4,"speed":3600,"phase":0},{"kind":"saw","axis":"h","r":5,"lo":0,"hi":4,"speed":4400,"phase":0},{"kind":"saw","axis":"h","r":2,"lo":0,"hi":4,"speed":5200,"phase":0}],"cps":0.8},
-    {"start":[1,8],"init":[[1,7],[1,6]],"goal":[6,0],"cols":7,"rows":9,"intro":[],"walls":[[0,0],[1,1],[3,4],[5,7],[6,8]],"hazards":[{"kind":"saw","axis":"v","c":3,"lo":0,"hi":3,"speed":4000,"phase":0},{"kind":"saw","axis":"v","c":3,"lo":5,"hi":8,"speed":4000,"phase":0},{"kind":"saw","axis":"h","r":4,"lo":0,"hi":2,"speed":4000,"phase":0},{"kind":"saw","axis":"h","r":4,"lo":4,"hi":6,"speed":4000,"phase":0}],"cps":0.8},
-    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[3,0],"cols":7,"rows":8,"intro":["key","door"],"walls":[[0,3],[1,3],[2,3],[4,3],[5,3],[6,3]],"doors":[[3,3,"#ffd24a"]],"keys":[[6,7,"#ffd24a"]],"cps":0.8},
-    {"start":[0,0],"init":[[1,0],[2,0]],"goal":[6,9],"cols":8,"rows":11,"intro":[],"walls":[[0,2],[2,2],[3,2],[4,2],[4,3],[5,3],[6,3],[7,3],[0,5],[1,5],[2,5],[3,5],[2,7],[3,7],[4,7],[5,7],[7,7],[4,8],[4,9],[4,10]],"doors":[[1,2,"#ffd24a"],[6,7,"#c77dff"]],"keys":[[6,1,"#ffd24a"],[2,9,"#c77dff"]],"cps":0.8,"talismans":[[7,0,"sun"]]},
-    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["stone"],"walls":[[0,3],[1,3],[2,3],[4,3]],"stone":[[3,3,2]],"cps":0.8},
-    {"start":[1,0],"init":[[1,1],[1,2]],"goal":[3,10],"cols":7,"rows":12,"intro":[],"walls":[[3,0],[3,1],[3,3],[0,4],[1,4],[2,4],[3,4],[5,4],[6,4],[3,5],[6,5],[1,6],[3,6],[4,6],[6,6],[1,7],[6,7],[1,8],[2,8],[3,8],[4,8],[5,8],[6,8]],"stone":[[3,2,2],[4,4,2],[5,6,2],[2,6,2],[0,8,2]],"cps":0.8},
-    {"start":[4,9],"init":[[4,8],[4,7]],"goal":[1,0],"cols":6,"rows":10,"intro":["platform"],"walls":[[0,2],[1,2],[2,2],[3,2],[3,4],[0,5],[2,5],[3,5],[4,5],[5,5]],"platforms":[[1,5,"ns"],[3,3,"ew"]],"cps":0.8},
-    {"start":[2,1],"init":[[3,1],[4,1]],"goal":[5,8],"cols":7,"rows":10,"intro":[],"walls":[[0,3],[1,3],[3,3],[4,3],[5,3],[6,3],[4,4],[1,5],[4,5],[1,6],[4,7],[0,8],[4,8],[4,9]],"platforms":[[2,3,"ns"],[1,4,"ew"],[1,7,"sw"],[4,6,"ew"]],"cps":0.8,"talismans":[[0,0,"shard"]]},
-    {"start":[0,8],"init":[[1,8],[2,8]],"goal":[1,2],"cols":14,"rows":10,"intro":[],"cps":0.8,"walls":[[11,0],[8,1],[9,1],[11,2],[3,3],[11,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[11,4],[13,4],[11,5],[4,6],[8,6],[11,6],[4,7],[5,7],[7,7],[8,7],[11,7],[4,8],[8,8],[4,9],[8,9]],"platforms":[[6,7,"ns"],[10,1,"ne"],[4,5,"ew"],[8,5,"ew"],[10,4,"ns"],[12,4,"ns"],[11,1,"ew"],[7,0,"es"],[7,1,"ns"],[7,2,"ns"],[7,3,"wn"],[3,0,"es"],[3,1,"ns"],[3,2,"wn"]]},
-    {"start":[1,8],"init":[[1,7],[1,6]],"goal":[7,8],"cols":10,"rows":10,"intro":[],"cps":0.8,"walls":[[5,1],[6,1],[8,1],[9,1],[5,2],[9,2],[5,3],[9,3],[0,4],[1,4],[2,4],[5,4],[9,4],[5,5],[9,5],[5,6],[9,6],[5,7],[9,7],[5,8],[9,8],[5,9],[9,9]],"blocks":[{"axis":"v","c":4,"pos0":4,"lo":3,"hi":5},{"axis":"v","c":3,"pos0":4,"lo":3,"hi":5},{"axis":"h","r":3,"pos0":8,"lo":6,"hi":8},{"axis":"h","r":2,"pos0":7,"lo":6,"hi":8},{"axis":"h","r":4,"pos0":7,"lo":6,"hi":8},{"axis":"h","r":5,"pos0":6,"lo":6,"hi":8}],"stone":[[7,1,2]]},
-    {"start":[2,9],"init":[[2,8],[2,7]],"goal":[2,0],"cols":5,"rows":10,"intro":[],"cps":0.8,"walls":[],"stone":[[0,4,2],[1,4,2],[2,4,2],[3,4,2],[4,4,2],[4,3,2],[3,3,2],[2,3,2],[1,3,2],[0,3,2],[0,2,2],[1,2,2],[2,2,2],[3,2,2],[0,5,2],[1,5,2],[2,5,2],[3,5,2],[4,5,2],[4,2,2]],"talismans":[[4,7,"sprig"]]},
-    {"start":[1,3],"init":[[1,2],[1,1]],"goal":[12,6],"cols":14,"rows":8,"intro":[],"cps":0.8,"walls":[],"hazards":[{"phase":0.07,"kind":"saw","axis":"v","c":3,"lo":0,"hi":7,"speed":4000},{"phase":0.14,"kind":"saw","axis":"v","c":4,"lo":0,"hi":7,"speed":4000},{"phase":0.21,"kind":"saw","axis":"v","c":5,"lo":0,"hi":7,"speed":4000},{"phase":0.43,"kind":"saw","axis":"v","c":8,"lo":0,"hi":7,"speed":4000},{"phase":0.36,"kind":"saw","axis":"v","c":9,"lo":0,"hi":7,"speed":4000},{"kind":"saw","axis":"v","c":10,"lo":0,"hi":7,"speed":4000,"phase":0.29}]},
+    {"start":[2,5],"init":[[2,4],[2,3]],"goal":[2,0],"cols":5,"rows":6,"intro":["recycle","flag","coin"],"walls":[],"cps":0.8,"coins":[[1,1],[4,2],[1,4]]},
+    {"start":[0,7],"init":[[0,6],[0,5]],"goal":[4,4],"cols":5,"rows":8,"intro":["turn"],"walls":[],"cps":0.8,"coins":[[2,1],[0,3],[3,4]]},
+    {"start":[0,0],"init":[[0,1],[0,2]],"goal":[5,7],"cols":6,"rows":8,"intro":["offscreen"],"walls":[],"cps":0.8,"talismans":[[5,2,"ember"]],"coins":[[4,1],[2,4],[0,6]]},
+    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["wall"],"walls":[[0,3],[1,3],[2,3],[4,3]],"cps":0.8,"coins":[[1,1],[1,4],[2,6]]},
+    {"start":[1,12],"init":[[1,11],[1,10]],"goal":[1,0],"cols":5,"rows":13,"intro":[],"walls":[[0,2],[1,2],[2,2],[4,2],[0,5],[2,5],[3,5],[4,5],[0,8],[1,8],[2,8],[4,8]],"cps":0.8,"coins":[[4,1],[0,6],[0,9],[2,11]]},
+    {"start":[0,3],"init":[[1,3],[2,3]],"goal":[1,6],"cols":9,"rows":9,"intro":[],"walls":[[4,0],[4,2],[4,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[8,4],[4,5],[4,6],[4,8]],"cps":0.8,"talismans":[[8,1,"tide"]],"coins":[[0,1],[8,2],[0,6],[7,7]]},
+    {"start":[4,7],"init":[[4,6],[4,5]],"goal":[1,7],"cols":8,"rows":8,"intro":[],"walls":[[5,0],[2,1],[0,2],[2,2],[3,2],[4,2],[5,2],[7,2],[2,3],[5,3],[2,4],[5,4],[1,5],[2,5],[5,5],[6,5],[2,6],[2,7]],"cps":0.8,"coins":[[7,0],[4,3],[3,4],[0,7]]},
+    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["block"],"walls":[[0,2],[1,2],[3,2],[4,2]],"blocks":[{"axis":"h","r":3,"lo":2,"hi":3,"pos0":2}],"cps":0.8,"coins":[[4,1],[1,4],[2,6]]},
+    {"start":[3,15],"init":[[3,14],[3,13]],"goal":[1,0],"cols":5,"rows":16,"intro":[],"walls":[[0,2],[1,2],[2,2],[4,2],[0,7],[2,7],[3,7],[4,7],[0,10],[1,10],[3,10],[4,10]],"blocks":[{"axis":"h","r":11,"lo":2,"hi":3,"pos0":2},{"axis":"h","r":6,"lo":0,"hi":1,"pos0":1},{"axis":"h","r":3,"lo":3,"hi":4,"pos0":3}],"cps":0.8,"coins":[[2,3],[4,5],[0,11],[1,13]]},
+    {"start":[0,9],"init":[[1,9],[2,9]],"goal":[6,9],"cols":9,"rows":11,"intro":[],"walls":[[4,0],[4,1],[4,3],[4,4],[0,5],[1,5],[3,5],[4,5],[5,5],[7,5],[8,5],[4,6],[4,7],[4,8],[4,9],[4,10]],"blocks":[{"axis":"h","r":6,"lo":5,"hi":6,"pos0":6},{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"h","r":6,"lo":2,"hi":3,"pos0":2},{"axis":"v","c":3,"lo":1,"hi":2,"pos0":2}],"cps":0.8,"talismans":[[8,0,"cog"]],"coins":[[5,1],[5,3],[8,6],[8,8]]},
+    {"start":[1,3],"init":[[1,2],[1,1]],"goal":[13,11],"cols":14,"rows":14,"intro":[],"walls":[[4,0],[8,0],[4,1],[8,2],[4,3],[8,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[10,4],[11,4],[13,4],[5,5],[9,5],[9,6],[5,7],[5,8],[9,8],[0,9],[1,9],[3,9],[4,9],[5,9],[6,9],[7,9],[8,9],[9,9],[10,9],[11,9],[12,9],[13,9],[4,10],[8,10],[8,11],[4,12],[4,13],[8,13]],"blocks":[{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"v","c":9,"lo":0,"hi":1,"pos0":1},{"axis":"h","r":5,"lo":11,"hi":12,"pos0":12},{"axis":"v","c":8,"lo":6,"hi":7,"pos0":7},{"axis":"v","c":4,"lo":5,"hi":6,"pos0":6},{"axis":"h","r":10,"lo":1,"hi":2,"pos0":2},{"axis":"v","c":5,"lo":10,"hi":11,"pos0":11},{"axis":"v","c":9,"lo":11,"hi":12,"pos0":12}],"cps":0.8,"coins":[[0,2],[1,5],[3,7],[0,10],[0,12]]},
+    {"start":[2,7],"init":[[2,6],[2,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["saw"],"walls":[],"hazards":[{"kind":"saw","axis":"h","r":3,"lo":0,"hi":4,"speed":4000,"phase":0}],"cps":0.8,"coins":[[4,1],[4,3],[4,5]]},
+    {"start":[2,12],"init":[[2,11],[2,10]],"goal":[2,0],"cols":5,"rows":13,"intro":[],"walls":[],"hazards":[{"kind":"saw","axis":"h","r":8,"lo":0,"hi":4,"speed":3600,"phase":0},{"kind":"saw","axis":"h","r":5,"lo":0,"hi":4,"speed":4400,"phase":0},{"kind":"saw","axis":"h","r":2,"lo":0,"hi":4,"speed":5200,"phase":0}],"cps":0.8,"coins":[[1,2],[0,5],[3,7],[1,10]]},
+    {"start":[1,8],"init":[[1,7],[1,6]],"goal":[6,0],"cols":7,"rows":9,"intro":[],"walls":[[0,0],[1,1],[3,4],[5,7],[6,8]],"hazards":[{"kind":"saw","axis":"v","c":3,"lo":0,"hi":3,"speed":4000,"phase":0},{"kind":"saw","axis":"v","c":3,"lo":5,"hi":8,"speed":4000,"phase":0},{"kind":"saw","axis":"h","r":4,"lo":0,"hi":2,"speed":4000,"phase":0},{"kind":"saw","axis":"h","r":4,"lo":4,"hi":6,"speed":4000,"phase":0}],"cps":0.8,"coins":[[5,1],[1,3],[4,4],[0,6]]},
+    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[3,0],"cols":7,"rows":8,"intro":["key","door"],"walls":[[0,3],[1,3],[2,3],[4,3],[5,3],[6,3]],"doors":[[3,3,"#ffd24a"]],"keys":[[6,7,"#ffd24a"]],"cps":0.8,"coins":[[4,1],[1,4],[0,6]]},
+    {"start":[0,0],"init":[[1,0],[2,0]],"goal":[6,9],"cols":8,"rows":11,"intro":[],"walls":[[0,2],[2,2],[3,2],[4,2],[4,3],[5,3],[6,3],[7,3],[0,5],[1,5],[2,5],[3,5],[2,7],[3,7],[4,7],[5,7],[7,7],[4,8],[4,9],[4,10]],"doors":[[1,2,"#ffd24a"],[6,7,"#c77dff"]],"keys":[[6,1,"#ffd24a"],[2,9,"#c77dff"]],"cps":0.8,"talismans":[[7,0,"sun"]],"coins":[[5,1],[7,4],[1,7],[3,9]]},
+    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["stone"],"walls":[[0,3],[1,3],[2,3],[4,3]],"stone":[[3,3,2]],"cps":0.8,"coins":[[2,1],[1,4],[2,6]]},
+    {"start":[1,0],"init":[[1,1],[1,2]],"goal":[3,10],"cols":7,"rows":12,"intro":[],"walls":[[3,0],[3,1],[3,3],[0,4],[1,4],[2,4],[3,4],[5,4],[6,4],[3,5],[6,5],[1,6],[3,6],[4,6],[6,6],[1,7],[6,7],[1,8],[2,8],[3,8],[4,8],[5,8],[6,8]],"stone":[[3,2,2],[4,4,2],[5,6,2],[2,6,2],[0,8,2]],"cps":0.8,"coins":[[2,1],[0,3],[5,9],[6,10]]},
+    {"start":[4,9],"init":[[4,8],[4,7]],"goal":[1,0],"cols":6,"rows":10,"intro":["platform"],"walls":[[0,2],[1,2],[2,2],[3,2],[3,4],[0,5],[2,5],[3,5],[4,5],[5,5]],"platforms":[[1,5,"ns"],[3,3,"ew"]],"cps":0.8,"coins":[[0,1],[0,4],[5,6],[3,8]]},
+    {"start":[2,1],"init":[[3,1],[4,1]],"goal":[5,8],"cols":7,"rows":10,"intro":[],"walls":[[0,3],[1,3],[3,3],[4,3],[5,3],[6,3],[4,4],[1,5],[4,5],[1,6],[4,7],[0,8],[4,8],[4,9]],"platforms":[[2,3,"ns"],[1,4,"ew"],[1,7,"sw"],[4,6,"ew"]],"cps":0.8,"talismans":[[0,0,"shard"]],"coins":[[1,1],[6,2],[6,5],[1,8]]},
+    {"start":[0,8],"init":[[1,8],[2,8]],"goal":[1,2],"cols":14,"rows":10,"intro":[],"cps":0.8,"walls":[[11,0],[8,1],[9,1],[11,2],[3,3],[11,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[11,4],[13,4],[11,5],[4,6],[8,6],[11,6],[4,7],[5,7],[7,7],[8,7],[11,7],[4,8],[8,8],[4,9],[8,9]],"platforms":[[6,7,"ns"],[10,1,"ne"],[4,5,"ew"],[8,5,"ew"],[10,4,"ns"],[12,4,"ns"],[11,1,"ew"],[7,0,"es"],[7,1,"ns"],[7,2,"ns"],[7,3,"wn"],[3,0,"es"],[3,1,"ns"],[3,2,"wn"]],"coins":[[0,1],[9,2],[13,5],[1,7],[13,8]]},
+    {"start":[1,8],"init":[[1,7],[1,6]],"goal":[7,8],"cols":10,"rows":10,"intro":[],"cps":0.8,"walls":[[5,1],[6,1],[8,1],[9,1],[5,2],[9,2],[5,3],[9,3],[0,4],[1,4],[2,4],[5,4],[9,4],[5,5],[9,5],[5,6],[9,6],[5,7],[9,7],[5,8],[9,8],[5,9],[9,9]],"blocks":[{"axis":"v","c":4,"pos0":4,"lo":3,"hi":5},{"axis":"v","c":3,"pos0":4,"lo":3,"hi":5},{"axis":"h","r":3,"pos0":8,"lo":6,"hi":8},{"axis":"h","r":2,"pos0":7,"lo":6,"hi":8},{"axis":"h","r":4,"pos0":7,"lo":6,"hi":8},{"axis":"h","r":5,"pos0":6,"lo":6,"hi":8}],"stone":[[7,1,2]],"coins":[[1,2],[6,4],[8,6],[4,8]]},
+    {"start":[2,9],"init":[[2,8],[2,7]],"goal":[2,0],"cols":5,"rows":10,"intro":[],"cps":0.8,"walls":[],"stone":[[0,4,2],[1,4,2],[2,4,2],[3,4,2],[4,4,2],[4,3,2],[3,3,2],[2,3,2],[1,3,2],[0,3,2],[0,2,2],[1,2,2],[2,2,2],[3,2,2],[0,5,2],[1,5,2],[2,5,2],[3,5,2],[4,5,2],[4,2,2]],"talismans":[[4,7,"sprig"]],"coins":[[1,1],[4,6],[1,8]]},
+    {"start":[1,3],"init":[[1,2],[1,1]],"goal":[12,6],"cols":14,"rows":8,"intro":[],"cps":0.8,"walls":[],"hazards":[{"phase":0.07,"kind":"saw","axis":"v","c":3,"lo":0,"hi":7,"speed":4000},{"phase":0.14,"kind":"saw","axis":"v","c":4,"lo":0,"hi":7,"speed":4000},{"phase":0.21,"kind":"saw","axis":"v","c":5,"lo":0,"hi":7,"speed":4000},{"phase":0.43,"kind":"saw","axis":"v","c":8,"lo":0,"hi":7,"speed":4000},{"phase":0.36,"kind":"saw","axis":"v","c":9,"lo":0,"hi":7,"speed":4000},{"kind":"saw","axis":"v","c":10,"lo":0,"hi":7,"speed":4000,"phase":0.29}],"coins":[[13,1],[3,3],[6,4],[8,5],[11,6]]},
   ];
 
   // ---------- DOM ---------------------------------------------------------
@@ -318,7 +333,11 @@
   const ovScore = document.getElementById("ov-score");
 
   // ---------- Tunables ----------------------------------------------------
-  const TILES_TOTAL = 3;
+  // How many track tiles a level plays with. Three is the game's shape and what all 24
+  // shipped levels use, but nothing in the engine assumes it: the count is the start cell
+  // plus however many are pre-laid in `init`, and the runner's head is the last of them.
+  // A level carrying more simply lists more cells. TILES_MAX is a sanity bound.
+  const TILES_MAX = 8;
   const GRACE_MS = 2600;
   const MIN_CELL = 78, MAX_CELL = 170;
   const VIEW_COLS = 4.2, VIEW_ROWS = 6;
@@ -750,7 +769,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v6.7";                    // shown on the title & pause screens
+  const VERSION = "v6.8";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -848,6 +867,133 @@
   }
   function applyColorblind(){ document.documentElement.classList.toggle("cb", colorblind); for (const k in _varCache) delete _varCache[k]; }
 
+
+  // ---------- Cosmetics, and the tiles you buy them with ------------------
+  // Every tile the runner clears is a tile in your pocket. Spend them here. Ownership and
+  // the balance live in one localStorage record; what is currently WORN lives in settings,
+  // so a skin you own is never lost by taking it off.
+  const WALLET_KEY = "tilerunner:wallet";
+  function loadWallet(){
+    try { const w = JSON.parse(localStorage.getItem(WALLET_KEY)) || {};
+          return { tiles: w.tiles|0, owned: new Set(w.owned || []) }; }
+    catch(_) { return { tiles: 0, owned: new Set() }; }
+  }
+  function saveWallet(){
+    try { localStorage.setItem(WALLET_KEY,
+      JSON.stringify({ tiles: wallet.tiles, owned: [...wallet.owned] })); } catch(_){}
+  }
+  const wallet = loadWallet();
+
+  // Each item draws its own swatch into an arbitrary 2d context, so the shop can preview it
+  // without going anywhere near the game's canvas. The in-play drawing is separate, below.
+  const rr2 = (g,x,y,w,h,r)=>{ g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r);
+    g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); };
+  // a little runner bust, used as the backdrop of most swatches
+  function swatchBust(g, S, body, ink){
+    const w = S*0.42, h = S*0.42, x = S/2 - w/2, y = S*0.30;
+    g.fillStyle = body; rr2(g, x, y, w, h, S*0.07); g.fill();
+    g.fillStyle = ink;
+    g.beginPath(); g.arc(S/2 - w*0.16, y + h*0.40, S*0.035, 0, 7); g.fill();
+    g.beginPath(); g.arc(S/2 + w*0.20, y + h*0.40, S*0.035, 0, 7); g.fill();
+    return { x, y, w, h };
+  }
+
+  const SKIN_COLOURS = [
+    { id:"classic", name:"Classic", cost:0,   body:"#bfe6ff", ink:"#17263f" },
+    { id:"ember",   name:"Ember",   cost:60,  body:"#ffb693", ink:"#3d1a10" },
+    { id:"moss",    name:"Moss",    cost:60,  body:"#b6e3a8", ink:"#17331a" },
+    { id:"orchid",  name:"Orchid",  cost:120, body:"#e4b6ff", ink:"#2c1140" },
+    { id:"ink",     name:"Ink",     cost:200, body:"#5b6480", ink:"#e9eeff" },
+    { id:"gold",    name:"Gold",    cost:400, body:"#ffd77a", ink:"#3b2a05" },
+  ];
+  SKIN_COLOURS.forEach(c => c.swatch = (g,S) => swatchBust(g, S, c.body, c.ink));
+
+  // Hats draw in the runner's local frame: +x is travel, the body spans byTop..byTop+bodyH.
+  const HATS = [
+    { id:"none", name:"Bare", cost:0, draw:null, swatch:(g,S)=>swatchBust(g,S,"#bfe6ff","#17263f") },
+    { id:"cap", name:"Cap", cost:80, col:"#e05b4b",
+      draw(g,s,bw,byTop,col){ g.fillStyle=col;
+        g.beginPath(); g.ellipse(0, byTop, bw*0.52, s*0.05, 0, Math.PI, 0); g.fill();
+        g.fillRect(0, byTop - s*0.012, bw*0.62, s*0.024); } },
+    { id:"top", name:"Top Hat", cost:180, col:"#2b2740",
+      draw(g,s,bw,byTop,col){ g.fillStyle=col;
+        g.fillRect(-bw*0.60, byTop - s*0.018, bw*1.20, s*0.026);
+        g.fillRect(-bw*0.30, byTop - s*0.115, bw*0.60, s*0.10); } },
+    { id:"band", name:"Headband", cost:80, col:"#ffd24a",
+      draw(g,s,bw,byTop,col){ g.fillStyle=col;
+        g.fillRect(-bw*0.52, byTop + s*0.012, bw*1.04, s*0.028); } },
+    { id:"crown", name:"Crown", cost:350, col:"#ffd24a",
+      draw(g,s,bw,byTop,col){ g.fillStyle=col; g.beginPath();
+        const w=bw*0.52, t=byTop - s*0.075, b=byTop + s*0.012;
+        g.moveTo(-w,b); g.lineTo(-w,t); g.lineTo(-w*0.5,b*0.55+t*0.45); g.lineTo(0,t);
+        g.lineTo(w*0.5,b*0.55+t*0.45); g.lineTo(w,t); g.lineTo(w,b); g.closePath(); g.fill(); } },
+  ];
+  HATS.forEach(h => { if (h.id === "none") return;
+    h.swatch = (g,S) => { const b = swatchBust(g,S,"#bfe6ff","#17263f");
+      g.save(); g.translate(S/2, 0); h.draw(g, S, b.w, b.y, h.col); g.restore(); }; });
+
+  // Nyan-style ribbons: a band of parallel stripes laid along the runner's recent path,
+  // exactly as deep as his body. Stored outermost-first; the drawing offsets each stripe
+  // along the path's normal, so they stay parallel round corners instead of nesting.
+  const TRAILS = [
+    { id:"none", name:"None", cost:0, cols:null, swatch:(g,S)=>swatchBust(g,S,"#bfe6ff","#17263f") },
+    { id:"rainbow", name:"Rainbow", cost:250, cols:["#ff595e","#ff924c","#ffca3a","#8ac926","#1982c4"] },
+    { id:"spark",   name:"Sparks",  cost:100, cols:["#ffe9a8","#ffd24a","#ff9e4d"] },
+    { id:"cyan",    name:"Coolant", cost:100, cols:["#dffaff","#8ff0ff","#3fb8d6"] },
+    { id:"rose",    name:"Rose",    cost:150, cols:["#ffd6e8","#ff9ec7","#e0559a"] },
+  ];
+  TRAILS.forEach(t => { if (!t.cols) return;
+    t.swatch = (g,S) => { const b = swatchBust(g,S,"#bfe6ff","#17263f");
+      const n = t.cols.length, band = b.h*0.62, sw = band/n, y0 = b.y + b.h*0.30;
+      for (let i=0;i<n;i++){ g.fillStyle = t.cols[i];
+        g.fillRect(S*0.06, y0 + i*sw, S/2 - b.w*0.30 - S*0.06, sw); } }; });
+
+  const CAPES = [
+    { id:"none", name:"None", cost:0, col:null, swatch:(g,S)=>swatchBust(g,S,"#bfe6ff","#17263f") },
+    { id:"crimson", name:"Crimson", cost:150, col:"#c2323f" },
+    { id:"teal",    name:"Teal",    cost:150, col:"#2f8f9d" },
+    { id:"royal",   name:"Royal",   cost:300, col:"#4b3fbf" },
+  ];
+  CAPES.forEach(c => { if (!c.col) return;
+    c.swatch = (g,S) => { const b = swatchBust(g,S,"#bfe6ff","#17263f");
+      g.save(); g.fillStyle = c.col; g.beginPath();
+      g.moveTo(S/2 - b.w*0.30, b.y + b.h*0.12);
+      g.quadraticCurveTo(S/2 - b.w*1.30, b.y + b.h*0.55, S/2 - b.w*0.85, b.y + b.h*1.15);
+      g.lineTo(S/2 - b.w*0.10, b.y + b.h*0.72); g.closePath(); g.fill(); g.restore(); }; });
+
+  const TRACKS = [
+    { id:"level", name:"Level", cost:0, track:null, rail:null,
+      swatch:(g,S)=>{ rr2(g,S*0.18,S*0.30,S*0.64,S*0.40,S*0.05); g.fillStyle="#8d86c9"; g.fill();
+        g.fillStyle="#ffcf4d"; g.fillRect(S*0.18,S*0.52,S*0.64,S*0.18);
+        g.fillStyle="#fff2c4"; g.fillRect(S*0.18,S*0.50,S*0.64,S*0.035); } },
+    { id:"sun",   name:"Sunbeam", cost:150, track:"#ffcf4d", rail:"#fff2c4" },
+    { id:"mint",  name:"Mint",    cost:150, track:"#54d6a4", rail:"#c8ffe8" },
+    { id:"berry", name:"Berry",   cost:250, track:"#e0559a", rail:"#ffd0e6" },
+    { id:"steel", name:"Steel",   cost:400, track:"#9aa7bd", rail:"#e6edf9" },
+  ];
+  TRACKS.forEach(t => { if (!t.track) return;
+    t.swatch = (g,S) => { rr2(g,S*0.18,S*0.30,S*0.64,S*0.40,S*0.05); g.fillStyle="#8d86c9"; g.fill();
+      g.fillStyle=t.track; g.fillRect(S*0.18,S*0.52,S*0.64,S*0.18);
+      g.fillStyle=t.rail;  g.fillRect(S*0.18,S*0.50,S*0.64,S*0.035); }; });
+
+  // one table so the shop, the save format and the drawing all agree on what exists
+  const LOOK = [
+    { key:"colour", label:"Colour",  items:SKIN_COLOURS },
+    { key:"hat",    label:"Hat",     items:HATS },
+    { key:"trail",  label:"Trail",   items:TRAILS },
+    { key:"cape",   label:"Cape",    items:CAPES },
+    { key:"track",  label:"Track",   items:TRACKS },
+  ];
+  const lookWorn = k => (settings.look && settings.look[k]) || LOOK.find(l=>l.key===k).items[0].id;
+  const lookItem = k => { const cat = LOOK.find(l=>l.key===k);
+                          return cat.items.find(i => i.id === lookWorn(k)) || cat.items[0]; };
+  // Everything unlocked while the shop is being built out — set to false to put the prices
+  // back and make the tile wallet mean something again. Costs and the wallet are untouched,
+  // so flipping it restores the economy exactly as it was.
+  const UNLOCK_ALL = true;
+  const owns = it => UNLOCK_ALL || it.cost === 0 || wallet.owned.has(it.id);
+  function wearLook(k, id){ settings.look = settings.look || {}; settings.look[k] = id; saveSettings(); }
+
   // ---------- Per-level look (background theme + track colour) -----------
   function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
   function hashSeed(str){ let h=2166136261; str=String(str); for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
@@ -868,7 +1014,6 @@
     return { colors, patchW:0.38+rnd()*0.32,
              dir:rnd()<0.5?1:-1,                               // which way the stripes lean
              stripeW:2+Math.floor(rnd()*3),                    // patches per stripe
-             style:["plain","plain","plain","dotted"][Math.floor(rnd()*4)],
              drift:(rnd()<0.5?1:-1)*(0.2+rnd()*0.5) };
   }
   // HSL -> "#rrggbb" (so hexA() can add alpha to the platform colours)
@@ -884,8 +1029,9 @@
     const h=Math.floor(rnd()*360), s=80+Math.floor(rnd()*15);
     return { track: hslHex(h, s, 58), rail: hslHex(h, Math.min(96, s+8), 83) };
   }
-  const curTrack = () => (state && state.trackPal && state.trackPal.track) || getVar("--track");
-  const curRail  = () => (state && state.trackPal && state.trackPal.rail)  || getVar("--rail");
+  // A worn track skin overrides the level's generated palette; "Level" keeps it.
+  const curTrack = () => lookItem("track").track || (state && state.trackPal && state.trackPal.track) || getVar("--track");
+  const curRail  = () => lookItem("track").rail  || (state && state.trackPal && state.trackPal.rail)  || getVar("--rail");
 
   function loadLevel(i) { levelIdx = clamp(i, 0, LEVELS.length - 1);
     levelAttempts[levelIdx] = (levelAttempts[levelIdx] || 0) + 1;      // count each start (incl. retries)
@@ -901,7 +1047,7 @@
     const stoneRot = (L.stone && L.stone.length)
       ? _sHash(L.stone[0][0] + 1, L.stone[0][1] + 1) % _STONE_VARS.length : 0;
     // the start IS a reusable tile: the 3 tiles start pre-laid from the start cell
-    const initCells = [L.start, ...L.init].slice(0, TILES_TOTAL);
+    const initCells = [L.start, ...L.init].slice(0, TILES_MAX);
     const tiles = initCells.map((cp, idx) => ({ id:idx, c:cp[0], r:cp[1], status:"active" }));
     const path = tiles.map(t => ({ c:t.c, r:t.r, kind:"tile", tileId:t.id }));
     // starting pace, tiles/sec, declared per level. Every shipped level now starts at
@@ -925,7 +1071,7 @@
       status:"play", drag:null, fall:null, runPhase:0,
       score:0, combo:0, maxCombo:0, coins:0, elapsed:0, flowClears:0,
       par: L.par || 24000,
-      shake:0, beatPulse:0, pops:[], lights:[],
+      shake:0, beatPulse:0, pops:[], lights:[], trail:[], trailT:0,
       // --- Batch 2: optional extra cell types & hazards ---
       coinCells: new Set((L.coins||[]).map(c=>key(c[0],c[1]))),
       // [c, r, id] — a talisman sits on the floor and is grabbed by passing over it
@@ -1842,7 +1988,8 @@
     for (const ck of Array.from(s.coinCells)) {
       const [c, r] = ck.split(",").map(Number);
       if (near(c, r)) { s.coinCells.delete(ck); s.coinsGot++; s.score = computeScore(); updateScoreHud();
-                        spawnPop(c, r, "#ffd24a"); Sound.coin(); haptic(6); }
+                        wallet.tiles += COIN_TILES; saveWallet();     // a golden tile is worth a stack of them
+                        spawnPop(c, r, "#ffd24a"); spawnLight(c, r); Sound.coin(); haptic(6); }
     }
     // talismans: passing over one unlocks it permanently, win or lose
     for (const t of s.talismans) {
@@ -1900,6 +2047,7 @@
         Sound.clearTile();                                  // play a tone as the tile clears
         spawnLight(node.c, node.r);                         // burst of light from the cleared tile
         scoreClear(i);                                      // score, combo, juice on the beat
+        wallet.tiles++;                                     // and a tile in your pocket to spend
         if (node.tileId != null) {
           const t = s.tiles[node.tileId];
           if (t) {
@@ -1980,10 +2128,16 @@
   function tickSquash(dt) {
     const q = state.squash; if (!q) return;
     q.t += dt;
-    if (q.t >= SQUASH_MS) { startFall(); state.squash = null; }
+    if (q.t >= SQUASH_MS) { startFall(true); state.squash = null; }   // peeled off the wall
   }
 
-  function startFall() {
+  // `offWall` is the difference between the two ways a run ends. Off a ledge he keeps his
+  // forward momentum and gravity takes it from there. Into a wall he has just been stopped
+  // dead by something solid, so he comes back off it: thrown BACKWARDS along his own travel
+  // direction, popped up a little, and tumbling the other way.
+  const WALL_BOUNCE = 0.55;          // of his running speed, sent back the way he came
+  const WALL_POP    = 0.62;          // upward kick out of the impact, same units
+  function startFall(offWall) {
     const ri = runnerInfo();
     state.status = "falling";
     state.combo = 0;                 // the run ends — combo breaks
@@ -1992,9 +2146,18 @@
     haptic(60);
     state.drag = null;
     const spd = cell / state.msPerCell;            // the runner's forward speed (px/ms)
-    state.fall = { x:ri.sx, y:ri.sy, angle:ri.angle,
-                   vx:ri.tx * spd, vy:ri.ty * spd,  // run off the edge, then gravity takes over
-                   va:(ri.tx >= 0 ? 1 : -1) * 0.004, t:0 };
+    if (offWall) {
+      // "up" is perpendicular to travel, so the pop is away from the track he was on
+      const ux = Math.sin(ri.angle), uy = -Math.cos(ri.angle);
+      state.fall = { x:ri.sx, y:ri.sy, angle:ri.angle,
+                     vx: -ri.tx*spd*WALL_BOUNCE + ux*spd*WALL_POP,
+                     vy: -ri.ty*spd*WALL_BOUNCE + uy*spd*WALL_POP,
+                     va: (ri.tx >= 0 ? -1 : 1) * 0.006, t:0 };
+    } else {
+      state.fall = { x:ri.sx, y:ri.sy, angle:ri.angle,
+                     vx:ri.tx * spd, vy:ri.ty * spd,  // run off the edge, then gravity takes over
+                     va:(ri.tx >= 0 ? 1 : -1) * 0.004, t:0 };
+    }
   }
   function tickFall(dt) {
     const f = state.fall;
@@ -2061,6 +2224,7 @@
   function endWin() {
     state.status = "win";
     const att = state.attempts || 1;
+    saveWallet();                               // bank the tiles this run collected
     {                                           // remember it's cleared — nothing else to track
       const best = loadBest(), keyId = "L" + levelIdx;
       best[keyId] = { done: true };
@@ -2105,6 +2269,7 @@
   let _lastQuip = -1;
   function showLose() {
     state.status = "lose";
+    saveWallet();                             // a failed run still keeps the tiles it cleared
     winAnimToken++; ovScore.innerHTML = "";   // cancel any pending win-score reveal
     ovStars.textContent = "";
     overlay.className = "lose show";
@@ -2150,6 +2315,7 @@
     drawShards();
     drawPops();
     drawLights();
+    drawTrail();                                  // worn light trail, under the runner
     if (state.status === "intro") drawIntro(ts);
     else if (state.status === "campan") { /* runner not formed yet — flag fly-in */ }
     else drawRunner(ts);
@@ -2221,8 +2387,7 @@
     const live = (n) => n.kind === "tile" && !n.exited;
     const onGoal = (n) => n.c === state.goal.c && n.r === state.goal.r;
 
-    for (let i = idx; i < p.length; i++)
-      if (live(p[i])) drawGlass(cx(p[i].c), cy(p[i].r), cell);
+    drawPathGlass(p.slice(idx).filter(live));
 
     for (let i = idx; i < p.length; i++)
       if (live(p[i])) {
@@ -2240,7 +2405,20 @@
     const x = (c+0.5)*cell, cy0 = (r+0.5)*cell, s = cell;
     const pt = state.flagPlantT || 0;                     // 0 floating -> 1 planted on the tile
     const bob = (1-pt) * Math.sin(ts/300)*s*0.05;
-    const baseY = cy0 + bob + pt*s*0.06;                  // planted: base settles onto the platform
+    // Once there is a tile here, the flag plants on the RUNNING SURFACE at the middle of that
+    // tile's path — the point the runner actually crosses — rather than on the cell's centre
+    // with a fudge factor. On a corner tile that midpoint is out on the arc, so the flag
+    // stands on the track instead of hovering beside it.
+    const gi = state.path.findIndex(n => n.kind === "tile" && n.c === c && n.r === r);
+    let ax = x, ay = cy0, tang = null;
+    if (gi >= 0) {
+      const S = tileSurface(state.path[gi], state.path[gi-1], state.path[gi+1]);
+      const m = Math.floor((S.length - 1)/2);
+      ax = x + (S[m].x - x)*pt; ay = cy0 + (S[m].y - cy0)*pt;   // slide onto it as it plants
+      const a = S[Math.max(0, m-1)], b = S[Math.min(S.length-1, m+1)];
+      tang = Math.atan2(b.y - a.y, b.x - a.x);            // the surface's own direction there
+    }
+    const baseY = ay + bob;
     ctx.save();
     // place-here target ring (fades out once the flag is planted)
     if (pt < 0.98) {
@@ -2251,12 +2429,11 @@
       ctx.setLineDash([]); ctx.globalAlpha = 1;
     }
     if (locked) drawLock(x, cy0 + s*0.02, ts);   // small padlock (unused: exit never locked now)
-    // as it plants, the flag tilts to align with the final tile's platform direction
-    // (the track's tangent as the runner enters the goal cell)
+    // as it plants, the flag tilts to stand square on the surface it is planting into
     let rot = 0;
-    const gi = state.path.findIndex(n => n.kind === "tile" && n.c === c && n.r === r);
-    if (gi > 0) { const pv = state.path[gi-1]; rot = Math.atan2((r - pv.r), (c - pv.c)); }
-    ctx.translate(x, baseY);
+    if (tang != null) rot = tang;
+    else if (gi > 0) { const pv = state.path[gi-1]; rot = Math.atan2((r - pv.r), (c - pv.c)); }
+    ctx.translate(ax, baseY);
     ctx.rotate(rot * pt);                                 // upright while floating, aligned once planted
     // shorter, all-white pole (local frame: base near origin)
     const poleTop = -s*0.30, poleBot = s*0.08;
@@ -2354,14 +2531,14 @@
     const { c, r } = grp.door, x = cx(c), y = cy(r), s = cell, t = grp.openT, color = grp.color;
     if (t >= 0.995) return;                       // fully open — nothing to draw
     ctx.save();
-    rrect(x, y, s, s, s*0.13); ctx.clip();
+    rrect(x, y, s, s, tileR(s)); ctx.clip();
     const off = t * (s*0.5 + 2);                  // each panel slides outward by up to half a cell
     const pw = s*0.5 - 1;
     const panel = (px) => {
       const g = ctx.createLinearGradient(px, y, px, y+s);
       g.addColorStop(0, shade(color, 34)); g.addColorStop(0.5, color); g.addColorStop(1, shade(color, -48));
-      rrect(px, y+2, pw, s-4, s*0.13); ctx.fillStyle = g; ctx.fill();
-      ctx.save(); rrect(px, y+2, pw, s-4, s*0.13); ctx.clip(); grainFill(px, y, pw, s, 0.7); ctx.restore();  // paper grain, like other tiles
+      rrect(px, y+2, pw, s-4, tileR(s)); ctx.fillStyle = g; ctx.fill();
+      ctx.save(); rrect(px, y+2, pw, s-4, tileR(s)); ctx.clip(); grainFill(px, y, pw, s, 0.7); ctx.restore();  // paper grain, like other tiles
       // corner rivets, matching the wall tiles' rivet size (s*0.05)
       const ox = Math.max(3, pw*0.24), oy = s*0.16, br = s*0.05;
       ctx.fillStyle = "rgba(0,0,0,0.30)";
@@ -2524,13 +2701,13 @@
     for (const md of (state.manualDoors||[])) {
       if (md.left >= 0.999 && md.right >= 0.999) continue;    // fully open — nothing to draw
       const x = cx(md.c), y = cy(md.r), s = cell, color = "#5bd6c0";
-      ctx.save(); rrect(x, y, s, s, s*0.13); ctx.clip();
+      ctx.save(); rrect(x, y, s, s, tileR(s)); ctx.clip();
       const pw = s*0.5 - 1;
       const panel = (px) => {
         const g = ctx.createLinearGradient(px, y, px, y+s);
         g.addColorStop(0, shade(color,34)); g.addColorStop(0.5, color); g.addColorStop(1, shade(color,-48));
-        rrect(px, y+2, pw, s-4, s*0.13); ctx.fillStyle = g; ctx.fill();
-        ctx.save(); rrect(px, y+2, pw, s-4, s*0.13); ctx.clip(); grainFill(px, y, pw, s, 0.7); ctx.restore();
+        rrect(px, y+2, pw, s-4, tileR(s)); ctx.fillStyle = g; ctx.fill();
+        ctx.save(); rrect(px, y+2, pw, s-4, tileR(s)); ctx.clip(); grainFill(px, y, pw, s, 0.7); ctx.restore();
         const ox = Math.max(3, pw*0.24), oy = s*0.16, br = s*0.05;
         ctx.fillStyle = "rgba(0,0,0,0.30)";
         for (const [bx,by] of [[ox,oy],[pw-ox,oy],[ox,s-oy],[pw-ox,s-oy]]) { ctx.beginPath(); ctx.arc(px+bx, y+by, br, 0, Math.PI*2); ctx.fill(); }
@@ -2641,20 +2818,86 @@
     ctx.fillText(talFlash.def.name, x + h, y + h*0.66);
     ctx.restore();
   }
+  // A coin is a little golden TILE hovering off the board: the same rounded square the game
+  // is built from, at about a third size, with its own rail across it. Its shadow stays on
+  // the ground and shrinks as it rises, which is what sells the float.
+  //
+  // The shine is four separate things, because "shiny" is not one number: a fixed diagonal
+  // GLOSS that gives it a lit side, a RIM along the top edge, a SWEEP that travels across
+  // the face on a timer, and a SPARK that twinkles off one corner. Tune them in coin-lab.html.
+  const COIN = {
+    size:     0.34,   // fraction of a cell
+    float:    0.07,   // bob height, fraction of a cell
+    floatMs:  620,    // one full bob
+    rock:     0.08,   // lazy rotation, radians
+    shadowA:  0.28,   // ground shadow opacity
+    gloss:    0.45,   // fixed diagonal sheen across the face
+    rim:      0.55,   // bright edge along the top
+    sweep:    0.55,   // travelling glint strength
+    sweepMs:  2200,   // how often it crosses
+    spark:    0.80,   // corner twinkle strength
+    sparkMs:  2600,   // how often it twinkles
+  };
+  const COIN_TILES = 25;                           // what one is worth in the shop
   function drawCoin(x, y, ts) {
-    const bob = Math.sin(ts/360) * cell*0.05;       // gentle up/down bob (no spin)
-    y += bob;
-    const r = cell*0.15, rh = r*0.82, depth = cell*0.058, tilt = -0.25;   // smaller disc + slight rotation
-    const lean = 0.42;                                                     // extrusion leans off at a slight angle
+    const s2 = cell * COIN.size, r = tileR(s2), h = s2/2;
+    const t = ts / COIN.floatMs;
+    const lift = (0.5 + 0.5*Math.sin(t)) * cell * COIN.float;
+    const tilt = Math.sin(t*0.8) * COIN.rock;
     ctx.save();
-    // orange extrusion (a short stack of discs, offset diagonally below the face)
-    ctx.fillStyle = "#e08a1e";
-    for (let d = depth; d > 0.4; d -= 1.0) { ctx.beginPath(); ctx.ellipse(x + d*lean, y + d, r, rh, tilt, 0, Math.PI*2); ctx.fill(); }
-    // flat yellow face — no shine, no outline, gently tilted
-    ctx.fillStyle = "#ffd24a";
-    ctx.beginPath(); ctx.ellipse(x, y, r, rh, tilt, 0, Math.PI*2); ctx.fill();
+    // ground shadow, tied to the lift
+    const k = 1 - (COIN.float ? (lift / (cell*COIN.float)) * 0.35 : 0);
+    ctx.globalAlpha = COIN.shadowA * k; ctx.fillStyle = "#05040d";
+    ctx.beginPath(); ctx.ellipse(x, y + cell*0.13, s2*0.42*k, s2*0.12*k, 0, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.translate(x, y - lift); ctx.rotate(tilt);
+    ctx.fillStyle = "#c78b16";                                    // the edge it sits on
+    rrect(-h + s2*0.06, -h + s2*0.10, s2, s2, r); ctx.fill();
+    ctx.fillStyle = "#ffd24a";                                    // the face
+    rrect(-h, -h, s2, s2, r); ctx.fill();
+    ctx.save();
+    rrect(-h, -h, s2, s2, r); ctx.clip();                         // everything below stays on the tile
+    if (COIN.gloss > 0) {                                         // lit from the top-left
+      const g = ctx.createLinearGradient(-h, -h, h, h);
+      g.addColorStop(0,    "rgba(255,255,255," + COIN.gloss + ")");
+      g.addColorStop(0.45, "rgba(255,255,255,0)");
+      g.addColorStop(1,    "rgba(120,72,0," + (COIN.gloss*0.5) + ")");
+      ctx.fillStyle = g; ctx.fillRect(-h, -h, s2, s2);
+    }
+    if (COIN.sweep > 0) {                                         // a glint travelling across
+      const u = (ts % COIN.sweepMs) / COIN.sweepMs;
+      const px = (-1.6 + 3.2*u) * h;
+      ctx.save(); ctx.rotate(-0.6);
+      const g2 = ctx.createLinearGradient(px - s2*0.30, 0, px + s2*0.30, 0);
+      g2.addColorStop(0,   "rgba(255,255,255,0)");
+      g2.addColorStop(0.5, "rgba(255,255,255," + COIN.sweep + ")");
+      g2.addColorStop(1,   "rgba(255,255,255,0)");
+      ctx.fillStyle = g2; ctx.fillRect(-s2, -s2, s2*2, s2*2);
+      ctx.restore();
+    }
+    ctx.restore();
+    if (COIN.rim > 0) {                                           // bright top edge
+      ctx.strokeStyle = "rgba(255,255,255," + COIN.rim + ")";
+      ctx.lineWidth = Math.max(1, s2*0.05);
+      ctx.beginPath(); ctx.moveTo(-h + r, -h + ctx.lineWidth*0.5);
+      ctx.lineTo(h - r, -h + ctx.lineWidth*0.5); ctx.stroke();
+    }
+    if (COIN.spark > 0) {                                         // corner twinkle
+      const u = (ts % COIN.sparkMs) / COIN.sparkMs;
+      const a = Math.pow(Math.max(0, Math.sin(u*Math.PI*2)), 8) * COIN.spark;
+      if (a > 0.01) {
+        const sx = h*0.62, sy = -h*0.66, L = s2*0.30*(0.6 + 0.4*a);
+        ctx.strokeStyle = "rgba(255,255,255," + a + ")";
+        ctx.lineWidth = Math.max(1, s2*0.05); ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(sx - L, sy); ctx.lineTo(sx + L, sy);
+        ctx.moveTo(sx, sy - L); ctx.lineTo(sx, sy + L); ctx.stroke();
+      }
+    }
     ctx.restore();
   }
+
+
   // a collectible boost / slow token that bobs on its cell (grab it for a timed speed effect)
   function drawFxPickup(c, r, ts, kind) {
     const col = kind === "boost" ? pal("boost") : pal("slow");
@@ -2736,7 +2979,7 @@
       const px = x + 2 + i * (pw + gap);
       const g = ctx.createLinearGradient(px, y, px, y + s);
       g.addColorStop(0, shade(color, 34)); g.addColorStop(0.5, color); g.addColorStop(1, shade(color, -48));
-      rrect(px, y + 2, pw, s - 4, s * 0.13); ctx.fillStyle = g; ctx.fill();
+      rrect(px, y + 2, pw, s - 4, tileR(s)); ctx.fillStyle = g; ctx.fill();
       // corner rivets, like the wall tiles
       const ox = Math.max(3, pw * 0.24), oy = s * 0.16, br = Math.max(2, s * 0.032);
       ctx.fillStyle = "rgba(0,0,0,0.30)";
@@ -2797,7 +3040,7 @@
     if (!open) {
       const tx = cx(c), ty = cy(r);
       ctx.save();
-      rrect(tx + cell*0.05, ty + cell*0.05, cell*0.90, cell*0.90, cell*0.12); ctx.clip();
+      rrect(tx + cell*0.05, ty + cell*0.05, cell*0.90, cell*0.90, tileR(cell*0.90)); ctx.clip();
       ctx.globalAlpha = 0.18; ctx.fillStyle = color; ctx.fillRect(tx, ty, cell, cell);            // soft wash of the hue
       ctx.globalAlpha = 0.5;  ctx.strokeStyle = color; ctx.lineWidth = cell*0.16; ctx.lineCap = "butt";
       const step = cell*0.34, drift = (ts/45) % step;                                             // slow barber-pole drift
@@ -2889,23 +3132,50 @@
     return "rgba(" + ((n>>16)&255) + "," + ((n>>8)&255) + "," + (n&255) + "," + a + ")";
   }
   // build the body polygon (surface S, extended past the far tile edge) as the current path
-  function bodyPath(S) {
-    const nlast = S.length - 1;
-    const nrm = S.map((pt, k) => {
-      const a = S[Math.max(0, k-1)], b = S[Math.min(nlast, k+1)];
-      let tx = b.x-a.x, ty = b.y-a.y; const m = Math.hypot(tx,ty) || 1;
-      return { x: ty/m, y: -tx/m };
-    });
-    const Obig = S.map((pt, k) => ({ x:pt.x - nrm[k].x*cell*1.7, y:pt.y - nrm[k].y*cell*1.7 })); // past the edge; clip trims it
+  // The slab hanging under the running surface, as a SIMPLE polygon: the surface itself, then
+  // closed along the cell's own edges and corners.
+  //
+  // It used to be built by pushing every surface point 1.7 cells down its own normal. On a
+  // straight that is a clean parallel offset, but on a CORNER the normals converge on the
+  // arc's centre, and an offset that long shoots straight through it and out the far side —
+  // so the "underside" arrived reversed and the polygon crossed itself. Nonzero winding then
+  // cancelled parts of the overlap, which is what ate the thin slivers along the edges of
+  // corner tiles. Nothing here offsets any more, so there is nothing to overshoot.
+  function bodyPath(S, C) {
+    const h = cell/2, last = S.length - 1, mid = last >> 1;
+    // which side the body hangs on, from the tangent at the middle of the surface
+    const a = S[Math.max(0, mid-1)], b = S[Math.min(last, mid+1)];
+    let tx = b.x - a.x, ty = b.y - a.y; const m = Math.hypot(tx, ty) || 1; tx /= m; ty /= m;
+    const bx = -ty, by = tx;                             // same convention as the old -normal
     ctx.moveTo(S[0].x, S[0].y);                          // adds a subpath (caller does beginPath/fill)
-    for (let k = 1; k <= nlast; k++) ctx.lineTo(S[k].x, S[k].y);
-    for (let k = nlast; k >= 0; k--) ctx.lineTo(Obig[k].x, Obig[k].y);
+    for (let k = 1; k <= last; k++) ctx.lineTo(S[k].x, S[k].y);
+    if (last === 2) {                                    // straight: a slab half a cell deep
+      ctx.lineTo(S[last].x + bx*h, S[last].y + by*h);
+      ctx.lineTo(S[0].x    + bx*h, S[0].y    + by*h);
+    } else {
+      // corner: the arc's centre is the cell corner it bends around
+      const O = { x: S[0].x + S[last].x - C.x, y: S[0].y + S[last].y - C.y };
+      const M = S[mid];
+      if ((O.x - M.x)*bx + (O.y - M.y)*by > 0) {         // body on the inside — hug that corner
+        ctx.lineTo(O.x, O.y);
+      } else {                                           // body on the outside — wrap the other three
+        const cs = [{x:C.x-h,y:C.y-h},{x:C.x+h,y:C.y-h},{x:C.x+h,y:C.y+h},{x:C.x-h,y:C.y+h}];
+        let k0 = 0, best = Infinity;
+        for (let i = 0; i < 4; i++) { const d = Math.hypot(cs[i].x-O.x, cs[i].y-O.y); if (d < best) { best = d; k0 = i; } }
+        const n1 = (k0+1)%4, n3 = (k0+3)%4;
+        const first = Math.hypot(cs[n1].x-S[last].x, cs[n1].y-S[last].y)
+                    < Math.hypot(cs[n3].x-S[last].x, cs[n3].y-S[last].y) ? n1 : n3;
+        ctx.lineTo(cs[first].x, cs[first].y);
+        ctx.lineTo(cs[(k0+2)%4].x, cs[(k0+2)%4].y);
+        ctx.lineTo(cs[first === n1 ? n3 : n1].x, cs[first === n1 ? n3 : n1].y);
+      }
+    }
     ctx.closePath();
   }
   function drawPlatformBody(n, S, fill) {
     ctx.save();
     rrect(cx(n.c), cy(n.r), cell, cell, tileR(cell)); ctx.clip();
-    ctx.beginPath(); bodyPath(S); ctx.fillStyle = fill; ctx.fill();   // flat solid body to the tile edge
+    ctx.beginPath(); bodyPath(S, nodeCenter(n)); ctx.fillStyle = fill; ctx.fill();   // flat solid body to the tile edge
     grainFill(cx(n.c), cy(n.r), cell, cell, TILE.bodyGrain);   // paper grain on the platform
     ctx.restore();
   }
@@ -2935,12 +3205,13 @@
   // That is why there is one body alpha and one rail alpha rather than separate entry and
   // exit values — see git history if the split is ever wanted back.
   const JUNCTION = {
-    body:  0.42,     // body fill, all three options
-    rail:  0.70,     // rail line, all three options
-    arrow: 0.70,     // the little direction arrows outside the tile
-    railW: 0.06,     // rail thickness, fraction of a cell
-    grain: 0.40,     // paper grain over the whole tile
-  };
+    bodyIn:  1.00,   // body fill where the runner enters
+    body:    0.32,   // ...fading to this out at the exits
+    railIn:  1.00,   // rail line where he enters
+    rail:    0.00,   // ...fading out entirely by the exits
+    arrow:   0.70,   // the little direction arrows outside the tile
+    grain:   0.40,   // paper grain over the whole tile
+  };                 // rail thickness is TILE.railW — the junction IS track, so it matches it
   // the leading tile renders as a 3-way junction: three real platform pieces
   // oriented to the travel direction — a flat run forward, plus a curve each way
   // (up / down relative to travel) — signalling the path isn't set yet.
@@ -2952,17 +3223,25 @@
     // draw each option as an actual platform surface (straight for forward, arcs for the turns)
     const surfaces = exits.map(d => tileSurface(n, prev, { c:n.c + d.x, r:n.r + d.y }));
     const C = nodeCenter(n), h = cell*0.5;
+    // Still ONE fill and ONE stroke — the three options overlap near the centre, so a second
+    // pass at a second alpha builds up in the overlap and the tile goes blotchy. A GRADIENT
+    // gets the same read for free: solid where he enters, fading to the pale value as each
+    // option runs out to its own edge. Radial from the entry point, so all three fade with
+    // distance travelled rather than only the one straight ahead.
+    const E = { x: C.x - din.x*h, y: C.y - din.y*h };     // the edge he came in through
+    const ramp = (col, a0, a1) => {
+      const g = ctx.createRadialGradient(E.x, E.y, 0, E.x, E.y, cell);
+      g.addColorStop(0, hexA(col, a0)); g.addColorStop(1, hexA(col, a1)); return g;
+    };
     ctx.save();
     rrect(cx(n.c), cy(n.r), cell, cell, tileR(cell)); ctx.clip();
-    // one path, one fill — a single flat alpha with no build-up where the options overlap
-    ctx.beginPath(); for (const S of surfaces) bodyPath(S);
-    ctx.fillStyle = hexA(curTrack(), JUNCTION.body); ctx.fill();
+    ctx.beginPath(); for (const S of surfaces) bodyPath(S, C);
+    ctx.fillStyle = ramp(curTrack(), JUNCTION.bodyIn, JUNCTION.body); ctx.fill();
     grainFill(cx(n.c), cy(n.r), cell, cell, JUNCTION.grain);
-    // rails (the top line of each path), likewise one stroke at one alpha
     ctx.beginPath(); for (const S of surfaces) railPath(S);
     ctx.lineJoin = "round"; ctx.lineCap = "round";
-    ctx.strokeStyle = hexA(curRail(), JUNCTION.rail);
-    ctx.lineWidth = Math.max(3, cell*JUNCTION.railW);
+    ctx.strokeStyle = ramp(curRail(), JUNCTION.railIn, JUNCTION.rail);
+    ctx.lineWidth = Math.max(3, cell*TILE.railW);   // same weight as laid track
     ctx.stroke();
     ctx.restore();
 
@@ -3052,7 +3331,8 @@
     bodyW:    0.26,
     bodyH:    0.26,
     bodyR:    0.07,    // corner radius of the body
-    shadow:   0.026,   // ground shadow height (its vertical radius), fraction of a cell
+    shadow:   0.037,   // ground shadow: vertical RADIUS, so drawn height is twice this —
+                       // 0.074, a shade under the 0.085 rail it sits on
     shadowW:  0.65,    // ground shadow width, fraction of body width
     shadowA:  0.26,    // ground shadow opacity
     shadowY:  0.01,    // shadow offset below the track, fraction of a cell
@@ -3134,7 +3414,10 @@
       ctx.scale(kx, ky);
     }
     // local frame: +x = travel, feet at y=0, body toward -y (surface "up")
-    const pale = RUNNER.body;
+    // A worn colour replaces RUNNER's two rather than editing the block the labs paste
+    // between themselves — the tuning stays the tuning, the skin is just what's on today.
+    const skin = lookItem("colour");
+    const pale = skin.body || RUNNER.body, inkCol = skin.ink || RUNNER.ink;
     const legL = s*RUNNER.legLen, bodyH = s*RUNNER.bodyH, bodyW = s*RUNNER.bodyW;
     // soft ground shadow (not an outline). shadowBob ties it to the body's rise, so a
     // high bob can read as him actually leaving the ground rather than sliding along it.
@@ -3164,8 +3447,21 @@
         ctx.beginPath(); ctx.moveTo(hx, hipY); ctx.lineTo(fx, fy); ctx.stroke();
       }
     }
-    // body — pale blue, rounded, no outline
     const byTop = -(legL + bodyH) - bob;
+    // cape — pinned at the shoulders, trailing back along -x and swinging with the stride.
+    // Drawn BEFORE the body so it hangs behind him rather than over his chest.
+    const cape = lookItem("cape");
+    if (cape.col) {
+      const sway = (moving ? Math.sin(phase*0.5) : 0) * s*0.05;
+      const tipX = -bodyW*(1.15 + (moving ? 0.35 : 0.10)), tipY = byTop + bodyH*1.05 + sway;
+      ctx.fillStyle = cape.col;
+      ctx.beginPath();
+      ctx.moveTo(-bodyW*0.34, byTop + bodyH*0.10);
+      ctx.quadraticCurveTo(tipX*0.75, byTop + bodyH*0.35 + sway*0.5, tipX, tipY);
+      ctx.lineTo(-bodyW*0.10, byTop + bodyH*0.80);
+      ctx.closePath(); ctx.fill();
+    }
+    // body — rounded, no outline
     ctx.fillStyle = pale;
     rrect(-bodyW/2, byTop, bodyW, bodyH, s*0.07); ctx.fill();
     // worn talisman: a cord across the chest with the pendant hanging from it
@@ -3180,7 +3476,7 @@
       worn.draw(ctx, px, hangY, s*RUNNER.talR);
     }
     // little round eyes (facing +x = travel direction) — they blink and glance around
-    ctx.fillStyle = RUNNER.ink;
+    ctx.fillStyle = inkCol;
     const eyeR = s*RUNNER.eyeR, eyeY = byTop + bodyH*RUNNER.eyeY;
     const e1x = bodyW*RUNNER.eyeAx, e2x = bodyW*RUNNER.eyeBx;
     // occasional glance: pupils dart forward/back, sometimes up
@@ -3191,7 +3487,7 @@
     // blink (a quick double-blink) roughly every 3s
     const bt = ts % 3000, blink = bt < 120 || (bt > 175 && bt < 255);
     if (blink) {
-      ctx.strokeStyle = RUNNER.ink; ctx.lineWidth = Math.max(1.5, s*RUNNER.eyeR*0.6); ctx.lineCap = "round";
+      ctx.strokeStyle = inkCol; ctx.lineWidth = Math.max(1.5, s*RUNNER.eyeR*0.6); ctx.lineCap = "round";
       ctx.beginPath();
       ctx.moveTo(e1x - eyeR, eyeY + gy); ctx.lineTo(e1x + eyeR, eyeY + gy);
       ctx.moveTo(e2x - eyeR, eyeY + gy); ctx.lineTo(e2x + eyeR, eyeY + gy);
@@ -3200,13 +3496,17 @@
       ctx.beginPath(); ctx.arc(e1x + gx, eyeY + gy, eyeR, 0, Math.PI*2); ctx.fill();
       ctx.beginPath(); ctx.arc(e2x + gx, eyeY + gy, eyeR, 0, Math.PI*2); ctx.fill();
     }
+    const hat = lookItem("hat");                  // last, so it sits on top of everything
+    if (hat.draw) hat.draw(ctx, s, bodyW, byTop, hat.col);
     ctx.restore();
   }
 
   // rounded-rectangle path (arcTo works on iOS 15+, unlike ctx.roundRect)
-  function rrect(x, y, w, h, r) {
+  function rrect(x, y, w, h, r) { ctx.beginPath(); rrectSub(x, y, w, h, r); }
+  // the same outline as a SUBPATH — several of these make one fillable region, which is how
+  // the whole run of track gets its backing in a single pass
+  function rrectSub(x, y, w, h, r) {
     r = Math.max(0, Math.min(r, w/2, h/2));
-    ctx.beginPath();
     ctx.moveTo(x+r, y);
     ctx.arcTo(x+w, y,   x+w, y+h, r);
     ctx.arcTo(x+w, y+h, x,   y+h, r);
@@ -3457,7 +3757,7 @@
   }
   // deep muted rainbow (red → violet), dark
   const DEFAULT_THEME = { colors:["#4e2733","#4f331f","#4d4620","#23412f","#1f3a52","#2e2652","#422247"],
-                          patchW:0.55, style:"plain", drift:0.5, dir:1, stripeW:3 };
+                          patchW:0.55, drift:0.5, dir:1, stripeW:3 };
 
   // ---- patchwork quilt ---------------------------------------------------
   // Patches are laid out square-on with the board, and their COLOUR runs in diagonal
@@ -3531,7 +3831,7 @@
   // same places in every repeat, and it could not move or breathe. This is a separate
   // additive pass keyed to quilt-space patch coordinates, so each glint sticks to its own
   // patch, travels with the scroll, and never repeats with the tile.
-  const BG_GLINT_RATE = 0.05;                // fraction of patches that ever catch the light
+  const BG_GLINT_RATE = 0.22;                // fraction of patches that ever catch the light
   const BG_GLINT_MS   = 5200;                // one breath, per patch
   const BG_GLINT_A    = 0.17;                // peak strength
   let bgScrollX = 0, bgScrollY = 0, bgScrollK = 0, bgScrollTs = 0;
@@ -3561,15 +3861,12 @@
     ctx.fillRect(0, 0, viewW + patchPeriodPx, viewH + patchPeriodPx);
     ctx.restore();
     drawGlints(ts, off, w);
-    if (T.style === "dotted") {                        // faint dot lattice over the quilt
-      ctx.fillStyle = "rgba(255,255,255,0.05)"; const g = w*0.7;
-      for (let a=0; a<viewW+g; a+=g) for (let bb=0; bb<viewH+g; bb+=g)
-        { ctx.beginPath(); ctx.arc(a, bb, Math.max(1, w*0.06), 0, Math.PI*2); ctx.fill(); }
-    }
   }
   // The glisten. Each patch on screen is identified by its position in the endless quilt,
   // hashed once to decide whether it glints at all and to give it its own phase, so they
-  // breathe out of step. Additive, so it lifts the patch's own colour rather than washing it.
+  // breathe out of step. Additive, so it lifts the patch's own colour rather than washing it,
+  // and FLAT across the whole patch — the patch itself is the shape, so a soft blob inside it
+  // just blurred the edge the quilt is made of.
   function drawGlints(ts, off, w) {
     if (BG_GLINT_A <= 0) return;
     const i0 = Math.floor(off.x / w), j0 = Math.floor(off.y / w);
@@ -3583,13 +3880,9 @@
       const k = 0.5 + 0.5*Math.sin(ts/BG_GLINT_MS*Math.PI*2 + ph*Math.PI*2);
       const a = Math.pow(k, 6) * BG_GLINT_A;                       // long dark, brief bloom
       if (a < 0.004) continue;
-      const x = qi*w - off.x, y = qj*w - off.y, cxp = x + w/2, cyp = y + w/2;
-      const g = ctx.createRadialGradient(cxp, cyp, 0, cxp, cyp, w*0.62);
-      g.addColorStop(0,   "rgba(255,250,228," + a + ")");
-      g.addColorStop(0.55,"rgba(255,238,196," + (a*0.45) + ")");
-      g.addColorStop(1,   "rgba(255,238,196,0)");
-      ctx.fillStyle = g;
-      ctx.fillRect(x, y, w, w);                                    // clipped to its own patch
+      const x = qi*w - off.x, y = qj*w - off.y;
+      ctx.fillStyle = "rgba(255,250,228," + a + ")";
+      ctx.fillRect(x, y, w + 1, w + 1);   // the whole patch lifts flat, edge to edge
     }
     ctx.restore();
   }
@@ -3625,10 +3918,50 @@
     railW:      0.085,   // running-surface rail thickness, fraction of a cell
   };
   const tileR = s => s * TILE.radius;
-  function drawGlass(x, y, s) {
-    const r = tileR(s);
+  // Direction bits for a tile's connected edges.
+  const FN = 1, FE = 2, FS = 4, FW = 8;
+  // which of a node's edges lead to something that is actually drawn right now
+  const nodeDrawn = o => o && (o.kind === "tile" ? !o.exited : true);
+  function flatMask(n, prev, next) {
+    let m = 0;
+    for (const o of [prev, next]) {
+      if (!nodeDrawn(o)) continue;
+      const dc = o.c - n.c, dr = o.r - n.r;
+      if (Math.abs(dc) + Math.abs(dr) !== 1) continue;      // only orthogonal neighbours
+      m |= dr < 0 ? FN : dr > 0 ? FS : dc > 0 ? FE : FW;
+    }
+    return m;
+  }
+  // The backing for a whole run of track, painted as ONE region — every live tile's rounded
+  // square, filled once rather than tile by tile, so a semi-transparent pane can never
+  // double up where two tiles touch.
+  //
+  // It does NOT close the notch at the ends of a shared edge. That notch IS the corner:
+  // two rounded squares each curve away from the edge between them, and anything that fills
+  // the gap necessarily squares the two corners that make it. Measured at a 190px cell it
+  // is 15px of a 186px edge. Rounded corners and a seamless join are mutually exclusive
+  // while a tile is drawn as a rounded square — see the notes if that trade is revisited.
+  function drawPathGlass(nodes) {
+    if (!nodes.length) return;
+    const r = tileR(cell);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     ctx.save();
-    rrect(x, y, s, s, r); ctx.clip();
+    ctx.beginPath();
+    for (const n of nodes) {
+      const x = cx(n.c), y = cy(n.r);
+      rrectSub(x, y, cell, cell, r);
+      x0 = Math.min(x0, x); y0 = Math.min(y0, y);
+      x1 = Math.max(x1, x + cell); y1 = Math.max(y1, y + cell);
+    }
+    ctx.clip();
+    ctx.fillStyle = "rgba(180,174,235," + TILE.glassA + ")";
+    ctx.fillRect(x0, y0, x1-x0, y1-y0);
+    grainFill(x0, y0, x1-x0, y1-y0, TILE.glassGrain);
+    ctx.restore();
+  }
+  function drawGlass(x, y, s) {
+    ctx.save();
+    rrect(x, y, s, s, tileR(s)); ctx.clip();
     ctx.fillStyle = "rgba(180,174,235," + TILE.glassA + ")";   // flat matte paper fill (no gloss/sheen)
     ctx.fillRect(x, y, s, s);
     grainFill(x, y, s, s, TILE.glassGrain);           // paper grain on the tile
@@ -3931,6 +4264,63 @@
       for (const p of s.lights) p.life += dt;
       s.lights = s.lights.filter(p => p.life < p.max);
     }
+    // Worn trail. Sampled from where the runner IS rather than where he was last drawn, so
+    // it keeps up through corners, and from his BODY's centre rather than his feet — the
+    // ribbon has to leave him at the height it will be drawn at.
+    const tr = lookItem("trail");
+    if (tr.cols && s.trail) {
+      for (const p of s.trail) p.life += dt;
+      s.trail = s.trail.filter(p => p.life < TRAIL_MS);
+      s.trailT -= dt;
+      if (s.trailT <= 0 && s.status === "play") {
+        s.trailT = TRAIL_EVERY;
+        const ri = runnerInfo();
+        const d = cell * (RUNNER.legLen + RUNNER.bodyH*0.5);      // up the body from the track
+        s.trail.push({ x: ri.sx + Math.sin(ri.angle)*d,
+                       y: ri.sy - Math.cos(ri.angle)*d, life: 0 });
+      }
+    } else if (s.trail && s.trail.length) s.trail.length = 0;
+  }
+  // A long streamer — a few tiles of it. The sample interval is loosened to match, since
+  // the path between tiles is straight and there is nothing for extra points to describe.
+  const TRAIL_MS = 2600, TRAIL_EVERY = 45;
+  // The ribbon: one polyline per stripe, offset along the path's own normal so the stripes
+  // run parallel rather than nesting inside one another, and stroked segment by segment so
+  // the tail can fade out instead of ending on a hard edge.
+  function drawTrail() {
+    const s = state, tr = lookItem("trail");
+    if (!tr.cols || !s || !s.trail || s.trail.length < 2) return;
+    const pts = s.trail, N = pts.length;
+    const nor = pts.map((p, k) => {
+      const a = pts[Math.max(0, k-1)], b = pts[Math.min(N-1, k+1)];
+      let tx = b.x - a.x, ty = b.y - a.y; const m = Math.hypot(tx, ty) || 1;
+      return { x: -ty/m, y: tx/m };
+    });
+    const band = cell * RUNNER.bodyH;                 // exactly as deep as he is
+    const n = tr.cols.length, sw = band / n;
+    ctx.save();
+    ctx.lineCap = "butt"; ctx.lineJoin = "round";
+    ctx.lineWidth = sw + 0.75;                        // a hair of overlap, so no seams show
+    // The fade runs the WHOLE length rather than just the last few segments. Doing that per
+    // segment would be hundreds of strokes a frame at this length, so the ribbon is stroked
+    // in CHUNKS instead — each a short polyline at its own alpha, overlapping its neighbour
+    // by a point so no seam opens up. Ten steps across a trail this long reads as smooth.
+    const CHUNKS = 10;
+    const at = (k, off) => ({ x: pts[k].x + nor[k].x*off, y: pts[k].y + nor[k].y*off });
+    for (let i = 0; i < n; i++) {
+      const off = (i - (n-1)/2) * sw;
+      ctx.strokeStyle = tr.cols[i];
+      for (let c = 0; c < CHUNKS; c++) {
+        const a = Math.floor((N-1) * c / CHUNKS), b = Math.ceil((N-1) * (c+1) / CHUNKS);
+        if (b <= a) continue;
+        ctx.globalAlpha = Math.pow((c + 1) / CHUNKS, 1.4) * 0.92;   // oldest end nearly gone
+        ctx.beginPath();
+        for (let k = a; k <= b; k++) { const q = at(k, off);
+          if (k === a) ctx.moveTo(q.x, q.y); else ctx.lineTo(q.x, q.y); }
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 
   // ---------- Buttons & menu ---------------------------------------------
@@ -3963,6 +4353,110 @@
     menuBody.innerHTML = "";
     const title = document.getElementById("menu-title");
     title.className = "";                      // only the main screen wears the logo treatment
+    // ---- character: a hub of categories, then a grid per category ----
+    if (screen === "character") {
+      title.textContent = "Character";
+      saveWallet();                                   // banks whatever the last run earned
+      menuBody.appendChild(sub(wallet.tiles + " tile" + (wallet.tiles === 1 ? "" : "s") + " collected"));
+
+      // A picture of the runner as he is now, with a line out to each thing you can change.
+      const S = 300, map = document.createElement("div"); map.className = "char-map";
+      const cv = document.createElement("canvas"); cv.width = S; cv.height = S;
+      map.appendChild(cv);
+      const g = cv.getContext("2d");
+
+      const rs = S*0.52;                              // his size on this canvas
+      const foot = { x: S*0.50, y: S*0.66 };          // where his feet stand
+      const legL = rs*RUNNER.legLen, bodyH = rs*RUNNER.bodyH, bodyW = rs*RUNNER.bodyW;
+      const byTop = foot.y - (legL + bodyH);
+
+      // A real tile for him to stand on — the game's own pane, body and rail, in whatever
+      // track skin is worn, so the tile design is on show here too rather than a stand-in.
+      // withCanvas translates for us, so cell (0,0) lands under his feet
+      withCanvas(g, rs, foot.x - rs/2, foot.y - rs/2, () => {
+        const n = { c:0, r:0 };
+        drawGlass(0, 0, cell);
+        drawPlatformSurface(n, tileSurface(n, { c:-1, r:0 }, { c:1, r:0 }), curTrack());
+      });
+
+      // the worn trail, sketched behind him
+      const tr = lookItem("trail");
+      if (tr.cols) {
+        const band = rs*RUNNER.bodyH, n = tr.cols.length, sw = band/n;
+        const cyb = foot.y - rs*(RUNNER.legLen + RUNNER.bodyH*0.5);
+        for (let i=0;i<n;i++){ g.fillStyle = tr.cols[i];
+          g.fillRect(S*0.04, cyb - band/2 + i*sw, foot.x - rs*0.22 - S*0.04, sw); }
+      }
+
+      // ...and the runner himself, drawn by the game
+      withCanvas(g, rs, 0, 0, () => paintRunner(foot.x, foot.y, rs, Math.PI*0.5, 0, true, performance.now(), 0, true));
+
+      // Each hotspot: where it points on the picture, and where its label sits. Kept as
+      // fractions of the canvas so the two never drift apart if the size changes.
+      const SPOTS = [
+        { key:"hat",    at:[0.50, 0.30], label:[0.72, 0.13] },
+        { key:"colour", at:[0.50, 0.44], label:[0.05, 0.20] },
+        { key:"cape",   at:[0.40, 0.52], label:[0.03, 0.46] },
+        { key:"trail",  at:[0.22, 0.60], label:[0.05, 0.75] },
+        { key:"track",  at:[0.66, 0.72], label:[0.66, 0.82] },
+      ];
+      g.strokeStyle = "rgba(232,230,255,0.55)"; g.lineWidth = 1.5;
+      g.fillStyle = "rgba(232,230,255,0.9)";
+      for (const sp of SPOTS) {
+        const ax = sp.at[0]*S, ay = sp.at[1]*S;
+        const lx = (sp.label[0] + 0.13)*S, ly = (sp.label[1] + 0.045)*S;   // the label's inner edge
+        g.beginPath(); g.moveTo(ax, ay); g.lineTo(lx, ly); g.stroke();
+        g.beginPath(); g.arc(ax, ay, 3, 0, Math.PI*2); g.fill();
+      }
+      for (const sp of SPOTS) {
+        const cat = LOOK.find(l => l.key === sp.key);
+        const b = document.createElement("button");
+        b.className = "hot";
+        b.style.left = (sp.label[0]*100) + "%";
+        b.style.top  = (sp.label[1]*100) + "%";
+        b.innerHTML = "<b>" + cat.label + "</b><span>" + lookItem(sp.key).name + "</span>";
+        b.onclick = () => buildMenu("look:" + sp.key);
+        map.appendChild(b);
+      }
+      menuBody.appendChild(map);
+      menuBody.appendChild(btn("Back", () => buildMenu("main")));
+      return;
+    }
+    if (screen.indexOf("look:") === 0) {
+      const cat = LOOK.find(l => l.key === screen.slice(5)) || LOOK[0];
+      title.textContent = cat.label;
+      menuBody.appendChild(sub(wallet.tiles + " tiles"));
+      const grid = document.createElement("div"); grid.className = "tal-grid";
+      const wornId = lookWorn(cat.key);
+      cat.items.forEach(it => {
+        const have = owns(it), on = wornId === it.id;
+        const el = document.createElement("button");
+        el.className = "tal" + (on ? " on" : "") + (have ? "" : " locked");
+        const cv = document.createElement("canvas"); cv.width = 96; cv.height = 96;
+        const g = cv.getContext("2d");
+        if (it.swatch) it.swatch(g, 96);
+        if (!have) {                                   // unaffordable/unowned: greyed silhouette
+          g.globalCompositeOperation = "source-atop";
+          g.fillStyle = "rgba(120,124,150,0.85)"; g.fillRect(0, 0, 96, 96);
+          g.globalCompositeOperation = "source-over";
+        }
+        const nm = document.createElement("span");
+        nm.textContent = have ? it.name : it.cost + " ◆";
+        el.appendChild(cv); el.appendChild(nm);
+        el.onclick = () => {
+          if (have) { wearLook(cat.key, it.id); }
+          else if (wallet.tiles >= it.cost) {           // buy, then wear it straight away
+            wallet.tiles -= it.cost; wallet.owned.add(it.id); saveWallet();
+            wearLook(cat.key, it.id); Sound.unlock(); if (Sound.key) Sound.key();
+          } else { el.classList.add("nope"); setTimeout(() => el.classList.remove("nope"), 420); return; }
+          buildMenu(screen);
+        };
+        grid.appendChild(el);
+      });
+      menuBody.appendChild(grid);
+      menuBody.appendChild(btn("Back", () => buildMenu("character")));
+      return;
+    }
     if (screen === "talismans") {
       title.textContent = "Talismans";
       const grid = document.createElement("div"); grid.className = "tal-grid";
@@ -4019,6 +4513,7 @@
     menuBody.appendChild(btn("Resume", closeMenu));
     menuBody.appendChild(btn("Restart Level", () => { loadLevel(levelIdx); closeMenu(); }));
     menuBody.appendChild(btn("Levels", () => buildMenu("levels")));
+    menuBody.appendChild(btn("Character", () => buildMenu("character")));
     menuBody.appendChild(btn("Talismans", () => buildMenu("talismans")));
     menuBody.appendChild(toggle("Sound", !Sound.isMuted(), () => { Sound.unlock(); Sound.setMuted(!Sound.isMuted()); buildMenu(screen); }));
     menuBody.appendChild(toggle("Colorblind", colorblind, () => { colorblind = !colorblind; settings.colorblind = colorblind; saveSettings(); applyColorblind(); buildMenu(screen); }));
@@ -4534,7 +5029,7 @@
     grainFill(tx, ty, s, s, 0.85);
     if (content === false) { ctx.restore(); return; }
     // solid gold beam body hanging from the surface to the tile edge (clipped to the tile)
-    ctx.beginPath(); introBodyPath(S, m); ctx.fillStyle = getVar("--track"); ctx.fill();
+    ctx.beginPath(); introBodyPath(S, m, introCenter(cellObj, m)); ctx.fillStyle = getVar("--track"); ctx.fill();
     grainFill(tx, ty, s, s, 0.45);
     // bright rail along the running surface
     ctx.strokeStyle = getVar("--rail"); ctx.lineWidth = Math.max(3, s*0.06); ctx.lineCap = "round"; ctx.lineJoin = "round";
@@ -4542,16 +5037,39 @@
     ctx.restore();
   }
   // the beam body polygon: the surface, then a far edge offset to the underside, clipped to the tile
-  function introBodyPath(S, m){
-    const nlast = S.length-1;
-    const nrm = S.map((pt,k)=>{ const a=S[Math.max(0,k-1)], b=S[Math.min(nlast,k+1)];
-      let tx=b.x-a.x, ty=b.y-a.y; const mm=Math.hypot(tx,ty)||1; return { x:ty/mm, y:-tx/mm }; });
-    const Obig = S.map((pt,k)=>({ x:pt.x - nrm[k].x*m.s*1.7, y:pt.y - nrm[k].y*m.s*1.7 }));
+  function introBodyPath(S, m, C){
+    // Simple polygon: the surface, then closed along the cell's edges. The old version pushed
+    // every point 1.7 cells down its own normal, which on a CONCAVE corner shoots through the
+    // arc's centre and out the far side — a self-intersecting polygon whose winding cancelled,
+    // eating slivers along the tile edge. Nothing is offset now, so nothing can overshoot.
+    const h = m.s/2, last = S.length - 1, mid = last >> 1;
+    const a = S[Math.max(0, mid-1)], b = S[Math.min(last, mid+1)];
+    let tx = b.x - a.x, ty = b.y - a.y; const mm = Math.hypot(tx, ty) || 1; tx /= mm; ty /= mm;
+    const bx = -ty, by = tx;
     ctx.moveTo(S[0].x, S[0].y);
-    for (let k=1;k<=nlast;k++) ctx.lineTo(S[k].x, S[k].y);
-    for (let k=nlast;k>=0;k--) ctx.lineTo(Obig[k].x, Obig[k].y);
+    for (let k = 1; k <= last; k++) ctx.lineTo(S[k].x, S[k].y);
+    if (last === 2) {
+      ctx.lineTo(S[last].x + bx*h, S[last].y + by*h);
+      ctx.lineTo(S[0].x    + bx*h, S[0].y    + by*h);
+    } else {
+      const O = { x: S[0].x + S[last].x - C.x, y: S[0].y + S[last].y - C.y };
+      const M = S[mid];
+      if ((O.x - M.x)*bx + (O.y - M.y)*by > 0) ctx.lineTo(O.x, O.y);
+      else {
+        const cs = [{x:C.x-h,y:C.y-h},{x:C.x+h,y:C.y-h},{x:C.x+h,y:C.y+h},{x:C.x-h,y:C.y+h}];
+        let k0 = 0, best = Infinity;
+        for (let i = 0; i < 4; i++) { const d = Math.hypot(cs[i].x-O.x, cs[i].y-O.y); if (d < best) { best = d; k0 = i; } }
+        const n1 = (k0+1)%4, n3 = (k0+3)%4;
+        const first = Math.hypot(cs[n1].x-S[last].x, cs[n1].y-S[last].y)
+                    < Math.hypot(cs[n3].x-S[last].x, cs[n3].y-S[last].y) ? n1 : n3;
+        ctx.lineTo(cs[first].x, cs[first].y);
+        ctx.lineTo(cs[(k0+2)%4].x, cs[(k0+2)%4].y);
+        ctx.lineTo(cs[first === n1 ? n3 : n1].x, cs[first === n1 ? n3 : n1].y);
+      }
+    }
     ctx.closePath();
   }
+
   // same proportions as the in-game runner (see drawRunner)
 
   loadLevel(0);
