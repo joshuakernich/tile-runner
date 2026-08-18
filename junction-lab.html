@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tile Runner — Junction Lab</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{ --bg:#0d0b1a; --panel:#17142b; --line:#2b2650; --ink:#e8e6ff; --dim:#8f88c8; --hi:#ffcf4d; }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--bg); color:var(--ink);
+        font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+  header{ padding:14px 18px; border-bottom:2px solid var(--line); }
+  h1{ margin:0; font-size:16px; letter-spacing:2px; text-transform:uppercase; color:var(--hi); }
+  header p{ margin:6px 0 0; font-size:12px; color:var(--dim); max-width:70ch; line-height:1.5; }
+  .wrap{ display:flex; gap:18px; padding:18px; align-items:flex-start; flex-wrap:wrap; }
+  .stage{ background:#0a0817; border:2px solid var(--line); border-radius:10px; padding:12px; }
+  canvas{ display:block; border-radius:6px; }
+  .panel{ background:var(--panel); border:2px solid var(--line); border-radius:10px;
+          padding:14px; width:330px; }
+  .grp{ margin-bottom:14px; }
+  .grp h2{ margin:0 0 8px; font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--dim); }
+  .row{ display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:12px; }
+  .row label{ width:96px; color:var(--dim); }
+  .row input[type=range]{ flex:1; }
+  .row output{ width:44px; text-align:right; font-variant-numeric:tabular-nums; }
+  .btns{ display:flex; gap:8px; flex-wrap:wrap; }
+  button{ font:inherit; font-size:12px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+          background:#241f4a; color:var(--ink); border:2px solid var(--line); border-radius:6px;
+          padding:8px 12px; cursor:pointer; }
+  button:hover{ border-color:var(--hi); }
+  button.on{ background:var(--hi); color:#241f4a; border-color:var(--hi); }
+  textarea{ width:100%; height:150px; background:#0a0817; color:var(--ink); border:2px solid var(--line);
+            border-radius:6px; padding:8px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+            font-size:11px; line-height:1.45; }
+  .hint{ font-size:11px; color:var(--dim); line-height:1.5; margin:8px 0 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Junction Lab</h1>
+  <p>The leading tile's 3-way junction. Each option is split at its midpoint: the half by the
+     <b>entry</b> edge (where the runner is arriving from) and the half by its <b>exit</b>.
+     Geometry, body and rail drawing are lifted from <code>index.html</code>, so what you see is
+     what the game draws. Tune, then <b>Copy JUNCTION block</b> and paste it over the block above
+     <code>drawJunction</code>.</p>
+</header>
+
+<div class="wrap">
+  <div class="stage"><canvas id="cv" width="620" height="560"></canvas></div>
+
+  <div class="panel">
+    <div class="grp">
+      <h2>Entry half</h2>
+      <div class="row"><label>body</label><input type="range" id="entryBody" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>rail</label><input type="range" id="entryRail" min="0" max="1" step="0.01"><output></output></div>
+    </div>
+    <div class="grp">
+      <h2>Exit halves</h2>
+      <div class="row"><label>body</label><input type="range" id="exitBody" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>rail</label><input type="range" id="exitRail" min="0" max="1" step="0.01"><output></output></div>
+    </div>
+    <div class="grp">
+      <h2>Shared</h2>
+      <div class="row"><label>arrows</label><input type="range" id="arrow" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>rail width</label><input type="range" id="railW" min="0.01" max="0.16" step="0.005"><output></output></div>
+      <div class="row"><label>grain</label><input type="range" id="grain" min="0" max="1" step="0.01"><output></output></div>
+    </div>
+    <div class="grp">
+      <h2>Scene</h2>
+      <div class="row"><label>travel</label>
+        <span class="btns"><button data-dir="n" class="dir">N</button><button data-dir="e" class="dir">E</button>
+        <button data-dir="s" class="dir">S</button><button data-dir="w" class="dir">W</button></span></div>
+      <div class="row"><label>approach</label>
+        <span class="btns"><button data-app="straight" class="app">Straight</button>
+        <button data-app="corner" class="app">Corner</button></span></div>
+      <div class="row"><label>track hue</label><input type="range" id="hue" min="0" max="359" step="1"><output></output></div>
+      <div class="row"><label>cell</label><input type="range" id="cellPx" min="90" max="240" step="2"><output></output></div>
+      <div class="btns"><button id="grid">Guides</button><button id="reset">Reset</button></div>
+    </div>
+    <div class="grp">
+      <h2>Block</h2>
+      <div class="btns"><button id="copy">Copy JUNCTION block</button></div>
+      <textarea id="out" spellcheck="false"></textarea>
+      <p class="hint">Paste over the <code>const JUNCTION = { … }</code> block in
+        <code>index.html</code>, wholesale.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---- the shipped defaults (mirror of index.html's JUNCTION) -------------------------
+const SHIPPED = {
+  entryBody: 0.42,
+  exitBody:  0.42,
+  entryRail: 0.70,
+  exitRail:  0.70,
+  arrow:     0.70,
+  railW:     0.06,
+  grain:     0.40,
+};
+const J = Object.assign({}, SHIPPED);
+let DIR = "n", APPROACH = "straight", HUE = 45, CELL = 170, GUIDES = false;
+
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+
+// ---- colours: same construction as the game's genTrackPal -------------------------
+function hslHex(h, s, l){
+  s/=100; l/=100; const k=n=>(n+h/30)%12, a=s*Math.min(l,1-l);
+  const f=n=>l - a*Math.max(-1, Math.min(k(n)-3, Math.min(9-k(n), 1)));
+  const to=x=>Math.round(x*255).toString(16).padStart(2,"0");
+  return "#"+to(f(0))+to(f(8))+to(f(4));
+}
+const curTrack = () => hslHex(HUE, 88, 58);
+const curRail  = () => hslHex(HUE, 94, 83);
+function hexA(hex, a){
+  const h = hex.replace("#",""); const n = parseInt(h,16);
+  return "rgba(" + ((n>>16)&255) + "," + ((n>>8)&255) + "," + (n&255) + "," + a + ")";
+}
+
+// ---- paper grain, so alphas read as they do in game -------------------------------
+let paperTile = null;
+function buildPaper(){
+  const S = 220, off = document.createElement("canvas"); off.width = off.height = S;
+  const o = off.getContext("2d");
+  for (let i=0;i<4600;i++){
+    o.fillStyle = Math.random()<0.64 ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.07)";
+    const z = Math.random()<0.14 ? 2 : 1;
+    o.fillRect(Math.random()*S, Math.random()*S, z, z);
+  }
+  o.lineWidth = 1;
+  for (let i=0;i<220;i++){
+    const x=Math.random()*S, y=Math.random()*S, a=Math.random()*Math.PI, len=5+Math.random()*16;
+    o.strokeStyle = Math.random()<0.6 ? "rgba(255,255,255,0.045)" : "rgba(0,0,0,0.05)";
+    o.beginPath(); o.moveTo(x,y); o.lineTo(x+Math.cos(a)*len, y+Math.sin(a)*len); o.stroke();
+  }
+  paperTile = off;
+}
+buildPaper();
+function grainFill(x,y,w,h,a){
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = ctx.createPattern(paperTile, "repeat");
+  ctx.fillRect(x,y,w,h); ctx.restore();
+}
+
+// ---- geometry, lifted from index.html ---------------------------------------------
+let cell = CELL, ORIGIN = { x:0, y:0 };
+const cx = c => ORIGIN.x + c*cell, cy = r => ORIGIN.y + r*cell;
+const nodeCenter = n => ({ x: cx(n.c) + cell/2, y: cy(n.r) + cell/2 });
+const axisDir = (a,b) => ({ x: Math.sign(b.c-a.c), y: Math.sign(b.r-a.r) });
+
+function rrect(x,y,w,h,r){
+  r = Math.max(0, Math.min(r, w/2, h/2));
+  ctx.beginPath(); ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);     ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+function tileSurface(n, prev, next){
+  const C = nodeCenter(n), h = cell/2;
+  let entry = prev ? axisDir(n, prev) : null;
+  let exit  = next ? axisDir(n, next) : null;
+  if (!entry && !exit) { entry = {x:-1,y:0}; exit = {x:1,y:0}; }
+  else if (!entry)     { entry = {x:-exit.x, y:-exit.y}; }
+  else if (!exit)      { exit  = {x:-entry.x, y:-entry.y}; }
+  const Me = { x:C.x + entry.x*h, y:C.y + entry.y*h };
+  const Mx = { x:C.x + exit.x*h,  y:C.y + exit.y*h };
+  if (entry.x === -exit.x && entry.y === -exit.y) return [Me, {x:C.x,y:C.y}, Mx];
+  const O = { x:C.x + (entry.x+exit.x)*h, y:C.y + (entry.y+exit.y)*h };
+  let a0 = Math.atan2(Me.y-O.y, Me.x-O.x), a1 = Math.atan2(Mx.y-O.y, Mx.x-O.x);
+  let d = a1-a0; while (d>Math.PI) d-=2*Math.PI; while (d<-Math.PI) d+=2*Math.PI;
+  const N=12, pts=[];
+  for (let k=0;k<=N;k++){ const a=a0+d*(k/N); pts.push({x:O.x+h*Math.cos(a), y:O.y+h*Math.sin(a)}); }
+  return pts;
+}
+function bodyPath(S){
+  const nlast = S.length-1;
+  const nrm = S.map((pt,k)=>{
+    const a=S[Math.max(0,k-1)], b=S[Math.min(nlast,k+1)];
+    let tx=b.x-a.x, ty=b.y-a.y; const m=Math.hypot(tx,ty)||1;
+    return { x: ty/m, y: -tx/m };
+  });
+  const Obig = S.map((pt,k)=>({ x:pt.x - nrm[k].x*cell*1.7, y:pt.y - nrm[k].y*cell*1.7 }));
+  ctx.moveTo(S[0].x, S[0].y);
+  for (let k=1;k<=nlast;k++) ctx.lineTo(S[k].x, S[k].y);
+  for (let k=nlast;k>=0;k--) ctx.lineTo(Obig[k].x, Obig[k].y);
+  ctx.closePath();
+}
+function railPath(S){
+  ctx.moveTo(S[0].x, S[0].y);
+  for (let k=1;k<S.length;k++) ctx.lineTo(S[k].x, S[k].y);
+}
+function drawGlass(x,y,s){
+  ctx.save();
+  rrect(x,y,s,s,s*0.16); ctx.clip();
+  ctx.fillStyle = "rgba(180,174,235,0.55)"; ctx.fillRect(x,y,s,s);
+  grainFill(x,y,s,s,0.85);
+  ctx.restore();
+}
+// a laid tile, full opacity — the track the junction is being approached along
+function drawLaid(n, prev, next){
+  drawGlass(cx(n.c), cy(n.r), cell);
+  const S = tileSurface(n, prev, next);
+  ctx.save();
+  rrect(cx(n.c), cy(n.r), cell, cell, cell*0.16); ctx.clip();
+  ctx.beginPath(); bodyPath(S); ctx.fillStyle = curTrack(); ctx.fill();
+  grainFill(cx(n.c), cy(n.r), cell, cell, 0.45);
+  ctx.beginPath(); railPath(S);
+  ctx.lineJoin="round"; ctx.lineCap="round";
+  ctx.strokeStyle = curRail(); ctx.lineWidth = Math.max(3, cell*0.06); ctx.stroke();
+  ctx.restore();
+}
+
+// ---- drawJunction, exactly as index.html now draws it ------------------------------
+function drawJunction(n, prev){
+  const din = prev ? axisDir(prev, n) : { x:0, y:-1 };
+  const left  = { x:-din.y, y:din.x };
+  const right = { x: din.y, y:-din.x };
+  const exits = [din, left, right];
+  const surfaces = exits.map(d => tileSurface(n, prev, { c:n.c+d.x, r:n.r+d.y }));
+  const C = nodeCenter(n), h = cell*0.5;
+
+  const halves = surfaces.map(S => { const mid = Math.floor((S.length-1)/2);
+                                     return { inn: S.slice(0, mid+1), out: S.slice(mid) }; });
+  ctx.save();
+  rrect(cx(n.c), cy(n.r), cell, cell, cell*0.16); ctx.clip();
+  ctx.beginPath(); for (const H of halves) bodyPath(H.out);
+  ctx.fillStyle = hexA(curTrack(), J.exitBody); ctx.fill();
+  ctx.beginPath(); for (const H of halves) bodyPath(H.inn);
+  ctx.fillStyle = hexA(curTrack(), J.entryBody); ctx.fill();
+  grainFill(cx(n.c), cy(n.r), cell, cell, J.grain);
+  ctx.lineJoin="round"; ctx.lineCap="round";
+  ctx.lineWidth = Math.max(3, cell*J.railW);
+  ctx.beginPath(); for (const H of halves) railPath(H.out);
+  ctx.strokeStyle = hexA(curRail(), J.exitRail); ctx.stroke();
+  ctx.beginPath(); for (const H of halves) railPath(H.inn);
+  ctx.strokeStyle = hexA(curRail(), J.entryRail); ctx.stroke();
+  ctx.restore();
+
+  ctx.fillStyle = hexA(curRail(), J.arrow);
+  const gap = cell*0.12, len = cell*0.11, w = cell*0.09;
+  for (const d of exits){
+    const tx = C.x + d.x*(h+gap+len), ty = C.y + d.y*(h+gap+len);
+    const bx = C.x + d.x*(h+gap),     by = C.y + d.y*(h+gap);
+    const px = -d.y, py = d.x;
+    ctx.beginPath();
+    ctx.moveTo(tx,ty); ctx.lineTo(bx+px*w, by+py*w); ctx.lineTo(bx-px*w, by-py*w);
+    ctx.closePath(); ctx.fill();
+  }
+  if (GUIDES){
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,120,120,0.85)"; ctx.setLineDash([5,5]); ctx.lineWidth = 1;
+    ctx.strokeRect(cx(n.c), cy(n.r), cell, cell);
+    // mark the split: the midpoint of each option
+    ctx.setLineDash([]); ctx.fillStyle = "rgba(255,120,120,0.95)";
+    for (const S of surfaces){ const m = S[Math.floor((S.length-1)/2)];
+      ctx.beginPath(); ctx.arc(m.x, m.y, 3, 0, Math.PI*2); ctx.fill(); }
+    ctx.restore();
+  }
+}
+
+// ---- scene -------------------------------------------------------------------------
+const DIRV = { n:{x:0,y:-1}, e:{x:1,y:0}, s:{x:0,y:1}, w:{x:-1,y:0} };
+function render(){
+  cell = CELL;
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.fillStyle = "#0a0817"; ctx.fillRect(0,0,cv.width,cv.height);
+
+  const d = DIRV[DIR];
+  // junction cell, and the tile behind it that the runner is arriving from
+  const J0 = { c:0, r:0 };
+  const P1 = { c:-d.x, r:-d.y };                       // immediately behind
+  const P2 = { c:-d.x*2, r:-d.y*2 };                   // one further back
+  // corner approach: bend the second tile back off to one side
+  const side = { x:-d.y, y:d.x };
+  const P2c = { c:P1.c + side.x, r:P1.r + side.y };
+  const back = (APPROACH === "corner") ? P2c : P2;
+
+  // centre the junction in the canvas
+  ORIGIN = { x: cv.width/2 - cell/2, y: cv.height/2 - cell/2 };
+
+  drawLaid(back, { c:back.c - d.x, r:back.r - d.y }, P1);
+  drawLaid(P1, back, J0);
+  drawGlass(cx(J0.c), cy(J0.r), cell);      // the game lays glass under every live tile first
+  drawJunction(J0, P1);
+}
+
+// ---- wiring ------------------------------------------------------------------------
+const KEYS = ["entryBody","exitBody","entryRail","exitRail","arrow","railW","grain"];
+function syncOut(){
+  const lines = KEYS.map(k => "    " + (k+":").padEnd(11) + " " + J[k].toFixed(k==="railW"?3:2) + ",");
+  document.getElementById("out").value = "  const JUNCTION = {\n" + lines.join("\n") + "\n  };";
+}
+function sync(){
+  for (const k of KEYS){
+    const el = document.getElementById(k);
+    el.value = J[k];
+    el.parentElement.querySelector("output").textContent = (+J[k]).toFixed(k==="railW"?3:2);
+  }
+  document.getElementById("hue").value = HUE;
+  document.getElementById("hue").parentElement.querySelector("output").textContent = HUE;
+  document.getElementById("cellPx").value = CELL;
+  document.getElementById("cellPx").parentElement.querySelector("output").textContent = CELL;
+  document.querySelectorAll(".dir").forEach(b => b.classList.toggle("on", b.dataset.dir === DIR));
+  document.querySelectorAll(".app").forEach(b => b.classList.toggle("on", b.dataset.app === APPROACH));
+  document.getElementById("grid").classList.toggle("on", GUIDES);
+  syncOut(); render();
+}
+for (const k of KEYS){
+  document.getElementById(k).addEventListener("input", e => { J[k] = +e.target.value; sync(); });
+}
+document.getElementById("hue").addEventListener("input", e => { HUE = +e.target.value; sync(); });
+document.getElementById("cellPx").addEventListener("input", e => { CELL = +e.target.value; sync(); });
+document.querySelectorAll(".dir").forEach(b => b.addEventListener("click", () => { DIR = b.dataset.dir; sync(); }));
+document.querySelectorAll(".app").forEach(b => b.addEventListener("click", () => { APPROACH = b.dataset.app; sync(); }));
+document.getElementById("grid").addEventListener("click", () => { GUIDES = !GUIDES; sync(); });
+document.getElementById("reset").addEventListener("click", () => { Object.assign(J, SHIPPED); sync(); });
+document.getElementById("copy").addEventListener("click", async () => {
+  const t = document.getElementById("out");
+  try { await navigator.clipboard.writeText(t.value); } catch(_) { t.select(); document.execCommand("copy"); }
+  const b = document.getElementById("copy"); const was = b.textContent;
+  b.textContent = "Copied"; setTimeout(() => b.textContent = was, 900);
+});
+sync();
+</script>
+</body>
+</html>

@@ -1039,11 +1039,17 @@
     const rp = visualAt(0);                        // where the character forms (start tile)
     s.introTarget = { x: rp.x, y: rp.y };
     s.introParticles = [];
-    const N = 90, reach = Math.max(viewW, viewH);
+    // Held as polar starts plus a landing offset inside his silhouette, both unitless, so the
+    // cloud converges on the middle of his BODY and settles across his whole shape rather
+    // than collapsing to a point at his feet. Bounds come from RUNNER, so a retune carries.
+    const N = 90;
     for (let i = 0; i < N; i++) {
-      const ang = Math.random()*Math.PI*2, dist = reach*(0.55 + Math.random()*0.6);
+      const inBody = Math.random() < 0.72;         // most of him is body; the rest is legs
       s.introParticles.push({
-        x0: rp.x + Math.cos(ang)*dist, y0: rp.y + Math.sin(ang)*dist,
+        ang: Math.random()*Math.PI*2, dist: 0.55 + Math.random()*0.6,
+        ex: (Math.random()*2 - 1) * RUNNER.bodyW * (inBody ? 0.5 : 0.35),
+        ey: inBody ? -(RUNNER.legLen + RUNNER.bodyH*Math.random())
+                   : -RUNNER.legLen * Math.random(),
         sz: cell*(0.05 + Math.random()*0.07),
         col: Math.random() < 0.7 ? getVar("--runner") : "#ffffff",
       });
@@ -1060,15 +1066,36 @@
     const s = state, t = s.introT, tgt = s.introTarget;
     if (t < INTRO_CONVERGE) {                       // pixels stream in from all around
       const u = t / INTRO_CONVERGE, e = 1 - Math.pow(1-u, 3);   // ease-out
+      const reach = Math.max(viewW, viewH);
+      // His local frame is tilted on slopes and corners, so the cloud is rotated with him —
+      // otherwise the pixels would assemble a runner standing at a different angle to himself.
+      const ri = runnerInfo(), ca = Math.cos(ri.angle), sa = Math.sin(ri.angle);
+      const at = (ox, oy) => ({ x: tgt.x + ox*ca - oy*sa, y: tgt.y + ox*sa + oy*ca });
+      const focus = at(0, -cell*(RUNNER.legLen + RUNNER.bodyH*0.5));   // centre of his body
       for (const p of s.introParticles) {
-        const px = p.x0 + (tgt.x - p.x0)*e, py = p.y0 + (tgt.y - p.y0)*e, sz = p.sz*(1 - u*0.4);
+        const x0 = focus.x + Math.cos(p.ang)*p.dist*reach, y0 = focus.y + Math.sin(p.ang)*p.dist*reach;
+        const T = at(p.ex*cell, p.ey*cell);         // and each lands on its own piece of him
+        const px = x0 + (T.x - x0)*e, py = y0 + (T.y - y0)*e, sz = p.sz*(1 - u*0.4);
         ctx.globalAlpha = 0.35 + 0.65*u; ctx.fillStyle = p.col;
         ctx.fillRect(px - sz/2, py - sz/2, sz, sz);
       }
       ctx.globalAlpha = u*0.6; drawRunner(ts); ctx.globalAlpha = 1;   // character fading in
-    } else {                                        // assembled — the runner himself flashes
-      const flash = 0.5 + 0.5*Math.sin(t/60);
-      ctx.save(); ctx.globalAlpha = 0.25 + 0.75*flash; drawRunner(ts); ctx.restore();
+    } else {
+      // Assembled: he is SOLID, and the flash is a flat-white copy of him laid over the top,
+      // pulsing and decaying away. Fading a just-formed character back out reads as him
+      // failing to arrive; RUNNER is the one source of his colours, so borrowing it for the
+      // overlay is what keeps the flash to his exact silhouette.
+      drawRunner(ts);
+      const ft = t - INTRO_CONVERGE;
+      if (ft < INTRO_FLASH) {
+        const fl = 0.9 * (0.5 + 0.5*Math.sin(t/60)) * (1 - ft/INTRO_FLASH);
+        if (fl > 0.01) {
+          const body = RUNNER.body, ink = RUNNER.ink;
+          RUNNER.body = "#ffffff"; RUNNER.ink = "#ffffff";
+          ctx.globalAlpha = fl; drawRunner(ts); ctx.globalAlpha = 1;
+          RUNNER.body = body; RUNNER.ink = ink;
+        }
+      }
     }
   }
   function updateKeyHud() {
@@ -2833,6 +2860,19 @@
     for (let k = 1; k < S.length; k++) ctx.lineTo(S[k].x, S[k].y);
   }
 
+  // Tuning for the leading tile's 3-way junction. The half of each option nearest the
+  // ENTRY edge is drawn separately from the half nearest its EXIT, so the track can read as
+  // committed where the runner is arriving and provisional where it might go. Edit these in
+  // junction-lab.html and paste the block back — never hand-patch one copy.
+  const JUNCTION = {
+    entryBody: 0.42,     // body fill, entry half
+    exitBody:  0.42,     // body fill, the three exit halves
+    entryRail: 0.70,     // rail line, entry half
+    exitRail:  0.70,     // rail line, exit halves
+    arrow:     0.70,     // the little direction arrows outside the tile
+    railW:     0.06,     // rail thickness, fraction of a cell
+    grain:     0.40,     // paper grain over the whole tile
+  };
   // the leading tile renders as a 3-way junction: three real platform pieces
   // oriented to the travel direction — a flat run forward, plus a curve each way
   // (up / down relative to travel) — signalling the path isn't set yet.
@@ -2844,24 +2884,29 @@
     // draw each option as an actual platform surface (straight for forward, arcs for the turns)
     const surfaces = exits.map(d => tileSurface(n, prev, { c:n.c + d.x, r:n.r + d.y }));
     const C = nodeCenter(n), h = cell*0.5;
+    // Split each option at its midpoint: the half by the entry edge, and the half by its
+    // exit. All three entry halves go down in ONE path and all three exit halves in another,
+    // so overlapping pieces still fill at a single alpha instead of stacking up.
+    const halves = surfaces.map(S => { const mid = Math.floor((S.length - 1)/2);
+                                       return { inn: S.slice(0, mid + 1), out: S.slice(mid) }; });
     ctx.save();
     rrect(cx(n.c), cy(n.r), cell, cell, cell*0.16); ctx.clip();
-    // flat, uniform transparent fill for all three path pieces (one fill = single alpha, no overlap build-up)
-    ctx.beginPath();
-    for (const S of surfaces) bodyPath(S);
-    ctx.fillStyle = hexA(curTrack(), 0.42); ctx.fill();
-    grainFill(cx(n.c), cy(n.r), cell, cell, 0.4);
+    ctx.beginPath(); for (const H of halves) bodyPath(H.out);
+    ctx.fillStyle = hexA(curTrack(), JUNCTION.exitBody); ctx.fill();
+    ctx.beginPath(); for (const H of halves) bodyPath(H.inn);
+    ctx.fillStyle = hexA(curTrack(), JUNCTION.entryBody); ctx.fill();
+    grainFill(cx(n.c), cy(n.r), cell, cell, JUNCTION.grain);
     // rails (the top line of each path), flat & semi-transparent (one stroke = single alpha)
-    const railCol = hexA(curRail(), 0.7);
-    ctx.beginPath();
-    for (const S of surfaces) railPath(S);
     ctx.lineJoin = "round"; ctx.lineCap = "round";
-    ctx.strokeStyle = railCol; ctx.lineWidth = Math.max(3, cell*0.06);
-    ctx.stroke();
+    ctx.lineWidth = Math.max(3, cell*JUNCTION.railW);
+    ctx.beginPath(); for (const H of halves) railPath(H.out);
+    ctx.strokeStyle = hexA(curRail(), JUNCTION.exitRail); ctx.stroke();
+    ctx.beginPath(); for (const H of halves) railPath(H.inn);
+    ctx.strokeStyle = hexA(curRail(), JUNCTION.entryRail); ctx.stroke();
     ctx.restore();
 
     // small direction arrows just OUTSIDE the tile — only for directions you can actually build into
-    ctx.fillStyle = railCol;
+    ctx.fillStyle = hexA(curRail(), JUNCTION.arrow);
     const occ = occupiedFor(null);
     const gap = cell*0.12, len = cell*0.11, w = cell*0.09;
     for (const d of exits) {
@@ -3008,12 +3053,13 @@
       ctx.beginPath(); ctx.arc(sx, sy - s*0.2, s*0.42, 0, Math.PI*2); ctx.fill();
       ctx.restore();
     }
-    paintRunner(sx, sy, s, phase, angle, moving, ts, (state.status === "squash") ? squashK() : 0);
+    paintRunner(sx, sy, s, phase, angle, moving, ts, (state.status === "squash") ? squashK() : 0,
+                state.status !== "falling");
   }
   // The runner himself, at an arbitrary place and size — knees, foot lift, bob, talisman and
   // all. Split out of drawRunner so the title screen and the opening cinematic can draw the
   // real character instead of a lookalike, and so there is only ever one of him to retune.
-  function paintRunner(sx, sy, s, phase, angle, moving, ts, sq) {
+  function paintRunner(sx, sy, s, phase, angle, moving, ts, sq, grounded) {
     const swing = moving ? Math.sin(phase) * s*RUNNER.swing : 0;
     const bob   = moving ? Math.abs(Math.sin(phase)) * s*RUNNER.bob : 0;
     ctx.save();
@@ -3031,11 +3077,15 @@
     const legL = s*RUNNER.legLen, bodyH = s*RUNNER.bodyH, bodyW = s*RUNNER.bodyW;
     // soft ground shadow (not an outline). shadowBob ties it to the body's rise, so a
     // high bob can read as him actually leaving the ground rather than sliding along it.
-    const shk = 1 - RUNNER.shadowBob * (bob / Math.max(1e-6, s*RUNNER.bob || 1e-6)) * 0.5;
-    ctx.fillStyle = "rgba(5,4,13," + RUNNER.shadowA + ")";
-    ctx.beginPath();
-    ctx.ellipse(0, -1 + s*RUNNER.shadowY, bodyW*RUNNER.shadowW*shk, s*RUNNER.shadow*shk, 0, 0, Math.PI*2);
-    ctx.fill();
+    // Skipped entirely once he is falling — there is no ground left to cast it on, and a
+    // shadow pinned under a plummeting character is the tell that it was never really there.
+    if (grounded !== false) {
+      const shk = 1 - RUNNER.shadowBob * (bob / Math.max(1e-6, s*RUNNER.bob || 1e-6)) * 0.5;
+      ctx.fillStyle = "rgba(5,4,13," + RUNNER.shadowA + ")";
+      ctx.beginPath();
+      ctx.ellipse(0, -1 + s*RUNNER.shadowY, bodyW*RUNNER.shadowW*shk, s*RUNNER.shadow*shk, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
     // legs — same colour as body, no outline
     ctx.strokeStyle = pale; ctx.lineWidth = Math.max(3, s*RUNNER.legWidth); ctx.lineCap = "round"; ctx.lineJoin = "round";
     const hipY = -legL - bob - bodyH*(RUNNER.hipRise||0), kneeLead = s*RUNNER.kneeLead;
@@ -3958,7 +4008,7 @@
     and1:   [3700, 4100, 4700, 5100],    // "And then"
     boom1:  4950,                        // ...a tile
     line2:  [5150, 5600, 7000, 7500],    // "A tile came into the cosmos"
-    and2:   [7700, 8100, 8700, 9100],    // "And then"
+    and2:   [7400, 7900, 8700, 9150],    // "But a tile is nothing without..." (longer line, longer read)
     boom2:  8950,                        // ...a runner, who assembles out of streaming pixels
                                          // over INTRO_CONVERGE — the game's own level-start effect
     line3:  [9750, 10200, 11500, 12000], // "A runner appeared"
@@ -3970,20 +4020,29 @@
   };
   const CINE_RUN_SPD = 0.0008;           // tiles per ms once he sets off (~the game's own pace)
   const CINE_LINES = { line1:"At first, there was nothing.", and1:"And then",
-                       line2:"A tile came into the cosmos", and2:"And then",
-                       line3:"A runner appeared", line4:"And so he ran..." };
+                       line2:"A tile came into the cosmos", and2:"But a tile is nothing without...",
+                       line3:"The runner.", line4:"And so he ran..." };
   const CINE_SETTLE = 620;               // how long he flickers after forming, before going solid
   let cineActive = false, cineNext = "level", cineT = 0, cineTheme = null, cineFired = 0, cineParts = [];
   function startCine(next){
     cineActive = true; cineNext = next || "level"; cineT = 0; cineFired = 0;
     cineTheme = genTheme(hashSeed("TILE RUNNER title"));
-    // Stored as angle + distance rather than absolute points, so the field still aims at the
-    // tile if the window is resized mid-cinematic. 90 of them, as in startIntro().
+    // Stored in units of the runner's size rather than as absolute points, so the field still
+    // aims true if the window is resized mid-cinematic. 90 of them, as in startIntro().
+    // They converge on the centre of his BODY but each one settles at its own spot inside his
+    // silhouette — body box or legs — so he assembles as a shape rather than collapsing to a
+    // dot and expanding out of it. Bounds come from RUNNER, so they follow any retune.
     cineParts = [];
-    for (let i = 0; i < 90; i++) cineParts.push({
-      ang: Math.random()*Math.PI*2, dist: 0.55 + Math.random()*0.6,
-      sz: 0.05 + Math.random()*0.07,
-      col: Math.random() < 0.7 ? getVar("--runner") : "#ffffff" });
+    for (let i = 0; i < 90; i++) {
+      const inBody = Math.random() < 0.72;              // most of him is body; the rest is legs
+      cineParts.push({
+        ang: Math.random()*Math.PI*2, dist: 0.55 + Math.random()*0.6,
+        ex: (Math.random()*2 - 1) * RUNNER.bodyW * (inBody ? 0.5 : 0.35),
+        ey: inBody ? -(RUNNER.legLen + RUNNER.bodyH*Math.random())
+                   : -RUNNER.legLen * Math.random(),
+        sz: 0.05 + Math.random()*0.07,
+        col: Math.random() < 0.7 ? getVar("--runner") : "#ffffff" });
+    }
     const pf = document.getElementById("pauseFloat"); if (pf) pf.style.display = "none";
   }
   function endCine(){
@@ -4057,7 +4116,7 @@
       const rowAt = (c) => ({ c, r:0 });
       for (let k = 0; k < TITLE_QUEUE - 1; k++)
         introDrawPlatform(rowAt(i0+k), rowAt(i0+k-1), rowAt(i0+k+1), m);
-      dragPlatform(rowAt, i0 - 1, i0 - 1 + TITLE_QUEUE, f, m);
+      dragPlatform(rowAt, i0 - 1, i0 - 1 + TITLE_QUEUE, f, m, ts);
     }
     if (t >= CINE.boom2) {
       // He arrives the way he arrives in game: pixels streaming in from every side, easing
@@ -4069,17 +4128,36 @@
       const phase = t > CINE.run ? (t - CINE.run)*CINE_RUN_SPD*Math.PI*3 : 0;   // stride follows distance
       if (ct < INTRO_CONVERGE) {
         const u = ct / INTRO_CONVERGE, e = 1 - Math.pow(1-u, 3), reach = Math.max(viewW, viewH);
+        // they come in aimed at the middle of his body, not at his feet
+        const fy = cy - s*(RUNNER.legLen + RUNNER.bodyH*0.5);
         for (const p of cineParts) {
-          const x0 = cx + Math.cos(p.ang)*p.dist*reach, y0 = cy + Math.sin(p.ang)*p.dist*reach;
-          const px = x0 + (cx - x0)*e, py = y0 + (cy - y0)*e, sz = p.sz*s*(1 - u*0.4);
+          const x0 = cx + Math.cos(p.ang)*p.dist*reach, y0 = fy + Math.sin(p.ang)*p.dist*reach;
+          const tx = cx + p.ex*s, ty = cy + p.ey*s;       // and each lands on its own piece of him
+          const px = x0 + (tx - x0)*e, py = y0 + (ty - y0)*e, sz = p.sz*s*(1 - u*0.4);
           ctx.globalAlpha = 0.35 + 0.65*u; ctx.fillStyle = p.col;
           ctx.fillRect(px - sz/2, py - sz/2, sz, sz);
         }
         ctx.globalAlpha = u*0.6; paintRunner(rx, cy, s, phase, 0, t > CINE.run, ts, 0); ctx.globalAlpha = 1;
       } else {
-        const fl = ct < INTRO_CONVERGE + CINE_SETTLE
-          ? 0.25 + 0.75*(0.5 + 0.5*Math.sin(ct/60)) : 1;                // brief flicker, then solid
-        ctx.globalAlpha = fl; paintRunner(rx, cy, s, phase, 0, t > CINE.run, ts, 0); ctx.globalAlpha = 1;
+        // He is solid the moment he forms. The flash is a white copy of him laid over the
+        // top, pulsing and decaying away, rather than him going translucent — fading a
+        // just-assembled character back out reads as him failing to arrive.
+        const moving = t > CINE.run;
+        paintRunner(rx, cy, s, phase, 0, moving, ts, 0);
+        const ft = ct - INTRO_CONVERGE;
+        if (ft < CINE_SETTLE) {
+          const fl = 0.9 * (0.5 + 0.5*Math.sin(ct/60)) * (1 - ft/CINE_SETTLE);
+          if (fl > 0.01) {
+            // paint him again in flat white. RUNNER is the single source of his colours, so
+            // borrowing it for one frame is how the flash keeps his exact silhouette.
+            const body = RUNNER.body, ink = RUNNER.ink;
+            RUNNER.body = "#ffffff"; RUNNER.ink = "#ffffff";
+            ctx.globalAlpha = fl;
+            paintRunner(rx, cy, s, phase, 0, moving, ts, 0);
+            ctx.globalAlpha = 1;
+            RUNNER.body = body; RUNNER.ink = ink;
+          }
+        }
       }
     }
     ctx.restore();
@@ -4127,7 +4205,7 @@
   // Where the title sits, as a fraction of the viewport height. The title logo, the halo
   // behind it and the maze band the runner travels along all key off this one number, so
   // they move as one composition — shift it and nothing comes unstuck from anything else.
-  const TITLE_CY = 0.36;
+  const TITLE_CY = 0.26;
   // The tile band used to sit on TITLE_CY, directly behind the logo. It now has its own
   // anchor further down the screen, so the lettering reads clean and the track runs beneath
   // it rather than through it.
@@ -4141,6 +4219,7 @@
   // tile (so its connectors already match where it is going) offset back along the flight
   // path, which is how it can arc without its shape popping when it lands.
   const TITLE_QUEUE = 3;                               // same three tiles the player cycles
+  const DRAG_HOLD = 0.22;                              // of the gap: it rests before it lifts
   const DRAG_FILL_AT = 0.86;                           // where in the flight the track casts back in
   // The same burst the board throws when a tile clears (see drawLights), in screen space and
   // driven straight off the drag's progress rather than off a particle list — nothing here
@@ -4160,24 +4239,37 @@
     ctx.beginPath(); ctx.arc(x, y, rad*0.9, 0, Math.PI*2); ctx.stroke();
     ctx.restore();
   }
-  function dragPlatform(cellAt, srcIdx, dstIdx, f, m){
+  function dragPlatform(cellAt, srcIdx, dstIdx, f, m, ts){
     const src = introCenter(cellAt(srcIdx), m), dst = introCenter(cellAt(dstIdx), m);
-    const e = f < 0.5 ? 2*f*f : 1 - Math.pow(-2*f + 2, 2)/2;          // easeInOutQuad
+    // A cleared tile sits where it is for a beat before anything picks it up: the runner is
+    // still stepping off it, and snatching it the instant he leaves reads as a glitch. The
+    // flight is then squeezed into what is left of the gap, so it still lands on time.
+    const g = f <= DRAG_HOLD ? 0 : (f - DRAG_HOLD) / (1 - DRAG_HOLD);
+    const e = g < 0.5 ? 2*g*g : 1 - Math.pow(-2*g + 2, 2)/2;          // easeInOutQuad
     const x = src.x + (dst.x - src.x)*e;
-    const y = src.y + (dst.y - src.y)*e - Math.sin(f*Math.PI)*m.s*0.8;  // arcs up and over
-    const k = 1 + 0.1*Math.sin(f*Math.PI);                            // and a touch nearer the eye
-    // The cell it leaves flashes as it clears, and the cell it lands on flashes as it takes.
+    const y = src.y + (dst.y - src.y)*e - Math.sin(g*Math.PI)*m.s*0.8;  // arcs up and over
+    const k = 1 + 0.1*Math.sin(g*Math.PI);                            // and a touch nearer the eye
+    // The cell it leaves flashes as it clears — keyed to the clear itself, not to the lift,
+    // so the flash still lands the moment the runner steps off. Setting down is silent: a
+    // drop is the player's own doing in game, and it gets no pulse there either.
     dragPulse(src.x, src.y, Math.min(1, f/0.40), m.s);
     ctx.save();
-    // In hand it is a held tile, not laid track: drop it back toward the glass-only look the
-    // board gives a tile you are dragging, and let it come solid again as it sets down.
-    ctx.globalAlpha = 0.68 + 0.32*Math.pow(f, 3);
+    // Solid while it rests, glassy while it is carried, solid again as it sets down — the
+    // dip follows the arc, so there is no step when it leaves the ground.
+    const tileA = 1 - 0.32*Math.sin(g*Math.PI);
+    ctx.globalAlpha = tileA;
     ctx.translate(x, y); ctx.scale(k, k); ctx.translate(-dst.x, -dst.y);
-    // Empty for the whole carry; the track only appears as it reaches the front, which is
-    // the moment the landing pulse fires, so the two read as one event.
-    introDrawPlatform(cellAt(dstIdx), cellAt(dstIdx-1), cellAt(dstIdx+1), m, f >= DRAG_FILL_AT);
+    // Empty from the moment it clears until it reaches the front of the queue.
+    const filled = g >= DRAG_FILL_AT;
+    introDrawPlatform(cellAt(dstIdx), cellAt(dstIdx-1), cellAt(dstIdx+1), m, filled);
+    // While it is empty it is a free tile, so it wears the same nine grip dots the board
+    // puts on one — same pulse, faded out as the track casts back in rather than cut.
+    if (!filled) {
+      const pulse = 0.5 + 0.5*Math.sin((ts||0)/180);
+      ctx.globalAlpha = tileA * (0.6 + 0.35*pulse) * clamp((DRAG_FILL_AT - g)/0.12, 0, 1);
+      drawDragDots(dst.x, dst.y, m.s);
+    }
     ctx.restore();
-    dragPulse(dst.x, dst.y, Math.max(0, (f - 0.78)/0.22), m.s);
   }
   function introCenter(cellObj, m){ return { x: m.x0 + cellObj.c*m.s + m.s/2, y: m.row0Y + cellObj.r*m.s + m.s/2 }; }
   function introDir(a, b){ return { x: Math.sign(b.c-a.c), y: Math.sign(b.r-a.r) }; }
@@ -4221,7 +4313,7 @@
     const i0 = Math.floor(u), f = u - i0;
     for (let k = 0; k < TITLE_QUEUE - 1; k++)
       introDrawPlatform(introCellAt(i0+k), introCellAt(i0+k-1), introCellAt(i0+k+1), m);
-    dragPlatform(introCellAt, i0 - 1, i0 - 1 + TITLE_QUEUE, f, m);
+    dragPlatform(introCellAt, i0 - 1, i0 - 1 + TITLE_QUEUE, f, m, ts);
     // runner follows the winding surface, tilting through the rises, dips and corners
     const surf = introSurface(introCellAt(i0), introCellAt(i0-1), introCellAt(i0+1), m);
     const pos = samplePolyline(surf, f);
@@ -4254,7 +4346,7 @@
       ctx.font = "900 " + Math.round(bf) + "px " + UI_FONT;
       const maxW = viewW*0.86, tw = ctx.measureText(txt).width;   // it is a long line; shrink to fit
       if (tw > maxW) { bf = bf * maxW / tw; ctx.font = "900 " + Math.round(bf) + "px " + UI_FONT; }
-      ctx.fillText(txt, viewW/2, viewH*0.525);
+      ctx.fillText(txt, viewW/2, cyT + size*1.3);   // hangs off the logo, so it follows it
       ctx.restore();
     }
     // --- tap-to-play prompt (after the title has landed) ---

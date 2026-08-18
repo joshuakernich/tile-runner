@@ -62,6 +62,24 @@ function runnerBlock(file, name) {
   }
 }
 
+// -------------------------------------------------- 2b. the junction block
+// junction-lab.html carries a copy of the game's JUNCTION tuning as its starting
+// point. If they drift, the lab is tuning a junction the game no longer draws —
+// the same trap the RUNNER block has fallen into before.
+head("JUNCTION block parity");
+{
+  const game = runnerBlock("index.html", "JUNCTION");
+  const lab  = runnerBlock("junction-lab.html", "SHIPPED");
+  if (!game || !lab) bad("could not extract the JUNCTION block from index.html or junction-lab.html");
+  else {
+    const diff = [...new Set([...Object.keys(game), ...Object.keys(lab)])]
+      .filter((k) => game[k] !== lab[k])
+      .map((k) => `${k}: game=${game[k]} lab=${lab[k]}`);
+    if (diff.length) bad(`junction-lab differs from the game — ${diff.join("; ")}`);
+    else ok(`junction-lab matches the game (${Object.keys(game).length} keys)`);
+  }
+}
+
 // -------------------------------------------------- 3. the song generator
 // music-lab.html reimplements setSong so it can extend it. At its shipped
 // defaults it must still produce the exact tune the game plays, or the lab is
