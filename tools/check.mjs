@@ -80,6 +80,23 @@ head("JUNCTION block parity");
   }
 }
 
+// -------------------------------------------------- 2c. the tile block
+// Same story as JUNCTION: tile-lab.html starts from the game's TILE block, and a drift
+// means the lab is tuning a tile the game no longer draws.
+head("TILE block parity");
+{
+  const game = runnerBlock("index.html", "TILE");
+  const lab  = runnerBlock("tile-lab.html", "SHIPPED");
+  if (!game || !lab) bad("could not extract the TILE block from index.html or tile-lab.html");
+  else {
+    const diff = [...new Set([...Object.keys(game), ...Object.keys(lab)])]
+      .filter((k) => game[k] !== lab[k])
+      .map((k) => `${k}: game=${game[k]} lab=${lab[k]}`);
+    if (diff.length) bad(`tile-lab differs from the game — ${diff.join("; ")}`);
+    else ok(`tile-lab matches the game (${Object.keys(game).length} keys)`);
+  }
+}
+
 // -------------------------------------------------- 3. the song generator
 // music-lab.html reimplements setSong so it can extend it. At its shipped
 // defaults it must still produce the exact tune the game plays, or the lab is

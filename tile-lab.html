@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tile Runner — Tile Lab</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{ --bg:#0d0b1a; --panel:#17142b; --line:#2b2650; --ink:#e8e6ff; --dim:#8f88c8; --hi:#ffcf4d; }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--bg); color:var(--ink);
+        font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+  header{ padding:14px 18px; border-bottom:2px solid var(--line); }
+  h1{ margin:0; font-size:16px; letter-spacing:2px; text-transform:uppercase; color:var(--hi); }
+  header p{ margin:6px 0 0; font-size:12px; color:var(--dim); max-width:74ch; line-height:1.5; }
+  .wrap{ display:flex; gap:18px; padding:18px; align-items:flex-start; flex-wrap:wrap; }
+  .stage{ background:#0a0817; border:2px solid var(--line); border-radius:10px; padding:12px; }
+  canvas{ display:block; border-radius:6px; }
+  .panel{ background:var(--panel); border:2px solid var(--line); border-radius:10px; padding:14px; width:330px; }
+  .grp{ margin-bottom:14px; }
+  .grp h2{ margin:0 0 8px; font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--dim); }
+  .row{ display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:12px; }
+  .row label{ width:96px; color:var(--dim); }
+  .row input[type=range]{ flex:1; }
+  .row output{ width:48px; text-align:right; font-variant-numeric:tabular-nums; }
+  .btns{ display:flex; gap:8px; flex-wrap:wrap; }
+  button{ font:inherit; font-size:12px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+          background:#241f4a; color:var(--ink); border:2px solid var(--line); border-radius:6px;
+          padding:8px 12px; cursor:pointer; }
+  button:hover{ border-color:var(--hi); }
+  button.on{ background:var(--hi); color:#241f4a; border-color:var(--hi); }
+  textarea{ width:100%; height:130px; background:#0a0817; color:var(--ink); border:2px solid var(--line);
+            border-radius:6px; padding:8px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+            font-size:11px; line-height:1.45; }
+  .hint{ font-size:11px; color:var(--dim); line-height:1.5; margin:8px 0 0; }
+  .cap{ font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--dim); margin:10px 0 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tile Lab</h1>
+  <p>The tile's own shape and surface. <b>radius</b> drives every full-cell corner in the game at
+     once — the glass pane, a laid platform, the wall plate, stone, fixed platforms, blocks — which
+     is the point: they used to be a dozen separate <code>0.16</code>s that could drift apart.
+     Drawing is lifted from <code>index.html</code>. Tune, then <b>Copy TILE block</b> and paste it
+     over the block above <code>drawGlass</code>.</p>
+</header>
+
+<div class="wrap">
+  <div class="stage"><canvas id="cv" width="660" height="520"></canvas></div>
+  <div class="panel">
+    <div class="grp">
+      <h2>Shape</h2>
+      <div class="row"><label>radius</label><input type="range" id="radius" min="0" max="0.5" step="0.005"><output></output></div>
+    </div>
+    <div class="grp">
+      <h2>Surface</h2>
+      <div class="row"><label>glass alpha</label><input type="range" id="glassA" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>glass grain</label><input type="range" id="glassGrain" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>body grain</label><input type="range" id="bodyGrain" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>rail width</label><input type="range" id="railW" min="0.01" max="0.18" step="0.005"><output></output></div>
+    </div>
+    <div class="grp">
+      <h2>Scene</h2>
+      <div class="row"><label>track hue</label><input type="range" id="hue" min="0" max="359" step="1"><output></output></div>
+      <div class="row"><label>cell</label><input type="range" id="cellPx" min="70" max="190" step="2"><output></output></div>
+      <div class="btns"><button id="reset">Reset</button></div>
+    </div>
+    <div class="grp">
+      <h2>Block</h2>
+      <div class="btns"><button id="copy">Copy TILE block</button></div>
+      <textarea id="out" spellcheck="false"></textarea>
+      <p class="hint">Paste over the <code>const TILE = { … }</code> block in <code>index.html</code>.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---- mirror of index.html's TILE ----------------------------------------------------
+const SHIPPED = {
+  radius:     0.075,
+  glassA:     0.50,
+  glassGrain: 1.00,
+  bodyGrain:  1.00,
+  railW:      0.085,
+};
+const T = Object.assign({}, SHIPPED);
+let HUE = 45, CELL = 130;
+
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+function hslHex(h,s,l){ s/=100;l/=100; const k=n=>(n+h/30)%12, a=s*Math.min(l,1-l);
+  const f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));
+  const to=x=>Math.round(x*255).toString(16).padStart(2,"0");
+  return "#"+to(f(0))+to(f(8))+to(f(4)); }
+const curTrack = () => hslHex(HUE,88,58);
+const curRail  = () => hslHex(HUE,94,83);
+
+let paperTile=null;
+(function buildPaper(){
+  const S=220, off=document.createElement("canvas"); off.width=off.height=S;
+  const o=off.getContext("2d");
+  for(let i=0;i<4600;i++){ o.fillStyle=Math.random()<0.64?"rgba(255,255,255,0.05)":"rgba(0,0,0,0.07)";
+    const z=Math.random()<0.14?2:1; o.fillRect(Math.random()*S,Math.random()*S,z,z); }
+  o.lineWidth=1;
+  for(let i=0;i<220;i++){ const x=Math.random()*S,y=Math.random()*S,a=Math.random()*Math.PI,len=5+Math.random()*16;
+    o.strokeStyle=Math.random()<0.6?"rgba(255,255,255,0.045)":"rgba(0,0,0,0.05)";
+    o.beginPath(); o.moveTo(x,y); o.lineTo(x+Math.cos(a)*len,y+Math.sin(a)*len); o.stroke(); }
+  paperTile=off;
+})();
+function grainFill(x,y,w,h,a){ ctx.save(); ctx.globalAlpha=a;
+  ctx.fillStyle=ctx.createPattern(paperTile,"repeat"); ctx.fillRect(x,y,w,h); ctx.restore(); }
+
+// ---- geometry + tile art, lifted from index.html ------------------------------------
+let cell = CELL, ORIGIN = {x:0,y:0};
+const cx = c => ORIGIN.x + c*cell, cy = r => ORIGIN.y + r*cell;
+const nodeCenter = n => ({ x: cx(n.c)+cell/2, y: cy(n.r)+cell/2 });
+const axisDir = (a,b) => ({ x:Math.sign(b.c-a.c), y:Math.sign(b.r-a.r) });
+const tileR = s => s * T.radius;
+
+function rrect(x,y,w,h,r){ r=Math.max(0,Math.min(r,w/2,h/2));
+  ctx.beginPath(); ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);     ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+function tileSurface(n,prev,next){
+  const C=nodeCenter(n), h=cell/2;
+  let entry = prev?axisDir(n,prev):null, exit = next?axisDir(n,next):null;
+  if(!entry&&!exit){ entry={x:-1,y:0}; exit={x:1,y:0}; }
+  else if(!entry) entry={x:-exit.x,y:-exit.y};
+  else if(!exit)  exit={x:-entry.x,y:-entry.y};
+  const Me={x:C.x+entry.x*h,y:C.y+entry.y*h}, Mx={x:C.x+exit.x*h,y:C.y+exit.y*h};
+  if(entry.x===-exit.x&&entry.y===-exit.y) return [Me,{x:C.x,y:C.y},Mx];
+  const O={x:C.x+(entry.x+exit.x)*h,y:C.y+(entry.y+exit.y)*h};
+  let a0=Math.atan2(Me.y-O.y,Me.x-O.x), a1=Math.atan2(Mx.y-O.y,Mx.x-O.x);
+  let d=a1-a0; while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI;
+  const pts=[]; for(let k=0;k<=12;k++){const a=a0+d*(k/12); pts.push({x:O.x+h*Math.cos(a),y:O.y+h*Math.sin(a)});}
+  return pts; }
+function bodyPath(S){
+  const nl=S.length-1;
+  const nrm=S.map((pt,k)=>{ const a=S[Math.max(0,k-1)],b=S[Math.min(nl,k+1)];
+    let tx=b.x-a.x,ty=b.y-a.y; const m=Math.hypot(tx,ty)||1; return {x:ty/m,y:-tx/m}; });
+  const Ob=S.map((pt,k)=>({x:pt.x-nrm[k].x*cell*1.7,y:pt.y-nrm[k].y*cell*1.7}));
+  ctx.moveTo(S[0].x,S[0].y);
+  for(let k=1;k<=nl;k++) ctx.lineTo(S[k].x,S[k].y);
+  for(let k=nl;k>=0;k--) ctx.lineTo(Ob[k].x,Ob[k].y);
+  ctx.closePath(); }
+function railPath(S){ ctx.moveTo(S[0].x,S[0].y); for(let k=1;k<S.length;k++) ctx.lineTo(S[k].x,S[k].y); }
+function drawGlass(x,y,s){
+  ctx.save(); rrect(x,y,s,s,tileR(s)); ctx.clip();
+  ctx.fillStyle="rgba(180,174,235,"+T.glassA+")"; ctx.fillRect(x,y,s,s);
+  grainFill(x,y,s,s,T.glassGrain); ctx.restore(); }
+function drawPlatformTile(n,prev,next){
+  const S=tileSurface(n,prev,next);
+  ctx.save(); rrect(cx(n.c),cy(n.r),cell,cell,tileR(cell)); ctx.clip();
+  ctx.beginPath(); bodyPath(S); ctx.fillStyle=curTrack(); ctx.fill();
+  grainFill(cx(n.c),cy(n.r),cell,cell,T.bodyGrain);
+  ctx.restore();
+  ctx.save(); rrect(cx(n.c),cy(n.r),cell,cell,tileR(cell)); ctx.clip();
+  ctx.lineJoin="round"; ctx.lineCap="round";
+  ctx.strokeStyle=curRail(); ctx.lineWidth=Math.max(3,cell*T.railW);
+  ctx.beginPath(); railPath(S); ctx.stroke(); ctx.restore(); }
+function drawDragDots(fx,fy,s){
+  const gap=s*0.16, rad=Math.max(1.5,s*0.035);
+  ctx.fillStyle="#05040d";
+  for(let gy=-1;gy<=1;gy++) for(let gx=-1;gx<=1;gx++){
+    ctx.beginPath(); ctx.arc(fx+gx*gap,fy+gy*gap,rad,0,Math.PI*2); ctx.fill(); } }
+function drawWallPlate(c,r){
+  const x=cx(c),y=cy(r),s=cell,rad=tileR(s);
+  const g=ctx.createLinearGradient(x,y,x,y+s);
+  g.addColorStop(0,"#697082"); g.addColorStop(0.5,"#5c6474"); g.addColorStop(1,"#4e5564");
+  rrect(x,y,s,s,rad); ctx.fillStyle=g; ctx.fill();
+  ctx.save(); rrect(x,y,s,s,rad); ctx.clip(); grainFill(x,y,s,s,0.9); ctx.restore();
+  const off=s*0.17, br=s*0.05;
+  for(const [bx,by] of [[off,off],[s-off,off],[off,s-off],[s-off,s-off]]){
+    ctx.fillStyle="rgba(74,80,96,0.75)"; ctx.beginPath(); ctx.arc(x+bx,y+by,br,0,Math.PI*2); ctx.fill(); } }
+
+// ---- scene: a short run of track, a free tile, and a wall for comparison -------------
+function label(t,x,y){ ctx.save(); ctx.fillStyle="#8f88c8"; ctx.font="10px ui-sans-serif,system-ui,sans-serif";
+  ctx.textAlign="center"; ctx.fillText(t,x,y); ctx.restore(); }
+function render(){
+  cell = CELL;
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.fillStyle="#0a0817"; ctx.fillRect(0,0,cv.width,cv.height);
+
+  // row 1: a straight, a corner, and the two meeting — the corner radius reads on the joins
+  ORIGIN = { x: cv.width/2 - cell*2, y: 70 };
+  drawGlass(cx(0),cy(0),cell); drawPlatformTile({c:0,r:0},{c:-1,r:0},{c:1,r:0});
+  drawGlass(cx(1),cy(0),cell); drawPlatformTile({c:1,r:0},{c:0,r:0},{c:2,r:0});
+  drawGlass(cx(2),cy(0),cell); drawPlatformTile({c:2,r:0},{c:1,r:0},{c:2,r:1});
+  drawGlass(cx(2),cy(1),cell); drawPlatformTile({c:2,r:1},{c:2,r:0},{c:3,r:1});
+  drawGlass(cx(3),cy(1),cell); drawPlatformTile({c:3,r:1},{c:2,r:1},{c:4,r:1});
+  label("laid track — straights, a corner, and the joins", cv.width/2, 56);
+
+  // row 2: a free tile beside a wall plate, so the shared corner can be compared
+  ORIGIN = { x: cv.width/2 - cell*1.6, y: 70 + cell*2 + 56 };
+  drawGlass(cx(0),cy(0),cell); drawDragDots(cx(0)+cell/2, cy(0)+cell/2, cell);
+  drawWallPlate(2,0);
+  label("free tile", cx(0)+cell/2, cy(0)-10);
+  label("wall plate", cx(2)+cell/2, cy(0)-10);
+}
+
+// ---- wiring -------------------------------------------------------------------------
+const KEYS = ["radius","glassA","glassGrain","bodyGrain","railW"];
+const DP = { radius:3, glassA:2, glassGrain:2, bodyGrain:2, railW:3 };
+function sync(){
+  for (const k of KEYS){
+    const el=document.getElementById(k); el.value=T[k];
+    el.parentElement.querySelector("output").textContent=(+T[k]).toFixed(DP[k]);
+  }
+  document.getElementById("hue").value=HUE;
+  document.getElementById("hue").parentElement.querySelector("output").textContent=HUE;
+  document.getElementById("cellPx").value=CELL;
+  document.getElementById("cellPx").parentElement.querySelector("output").textContent=CELL;
+  document.getElementById("out").value =
+    "  const TILE = {\n" + KEYS.map(k => "    " + (k+":").padEnd(12) + " " + (+T[k]).toFixed(DP[k]) + ",").join("\n") + "\n  };";
+  render();
+}
+for (const k of KEYS) document.getElementById(k).addEventListener("input", e => { T[k]=+e.target.value; sync(); });
+document.getElementById("hue").addEventListener("input", e => { HUE=+e.target.value; sync(); });
+document.getElementById("cellPx").addEventListener("input", e => { CELL=+e.target.value; sync(); });
+document.getElementById("reset").addEventListener("click", () => { Object.assign(T,SHIPPED); sync(); });
+document.getElementById("copy").addEventListener("click", async () => {
+  const t=document.getElementById("out");
+  try { await navigator.clipboard.writeText(t.value); } catch(_) { t.select(); document.execCommand("copy"); }
+  const b=document.getElementById("copy"), was=b.textContent;
+  b.textContent="Copied"; setTimeout(()=>b.textContent=was,900);
+});
+sync();
+</script>
+</body>
+</html>

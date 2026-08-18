@@ -125,7 +125,8 @@
   #overlay h2 { font-size:46px; font-weight:900; letter-spacing:2px; text-transform:uppercase;
     margin-bottom:16px; transform:rotate(-4deg); line-height:1.05; }
   #overlay p { font-size:var(--body); line-height:1.5; color:var(--dim); margin:0 auto 20px; letter-spacing:1px;
-    max-width:15rem; text-wrap:balance; }   /* wrap the byline to ~2 evenly-balanced lines */
+    max-width:19rem; text-wrap:balance; }   /* setByline() places the break; 19rem is the narrowest
+                                              width at which all 47 quips still fit on two lines */
   #overlay.win h2 { color:#8dff78;
     text-shadow:1px 1px 0 #3a8a45, 2px 2px 0 #2f7439, 3px 3px 0 #256030, 4px 4px 0 #1c4c26, 5px 6px 10px rgba(5,4,13,0.65); }
   #overlay.lose h2 { color:#ff8f74; margin-bottom:15px;
@@ -288,13 +289,29 @@
 
   // ---------- DOM ---------------------------------------------------------
   const canvas = document.getElementById("game");
-  const ctx = canvas.getContext("2d");
+  let ctx = canvas.getContext("2d");     // `let`, so hint icons can borrow the game's own
+                                        // drawing routines against another canvas (withCanvas)
   const elLevel = document.getElementById("level");
   const elReady = document.getElementById("ready");
   const elKey = document.getElementById("keystate");
   const overlay = document.getElementById("overlay");
   const ovTitle = document.getElementById("ov-title");
   const ovMsg = document.getElementById("ov-msg");
+  // The card's byline always reads as two balanced lines. CSS text-wrap:balance can even up
+  // a line that already wraps but cannot force a short quip onto two, and a one-line card
+  // sits at a different height from a two-line one — which is what makes the win screen
+  // jump about between levels. Split on the word boundary nearest the middle.
+  const escHtml = t => t.replace(/[&<>]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" }[c]));
+  function setByline(el, text) {
+    const w = String(text).split(/\s+/).filter(Boolean);
+    if (w.length < 2) { el.textContent = text; return; }
+    let cut = 1, best = Infinity;
+    for (let i = 1; i < w.length; i++) {
+      const d = Math.abs(w.slice(0, i).join(" ").length - w.slice(i).join(" ").length);
+      if (d < best) { best = d; cut = i; }
+    }
+    el.innerHTML = escHtml(w.slice(0, cut).join(" ")) + "<br>" + escHtml(w.slice(cut).join(" "));
+  }
   const ovBtn = document.getElementById("ov-btn");
   const elScore = document.getElementById("score");
   const ovStars = document.getElementById("ov-stars");
@@ -1106,7 +1123,7 @@
 
   // ---------- New-mechanic intro pop-ups ---------------------------------
   const MECHS = {
-    tile:   { name:"Track Tiles", desc:"The runner never stops! Drag the dotted tiles to lay track ahead of it." },
+    tile:   { name:"Track Tiles", desc:"The runner never stops! Drag cleared tiles to lay track ahead." },
     key:    { name:"Colour Key", desc:"Grab a coloured key to open its matching door." },
     flag:   { name:"The Exit", desc:"Lay a tile on the flag to finish the level." },
     wall:   { name:"Metal Wall", desc:"Solid — you can't build on it. Route around." },
@@ -1124,7 +1141,7 @@
     platform:{ name:"Fixed Platform", desc:"Track already bolted to the level. You can't build on it — but run your path into one of its open ends and the runner rides across for FREE, no tile spent. It only connects where the rails are drawn." },
     mdoor:  { name:"Sliding Door", desc:"Slide it open by dragging BOTH panels apart — push each side away from the centre." },
     // ---- tutorial prompts for the hand-built levels ----
-    recycle:  { name:"Reusable Tiles", desc:"The runner never stops! Drag the dotted tiles to lay track ahead. As it clears a tile behind it, that tile frees up — drag it to the FRONT of the path to keep the runner moving." },
+    recycle:  { name:"Reusable Tiles", desc:"The runner never stops! Drag cleared tiles to lay track ahead." },
     turn:     { name:"Take a Turn", desc:"Lay a tile to the SIDE of the runner's path and it turns to follow. Steer it toward the flag." },
     offscreen:{ name:"Off-screen Arrows", desc:"When the flag is off-screen, a coloured arrow at the edge points the way. Follow it to find the exit." },
   };
@@ -1176,12 +1193,61 @@
     pop.classList.add("show");
   }
   // draw a small representative icon for a mechanic on a 2d context of size S
+  // Draw with the game's OWN routines into another canvas, at a chosen cell size. The hint
+  // cards use it so their icons are the real art rather than a hand-drawn likeness that
+  // quietly goes stale. ctx and cell are module-wide, so the swap is guarded — a throw
+  // mid-icon must never leave the board rendering into a 90px canvas.
+  function withCanvas(g, cellPx, ox, oy, fn) {
+    const oldCtx = ctx, oldCell = cell;
+    ctx = g; cell = cellPx;
+    try { ctx.save(); ctx.translate(ox, oy); fn(); ctx.restore(); }
+    finally { ctx = oldCtx; cell = oldCell; }
+  }
   function drawMechIcon(g, type, S) {
     g.clearRect(0, 0, S, S);
     const cx = S/2, cy = S/2, V = n => getVar(n);
     const rr = (x,y,w,h,rad)=>{ g.beginPath(); g.moveTo(x+rad,y); g.arcTo(x+w,y,x+w,y+h,rad);
       g.arcTo(x+w,y+h,x,y+h,rad); g.arcTo(x,y+h,x,y,rad); g.arcTo(x,y,x+w,y,rad); g.closePath(); };
     const tile = col => { rr(S*0.14,S*0.14,S*0.72,S*0.72,S*0.13); g.fillStyle = col; g.fill(); };
+
+    // ---- icons drawn with the game's real routines ---------------------------------
+    // One cell, centred. Anything below this block is still a bespoke drawing, either
+    // because the mechanic has no standalone renderer (block) or because it never
+    // appears in the shipped campaign and so its card can never fire.
+    const CP = Math.round(S*0.78), OX = (S-CP)/2, OY = (S-CP)/2;
+    const real = fn => { try { withCanvas(g, CP, OX, OY, fn); return true; } catch(_) { return false; } };
+    const N0 = { c:0, r:0 };
+    if (type==="tile" || type==="recycle") {
+      // a free tile, exactly as the board draws one: glass pane plus the nine grip dots
+      real(() => { drawGlass(0, 0, cell); drawDragDots(cell/2, cell/2, cell); });
+      if (type==="recycle") {                       // ...looping back round to the front
+        g.strokeStyle=V("--track"); g.lineWidth=S*0.045; g.lineCap="round";
+        g.beginPath(); g.arc(cx,cy,S*0.33,Math.PI*0.75,Math.PI*0.15); g.stroke();
+        const ax=cx+Math.cos(Math.PI*0.15)*S*0.33, ay=cy+Math.sin(Math.PI*0.15)*S*0.33;
+        g.beginPath(); g.moveTo(ax-S*0.02,ay-S*0.08); g.lineTo(ax+S*0.06,ay+S*0.01);
+        g.lineTo(ax-S*0.05,ay+S*0.07); g.closePath(); g.fillStyle=V("--track"); g.fill();
+      }
+      return;
+    }
+    if (type==="turn") {   // a laid elbow — the same corner surface the runner rides
+      real(() => { drawGlass(0, 0, cell);
+                   drawPlatformTile(N0, { c:-1, r:0 }, { c:0, r:1 }); });
+      return;
+    }
+    if (type==="wall")     { real(() => drawWall(0, 0)); return; }
+    if (type==="stone")    { real(() => drawStone(0, 0, 0, { hp:2, vi:0 })); return; }
+    if (type==="platform") { real(() => drawPlatform({ c:0, r:0, dirs:["n","e"], lit:0.55 }, 0)); return; }
+    if (type==="door")     { real(() => drawKeyDoor(0, 0, "#ffd24a")); return; }
+    if (type==="key")      { real(() => drawKey(cell*0.5, cell*0.5, 0, "#ffd24a")); return; }
+    if (type==="saw")      {
+      real(() => {                                  // the rail it sweeps, then the blade
+        ctx.strokeStyle = "rgba(150,156,172,0.85)"; ctx.lineWidth = cell*0.05; ctx.lineCap = "round";
+        ctx.beginPath(); ctx.moveTo(cell*0.04, cell*0.5); ctx.lineTo(cell*0.96, cell*0.5); ctx.stroke();
+        drawSaw(cell*0.5, cell*0.5, 0);
+      });
+      return;
+    }
+    if (type==="flag")     { real(() => drawFlag(0, 0, 0, false)); return; }
     if (type==="tile") { tile("rgba(180,174,235,0.9)"); g.fillStyle=V("--shadow");
       const gp=S*0.15; for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++){g.beginPath();g.arc(cx+i*gp,cy+j*gp,S*0.028,0,7);g.fill();} }
     else if (type==="wall") { tile("#5c6474"); g.fillStyle="rgba(15,17,24,0.9)";
@@ -2008,9 +2074,9 @@
     overlay.className = "win show";
     const last = levelIdx >= LEVELS.length - 1;
     ovTitle.textContent = last ? "That's All of Them" : "Level Clear";
-    ovMsg.textContent = last
+    setByline(ovMsg, last
       ? "All " + LEVELS.length + " levels. You've run out of track — and excuses."
-      : pickQuip(att > 1 ? WIN_QUIPS_RETRY : WIN_QUIPS);
+      : pickQuip(att > 1 ? WIN_QUIPS_RETRY : WIN_QUIPS));
     ovBtn.textContent = last ? "Level Select" : "Next Level";
   }
   const LOSE_QUIPS = [
@@ -2046,7 +2112,7 @@
     if (i === _lastQuip) i = (i + 1) % LOSE_QUIPS.length;   // avoid repeating the last quip
     _lastQuip = i;
     ovTitle.textContent = LOSE_TITLES[(Math.random() * LOSE_TITLES.length) | 0];
-    ovMsg.textContent = LOSE_QUIPS[i];
+    setByline(ovMsg, LOSE_QUIPS[i]);
     ovBtn.textContent = "Retry";
     Sound.death();                  // a short sad jingle on the death screen
   }
@@ -2387,7 +2453,7 @@
     opts = opts || {};
     const s = cell;
     ctx.save();
-    rrect(x, y, s, s, s*0.16); ctx.clip();
+    rrect(x, y, s, s, tileR(s)); ctx.clip();
     if (opts.alpha != null) ctx.globalAlpha = opts.alpha;
     ctx.fillStyle = opts.fill || curTrack(); ctx.fillRect(x, y, s, s);   // body fills the cell edge-to-edge
     if (opts.grain !== false) grainFill(x, y, s, s, 0.7);                 // paper grain, like every other tile
@@ -2416,7 +2482,7 @@
     const s = cell, dragging = state.sliderDrag && state.sliderDrag.sl === sl;
     drawStraightPlatform(x, y, vertical, {});               // full-opacity platform tile (matches laid track)
     ctx.save();
-    rrect(x, y, s, s, s*0.16); ctx.clip();
+    rrect(x, y, s, s, tileR(s)); ctx.clip();
     if (dragging) { ctx.fillStyle = "rgba(255,255,255,0.14)"; ctx.fillRect(x, y, s, s); }   // lift highlight
     // grip dots so it reads as draggable
     const pulse = 0.5 + 0.5*Math.sin(ts/280);
@@ -2446,7 +2512,7 @@
       const by = horiz ? cy(b.r) : b.pos*cell;
       const dragging = state.blockDrag && state.blockDrag.b === b;
       paintWallInto(ctx, bx, by, s);
-      ctx.save(); rrect(bx, by, s, s, s*0.16); ctx.clip();
+      ctx.save(); rrect(bx, by, s, s, tileR(s)); ctx.clip();
       if (dragging) { ctx.fillStyle = "rgba(255,255,255,0.12)"; ctx.fillRect(bx, by, s, s); }
       const pulse = 0.5 + 0.5*Math.sin(ts/280);
       ctx.globalAlpha = 0.5 + 0.35*pulse; drawDragDots(bx + s/2, by + s/2, s); ctx.globalAlpha = 1;
@@ -2838,16 +2904,16 @@
   }
   function drawPlatformBody(n, S, fill) {
     ctx.save();
-    rrect(cx(n.c), cy(n.r), cell, cell, cell*0.16); ctx.clip();
+    rrect(cx(n.c), cy(n.r), cell, cell, tileR(cell)); ctx.clip();
     ctx.beginPath(); bodyPath(S); ctx.fillStyle = fill; ctx.fill();   // flat solid body to the tile edge
-    grainFill(cx(n.c), cy(n.r), cell, cell, 0.7);     // paper grain on the platform
+    grainFill(cx(n.c), cy(n.r), cell, cell, TILE.bodyGrain);   // paper grain on the platform
     ctx.restore();
   }
   function drawPlatformRail(n, S) {
     ctx.save();
-    rrect(cx(n.c), cy(n.r), cell, cell, cell*0.16); ctx.clip();
+    rrect(cx(n.c), cy(n.r), cell, cell, tileR(cell)); ctx.clip();
     ctx.lineJoin = "round"; ctx.lineCap = "round";
-    ctx.strokeStyle = curRail(); ctx.lineWidth = Math.max(3, cell*0.06);
+    ctx.strokeStyle = curRail(); ctx.lineWidth = Math.max(3, cell*TILE.railW);
     ctx.beginPath(); railPath(S); ctx.stroke();
     ctx.restore();
   }
@@ -2860,18 +2926,20 @@
     for (let k = 1; k < S.length; k++) ctx.lineTo(S[k].x, S[k].y);
   }
 
-  // Tuning for the leading tile's 3-way junction. The half of each option nearest the
-  // ENTRY edge is drawn separately from the half nearest its EXIT, so the track can read as
-  // committed where the runner is arriving and provisional where it might go. Edit these in
-  // junction-lab.html and paste the block back — never hand-patch one copy.
+  // Tuning for the leading tile's 3-way junction. Edit these in junction-lab.html and paste
+  // the block back — never hand-patch one copy.
+  //
+  // The three options are filled in ONE path and stroked in ONE stroke, which is what keeps
+  // the tile at a single flat opacity: they genuinely overlap each other near the centre, so
+  // any second fill at a second alpha builds up in the overlap and the tile goes blotchy.
+  // That is why there is one body alpha and one rail alpha rather than separate entry and
+  // exit values — see git history if the split is ever wanted back.
   const JUNCTION = {
-    entryBody: 0.42,     // body fill, entry half
-    exitBody:  0.42,     // body fill, the three exit halves
-    entryRail: 0.70,     // rail line, entry half
-    exitRail:  0.70,     // rail line, exit halves
-    arrow:     0.70,     // the little direction arrows outside the tile
-    railW:     0.06,     // rail thickness, fraction of a cell
-    grain:     0.40,     // paper grain over the whole tile
+    body:  0.42,     // body fill, all three options
+    rail:  0.70,     // rail line, all three options
+    arrow: 0.70,     // the little direction arrows outside the tile
+    railW: 0.06,     // rail thickness, fraction of a cell
+    grain: 0.40,     // paper grain over the whole tile
   };
   // the leading tile renders as a 3-way junction: three real platform pieces
   // oriented to the travel direction — a flat run forward, plus a curve each way
@@ -2884,25 +2952,18 @@
     // draw each option as an actual platform surface (straight for forward, arcs for the turns)
     const surfaces = exits.map(d => tileSurface(n, prev, { c:n.c + d.x, r:n.r + d.y }));
     const C = nodeCenter(n), h = cell*0.5;
-    // Split each option at its midpoint: the half by the entry edge, and the half by its
-    // exit. All three entry halves go down in ONE path and all three exit halves in another,
-    // so overlapping pieces still fill at a single alpha instead of stacking up.
-    const halves = surfaces.map(S => { const mid = Math.floor((S.length - 1)/2);
-                                       return { inn: S.slice(0, mid + 1), out: S.slice(mid) }; });
     ctx.save();
-    rrect(cx(n.c), cy(n.r), cell, cell, cell*0.16); ctx.clip();
-    ctx.beginPath(); for (const H of halves) bodyPath(H.out);
-    ctx.fillStyle = hexA(curTrack(), JUNCTION.exitBody); ctx.fill();
-    ctx.beginPath(); for (const H of halves) bodyPath(H.inn);
-    ctx.fillStyle = hexA(curTrack(), JUNCTION.entryBody); ctx.fill();
+    rrect(cx(n.c), cy(n.r), cell, cell, tileR(cell)); ctx.clip();
+    // one path, one fill — a single flat alpha with no build-up where the options overlap
+    ctx.beginPath(); for (const S of surfaces) bodyPath(S);
+    ctx.fillStyle = hexA(curTrack(), JUNCTION.body); ctx.fill();
     grainFill(cx(n.c), cy(n.r), cell, cell, JUNCTION.grain);
-    // rails (the top line of each path), flat & semi-transparent (one stroke = single alpha)
+    // rails (the top line of each path), likewise one stroke at one alpha
+    ctx.beginPath(); for (const S of surfaces) railPath(S);
     ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.strokeStyle = hexA(curRail(), JUNCTION.rail);
     ctx.lineWidth = Math.max(3, cell*JUNCTION.railW);
-    ctx.beginPath(); for (const H of halves) railPath(H.out);
-    ctx.strokeStyle = hexA(curRail(), JUNCTION.exitRail); ctx.stroke();
-    ctx.beginPath(); for (const H of halves) railPath(H.inn);
-    ctx.strokeStyle = hexA(curRail(), JUNCTION.entryRail); ctx.stroke();
+    ctx.stroke();
     ctx.restore();
 
     // small direction arrows just OUTSIDE the tile — only for directions you can actually build into
@@ -3191,7 +3252,7 @@
   // rounded, full-cell obstacle
   // metal barrier tile: brushed steel plate with a bevel, sheen and corner bolts
   function drawWall(c, r) {
-    const x = cx(c), y = cy(r), s = cell, rad = s*0.16;
+    const x = cx(c), y = cy(r), s = cell, rad = tileR(s);
     const g = ctx.createLinearGradient(x, y, x, y + s);
     g.addColorStop(0, "#697082"); g.addColorStop(0.5, "#5c6474");    // gentler top-to-bottom gradient
     g.addColorStop(1, "#4e5564");
@@ -3211,7 +3272,7 @@
   // laid across it along the shape's two connectors. Dim while idle; it warms to the
   // full track colour and throws a glow the moment the runner's path latches onto it.
   function drawPlatform(pf, ts) {
-    const x = cx(pf.c), y = cy(pf.r), s = cell, rad = s*0.16;
+    const x = cx(pf.c), y = cy(pf.r), s = cell, rad = tileR(s);
     const n = { c: pf.c, r: pf.r };
     const A = PF_VEC[pf.dirs[0]], B = PF_VEC[pf.dirs[1]];
     const S = tileSurface(n, { c: pf.c + A.x, r: pf.r + A.y }, { c: pf.c + B.x, r: pf.r + B.y });
@@ -3338,7 +3399,7 @@
     if (taps===2) return { cracks:[[F(v.F1,0.82),1],[F(v.F2),0.95]], dark:8, w:T[2] };
     return { cracks:[[F(v.F1),1],[F(v.F2),0.95],[F(v.F3),0.95],[F(v.F4),0.95]], dark:16, w:T[1] }; }
   function drawStone(c, r, ts, st) {
-    const x = cx(c), y = cy(r), s = cell, rad = s*0.16;
+    const x = cx(c), y = cy(r), s = cell, rad = tileR(s);
     const hp = st ? st.hp : 1, taps = Math.max(1, Math.min(3, hp));
     const v = _STONE_VARS[(st && st.vi != null ? st.vi : _sHash(c*7+3, r*13+5)) % _STONE_VARS.length];
     const cfg = _stoneCracks(v, taps), t = cfg.dark;
@@ -3465,6 +3526,14 @@
   // accumulates, wrapped to one tile so the number stays small. The SPEED eases in and out
   // — easing the offset instead would drag the quilt back to where it started.
   const BG_SCROLL_CPS = 0.22;                // cells/sec along x; y follows at 0.45 of it
+  // A sparse glisten passed OVER the quilt. Deliberately not baked into the repeat tile:
+  // that tile is one cycle of the pattern, so anything painted into it would glint in the
+  // same places in every repeat, and it could not move or breathe. This is a separate
+  // additive pass keyed to quilt-space patch coordinates, so each glint sticks to its own
+  // patch, travels with the scroll, and never repeats with the tile.
+  const BG_GLINT_RATE = 0.05;                // fraction of patches that ever catch the light
+  const BG_GLINT_MS   = 5200;                // one breath, per patch
+  const BG_GLINT_A    = 0.17;                // peak strength
   let bgScrollX = 0, bgScrollY = 0, bgScrollK = 0, bgScrollTs = 0;
   function bgScrollOffset(ts, active) {
     const dt = bgScrollTs ? Math.min(120, ts - bgScrollTs) : 0;
@@ -3491,11 +3560,38 @@
     ctx.fillStyle = patchPat;
     ctx.fillRect(0, 0, viewW + patchPeriodPx, viewH + patchPeriodPx);
     ctx.restore();
+    drawGlints(ts, off, w);
     if (T.style === "dotted") {                        // faint dot lattice over the quilt
       ctx.fillStyle = "rgba(255,255,255,0.05)"; const g = w*0.7;
       for (let a=0; a<viewW+g; a+=g) for (let bb=0; bb<viewH+g; bb+=g)
         { ctx.beginPath(); ctx.arc(a, bb, Math.max(1, w*0.06), 0, Math.PI*2); ctx.fill(); }
     }
+  }
+  // The glisten. Each patch on screen is identified by its position in the endless quilt,
+  // hashed once to decide whether it glints at all and to give it its own phase, so they
+  // breathe out of step. Additive, so it lifts the patch's own colour rather than washing it.
+  function drawGlints(ts, off, w) {
+    if (BG_GLINT_A <= 0) return;
+    const i0 = Math.floor(off.x / w), j0 = Math.floor(off.y / w);
+    const nx = Math.ceil(viewW / w) + 1, ny = Math.ceil(viewH / w) + 1;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) {
+      const qi = i0 + i, qj = j0 + j, h = bgHash(qi + 7, qj + 13);
+      if ((h % 1000) / 1000 >= BG_GLINT_RATE) continue;            // most patches never glint
+      const ph = ((h >>> 9) % 1000) / 1000;
+      const k = 0.5 + 0.5*Math.sin(ts/BG_GLINT_MS*Math.PI*2 + ph*Math.PI*2);
+      const a = Math.pow(k, 6) * BG_GLINT_A;                       // long dark, brief bloom
+      if (a < 0.004) continue;
+      const x = qi*w - off.x, y = qj*w - off.y, cxp = x + w/2, cyp = y + w/2;
+      const g = ctx.createRadialGradient(cxp, cyp, 0, cxp, cyp, w*0.62);
+      g.addColorStop(0,   "rgba(255,250,228," + a + ")");
+      g.addColorStop(0.55,"rgba(255,238,196," + (a*0.45) + ")");
+      g.addColorStop(1,   "rgba(255,238,196,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(x, y, w, w);                                    // clipped to its own patch
+    }
+    ctx.restore();
   }
   function drawBackground(ts, themeOverride) {
     if (!grainPattern) buildPaper();
@@ -3517,18 +3613,30 @@
     if (!grainPattern) return;
     ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = grainPattern; ctx.fillRect(x, y, w, h); ctx.restore();
   }
+  // The tile's own look, shared by every full-cell piece — the glass pane, the platform
+  // body and rail, walls, stone, fixed platforms, blocks. Corner radius especially: it was
+  // the same 0.16 written out in a dozen places, so a tile and the wall beside it could
+  // silently drift apart. Edit in tile-lab.html and paste the block back.
+  const TILE = {
+    radius:     0.075,   // corner radius, fraction of a cell
+    glassA:     0.50,    // the pane's flat fill alpha
+    glassGrain: 1.00,    // paper grain over the pane
+    bodyGrain:  1.00,    // paper grain over a laid platform body
+    railW:      0.085,   // running-surface rail thickness, fraction of a cell
+  };
+  const tileR = s => s * TILE.radius;
   function drawGlass(x, y, s) {
-    const r = s*0.16;
+    const r = tileR(s);
     ctx.save();
     rrect(x, y, s, s, r); ctx.clip();
-    ctx.fillStyle = "rgba(180,174,235,0.55)";        // flat matte paper fill (no gloss/sheen)
+    ctx.fillStyle = "rgba(180,174,235," + TILE.glassA + ")";   // flat matte paper fill (no gloss/sheen)
     ctx.fillRect(x, y, s, s);
-    grainFill(x, y, s, s, 0.9);                       // paper grain on the tile
+    grainFill(x, y, s, s, TILE.glassGrain);           // paper grain on the tile
     ctx.restore();
   }
 
   function drawFreeTile(x, y, ts, lifted) {
-    const s = cell, r = s*0.16;
+    const s = cell, r = tileR(s);
     if (lifted) { ctx.fillStyle = "rgba(5,4,13,0.4)"; rrect(x+6, y+9, s, s, r); ctx.fill(); }
     drawGlass(x, y, s);
     // 3x3 grid of dots in the centre — the "draggable" affordance
@@ -3556,7 +3664,7 @@
     c = clamp(c, 0, COLS-1); r = clamp(r, 0, ROWS-1);
     const pos = nearestFreeCell(d.tile, c, r); if (!pos) return;
     const pulse = 0.35 + 0.25*Math.sin(ts/220);
-    const rad = cell*0.16, x = cx(pos.c), y = cy(pos.r), s = cell;
+    const rad = tileR(cell), x = cx(pos.c), y = cy(pos.r), s = cell;
     ctx.globalAlpha = pulse;
     ctx.fillStyle = getVar("--free");
     rrect(x+6, y+6, s-12, s-12, rad-2); ctx.fill(); ctx.globalAlpha = 1;
@@ -3914,6 +4022,16 @@
     menuBody.appendChild(btn("Talismans", () => buildMenu("talismans")));
     menuBody.appendChild(toggle("Sound", !Sound.isMuted(), () => { Sound.unlock(); Sound.setMuted(!Sound.isMuted()); buildMenu(screen); }));
     menuBody.appendChild(toggle("Colorblind", colorblind, () => { colorblind = !colorblind; settings.colorblind = colorblind; saveSettings(); applyColorblind(); buildMenu(screen); }));
+    // Wipes the record of which mechanics have been taught, so the tutorial cards come back
+    // on the next level that uses one. Confirms in the label rather than in a dialog — it is
+    // harmless and instantly repeatable, so an "are you sure?" would just be in the way.
+    const rb = btn("Reset Tutorials", () => {
+      try { localStorage.removeItem(SEEN_KEY); } catch(_) {}
+      Sound.unlock();
+      rb.textContent = "Tutorials reset";
+      setTimeout(() => { if (rb.isConnected) rb.textContent = "Reset Tutorials"; }, 1300);
+    });
+    menuBody.appendChild(rb);
     const ver = document.createElement("div"); ver.className = "menu-ver"; ver.textContent = VERSION;
     menuBody.appendChild(ver);
   }
@@ -4409,9 +4527,9 @@
   function introDrawPlatform(cellObj, prev, next, m, content){
     const C = introCenter(cellObj, m), s = m.s, tx = C.x - s/2, ty = C.y - s/2;
     const S = introSurface(cellObj, prev, next, m);
-    ctx.fillStyle = "rgba(5,4,13,0.3)"; rrect(tx+3, ty+5, s, s, s*0.16); ctx.fill();   // drop shadow
+    ctx.fillStyle = "rgba(5,4,13,0.3)"; rrect(tx+3, ty+5, s, s, tileR(s)); ctx.fill();   // drop shadow
     ctx.save();
-    rrect(tx, ty, s, s, s*0.16); ctx.clip();
+    rrect(tx, ty, s, s, tileR(s)); ctx.clip();
     ctx.fillStyle = "rgba(180,174,235,0.55)"; ctx.fillRect(tx, ty, s, s);              // glass base
     grainFill(tx, ty, s, s, 0.85);
     if (content === false) { ctx.restore(); return; }

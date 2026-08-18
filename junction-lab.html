@@ -38,10 +38,11 @@
 <body>
 <header>
   <h1>Junction Lab</h1>
-  <p>The leading tile's 3-way junction. Each option is split at its midpoint: the half by the
-     <b>entry</b> edge (where the runner is arriving from) and the half by its <b>exit</b>.
-     Geometry, body and rail drawing are lifted from <code>index.html</code>, so what you see is
-     what the game draws. Tune, then <b>Copy JUNCTION block</b> and paste it over the block above
+  <p>The leading tile's 3-way junction. All three options are filled in one path and stroked in
+     one stroke, so the tile holds a single flat opacity — they overlap near the centre, and a
+     second fill at a second alpha builds up there and goes blotchy. Geometry, body and rail
+     drawing are lifted from <code>index.html</code>, so what you see is what the game draws.
+     Tune, then <b>Copy JUNCTION block</b> and paste it over the block above
      <code>drawJunction</code>.</p>
 </header>
 
@@ -50,14 +51,9 @@
 
   <div class="panel">
     <div class="grp">
-      <h2>Entry half</h2>
-      <div class="row"><label>body</label><input type="range" id="entryBody" min="0" max="1" step="0.01"><output></output></div>
-      <div class="row"><label>rail</label><input type="range" id="entryRail" min="0" max="1" step="0.01"><output></output></div>
-    </div>
-    <div class="grp">
-      <h2>Exit halves</h2>
-      <div class="row"><label>body</label><input type="range" id="exitBody" min="0" max="1" step="0.01"><output></output></div>
-      <div class="row"><label>rail</label><input type="range" id="exitRail" min="0" max="1" step="0.01"><output></output></div>
+      <h2>Track</h2>
+      <div class="row"><label>body</label><input type="range" id="body" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>rail</label><input type="range" id="rail" min="0" max="1" step="0.01"><output></output></div>
     </div>
     <div class="grp">
       <h2>Shared</h2>
@@ -90,13 +86,11 @@
 <script>
 // ---- the shipped defaults (mirror of index.html's JUNCTION) -------------------------
 const SHIPPED = {
-  entryBody: 0.42,
-  exitBody:  0.42,
-  entryRail: 0.70,
-  exitRail:  0.70,
-  arrow:     0.70,
-  railW:     0.06,
-  grain:     0.40,
+  body:  0.42,
+  rail:  0.70,
+  arrow: 0.70,
+  railW: 0.06,
+  grain: 0.40,
 };
 const J = Object.assign({}, SHIPPED);
 let DIR = "n", APPROACH = "straight", HUE = 45, CELL = 170, GUIDES = false;
@@ -219,21 +213,17 @@ function drawJunction(n, prev){
   const surfaces = exits.map(d => tileSurface(n, prev, { c:n.c+d.x, r:n.r+d.y }));
   const C = nodeCenter(n), h = cell*0.5;
 
-  const halves = surfaces.map(S => { const mid = Math.floor((S.length-1)/2);
-                                     return { inn: S.slice(0, mid+1), out: S.slice(mid) }; });
   ctx.save();
   rrect(cx(n.c), cy(n.r), cell, cell, cell*0.16); ctx.clip();
-  ctx.beginPath(); for (const H of halves) bodyPath(H.out);
-  ctx.fillStyle = hexA(curTrack(), J.exitBody); ctx.fill();
-  ctx.beginPath(); for (const H of halves) bodyPath(H.inn);
-  ctx.fillStyle = hexA(curTrack(), J.entryBody); ctx.fill();
+  // one path, one fill — a single flat alpha with no build-up where the options overlap
+  ctx.beginPath(); for (const S of surfaces) bodyPath(S);
+  ctx.fillStyle = hexA(curTrack(), J.body); ctx.fill();
   grainFill(cx(n.c), cy(n.r), cell, cell, J.grain);
+  ctx.beginPath(); for (const S of surfaces) railPath(S);
   ctx.lineJoin="round"; ctx.lineCap="round";
+  ctx.strokeStyle = hexA(curRail(), J.rail);
   ctx.lineWidth = Math.max(3, cell*J.railW);
-  ctx.beginPath(); for (const H of halves) railPath(H.out);
-  ctx.strokeStyle = hexA(curRail(), J.exitRail); ctx.stroke();
-  ctx.beginPath(); for (const H of halves) railPath(H.inn);
-  ctx.strokeStyle = hexA(curRail(), J.entryRail); ctx.stroke();
+  ctx.stroke();
   ctx.restore();
 
   ctx.fillStyle = hexA(curRail(), J.arrow);
@@ -251,9 +241,6 @@ function drawJunction(n, prev){
     ctx.strokeStyle = "rgba(255,120,120,0.85)"; ctx.setLineDash([5,5]); ctx.lineWidth = 1;
     ctx.strokeRect(cx(n.c), cy(n.r), cell, cell);
     // mark the split: the midpoint of each option
-    ctx.setLineDash([]); ctx.fillStyle = "rgba(255,120,120,0.95)";
-    for (const S of surfaces){ const m = S[Math.floor((S.length-1)/2)];
-      ctx.beginPath(); ctx.arc(m.x, m.y, 3, 0, Math.PI*2); ctx.fill(); }
     ctx.restore();
   }
 }
@@ -285,7 +272,7 @@ function render(){
 }
 
 // ---- wiring ------------------------------------------------------------------------
-const KEYS = ["entryBody","exitBody","entryRail","exitRail","arrow","railW","grain"];
+const KEYS = ["body","rail","arrow","railW","grain"];
 function syncOut(){
   const lines = KEYS.map(k => "    " + (k+":").padEnd(11) + " " + J[k].toFixed(k==="railW"?3:2) + ",");
   document.getElementById("out").value = "  const JUNCTION = {\n" + lines.join("\n") + "\n  };";
