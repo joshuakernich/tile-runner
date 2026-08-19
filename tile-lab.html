@@ -41,6 +41,8 @@
   <p>The tile's own shape and surface. <b>radius</b> drives every full-cell corner in the game at
      once — the glass pane, a laid platform, the wall plate, stone, fixed platforms, blocks — which
      is the point: they used to be a dozen separate <code>0.16</code>s that could drift apart.
+     The slab under the rail now has a <b>cross-section</b>: a beam in the track's own colour
+     hugging the running surface, and the ground beneath it in a darker shade of the same hue.
      Drawing is lifted from <code>index.html</code>. Tune, then <b>Copy TILE block</b> and paste it
      over the block above <code>drawGlass</code>.</p>
 </header>
@@ -58,6 +60,13 @@
       <div class="row"><label>glass grain</label><input type="range" id="glassGrain" min="0" max="1" step="0.01"><output></output></div>
       <div class="row"><label>body grain</label><input type="range" id="bodyGrain" min="0" max="1" step="0.01"><output></output></div>
       <div class="row"><label>rail width</label><input type="range" id="railW" min="0.01" max="0.18" step="0.005"><output></output></div>
+    </div>
+    <div class="grp">
+      <h2>Cross-section</h2>
+      <div class="row"><label>beam depth</label><input type="range" id="pathW" min="0" max="0.5" step="0.005"><output></output></div>
+      <div class="row"><label>ground shade</label><input type="range" id="underShade" min="-160" max="60" step="2"><output></output></div>
+      <div class="row"><label>beam shadow</label><input type="range" id="shadowW" min="0" max="0.15" step="0.005"><output></output></div>
+      <div class="row"><label>shadow dark</label><input type="range" id="shadowShade" min="-120" max="0" step="2"><output></output></div>
     </div>
     <div class="grp">
       <h2>Scene</h2>
@@ -81,16 +90,39 @@ const SHIPPED = {
   glassA:     0.50,
   glassGrain: 1.00,
   bodyGrain:  1.00,
-  railW:      0.085,
+  railW:      0.075,
+  pathW:      0.150,
+  underShade: -50,
+  shadowW:    0.015,
+  shadowShade: -16,
 };
 const T = Object.assign({}, SHIPPED);
 let HUE = 45, CELL = 130;
 
-const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+const cv = document.getElementById("cv");
+let ctx = cv.getContext("2d");
+const dpr = 1;                                   // the labs draw 1:1
+const jScratch = document.createElement("canvas");   // the junction composites here
 function hslHex(h,s,l){ s/=100;l/=100; const k=n=>(n+h/30)%12, a=s*Math.min(l,1-l);
   const f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));
   const to=x=>Math.round(x*255).toString(16).padStart(2,"0");
   return "#"+to(f(0))+to(f(8))+to(f(4)); }
+function shade(hex, amt){ const n=parseInt(hex.replace("#",""),16);
+  const cl=v=>Math.max(0,Math.min(255,v+amt));
+  return "rgb("+cl((n>>16)&255)+","+cl((n>>8)&255)+","+cl(n&255)+")"; }
+function shadeHex(hex, amt){ const n=parseInt(hex.replace("#",""),16);
+  const cl=v=>Math.max(0,Math.min(255,v+amt)); const to=v=>cl(v).toString(16).padStart(2,"0");
+  return "#"+to((n>>16)&255)+to((n>>8)&255)+to(n&255); }
+function hexA(hex,a){ const h=hex.replace("#",""), n=parseInt(h,16);
+  return "rgba("+((n>>16)&255)+","+((n>>8)&255)+","+(n&255)+","+a+")"; }
+// Mirror of the game's JUNCTION. The junction is shown here so the cross-section can be
+// judged on it too; its own alphas are tuned in junction-lab.html, not here.
+const JUNCTION = {
+  tileIn:  1.00,
+  tile:    0.32,
+  arrow:   0.70,
+  grain:   0.40,
+};
 const curTrack = () => hslHex(HUE,88,58);
 const curRail  = () => hslHex(HUE,94,83);
 
@@ -170,14 +202,124 @@ function drawGlass(x,y,s){
   grainFill(x,y,s,s,T.glassGrain); ctx.restore(); }
 function drawPlatformTile(n,prev,next){
   const S=tileSurface(n,prev,next);
+  // beam in the track colour hugging the surface, ground beneath it in a darker shade —
+  // the beam is a fat stroke clipped to the slab, so only its lower half survives
   ctx.save(); rrect(cx(n.c),cy(n.r),cell,cell,tileR(cell)); ctx.clip();
-  ctx.beginPath(); bodyPath(S, nodeCenter(n)); ctx.fillStyle=curTrack(); ctx.fill();
+  ctx.beginPath(); bodyPath(S, nodeCenter(n)); ctx.clip();
+  ctx.fillStyle = shade(curTrack(), T.underShade);
+  ctx.fillRect(cx(n.c),cy(n.r),cell,cell);
+  ctx.lineJoin="round"; ctx.lineCap="butt";
+  // shadow first as a wider stroke, beam laid over it — what shows below is shadowW deep
+  if (T.pathW > 0 && T.shadowW > 0){
+    ctx.strokeStyle = shade(curTrack(), T.underShade + T.shadowShade);
+    ctx.lineWidth = Math.max(1, cell*(T.pathW + T.shadowW)*2);
+    ctx.beginPath(); railPath(S); ctx.stroke();
+  }
+  if (T.pathW > 0){
+    ctx.strokeStyle = curTrack();
+    ctx.lineWidth = Math.max(1, cell*T.pathW*2);
+    ctx.beginPath(); railPath(S); ctx.stroke();
+  }
   grainFill(cx(n.c),cy(n.r),cell,cell,T.bodyGrain);
   ctx.restore();
   ctx.save(); rrect(cx(n.c),cy(n.r),cell,cell,tileR(cell)); ctx.clip();
   ctx.lineJoin="round"; ctx.lineCap="round";
   ctx.strokeStyle=curRail(); ctx.lineWidth=Math.max(3,cell*T.railW);
   ctx.beginPath(); railPath(S); ctx.stroke(); ctx.restore(); }
+const axisDir2 = (a,b) => ({ x:Math.sign(b.c-a.c), y:Math.sign(b.r-a.r) });
+// The beam and its shadow hang off the surface as BANDS here rather than fat strokes
+// clipped to the body. On a junction the three options' bodies overlap — a turn's body is
+// most of the cell — so a stroke clipped to their union leaks out above its own surface.
+// A band is exact, and all three go into one path so the overlaps don't build up.
+function surfaceBand(S, C, d) {
+  const h = cell/2, last = S.length - 1, mid = last >> 1;
+  const a = S[Math.max(0, mid-1)], b = S[Math.min(last, mid+1)];
+  let tx = b.x - a.x, ty = b.y - a.y; const m = Math.hypot(tx, ty) || 1; tx /= m; ty /= m;
+  const bx = -ty, by = tx;                             // the side the body hangs on
+  let off;
+  if (last === 2) {                                    // straight: parallel offset
+    off = S.map(P => ({ x:P.x + bx*d, y:P.y + by*d }));
+  } else {                                             // corner: a concentric arc
+    const O = { x:S[0].x + S[last].x - C.x, y:S[0].y + S[last].y - C.y };
+    const M = S[mid], inside = (O.x - M.x)*bx + (O.y - M.y)*by > 0;
+    const r = inside ? h - d : h + d;
+    off = S.map(P => { const ux = P.x-O.x, uy = P.y-O.y, L = Math.hypot(ux, uy) || 1;
+      return { x:O.x + ux/L*r, y:O.y + uy/L*r }; });
+  }
+  const loop = S.concat(off.slice().reverse());
+  let area = 0;                                        // same winding every time, or the
+  for (let k = 0; k < loop.length; k++) {              // overlaps cancel under nonzero fill
+    const p = loop[k], q = loop[(k+1) % loop.length]; area += p.x*q.y - q.x*p.y;
+  }
+  if (area < 0) loop.reverse();
+  ctx.moveTo(loop[0].x, loop[0].y);
+  for (let k = 1; k < loop.length; k++) ctx.lineTo(loop[k].x, loop[k].y);
+  ctx.closePath();
+}
+function drawJunction(n, prev){
+  const din = prev ? axisDir2(prev,n) : {x:0,y:-1};
+  const left={x:-din.y,y:din.x}, right={x:din.y,y:-din.x};
+  const exits=[din,left,right];
+  const surfaces = exits.map(d => tileSurface(n, prev, {c:n.c+d.x, r:n.r+d.y}));
+  const C = nodeCenter(n), h = cell*0.5;
+  const E = { x:C.x - din.x*h, y:C.y - din.y*h };
+  const fade = () => { const g=ctx.createRadialGradient(E.x,E.y,0,E.x,E.y,cell);
+    g.addColorStop(0,`rgba(255,255,255,${JUNCTION.tileIn})`);
+    g.addColorStop(1,`rgba(255,255,255,${JUNCTION.tile})`); return g; };
+  const track = curTrack();
+  // The tile is rendered OPAQUE off-screen and faded by ONE gradient at the very end.
+  // Drawing each layer at its own alpha meant the semi-transparent rail was blending with
+  // the glass pane and the backdrop rather than with the tile it belongs to, and every
+  // overlap read as a smudge. Now the rail only ever mixes with an opaque beam, and the
+  // finished tile fades as a single object.
+  const X = cx(n.c), Y = cy(n.r);
+  const DX = Math.floor(X*dpr) - 1, DY = Math.floor(Y*dpr) - 1;   // device-pixel aligned, so
+  const px = Math.ceil(cell*dpr) + 3;                             // the blit back is 1:1
+  if (jScratch.width !== px) { jScratch.width = jScratch.height = px; }
+  const g = jScratch.getContext("2d");
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, px, px);
+  g.setTransform(dpr, 0, 0, dpr, -DX, -DY);                       // same world coords as the board
+  const main = ctx; ctx = g;
+  try {
+    ctx.save();
+    rrect(X, Y, cell, cell, tileR(cell)); ctx.clip();
+    ctx.save();
+    ctx.beginPath(); for (const S of surfaces) bodyPath(S, C); ctx.clip();
+    ctx.fillStyle = shadeHex(track, T.underShade);
+    ctx.fillRect(X, Y, cell, cell);                               // the ground
+    if (T.pathW > 0 && T.shadowW > 0) {
+      ctx.fillStyle = shadeHex(track, T.underShade + T.shadowShade);
+      ctx.beginPath(); for (const S of surfaces) surfaceBand(S, C, cell*(T.pathW + T.shadowW)); ctx.fill();
+    }
+    if (T.pathW > 0) {
+      ctx.fillStyle = track;
+      ctx.beginPath(); for (const S of surfaces) surfaceBand(S, C, cell*T.pathW); ctx.fill();
+    }
+    grainFill(X, Y, cell, cell, JUNCTION.grain);
+    ctx.restore();                                                // out of the body clip
+    ctx.lineJoin = "round"; ctx.lineCap = "round";                 // the rail rides on top, opaque
+    ctx.strokeStyle = curRail();
+    ctx.lineWidth = Math.max(3, cell*T.railW);
+    ctx.beginPath(); for (const S of surfaces) railPath(S); ctx.stroke();
+    ctx.restore();
+    ctx.globalCompositeOperation = "destination-in";               // ...and only now, the fade
+    ctx.fillStyle = fade();
+    ctx.fillRect(X, Y, cell, cell);
+    ctx.globalCompositeOperation = "source-over";
+  } finally { ctx = main; }
+  ctx.drawImage(jScratch, DX/dpr, DY/dpr, px/dpr, px/dpr);
+
+  ctx.fillStyle = hexA(curRail(), JUNCTION.arrow);
+  const gap=cell*0.12, len=cell*0.11, w=cell*0.09;
+  for (const d of exits){
+    const tx=C.x+d.x*(h+gap+len), ty=C.y+d.y*(h+gap+len);
+    const bx=C.x+d.x*(h+gap),     by=C.y+d.y*(h+gap);
+    const px=-d.y, py=d.x;
+    ctx.beginPath(); ctx.moveTo(tx,ty);
+    ctx.lineTo(bx+px*w,by+py*w); ctx.lineTo(bx-px*w,by-py*w);
+    ctx.closePath(); ctx.fill();
+  }
+}
 function drawDragDots(fx,fy,s){
   const gap=s*0.16, rad=Math.max(1.5,s*0.035);
   ctx.fillStyle="#05040d";
@@ -204,11 +346,11 @@ function render(){
   // row 1: a straight, a corner, and the two meeting — the corner radius reads on the joins
   ORIGIN = { x: cv.width/2 - cell*2, y: 70 };
   drawGlass(cx(0),cy(0),cell); drawPlatformTile({c:0,r:0},{c:-1,r:0},{c:1,r:0});
-  drawGlass(cx(1),cy(0),cell); drawPlatformTile({c:1,r:0},{c:0,r:0},{c:2,r:0});
-  drawGlass(cx(2),cy(0),cell); drawPlatformTile({c:2,r:0},{c:1,r:0},{c:2,r:1});
-  drawGlass(cx(2),cy(1),cell); drawPlatformTile({c:2,r:1},{c:2,r:0},{c:3,r:1});
-  drawGlass(cx(3),cy(1),cell); drawPlatformTile({c:3,r:1},{c:2,r:1},{c:4,r:1});
-  label("laid track — straights, a corner, and the joins", cv.width/2, 56);
+  drawGlass(cx(1),cy(0),cell); drawPlatformTile({c:1,r:0},{c:0,r:0},{c:1,r:1});
+  drawGlass(cx(1),cy(1),cell); drawPlatformTile({c:1,r:1},{c:1,r:0},{c:2,r:1});
+  drawGlass(cx(2),cy(1),cell); drawPlatformTile({c:2,r:1},{c:1,r:1},{c:3,r:1});
+  drawGlass(cx(3),cy(1),cell); drawJunction({c:3,r:1},{c:2,r:1});   // the leading tile
+  label("laid track, ending in the junction — the cross-section rides both", cv.width/2, 56);
 
   // row 2: a free tile beside a wall plate, so the shared corner can be compared
   ORIGIN = { x: cv.width/2 - cell*1.6, y: 70 + cell*2 + 56 };
@@ -219,8 +361,8 @@ function render(){
 }
 
 // ---- wiring -------------------------------------------------------------------------
-const KEYS = ["radius","glassA","glassGrain","bodyGrain","railW"];
-const DP = { radius:3, glassA:2, glassGrain:2, bodyGrain:2, railW:3 };
+const KEYS = ["radius","glassA","glassGrain","bodyGrain","railW","pathW","underShade","shadowW","shadowShade"];
+const DP = { radius:3, glassA:2, glassGrain:2, bodyGrain:2, railW:3, pathW:3, underShade:0, shadowW:3, shadowShade:0 };
 function sync(){
   for (const k of KEYS){
     const el=document.getElementById(k); el.value=T[k];

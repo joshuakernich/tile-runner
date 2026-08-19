@@ -69,14 +69,15 @@ function runnerBlock(file, name) {
 head("JUNCTION block parity");
 {
   const game = runnerBlock("index.html", "JUNCTION");
-  const lab  = runnerBlock("junction-lab.html", "SHIPPED");
-  if (!game || !lab) bad("could not extract the JUNCTION block from index.html or junction-lab.html");
-  else {
+  // tile-lab draws a junction too, so it carries its own mirror of the block
+  for (const [file, name] of [["junction-lab.html", "SHIPPED"], ["tile-lab.html", "JUNCTION"]]) {
+    const lab = runnerBlock(file, name);
+    if (!game || !lab) { bad(`could not extract the JUNCTION block from index.html or ${file}`); continue; }
     const diff = [...new Set([...Object.keys(game), ...Object.keys(lab)])]
       .filter((k) => game[k] !== lab[k])
       .map((k) => `${k}: game=${game[k]} lab=${lab[k]}`);
-    if (diff.length) bad(`junction-lab differs from the game — ${diff.join("; ")}`);
-    else ok(`junction-lab matches the game (${Object.keys(game).length} keys)`);
+    if (diff.length) bad(`${file} differs from the game — ${diff.join("; ")}`);
+    else ok(`${file} matches the game (${Object.keys(game).length} keys)`);
   }
 }
 
@@ -86,14 +87,15 @@ head("JUNCTION block parity");
 head("TILE block parity");
 {
   const game = runnerBlock("index.html", "TILE");
-  const lab  = runnerBlock("tile-lab.html", "SHIPPED");
-  if (!game || !lab) bad("could not extract the TILE block from index.html or tile-lab.html");
-  else {
+  // junction-lab carries a mirror too — the junction rides on the same cross-section
+  for (const [file, name] of [["tile-lab.html", "SHIPPED"], ["junction-lab.html", "TILE"]]) {
+    const lab = runnerBlock(file, name);
+    if (!game || !lab) { bad(`could not extract the TILE block from index.html or ${file}`); continue; }
     const diff = [...new Set([...Object.keys(game), ...Object.keys(lab)])]
       .filter((k) => game[k] !== lab[k])
       .map((k) => `${k}: game=${game[k]} lab=${lab[k]}`);
-    if (diff.length) bad(`tile-lab differs from the game — ${diff.join("; ")}`);
-    else ok(`tile-lab matches the game (${Object.keys(game).length} keys)`);
+    if (diff.length) bad(`${file} differs from the game — ${diff.join("; ")}`);
+    else ok(`${file} matches the game (${Object.keys(game).length} keys)`);
   }
 }
 

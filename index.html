@@ -136,6 +136,12 @@
   #overlay.lose p { font-size:var(--body); line-height:1.5; color:#fff1ea; margin-bottom:26px; }
   /* NEXT LEVEL button matches the death-screen RETRY button */
   #overlay.lose #ov-btn, #overlay.win #ov-btn { font-size:var(--btn); padding:16px 40px; }
+  /* the between-levels way into the shop: present but plainly secondary to Next Level.
+     Only on the clear screen — after a fall the one thing you want is to go again. */
+  #ov-shop { display:none; margin:14px auto 0; font-size:12px; letter-spacing:2px;
+    padding:9px 22px; background:transparent; color:var(--dim); border-color:var(--grid-line);
+    box-shadow:2px 2px 0 var(--shadow); }
+  #overlay.win #ov-shop { display:block; }
 
   /* "Add to Home Screen" prompt (mobile browsers only) */
   #a2hs {
@@ -159,7 +165,10 @@
   .cb { --accent:#d55e00; --goal:#009e73; --runner:#56b4e9; }
 
   #menu {
-    position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+    /* A centred flex child that outgrows its scroll container gets clipped at the TOP and
+       can't be scrolled back to — which the shop, being the tallest screen here, does.
+       safe-centring keeps it centred while it fits and pins it to the top once it doesn't. */
+    position:fixed; inset:0; display:none; align-items:safe center; justify-content:center;
     background:radial-gradient(ellipse 84% 70% at 50% 50%, rgba(5,4,13,0.58) 0%, rgba(5,4,13,0.48) 48%, rgba(5,4,13,0.14) 100%);
     z-index:30; padding:22px; overflow:auto;
   }
@@ -198,17 +207,24 @@
                         text-align:center; hyphens:none; }
   .tal-grid .tal.locked span { color:var(--dim); }
   .tal-grid .tal.on { border-color:var(--goal); box-shadow:0 0 0 2px var(--goal) inset; }
-  /* the character map: a picture of the runner with a label wired to each changeable part */
-  .char-map { position:relative; width:300px; height:300px; margin:0 auto 6px; }
-  .char-map canvas { display:block; width:300px; height:300px; }
+  /* the shop: a picture of the runner as he is, then a tab per category under him */
+  .shop-fig { width:100%; max-width:300px; margin:0 auto; }
+  .shop-fig canvas { display:block; width:100%; height:auto; }
+  /* the wallet, sitting on the picture rather than costing a line of its own */
+  .shop-purse { display:flex; align-items:center; justify-content:center; gap:7px;
+    margin:-4px auto 8px; font-size:13px; letter-spacing:1px; color:var(--track); font-weight:900; }
+  .shop-purse canvas { width:17px; height:17px; }
+  .shop-purse i { font-style:normal; color:var(--dim); font-weight:700; letter-spacing:1px; }
   /* #menu-body button sets width:100%, and an id beats a class — so these have to match it */
-  #menu-body .char-map .hot { position:absolute; width:27%; padding:4px 3px; display:flex;
-    flex-direction:column; gap:0; line-height:1.1; border-width:2px;
-    box-shadow:2px 2px 0 var(--shadow); text-align:center; }
-  #menu-body .char-map .hot b { font-size:9px; letter-spacing:1px; color:var(--track); }
-  #menu-body .char-map .hot span { font-size:9px; letter-spacing:0.3px; color:var(--dim);
-    text-transform:none; font-weight:700; }
-  #menu-body .char-map .hot:active { transform:translate(2px,2px); box-shadow:none; }
+  .shop-tabs { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin-bottom:2px; }
+  #menu-body .shop-tabs button { width:100%; padding:8px 2px; font-size:10px; letter-spacing:1px;
+    border-width:2px; box-shadow:2px 2px 0 var(--shadow); }
+  #menu-body .shop-tabs button.on { border-color:var(--goal); color:var(--goal);
+    box-shadow:0 0 0 2px var(--goal) inset; }
+  #menu-body .shop-tabs button:active { transform:translate(2px,2px); box-shadow:none; }
+  /* what the tab is showing, and what of it is on */
+  .shop-worn { text-align:center; font-size:11px; letter-spacing:0.5px; color:var(--dim);
+    text-transform:none; font-weight:700; margin:1px 0 2px; }
   /* can't afford it yet — a short shake rather than a dialog */
   .tal-grid .tal.nope { animation:nope 0.4s; border-color:#ff8f74; }
   @keyframes nope { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-4px);}
@@ -257,6 +273,7 @@
     <div id="ov-score"></div>
     <p id="ov-msg"></p>
     <button id="ov-btn">Continue</button>
+    <button id="ov-shop" class="ghost">Shop</button>
   </div>
 </div>
 
@@ -276,28 +293,28 @@
   // way to the key and the exit.
   // 50-level campaign: each new mechanic is introduced on its own level (see `intro`).
   const LEVELS = [
-    {"start":[2,5],"init":[[2,4],[2,3]],"goal":[2,0],"cols":5,"rows":6,"intro":["recycle","flag","coin"],"walls":[],"cps":0.8,"coins":[[1,1],[4,2],[1,4]]},
-    {"start":[0,7],"init":[[0,6],[0,5]],"goal":[4,4],"cols":5,"rows":8,"intro":["turn"],"walls":[],"cps":0.8,"coins":[[2,1],[0,3],[3,4]]},
-    {"start":[0,0],"init":[[0,1],[0,2]],"goal":[5,7],"cols":6,"rows":8,"intro":["offscreen"],"walls":[],"cps":0.8,"talismans":[[5,2,"ember"]],"coins":[[4,1],[2,4],[0,6]]},
-    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["wall"],"walls":[[0,3],[1,3],[2,3],[4,3]],"cps":0.8,"coins":[[1,1],[1,4],[2,6]]},
-    {"start":[1,12],"init":[[1,11],[1,10]],"goal":[1,0],"cols":5,"rows":13,"intro":[],"walls":[[0,2],[1,2],[2,2],[4,2],[0,5],[2,5],[3,5],[4,5],[0,8],[1,8],[2,8],[4,8]],"cps":0.8,"coins":[[4,1],[0,6],[0,9],[2,11]]},
-    {"start":[0,3],"init":[[1,3],[2,3]],"goal":[1,6],"cols":9,"rows":9,"intro":[],"walls":[[4,0],[4,2],[4,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[8,4],[4,5],[4,6],[4,8]],"cps":0.8,"talismans":[[8,1,"tide"]],"coins":[[0,1],[8,2],[0,6],[7,7]]},
-    {"start":[4,7],"init":[[4,6],[4,5]],"goal":[1,7],"cols":8,"rows":8,"intro":[],"walls":[[5,0],[2,1],[0,2],[2,2],[3,2],[4,2],[5,2],[7,2],[2,3],[5,3],[2,4],[5,4],[1,5],[2,5],[5,5],[6,5],[2,6],[2,7]],"cps":0.8,"coins":[[7,0],[4,3],[3,4],[0,7]]},
-    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["block"],"walls":[[0,2],[1,2],[3,2],[4,2]],"blocks":[{"axis":"h","r":3,"lo":2,"hi":3,"pos0":2}],"cps":0.8,"coins":[[4,1],[1,4],[2,6]]},
-    {"start":[3,15],"init":[[3,14],[3,13]],"goal":[1,0],"cols":5,"rows":16,"intro":[],"walls":[[0,2],[1,2],[2,2],[4,2],[0,7],[2,7],[3,7],[4,7],[0,10],[1,10],[3,10],[4,10]],"blocks":[{"axis":"h","r":11,"lo":2,"hi":3,"pos0":2},{"axis":"h","r":6,"lo":0,"hi":1,"pos0":1},{"axis":"h","r":3,"lo":3,"hi":4,"pos0":3}],"cps":0.8,"coins":[[2,3],[4,5],[0,11],[1,13]]},
-    {"start":[0,9],"init":[[1,9],[2,9]],"goal":[6,9],"cols":9,"rows":11,"intro":[],"walls":[[4,0],[4,1],[4,3],[4,4],[0,5],[1,5],[3,5],[4,5],[5,5],[7,5],[8,5],[4,6],[4,7],[4,8],[4,9],[4,10]],"blocks":[{"axis":"h","r":6,"lo":5,"hi":6,"pos0":6},{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"h","r":6,"lo":2,"hi":3,"pos0":2},{"axis":"v","c":3,"lo":1,"hi":2,"pos0":2}],"cps":0.8,"talismans":[[8,0,"cog"]],"coins":[[5,1],[5,3],[8,6],[8,8]]},
-    {"start":[1,3],"init":[[1,2],[1,1]],"goal":[13,11],"cols":14,"rows":14,"intro":[],"walls":[[4,0],[8,0],[4,1],[8,2],[4,3],[8,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[10,4],[11,4],[13,4],[5,5],[9,5],[9,6],[5,7],[5,8],[9,8],[0,9],[1,9],[3,9],[4,9],[5,9],[6,9],[7,9],[8,9],[9,9],[10,9],[11,9],[12,9],[13,9],[4,10],[8,10],[8,11],[4,12],[4,13],[8,13]],"blocks":[{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"v","c":9,"lo":0,"hi":1,"pos0":1},{"axis":"h","r":5,"lo":11,"hi":12,"pos0":12},{"axis":"v","c":8,"lo":6,"hi":7,"pos0":7},{"axis":"v","c":4,"lo":5,"hi":6,"pos0":6},{"axis":"h","r":10,"lo":1,"hi":2,"pos0":2},{"axis":"v","c":5,"lo":10,"hi":11,"pos0":11},{"axis":"v","c":9,"lo":11,"hi":12,"pos0":12}],"cps":0.8,"coins":[[0,2],[1,5],[3,7],[0,10],[0,12]]},
-    {"start":[2,7],"init":[[2,6],[2,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["saw"],"walls":[],"hazards":[{"kind":"saw","axis":"h","r":3,"lo":0,"hi":4,"speed":4000,"phase":0}],"cps":0.8,"coins":[[4,1],[4,3],[4,5]]},
-    {"start":[2,12],"init":[[2,11],[2,10]],"goal":[2,0],"cols":5,"rows":13,"intro":[],"walls":[],"hazards":[{"kind":"saw","axis":"h","r":8,"lo":0,"hi":4,"speed":3600,"phase":0},{"kind":"saw","axis":"h","r":5,"lo":0,"hi":4,"speed":4400,"phase":0},{"kind":"saw","axis":"h","r":2,"lo":0,"hi":4,"speed":5200,"phase":0}],"cps":0.8,"coins":[[1,2],[0,5],[3,7],[1,10]]},
-    {"start":[1,8],"init":[[1,7],[1,6]],"goal":[6,0],"cols":7,"rows":9,"intro":[],"walls":[[0,0],[1,1],[3,4],[5,7],[6,8]],"hazards":[{"kind":"saw","axis":"v","c":3,"lo":0,"hi":3,"speed":4000,"phase":0},{"kind":"saw","axis":"v","c":3,"lo":5,"hi":8,"speed":4000,"phase":0},{"kind":"saw","axis":"h","r":4,"lo":0,"hi":2,"speed":4000,"phase":0},{"kind":"saw","axis":"h","r":4,"lo":4,"hi":6,"speed":4000,"phase":0}],"cps":0.8,"coins":[[5,1],[1,3],[4,4],[0,6]]},
-    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[3,0],"cols":7,"rows":8,"intro":["key","door"],"walls":[[0,3],[1,3],[2,3],[4,3],[5,3],[6,3]],"doors":[[3,3,"#ffd24a"]],"keys":[[6,7,"#ffd24a"]],"cps":0.8,"coins":[[4,1],[1,4],[0,6]]},
-    {"start":[0,0],"init":[[1,0],[2,0]],"goal":[6,9],"cols":8,"rows":11,"intro":[],"walls":[[0,2],[2,2],[3,2],[4,2],[4,3],[5,3],[6,3],[7,3],[0,5],[1,5],[2,5],[3,5],[2,7],[3,7],[4,7],[5,7],[7,7],[4,8],[4,9],[4,10]],"doors":[[1,2,"#ffd24a"],[6,7,"#c77dff"]],"keys":[[6,1,"#ffd24a"],[2,9,"#c77dff"]],"cps":0.8,"talismans":[[7,0,"sun"]],"coins":[[5,1],[7,4],[1,7],[3,9]]},
-    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["stone"],"walls":[[0,3],[1,3],[2,3],[4,3]],"stone":[[3,3,2]],"cps":0.8,"coins":[[2,1],[1,4],[2,6]]},
-    {"start":[1,0],"init":[[1,1],[1,2]],"goal":[3,10],"cols":7,"rows":12,"intro":[],"walls":[[3,0],[3,1],[3,3],[0,4],[1,4],[2,4],[3,4],[5,4],[6,4],[3,5],[6,5],[1,6],[3,6],[4,6],[6,6],[1,7],[6,7],[1,8],[2,8],[3,8],[4,8],[5,8],[6,8]],"stone":[[3,2,2],[4,4,2],[5,6,2],[2,6,2],[0,8,2]],"cps":0.8,"coins":[[2,1],[0,3],[5,9],[6,10]]},
-    {"start":[4,9],"init":[[4,8],[4,7]],"goal":[1,0],"cols":6,"rows":10,"intro":["platform"],"walls":[[0,2],[1,2],[2,2],[3,2],[3,4],[0,5],[2,5],[3,5],[4,5],[5,5]],"platforms":[[1,5,"ns"],[3,3,"ew"]],"cps":0.8,"coins":[[0,1],[0,4],[5,6],[3,8]]},
-    {"start":[2,1],"init":[[3,1],[4,1]],"goal":[5,8],"cols":7,"rows":10,"intro":[],"walls":[[0,3],[1,3],[3,3],[4,3],[5,3],[6,3],[4,4],[1,5],[4,5],[1,6],[4,7],[0,8],[4,8],[4,9]],"platforms":[[2,3,"ns"],[1,4,"ew"],[1,7,"sw"],[4,6,"ew"]],"cps":0.8,"talismans":[[0,0,"shard"]],"coins":[[1,1],[6,2],[6,5],[1,8]]},
+    {"start":[2,6],"init":[[2,5],[2,4]],"goal":[2,0],"cols":5,"rows":7,"intro":["recycle","flag","coin"],"cps":0.8,"walls":[],"coins":[[1,1],[4,2]]},
+    {"start":[0,7],"init":[[0,6],[0,5]],"goal":[4,3],"cols":5,"rows":8,"intro":["turn"],"cps":0.8,"walls":[],"coins":[[3,4],[1,4],[2,4],[1,3],[2,3],[3,3]]},
+    {"start":[0,0],"init":[[0,1],[0,2]],"goal":[5,7],"cols":6,"rows":8,"intro":["offscreen"],"cps":0.8,"walls":[],"talismans":[[5,2,"ember"]],"coins":[[4,1],[2,4],[0,6]]},
+    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["wall"],"cps":0.8,"walls":[[0,3],[1,3],[2,3],[4,3]],"coins":[[1,1],[1,4],[2,6]]},
+    {"start":[1,12],"init":[[1,11],[1,10]],"goal":[1,0],"cols":5,"rows":13,"intro":[],"cps":0.8,"walls":[[0,2],[1,2],[2,2],[4,2],[0,5],[2,5],[3,5],[4,5],[0,8],[1,8],[2,8],[4,8]],"coins":[[4,1],[0,6],[0,9],[2,11]]},
+    {"start":[0,3],"init":[[1,3],[2,3]],"goal":[1,6],"cols":9,"rows":9,"intro":[],"cps":0.8,"walls":[[4,0],[4,2],[4,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[8,4],[4,5],[4,6],[4,8]],"talismans":[[8,1,"tide"]],"coins":[[0,1],[8,2],[0,6],[7,7]]},
+    {"start":[4,7],"init":[[4,6],[4,5]],"goal":[1,7],"cols":8,"rows":8,"intro":[],"cps":0.8,"walls":[[5,0],[2,1],[0,2],[2,2],[3,2],[4,2],[5,2],[7,2],[2,3],[5,3],[2,4],[5,4],[1,5],[2,5],[5,5],[6,5],[2,6],[2,7]],"coins":[[7,0],[4,3],[3,4],[0,7]]},
+    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["block"],"cps":0.8,"walls":[[0,2],[1,2],[3,2],[4,2]],"blocks":[{"axis":"h","r":3,"lo":2,"hi":3,"pos0":2}],"coins":[[4,1],[1,4],[2,6]]},
+    {"start":[3,15],"init":[[3,14],[3,13]],"goal":[1,0],"cols":5,"rows":16,"intro":[],"cps":0.8,"walls":[[0,2],[1,2],[2,2],[4,2],[0,7],[2,7],[3,7],[4,7],[0,10],[1,10],[3,10],[4,10]],"blocks":[{"axis":"h","r":11,"lo":2,"hi":3,"pos0":2},{"axis":"h","r":6,"lo":0,"hi":1,"pos0":1},{"axis":"h","r":3,"lo":3,"hi":4,"pos0":3}],"coins":[[2,3],[4,5],[0,11],[1,13]]},
+    {"start":[0,9],"init":[[1,9],[2,9]],"goal":[6,9],"cols":9,"rows":11,"intro":[],"cps":0.8,"walls":[[4,0],[4,1],[4,3],[4,4],[0,5],[1,5],[3,5],[4,5],[5,5],[7,5],[8,5],[4,6],[4,7],[4,8],[4,9],[4,10]],"blocks":[{"axis":"h","r":6,"lo":5,"hi":6,"pos0":6},{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"h","r":6,"lo":2,"hi":3,"pos0":2},{"axis":"v","c":3,"lo":1,"hi":2,"pos0":2}],"talismans":[[8,0,"cog"]],"coins":[[5,1],[5,3],[8,6],[8,8]]},
+    {"start":[1,3],"init":[[1,2],[1,1]],"goal":[13,11],"cols":14,"rows":14,"intro":[],"cps":0.8,"walls":[[4,0],[8,0],[4,1],[8,2],[4,3],[8,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[10,4],[11,4],[13,4],[5,5],[9,5],[9,6],[5,7],[5,8],[9,8],[0,9],[1,9],[3,9],[4,9],[5,9],[6,9],[7,9],[8,9],[9,9],[10,9],[11,9],[12,9],[13,9],[4,10],[8,10],[8,11],[4,12],[4,13],[8,13]],"blocks":[{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"v","c":9,"lo":0,"hi":1,"pos0":1},{"axis":"h","r":5,"lo":11,"hi":12,"pos0":12},{"axis":"v","c":8,"lo":6,"hi":7,"pos0":7},{"axis":"v","c":4,"lo":5,"hi":6,"pos0":6},{"axis":"h","r":10,"lo":1,"hi":2,"pos0":2},{"axis":"v","c":5,"lo":10,"hi":11,"pos0":11},{"axis":"v","c":9,"lo":11,"hi":12,"pos0":12}],"coins":[[1,5],[3,7],[0,10],[0,12]]},
+    {"start":[2,7],"init":[[2,6],[2,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["saw"],"cps":0.8,"walls":[],"hazards":[{"kind":"saw","axis":"h","r":3,"lo":0,"hi":4,"speed":4000,"phase":0}],"coins":[[4,1],[4,5],[2,3]]},
+    {"start":[2,12],"init":[[2,11],[2,10]],"goal":[2,0],"cols":5,"rows":13,"intro":[],"cps":0.8,"walls":[],"hazards":[{"phase":0,"kind":"saw","axis":"h","r":8,"lo":0,"hi":4,"speed":3600},{"phase":0,"kind":"saw","axis":"h","r":5,"lo":0,"hi":4,"speed":4400},{"phase":0,"kind":"saw","axis":"h","r":2,"lo":0,"hi":4,"speed":5200}],"coins":[[2,2],[4,8],[3,5],[1,5],[0,8]]},
+    {"start":[1,8],"init":[[1,7],[1,6]],"goal":[6,0],"cols":7,"rows":9,"intro":[],"cps":0.8,"walls":[[0,0],[1,1],[3,4],[5,7],[6,8]],"hazards":[{"phase":0,"kind":"saw","axis":"v","c":3,"lo":0,"hi":3,"speed":4000},{"phase":0,"kind":"saw","axis":"v","c":3,"lo":5,"hi":8,"speed":4000},{"phase":0,"kind":"saw","axis":"h","r":4,"lo":0,"hi":2,"speed":4000},{"phase":0,"kind":"saw","axis":"h","r":4,"lo":4,"hi":6,"speed":4000}],"coins":[[5,4],[3,1],[1,4],[3,7]]},
+    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[3,0],"cols":7,"rows":8,"intro":["key","door"],"cps":0.8,"walls":[[0,3],[1,3],[2,3],[4,3],[5,3],[6,3]],"doors":[[3,3,"#ffd24a"]],"keys":[[6,7,"#ffd24a"]],"coins":[[4,1],[1,4],[0,6]]},
+    {"start":[0,0],"init":[[1,0],[2,0]],"goal":[6,9],"cols":8,"rows":11,"intro":[],"cps":0.8,"walls":[[0,2],[2,2],[3,2],[4,2],[4,3],[5,3],[6,3],[7,3],[0,5],[1,5],[2,5],[3,5],[2,7],[3,7],[4,7],[5,7],[7,7],[4,8],[4,9],[4,10]],"doors":[[1,2,"#ffd24a"],[6,7,"#c77dff"]],"keys":[[6,1,"#ffd24a"],[2,9,"#c77dff"]],"talismans":[[7,0,"sun"]],"coins":[[5,1],[7,4],[1,7],[3,9]]},
+    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["stone"],"cps":0.8,"walls":[[0,3],[1,3],[2,3],[4,3]],"stone":[[3,3,2]],"coins":[[2,1],[1,4],[2,6]]},
+    {"start":[1,0],"init":[[1,1],[1,2]],"goal":[3,10],"cols":7,"rows":12,"intro":[],"cps":0.8,"walls":[[3,0],[3,1],[3,3],[0,4],[1,4],[2,4],[3,4],[5,4],[6,4],[3,5],[6,5],[1,6],[3,6],[4,6],[6,6],[1,7],[6,7],[1,8],[2,8],[3,8],[4,8],[5,8],[6,8]],"stone":[[3,2,2],[4,4,2],[5,6,2],[2,6,2],[0,8,2]],"coins":[[2,1],[0,3],[5,9],[6,10]]},
+    {"start":[4,9],"init":[[4,8],[4,7]],"goal":[1,0],"cols":6,"rows":10,"intro":["platform"],"cps":0.8,"walls":[[0,2],[1,2],[2,2],[3,2],[3,4],[0,5],[2,5],[3,5],[4,5],[5,5]],"platforms":[[1,5,"ns"],[3,3,"ew"]],"coins":[[0,1],[0,4],[5,6],[3,8]]},
+    {"start":[2,1],"init":[[3,1],[4,1]],"goal":[5,8],"cols":7,"rows":10,"intro":[],"cps":0.8,"walls":[[0,3],[1,3],[3,3],[4,3],[5,3],[6,3],[4,4],[1,5],[4,5],[1,6],[4,7],[0,8],[4,8],[4,9]],"platforms":[[2,3,"ns"],[1,4,"ew"],[1,7,"sw"],[4,6,"ew"]],"talismans":[[0,0,"shard"]],"coins":[[1,1],[6,2],[6,5],[1,8]]},
     {"start":[0,8],"init":[[1,8],[2,8]],"goal":[1,2],"cols":14,"rows":10,"intro":[],"cps":0.8,"walls":[[11,0],[8,1],[9,1],[11,2],[3,3],[11,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[11,4],[13,4],[11,5],[4,6],[8,6],[11,6],[4,7],[5,7],[7,7],[8,7],[11,7],[4,8],[8,8],[4,9],[8,9]],"platforms":[[6,7,"ns"],[10,1,"ne"],[4,5,"ew"],[8,5,"ew"],[10,4,"ns"],[12,4,"ns"],[11,1,"ew"],[7,0,"es"],[7,1,"ns"],[7,2,"ns"],[7,3,"wn"],[3,0,"es"],[3,1,"ns"],[3,2,"wn"]],"coins":[[0,1],[9,2],[13,5],[1,7],[13,8]]},
-    {"start":[1,8],"init":[[1,7],[1,6]],"goal":[7,8],"cols":10,"rows":10,"intro":[],"cps":0.8,"walls":[[5,1],[6,1],[8,1],[9,1],[5,2],[9,2],[5,3],[9,3],[0,4],[1,4],[2,4],[5,4],[9,4],[5,5],[9,5],[5,6],[9,6],[5,7],[9,7],[5,8],[9,8],[5,9],[9,9]],"blocks":[{"axis":"v","c":4,"pos0":4,"lo":3,"hi":5},{"axis":"v","c":3,"pos0":4,"lo":3,"hi":5},{"axis":"h","r":3,"pos0":8,"lo":6,"hi":8},{"axis":"h","r":2,"pos0":7,"lo":6,"hi":8},{"axis":"h","r":4,"pos0":7,"lo":6,"hi":8},{"axis":"h","r":5,"pos0":6,"lo":6,"hi":8}],"stone":[[7,1,2]],"coins":[[1,2],[6,4],[8,6],[4,8]]},
+    {"start":[1,8],"init":[[1,7],[1,6]],"goal":[7,8],"cols":10,"rows":10,"intro":[],"cps":0.8,"walls":[[5,1],[6,1],[8,1],[9,1],[5,2],[9,2],[5,3],[9,3],[0,4],[1,4],[2,4],[5,4],[9,4],[5,5],[9,5],[5,6],[9,6],[5,7],[9,7],[5,8],[9,8],[5,9],[9,9]],"blocks":[{"axis":"v","c":4,"pos0":4,"lo":3,"hi":5},{"axis":"v","c":3,"pos0":4,"lo":3,"hi":5},{"axis":"h","r":3,"pos0":8,"lo":6,"hi":8},{"axis":"h","r":2,"pos0":7,"lo":6,"hi":8},{"axis":"h","r":4,"pos0":7,"lo":6,"hi":8},{"axis":"h","r":5,"pos0":6,"lo":6,"hi":8}],"stone":[[7,1,2]],"coins":[[6,4],[3,5],[4,5],[0,0],[1,1]]},
     {"start":[2,9],"init":[[2,8],[2,7]],"goal":[2,0],"cols":5,"rows":10,"intro":[],"cps":0.8,"walls":[],"stone":[[0,4,2],[1,4,2],[2,4,2],[3,4,2],[4,4,2],[4,3,2],[3,3,2],[2,3,2],[1,3,2],[0,3,2],[0,2,2],[1,2,2],[2,2,2],[3,2,2],[0,5,2],[1,5,2],[2,5,2],[3,5,2],[4,5,2],[4,2,2]],"talismans":[[4,7,"sprig"]],"coins":[[1,1],[4,6],[1,8]]},
     {"start":[1,3],"init":[[1,2],[1,1]],"goal":[12,6],"cols":14,"rows":8,"intro":[],"cps":0.8,"walls":[],"hazards":[{"phase":0.07,"kind":"saw","axis":"v","c":3,"lo":0,"hi":7,"speed":4000},{"phase":0.14,"kind":"saw","axis":"v","c":4,"lo":0,"hi":7,"speed":4000},{"phase":0.21,"kind":"saw","axis":"v","c":5,"lo":0,"hi":7,"speed":4000},{"phase":0.43,"kind":"saw","axis":"v","c":8,"lo":0,"hi":7,"speed":4000},{"phase":0.36,"kind":"saw","axis":"v","c":9,"lo":0,"hi":7,"speed":4000},{"kind":"saw","axis":"v","c":10,"lo":0,"hi":7,"speed":4000,"phase":0.29}],"coins":[[13,1],[3,3],[6,4],[8,5],[11,6]]},
   ];
@@ -328,6 +345,7 @@
     el.innerHTML = escHtml(w.slice(0, cut).join(" ")) + "<br>" + escHtml(w.slice(cut).join(" "));
   }
   const ovBtn = document.getElementById("ov-btn");
+  const ovShop = document.getElementById("ov-shop");
   const elScore = document.getElementById("score");
   const ovStars = document.getElementById("ov-stars");
   const ovScore = document.getElementById("ov-score");
@@ -344,10 +362,9 @@
   const CAM_LERP = 0.009;
   // Slack, in CELLS, that the camera may travel past the outer edge of the board. Without
   // it the camera stops dead on the last row/column and the edge tiles sit welded to the
-  // frame; a sliver of overshoot lets the backdrop breathe around the board. The top gets
-  // twice the others — it is the edge the runner drives toward, so it is the one you look at.
-  const CAM_EDGE_PAD = 0.05;                  // left / right / bottom
-  const CAM_TOP_PAD  = 0.10;                  // top
+  // frame; a sliver of overshoot lets the backdrop breathe around the board. Every edge gets
+  // the same slack — the top used to get double, which just read as a lopsided board.
+  const CAM_EDGE_PAD = 0.05;                  // all four edges
   const TRACK_T = 0.44;        // platform thickness as fraction of cell (hangs below centre)
   const SAMPLE_D = 0.42;       // tangent smoothing window (path-param units)
   const FALL_G = 0.0022, FALL_MS = 850;   // gravity fall on lose
@@ -612,21 +629,48 @@
       g.gain.exponentialRampToValueAtTime(0.0006, t + 0.4);
       o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.45);
     }
-    // Coin pickup: a quick bright two-note ping.
+    // Coin pickup: silver rather than gold. A stack of high sine partials struck together
+    // and left to ring at different lengths is what a struck metal thing actually does —
+    // the top ones die first and the shimmer is what is left. A whisper of filtered noise
+    // on the attack gives it the chime's "tick", and everything goes through the reverb send.
     function coin() {
       if (muted || !ac || ac.state !== "running") return;
       const t0 = ac.currentTime;
-      [19, 24].forEach((s, i) => {
-        const t = t0 + i * 0.06, freq = BASE * Math.pow(2, s / 12);
+      // inharmonic partials, the way a bell or triangle rings — not a neat octave stack
+      const PART = [[24, 1.00, 0.9], [31, 0.62, 1.5], [36, 0.48, 1.1], [40, 0.34, 2.0],
+                    [43, 0.26, 1.7], [48, 0.20, 2.4], [50.4, 0.14, 2.9]];
+      for (const [semi, amp, ring] of PART) {
+        const t = t0 + Math.random()*0.006;                  // a hair of spread = one strike, not seven
         const o = ac.createOscillator(), g = ac.createGain();
-        o.type = "square";
-        o.frequency.setValueAtTime(freq, t);
+        o.type = "sine"; o.frequency.setValueAtTime(BASE * Math.pow(2, semi/12), t);
         g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.28, t + 0.005);
-        g.gain.exponentialRampToValueAtTime(0.0006, t + 0.14);
-        o.connect(g); g.connect(master);
-        o.start(t); o.stop(t + 0.16);
+        g.gain.exponentialRampToValueAtTime(0.13*amp, t + 0.004);
+        g.gain.exponentialRampToValueAtTime(0.0004, t + 0.10 + 0.55*ring);
+        o.connect(g); g.connect(master); g.connect(sendBus);
+        o.start(t); o.stop(t + 0.16 + 0.6*ring);
+      }
+      // a rising sparkle riding on top, so the whole thing lifts rather than just decays
+      [31, 38, 43, 50].forEach((semi, i) => {
+        const t = t0 + 0.03 + i*0.035;
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "triangle"; o.frequency.setValueAtTime(BASE * Math.pow(2, semi/12), t);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.075, t + 0.004);
+        g.gain.exponentialRampToValueAtTime(0.0004, t + 0.22);
+        o.connect(g); g.connect(master); g.connect(sendBus);
+        o.start(t); o.stop(t + 0.26);
       });
+      if (noiseBuf) {                                         // the strike itself
+        const t = t0;
+        const src = ac.createBufferSource(); src.buffer = noiseBuf;
+        const hp = ac.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 5200;
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.05, t + 0.003);
+        g.gain.exponentialRampToValueAtTime(0.0004, t + 0.09);
+        src.connect(hp); hp.connect(g); g.connect(master); g.connect(sendBus);
+        src.start(t); src.stop(t + 0.12);
+      }
     }
     // Key pickup: a bright rising three-note sparkle.
     function key() {
@@ -722,9 +766,60 @@
       const t = ac.currentTime;
       const src = ac.createBufferSource(); src.buffer = noiseBuf;
       const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 0.8;
-      bp.frequency.setValueAtTime(520, t); bp.frequency.exponentialRampToValueAtTime(1300, t + 0.12);
-      const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.13, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0006, t + 0.17);
-      src.connect(bp); bp.connect(g); g.connect(master); src.start(t); src.stop(t + 0.22);
+      bp.frequency.setValueAtTime(420, t); bp.frequency.exponentialRampToValueAtTime(1700, t + 0.14);
+      const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.34, t + 0.010); g.gain.exponentialRampToValueAtTime(0.0006, t + 0.20);
+      src.connect(bp); bp.connect(g); g.connect(master); src.start(t); src.stop(t + 0.24);
+      const o = ac.createOscillator(), og = ac.createGain();      // a low body under the scrape,
+      o.type = "triangle";                                        // so it carries over the music
+      o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(96, t + 0.15);
+      og.gain.setValueAtTime(0.0001, t); og.gain.exponentialRampToValueAtTime(0.16, t + 0.012);
+      og.gain.exponentialRampToValueAtTime(0.0006, t + 0.19);
+      o.connect(og); og.connect(master); o.start(t); o.stop(t + 0.22);
+    }
+    // the stop at the end of the rail: a hard wooden clack, no scrape
+    function clack(){
+      if (muted || !ac || ac.state !== "running") return;
+      const t = ac.currentTime;
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = "square";
+      o.frequency.setValueAtTime(880, t); o.frequency.exponentialRampToValueAtTime(150, t + 0.05);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.30, t + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0006, t + 0.09);
+      o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.11);
+      if (noiseBuf) {                                             // the knock's transient
+        const src = ac.createBufferSource(); src.buffer = noiseBuf;
+        const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 2100; bp.Q.value = 1.2;
+        const ng = ac.createGain();
+        ng.gain.setValueAtTime(0.0001, t); ng.gain.exponentialRampToValueAtTime(0.20, t + 0.002);
+        ng.gain.exponentialRampToValueAtTime(0.0006, t + 0.055);
+        src.connect(bp); bp.connect(ng); ng.connect(master); src.start(t); src.stop(t + 0.08);
+      }
+    }
+    // ---- UI ----------------------------------------------------------------------
+    // Every button in the game makes this noise. Short, dry, no reverb send: it is a
+    // control surface, not part of the world, so it must not sound like it is in the room.
+    function tap(){
+      if (muted || !ac || ac.state !== "running") return;
+      const t = ac.currentTime;
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = "square";
+      o.frequency.setValueAtTime(620, t); o.frequency.exponentialRampToValueAtTime(360, t + 0.035);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.14, t + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0006, t + 0.06);
+      o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.08);
+    }
+    // the heavier version, for a button that commits to something (buy, start, continue)
+    function tapBig(){
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime;
+      [12, 19].forEach((semi, i) => {
+        const t = t0 + i*0.045;
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "triangle"; o.frequency.setValueAtTime(BASE * Math.pow(2, semi/12), t);
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.20, t + 0.004);
+        g.gain.exponentialRampToValueAtTime(0.0006, t + 0.16);
+        o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.18);
+      });
     }
     // a continuous saw whir whose volume tracks the runner's proximity (silent beyond 2 tiles → peak within 1)
     let sawOsc = null, sawGain = null, sawLfo = null;
@@ -736,16 +831,89 @@
       sawLfo = ac.createOscillator(); const lg = ac.createGain(); sawLfo.frequency.value = 34; lg.gain.value = 70; sawLfo.connect(lg); lg.connect(sawOsc.frequency);
       sawOsc.start(); sawLfo.start();
     }
+    // A choir "aah" that swells as the runner nears a coin. Two detuned saws through a pair
+    // of fixed formant peaks is the cheap, convincing way to say "voice" — the formants are
+    // what the ear reads as a vowel, and a slow vibrato is what stops it reading as an organ.
+    // Same shape as the saw drone: one voice, created once, gain follows proximity.
+    let voxOsc = null, voxGain = null, voxVib = null;
+    function ensureVoxDrone(){
+      if (voxOsc || !ac) return;
+      voxGain = ac.createGain(); voxGain.gain.value = 0;
+      voxGain.connect(master); voxGain.connect(sendBus);            // wet — it should sound distant
+      const mix = ac.createGain(); mix.gain.value = 0.5; mix.connect(voxGain);
+      for (const [f, q, amp] of [[720, 7, 1.0], [1180, 9, 0.7], [2600, 11, 0.28]]) {
+        const bp = ac.createBiquadFilter(); bp.type = "bandpass";
+        bp.frequency.value = f; bp.Q.value = q;
+        const gg = ac.createGain(); gg.gain.value = amp;
+        bp.connect(gg); gg.connect(mix); (ensureVoxDrone.taps = ensureVoxDrone.taps || []).push(bp);
+      }
+      voxOsc = [];
+      for (const det of [-4, 3]) {                                  // two, slightly apart = a section
+        const o = ac.createOscillator(); o.type = "sawtooth";
+        o.frequency.value = BASE * Math.pow(2, 24/12); o.detune.value = det*6;
+        for (const bp of ensureVoxDrone.taps) o.connect(bp);
+        o.start(); voxOsc.push(o);
+      }
+      voxVib = ac.createOscillator(); const vg = ac.createGain();   // the vibrato
+      voxVib.frequency.value = 5.2; vg.gain.value = 5.5;
+      voxVib.connect(vg); for (const o of voxOsc) vg.connect(o.detune);
+      voxVib.start();
+    }
+    function coinProximity(p){
+      if (muted || !ac || ac.state !== "running") { if (voxGain) voxGain.gain.value = 0; return; }
+      ensureVoxDrone();
+      const k = Math.max(0, Math.min(1, p));
+      voxGain.gain.setTargetAtTime(k*k * 0.075, ac.currentTime, 0.10);   // squared: only really sings up close
+      for (const o of voxOsc) o.frequency.setTargetAtTime(              // and lifts in pitch as he closes
+        BASE * Math.pow(2, (24 + 7*k)/12), ac.currentTime, 0.14);
+    }
     function sawProximity(p){
       if (muted || !ac || ac.state !== "running") { if (sawGain) sawGain.gain.value = 0; return; }
       ensureSawDrone();
       const g = Math.max(0, Math.min(1, p)) * 0.13;               // peak whir gain
       sawGain.gain.setTargetAtTime(g, ac.currentTime, 0.06);      // smooth swell/fade
     }
+    // ---- pause-screen music ------------------------------------------------------
+    // The board's arrangement is driven by cleared tiles, so a paused game is silent — which
+    // makes the menu feel like the game crashed. This is its own thing: the level's own chord
+    // loop, taken slow and soft, as a pad with a lazy arpeggio over it. Scheduled a bar at a
+    // time on the audio clock (a setInterval only decides WHEN to schedule, never when a note
+    // sounds), so it stays in time even if the main thread stalls behind a menu rebuild.
+    let pauseTimer = null, pauseAt = 0, pauseBar = 0;
+    const PAUSE_BEAT = 0.62;                              // seconds — about half the game's pace
+    function pauseTick(){
+      if (!ac || muted) return;
+      const horizon = ac.currentTime + 1.2;
+      while (pauseAt < horizon) {
+        const chord = CHORDS[pauseBar % CHORDS.length];
+        const t = pauseAt, bar = PAUSE_BEAT*4;
+        for (const semi of chord.tones)                   // the pad: whole bar, very soft
+          voice(t, semi - 12, "sine", bar*1.05, 0.085, bar*0.35, true);
+        voice(t, chord.root - 24, "triangle", bar*0.9, 0.075, 0.05, false);   // bass
+        const arp = [0, 2, 1, 2];                         // a lazy figure over the top
+        for (let k = 0; k < 4; k++)
+          voice(t + PAUSE_BEAT*k + PAUSE_BEAT*0.5, chord.tones[arp[k]] + 12,
+                "sine", PAUSE_BEAT*1.6, 0.055, 0.03, true, true);
+        pauseAt += bar; pauseBar++;
+      }
+    }
+    function pauseMusic(on){
+      if (!on) {
+        if (pauseTimer) { clearInterval(pauseTimer); pauseTimer = null; }
+        return;
+      }
+      if (pauseTimer || !ac || ac.state !== "running" || muted) return;
+      pauseAt = ac.currentTime + 0.08; pauseBar = 0;
+      pauseTick();
+      pauseTimer = setInterval(pauseTick, 400);
+    }
     function resetMelody() { step = 0; }
-    function setMuted(m) { muted = !!m; if (m && sawGain) sawGain.gain.value = 0; }
+    function setMuted(m) { muted = !!m;
+      if (m) { if (sawGain) sawGain.gain.value = 0; if (voxGain) voxGain.gain.value = 0; pauseMusic(false); } }
     function isMuted() { return muted; }
-    return { unlock, clearTile, smash, win, lose, fall, death, boost, slow, coin, key, doorOpen, slide, sawProximity, introGather, introFlash, setSong, setTempo, resetMelody, setMuted, isMuted };
+    return { unlock, clearTile, smash, win, lose, fall, death, boost, slow, coin, key, doorOpen,
+             slide, clack, tap, tapBig, sawProximity, coinProximity, pauseMusic,
+             introGather, introFlash, setSong, setTempo, resetMelody, setMuted, isMuted };
   })();
 
   // ---------- State -------------------------------------------------------
@@ -769,7 +937,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v6.8";                    // shown on the title & pause screens
+  const VERSION = "v6.9";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -898,13 +1066,35 @@
     return { x, y, w, h };
   }
 
+  // A wide bench of them. Each is a body colour and the ink its eyes are drawn in — dark
+  // eyes on a pale body, pale eyes on a dark one, or the reading falls apart.
   const SKIN_COLOURS = [
-    { id:"classic", name:"Classic", cost:0,   body:"#bfe6ff", ink:"#17263f" },
-    { id:"ember",   name:"Ember",   cost:60,  body:"#ffb693", ink:"#3d1a10" },
-    { id:"moss",    name:"Moss",    cost:60,  body:"#b6e3a8", ink:"#17331a" },
-    { id:"orchid",  name:"Orchid",  cost:120, body:"#e4b6ff", ink:"#2c1140" },
-    { id:"ink",     name:"Ink",     cost:200, body:"#5b6480", ink:"#e9eeff" },
-    { id:"gold",    name:"Gold",    cost:400, body:"#ffd77a", ink:"#3b2a05" },
+    { id:"classic",  name:"Classic",  cost:0,   body:"#bfe6ff", ink:"#17263f" },
+    { id:"ember",    name:"Ember",    cost:60,  body:"#ffb693", ink:"#3d1a10" },
+    { id:"moss",     name:"Moss",     cost:60,  body:"#b6e3a8", ink:"#17331a" },
+    { id:"butter",   name:"Butter",   cost:60,  body:"#ffeaa0", ink:"#3f3308" },
+    { id:"blush",    name:"Blush",    cost:60,  body:"#ffc9d6", ink:"#41152a" },
+    { id:"sky",      name:"Sky",      cost:60,  body:"#a9d4ff", ink:"#122744" },
+    { id:"mint",     name:"Mint",     cost:80,  body:"#a9edd2", ink:"#0e3a2c" },
+    { id:"apricot",  name:"Apricot",  cost:80,  body:"#ffd0a1", ink:"#452408" },
+    { id:"lilac",    name:"Lilac",    cost:80,  body:"#d6c8ff", ink:"#241548" },
+    { id:"sand",     name:"Sand",     cost:80,  body:"#e6d8bb", ink:"#3b3018" },
+    { id:"orchid",   name:"Orchid",   cost:120, body:"#e4b6ff", ink:"#2c1140" },
+    { id:"coral",    name:"Coral",    cost:120, body:"#ff9d8a", ink:"#4a1410" },
+    { id:"lagoon",   name:"Lagoon",   cost:120, body:"#7fd8d0", ink:"#0b3330" },
+    { id:"limeade",  name:"Limeade",  cost:120, body:"#d6f07a", ink:"#2b3a06" },
+    { id:"cherry",   name:"Cherry",   cost:180, body:"#e8506b", ink:"#ffe6ea" },
+    { id:"cobalt",   name:"Cobalt",   cost:180, body:"#4a72e0", ink:"#e6ecff" },
+    { id:"jade",     name:"Jade",     cost:180, body:"#2fa06e", ink:"#e6fff2" },
+    { id:"plum",     name:"Plum",     cost:180, body:"#7a3f9d", ink:"#f4e6ff" },
+    { id:"rust",     name:"Rust",     cost:200, body:"#b5551f", ink:"#ffe9d6" },
+    { id:"ink",      name:"Ink",      cost:200, body:"#5b6480", ink:"#e9eeff" },
+    { id:"charcoal", name:"Charcoal", cost:250, body:"#31343f", ink:"#dfe4f5" },
+    { id:"bone",     name:"Bone",     cost:250, body:"#f4f1e6", ink:"#2a2a2f" },
+    { id:"copper",   name:"Copper",   cost:300, body:"#d98b4a", ink:"#3d1f06" },
+    { id:"gold",     name:"Gold",     cost:400, body:"#ffd77a", ink:"#3b2a05" },
+    { id:"silver",   name:"Silver",   cost:400, body:"#d9dfe8", ink:"#22262e" },
+    { id:"neon",     name:"Neon",     cost:500, body:"#c6ff2e", ink:"#1b2600" },
   ];
   SKIN_COLOURS.forEach(c => c.swatch = (g,S) => swatchBust(g, S, c.body, c.ink));
 
@@ -930,7 +1120,9 @@
   ];
   HATS.forEach(h => { if (h.id === "none") return;
     h.swatch = (g,S) => { const b = swatchBust(g,S,"#bfe6ff","#17263f");
-      g.save(); g.translate(S/2, 0); h.draw(g, S, b.w, b.y, h.col); g.restore(); }; });
+      g.save(); g.translate(S/2, 0);                       // HAT_SCALE, same as in play
+      g.translate(0, b.y); g.scale(HAT_SCALE, HAT_SCALE); g.translate(0, -b.y);
+      h.draw(g, S, b.w, b.y, h.col); g.restore(); }; });
 
   // Nyan-style ribbons: a band of parallel stripes laid along the runner's recent path,
   // exactly as deep as his body. Stored outermost-first; the drawing offsets each stripe
@@ -948,18 +1140,82 @@
       for (let i=0;i<n;i++){ g.fillStyle = t.cols[i];
         g.fillRect(S*0.06, y0 + i*sw, S/2 - b.w*0.30 - S*0.06, sw); } }; });
 
-  const CAPES = [
-    { id:"none", name:"None", cost:0, col:null, swatch:(g,S)=>swatchBust(g,S,"#bfe6ff","#17263f") },
-    { id:"crimson", name:"Crimson", cost:150, col:"#c2323f" },
-    { id:"teal",    name:"Teal",    cost:150, col:"#2f8f9d" },
-    { id:"royal",   name:"Royal",   cost:300, col:"#4b3fbf" },
+  // SWAGGER — the way he runs. Every field is a multiplier or an addition on top of the
+  // RUNNER tuning rather than a replacement for it, so retuning the runner in the lab still
+  // moves all five styles together instead of leaving four of them behind.
+  //   lean  extra body tilt, radians (negative = leaning back)
+  //   bob / swing / lift  scale the stock rise, stride reach and foot lift
+  //   hop   one big bounce per stride, fraction of a cell
+  //   hover a constant height off the track, fraction of a cell
+  //   spin  radians per ms of continuous roll
+  //   legs  false hides them entirely
+  const SWAGGERS = [
+    { id:"classic", name:"Classic",   cost:0 },
+    { id:"lean",    name:"Lean Back", cost:120, lean:-0.30, bob:0.70, swing:1.20, lift:1.15 },
+    { id:"hop",     name:"Hopping",   cost:120, hop:0.15, bob:0.15, swing:0.40, lift:0.35 },
+    { id:"float",   name:"Floating",  cost:220, legs:false, hover:0.11, bob:0.35, swing:0, lift:0 },
+    { id:"roll",    name:"Rolling",   cost:220, legs:false, spin:0.0055, hover:0.015, bob:0 },
   ];
-  CAPES.forEach(c => { if (!c.col) return;
-    c.swatch = (g,S) => { const b = swatchBust(g,S,"#bfe6ff","#17263f");
-      g.save(); g.fillStyle = c.col; g.beginPath();
-      g.moveTo(S/2 - b.w*0.30, b.y + b.h*0.12);
-      g.quadraticCurveTo(S/2 - b.w*1.30, b.y + b.h*0.55, S/2 - b.w*0.85, b.y + b.h*1.15);
-      g.lineTo(S/2 - b.w*0.10, b.y + b.h*0.72); g.closePath(); g.fill(); g.restore(); }; });
+  // Each swatch is the same bust in the pose that style would hold it in — a still frame
+  // reads the difference far better than a name does.
+  SWAGGERS.forEach(w => { w.swatch = (g,S) => {
+    g.save(); g.translate(S/2, 0);
+    if (w.lean)  g.rotate(w.lean*0.8);
+    if (w.spin)  g.rotate(0.7);
+    if (w.hover || w.hop) g.translate(0, -S*(w.hover||w.hop)*0.8);
+    g.translate(-S/2, 0);
+    const b = swatchBust(g, S, "#bfe6ff", "#17263f");
+    if (w.legs !== false) {                       // a suggestion of legs under the body
+      g.strokeStyle = "#bfe6ff"; g.lineWidth = S*0.05; g.lineCap = "round";
+      const rch = S*0.09*(w.swing == null ? 1 : w.swing);
+      g.beginPath();
+      g.moveTo(S/2 - b.w*0.20, b.y + b.h); g.lineTo(S/2 - b.w*0.20 - rch, b.y + b.h + S*0.11);
+      g.moveTo(S/2 + b.w*0.20, b.y + b.h); g.lineTo(S/2 + b.w*0.20 + rch, b.y + b.h + S*0.11);
+      g.stroke();
+    }
+    g.restore();
+  }; });
+
+  // SHOES — drawn at each foot, in the runner's local frame, +x being travel. The foot
+  // itself is the anchor, so they follow the stride and the lift for free.
+  const SHOES = [
+    { id:"none", name:"Barefoot", cost:0, draw:null, swatch:(g,S)=>swatchBust(g,S,"#bfe6ff","#17263f") },
+    { id:"sneaker", name:"Sneakers", cost:90, col:"#f2f4ff",
+      draw(g,s,col){ g.fillStyle = col;
+        rr2(g, -s*0.030, -s*0.026, s*0.085, s*0.045, s*0.018); g.fill();
+        g.fillStyle = "rgba(23,38,63,0.35)"; g.fillRect(-s*0.030, s*0.007, s*0.085, s*0.012); } },
+    { id:"boot", name:"Boots", cost:140, col:"#7a4a22",
+      draw(g,s,col){ g.fillStyle = col;
+        rr2(g, -s*0.032, -s*0.055, s*0.070, s*0.075, s*0.014); g.fill();
+        g.fillStyle = "#2c1a0b"; g.fillRect(-s*0.036, s*0.010, s*0.090, s*0.014); } },
+    { id:"skate", name:"Skates", cost:200, col:"#e8506b",
+      draw(g,s,col){ g.fillStyle = col;
+        rr2(g, -s*0.030, -s*0.048, s*0.078, s*0.058, s*0.016); g.fill();
+        g.fillStyle = "#d9dfe8"; g.fillRect(-s*0.034, s*0.012, s*0.088, s*0.008);
+        g.beginPath(); g.arc(-s*0.014, s*0.028, s*0.016, 0, 7);
+        g.arc( s*0.032, s*0.028, s*0.016, 0, 7); g.fill(); } },
+    { id:"glow", name:"Glowsteps", cost:320, col:"#c6ff2e",
+      draw(g,s,col){ g.fillStyle = "#2b2740";
+        rr2(g, -s*0.030, -s*0.030, s*0.082, s*0.050, s*0.016); g.fill();
+        g.fillStyle = col; g.fillRect(-s*0.034, s*0.012, s*0.090, s*0.016);
+        g.globalAlpha = 0.35; g.fillRect(-s*0.048, s*0.024, s*0.118, s*0.020); g.globalAlpha = 1; } },
+    { id:"gilded", name:"Gilded", cost:420, col:"#ffd24a",
+      draw(g,s,col){ g.fillStyle = col;
+        rr2(g, -s*0.032, -s*0.034, s*0.086, s*0.056, s*0.018); g.fill();
+        g.fillStyle = "rgba(255,255,255,0.65)"; g.fillRect(-s*0.026, -s*0.026, s*0.070, s*0.010); } },
+  ];
+  SHOES.forEach(sh => { if (!sh.draw) return;
+    sh.swatch = (g,S) => { const b = swatchBust(g,S,"#bfe6ff","#17263f");
+      g.strokeStyle = "#bfe6ff"; g.lineWidth = S*0.05; g.lineCap = "round";
+      g.beginPath();
+      g.moveTo(S/2 - b.w*0.20, b.y + b.h); g.lineTo(S/2 - b.w*0.24, b.y + b.h + S*0.10);
+      g.moveTo(S/2 + b.w*0.20, b.y + b.h); g.lineTo(S/2 + b.w*0.24, b.y + b.h + S*0.10);
+      g.stroke();
+      for (const fx of [-b.w*0.24, b.w*0.24]) {
+        g.save(); g.translate(S/2 + fx, b.y + b.h + S*0.10); g.scale(2.3, 2.3);
+        sh.draw(g, S, sh.col); g.restore();
+      }
+    }; });
 
   const TRACKS = [
     { id:"level", name:"Level", cost:0, track:null, rail:null,
@@ -980,9 +1236,10 @@
   const LOOK = [
     { key:"colour", label:"Colour",  items:SKIN_COLOURS },
     { key:"hat",    label:"Hat",     items:HATS },
-    { key:"trail",  label:"Trail",   items:TRAILS },
-    { key:"cape",   label:"Cape",    items:CAPES },
-    { key:"track",  label:"Track",   items:TRACKS },
+    { key:"trail",   label:"Trail",   items:TRAILS },
+    { key:"swagger", label:"Swagger", items:SWAGGERS },
+    { key:"shoes",   label:"Shoes",   items:SHOES },
+    { key:"track",   label:"Track",   items:TRACKS },
   ];
   const lookWorn = k => (settings.look && settings.look[k]) || LOOK.find(l=>l.key===k).items[0].id;
   const lookItem = k => { const cat = LOOK.find(l=>l.key===k);
@@ -1652,7 +1909,7 @@
   const camPad = () => cell * CAM_EDGE_PAD;
   function camClampY(py) {
     if (worldH <= viewH) return -(viewH - worldH) / 2;             // whole level fits — centre it
-    return clamp(py - viewH/2, -cell*CAM_TOP_PAD, worldH - viewH + camPad());
+    return clamp(py - viewH/2, -camPad(), worldH - viewH + camPad());
   }
   function camClampX(px) {
     const pad = camPad();
@@ -2047,7 +2304,6 @@
         Sound.clearTile();                                  // play a tone as the tile clears
         spawnLight(node.c, node.r);                         // burst of light from the cleared tile
         scoreClear(i);                                      // score, combo, juice on the beat
-        wallet.tiles++;                                     // and a tile in your pocket to spend
         if (node.tileId != null) {
           const t = s.tiles[node.tileId];
           if (t) {
@@ -2320,6 +2576,9 @@
     else if (state.status === "campan") { /* runner not formed yet — flag fly-in */ }
     else drawRunner(ts);
     drawHazards(ts);
+    // Coins last of everything on the board. They hover off the surface, so a saw or a
+    // block passing over one used to swallow it and the player would never know it was there.
+    for (const ck of state.coinCells) { const [c,r] = ck.split(",").map(Number); drawCoin((c+0.5)*cell, (r+0.5)*cell, ts); }
 
     if (state.drag) {
       const d = state.drag;
@@ -2371,6 +2630,44 @@
     ctx.font = smallF;                                                // unit in a smaller dim suffix
     ctx.fillStyle = "rgba(214,218,240,0.66)";
     ctx.fillText(unit, m + padX + lw + gap + vw, midY + 1);
+    ctx.restore();
+    drawCoinHud(m, m + boxH + Math.round(fs*0.35), fs);
+  }
+  // Coin tally, sitting under the speed plate: this level's haul over what's out there,
+  // then the wallet it feeds. Coins are the only currency, so the running total is the
+  // number that actually matters — it is what the shop spends.
+  function drawCoinHud(x, y, fs) {
+    const s = state, total = (s.coinsGot || 0) + s.coinCells.size;
+    if (!total) return;
+    const f2 = Math.round(fs*0.72);
+    const here = (s.coinsGot || 0) + "/" + total, bank = wallet.tiles + " TILES";
+    ctx.save();
+    ctx.textBaseline = "middle";
+    const bigF = "900 " + f2 + "px " + UI_FONT, smallF = "700 " + Math.round(f2*0.62) + "px " + UI_FONT;
+    ctx.font = bigF;   const hw = ctx.measureText(here).width;
+    ctx.font = smallF; const bw = ctx.measureText(bank).width;
+    const padX = Math.round(f2*0.55), gap = Math.round(f2*0.45), ic = Math.round(f2*0.86);
+    const boxW = padX*2 + ic + gap + hw + gap + bw, boxH = Math.round(f2*1.6);
+    rrect(x, y, boxW, boxH, 0);
+    ctx.fillStyle = "rgba(10,8,22,0.62)"; ctx.fill();
+    ctx.lineWidth = Math.max(1, f2*0.05); ctx.strokeStyle = "rgba(255,255,255,0.10)"; ctx.stroke();
+    const midY = y + boxH/2;
+    coinGlyph(x + padX + ic/2, midY, ic);
+    ctx.textAlign = "left";
+    ctx.font = bigF;   ctx.fillStyle = "#ffd24a"; ctx.fillText(here, x + padX + ic + gap, midY);
+    ctx.font = smallF; ctx.fillStyle = "rgba(214,218,240,0.66)";
+    ctx.fillText(bank, x + padX + ic + gap + hw + gap, midY + 1);
+    ctx.restore();
+  }
+  // the coin as a flat badge, for the HUD and the shop — no float, no shine, just the shape
+  function coinGlyph(cxp, cyp, s2) {
+    const h = s2/2, r = s2*TILE.radius;
+    ctx.save();
+    rrect(cxp - h + s2*0.06, cyp - h + s2*0.10, s2, s2, r); ctx.fillStyle = "#c78b16"; ctx.fill();
+    rrect(cxp - h, cyp - h, s2, s2, r); ctx.fillStyle = "#ffd24a"; ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.55)"; ctx.lineWidth = Math.max(1, s2*0.07);
+    ctx.beginPath(); ctx.moveTo(cxp - h + r, cyp - h + ctx.lineWidth*0.5);
+    ctx.lineTo(cxp + h - r, cyp - h + ctx.lineWidth*0.5); ctx.stroke();
     ctx.restore();
   }
 
@@ -2577,13 +2874,19 @@
     ctx.restore();
   }
   // lighten/darken a #rrggbb by amount (-255..255)
+  // shade(), but returning hex so hexA() can put an alpha on it — the junction needs both
+  function shadeHex(hex, amt) {
+    const n = parseInt(hex.replace("#",""), 16);
+    const cl = v => Math.max(0, Math.min(255, v + amt));
+    const to = v => cl(v).toString(16).padStart(2, "0");
+    return "#" + to((n>>16)&255) + to((n>>8)&255) + to(n&255);
+  }
   function shade(hex, amt) {
     const n = parseInt(hex.replace("#",""), 16);
     const cl = v => Math.max(0, Math.min(255, v + amt));
     return "rgb(" + cl((n>>16)&255) + "," + cl((n>>8)&255) + "," + cl(n&255) + ")";
   }
   function drawPickups(ts) {
-    for (const ck of state.coinCells) { const [c,r]=ck.split(",").map(Number); drawCoin((c+0.5)*cell,(r+0.5)*cell,ts); }
     if (!state.keyCollected) for (const k of state.keys) if (!k.got) drawKey((k.c+0.5)*cell,(k.r+0.5)*cell,ts,k.color);
     for (const t of state.talismans) drawTalismanCell(t, ts);
   }
@@ -2795,16 +3098,34 @@
     def.draw(ctx, x, y, cell * 0.26);
     ctx.restore();
   }
-  // brief "New Talisman" banner across the top of the board
+  // "New Talisman" card, low on the screen. It used to sit across the TOP, which is exactly
+  // where the runner is heading and where the speed and coin plates already live — so the one
+  // thing you had to read landed on the one part of the screen you were watching. Down here it
+  // is out of the play area, and it stays put until it is tapped rather than timing out while
+  // you are busy laying track.
+  const TAL_IN = 260, TAL_OUT = 320;
   let talFlash = null;
-  function flashTalisman(def){ if (def) talFlash = { def, t: 2600 }; }
+  function flashTalisman(def){ if (def) talFlash = { def, t: 0, out: 0 }; }
+  function talFlashRect() {
+    const w = Math.min(viewW * 0.8, 340), h = Math.round(Math.min(viewW, viewH) * 0.13);
+    return { x: (viewW - w)/2, y: Math.round(viewH * 0.86) - h, w, h };
+  }
+  // a tap anywhere on the card sends it away; returns true if it swallowed the tap
+  function dismissTalismanFlash(sx, sy) {
+    if (!talFlash || talFlash.out) return false;
+    const R = talFlashRect();
+    if (sx < R.x || sx > R.x + R.w || sy < R.y || sy > R.y + R.h) return false;
+    talFlash.out = TAL_OUT; Sound.tap(); haptic(4);
+    return true;
+  }
   function drawTalismanFlash(dt, ts) {
     if (!talFlash) return;
-    talFlash.t -= dt; if (talFlash.t <= 0) { talFlash = null; return; }
-    const k = Math.min(1, (2600 - talFlash.t) / 260), out = Math.min(1, talFlash.t / 400);
-    const a = Math.min(k, out);
-    const w = Math.min(viewW * 0.8, 340), h = Math.round(Math.min(viewW, viewH) * 0.13);
-    const x = (viewW - w)/2, y = Math.round(viewH * 0.12) + (1-k) * -18;
+    talFlash.t += dt;
+    if (talFlash.out) { talFlash.out -= dt; if (talFlash.out <= 0) { talFlash = null; return; } }
+    const k = Math.min(1, talFlash.t / TAL_IN);
+    const a = talFlash.out ? Math.min(k, talFlash.out / TAL_OUT) : k;
+    const R = talFlashRect();
+    const w = R.w, h = R.h, x = R.x, y = R.y + (1-k) * 18;
     ctx.save(); ctx.globalAlpha = a;
     rrect(x, y, w, h, h*0.28); ctx.fillStyle = "rgba(10,8,22,0.82)"; ctx.fill();
     ctx.lineWidth = 2; ctx.strokeStyle = hexA(talFlash.def.col, 0.7); ctx.stroke();
@@ -2816,6 +3137,12 @@
     ctx.fillStyle = talFlash.def.col;
     ctx.font = "900 " + Math.round(h*0.32) + "px " + UI_FONT;
     ctx.fillText(talFlash.def.name, x + h, y + h*0.66);
+    // Tucked under the name rather than beside it: the names run long ("Nightshard") and
+    // the top line already carries NEW TALISMAN, so the middle and top right are both taken.
+    ctx.textAlign = "right";
+    ctx.fillStyle = "rgba(214,218,240,0.42)";
+    ctx.font = "700 " + Math.round(h*0.16) + "px " + UI_FONT;
+    ctx.fillText("TAP TO DISMISS", x + w - h*0.34, y + h*0.90);
     ctx.restore();
   }
   // A coin is a little golden TILE hovering off the board: the same rounded square the game
@@ -2838,7 +3165,10 @@
     spark:    0.80,   // corner twinkle strength
     sparkMs:  2600,   // how often it twinkles
   };
-  const COIN_TILES = 25;                           // what one is worth in the shop
+  // Coins ARE the shop's currency. One golden coin is worth this many tiles, and it is the
+  // only way to earn them — simply running over a tile used to pay too, which meant the
+  // wallet filled up on its own and the coins hidden off the route were pointless.
+  const COIN_TILES = 25;
   function drawCoin(x, y, ts) {
     const s2 = cell * COIN.size, r = tileR(s2), h = s2/2;
     const t = ts / COIN.floatMs;
@@ -3172,12 +3502,64 @@
     }
     ctx.closePath();
   }
+  // The slab under the rail is drawn as two layers rather than one flat colour, which is
+  // what gives the track a cross-section: a BEAM in the track's own colour hugging the
+  // running surface, and the GROUND beneath it in a darker shade of the same hue.
+  //
+  // The beam is a fat stroke laid along the surface line and clipped to the body, so only
+  // its lower half survives — that keeps it hugging every curve of a corner for free,
+  // rather than needing a second offset polyline that could drift from the rail.
   function drawPlatformBody(n, S, fill) {
     ctx.save();
     rrect(cx(n.c), cy(n.r), cell, cell, tileR(cell)); ctx.clip();
-    ctx.beginPath(); bodyPath(S, nodeCenter(n)); ctx.fillStyle = fill; ctx.fill();   // flat solid body to the tile edge
-    grainFill(cx(n.c), cy(n.r), cell, cell, TILE.bodyGrain);   // paper grain on the platform
+    ctx.beginPath(); bodyPath(S, nodeCenter(n)); ctx.clip();   // everything below stays in the slab
+    ctx.fillStyle = shade(fill, TILE.underShade);              // the ground
+    ctx.fillRect(cx(n.c), cy(n.r), cell, cell);
+    ctx.lineJoin = "round"; ctx.lineCap = "butt";
+    // The beam's shadow first, as a WIDER stroke on the same line: the beam is then laid
+    // over the top of it, and what is left showing below is exactly shadowW deep. Drawing
+    // it this way means the shadow follows a corner's curve as precisely as the beam does.
+    if (TILE.pathW > 0 && TILE.shadowW > 0) {
+      ctx.strokeStyle = shade(fill, TILE.underShade + TILE.shadowShade);
+      ctx.lineWidth = Math.max(1, cell*(TILE.pathW + TILE.shadowW)*2);
+      ctx.beginPath(); railPath(S); ctx.stroke();
+    }
+    if (TILE.pathW > 0) {                                      // the beam, riding the surface
+      ctx.strokeStyle = fill;
+      ctx.lineWidth = Math.max(1, cell*TILE.pathW*2);          // doubled: the top half is clipped away
+      ctx.beginPath(); railPath(S); ctx.stroke();
+    }
+    grainFill(cx(n.c), cy(n.r), cell, cell, TILE.bodyGrain);   // paper grain over both
     ctx.restore();
+  }
+  // The beam and its shadow hang off the surface as BANDS here rather than fat strokes
+  // clipped to the body. On a junction the three options' bodies overlap — a turn's body is
+  // most of the cell — so a stroke clipped to their union leaks out above its own surface.
+  // A band is exact, and all three go into one path so the overlaps don't build up.
+  function surfaceBand(S, C, d) {
+    const h = cell/2, last = S.length - 1, mid = last >> 1;
+    const a = S[Math.max(0, mid-1)], b = S[Math.min(last, mid+1)];
+    let tx = b.x - a.x, ty = b.y - a.y; const m = Math.hypot(tx, ty) || 1; tx /= m; ty /= m;
+    const bx = -ty, by = tx;                             // the side the body hangs on
+    let off;
+    if (last === 2) {                                    // straight: parallel offset
+      off = S.map(P => ({ x:P.x + bx*d, y:P.y + by*d }));
+    } else {                                             // corner: a concentric arc
+      const O = { x:S[0].x + S[last].x - C.x, y:S[0].y + S[last].y - C.y };
+      const M = S[mid], inside = (O.x - M.x)*bx + (O.y - M.y)*by > 0;
+      const r = inside ? h - d : h + d;
+      off = S.map(P => { const ux = P.x-O.x, uy = P.y-O.y, L = Math.hypot(ux, uy) || 1;
+        return { x:O.x + ux/L*r, y:O.y + uy/L*r }; });
+    }
+    const loop = S.concat(off.slice().reverse());
+    let area = 0;                                        // same winding every time, or the
+    for (let k = 0; k < loop.length; k++) {              // overlaps cancel under nonzero fill
+      const p = loop[k], q = loop[(k+1) % loop.length]; area += p.x*q.y - q.x*p.y;
+    }
+    if (area < 0) loop.reverse();
+    ctx.moveTo(loop[0].x, loop[0].y);
+    for (let k = 1; k < loop.length; k++) ctx.lineTo(loop[k].x, loop[k].y);
+    ctx.closePath();
   }
   function drawPlatformRail(n, S) {
     ctx.save();
@@ -3205,13 +3587,12 @@
   // That is why there is one body alpha and one rail alpha rather than separate entry and
   // exit values — see git history if the split is ever wanted back.
   const JUNCTION = {
-    bodyIn:  1.00,   // body fill where the runner enters
-    body:    0.32,   // ...fading to this out at the exits
-    railIn:  1.00,   // rail line where he enters
-    rail:    0.00,   // ...fading out entirely by the exits
+    tileIn:  1.00,   // the finished tile where the runner enters
+    tile:    0.32,   // ...fading to this out at the exits
     arrow:   0.70,   // the little direction arrows outside the tile
     grain:   0.40,   // paper grain over the whole tile
   };                 // rail thickness is TILE.railW — the junction IS track, so it matches it
+  const jScratch = document.createElement("canvas");   // reused every frame
   // the leading tile renders as a 3-way junction: three real platform pieces
   // oriented to the travel direction — a flat run forward, plus a curve each way
   // (up / down relative to travel) — signalling the path isn't set yet.
@@ -3223,27 +3604,59 @@
     // draw each option as an actual platform surface (straight for forward, arcs for the turns)
     const surfaces = exits.map(d => tileSurface(n, prev, { c:n.c + d.x, r:n.r + d.y }));
     const C = nodeCenter(n), h = cell*0.5;
-    // Still ONE fill and ONE stroke — the three options overlap near the centre, so a second
-    // pass at a second alpha builds up in the overlap and the tile goes blotchy. A GRADIENT
-    // gets the same read for free: solid where he enters, fading to the pale value as each
-    // option runs out to its own edge. Radial from the entry point, so all three fade with
-    // distance travelled rather than only the one straight ahead.
+    // The fade is a GRADIENT rather than a flat alpha: solid where he enters, thinning to
+    // the pale value as each option runs out to its own edge. Radial from the entry point,
+    // so all three fade with distance travelled rather than only the one straight ahead.
     const E = { x: C.x - din.x*h, y: C.y - din.y*h };     // the edge he came in through
-    const ramp = (col, a0, a1) => {
+    const fade = () => {                                 // the mask, white → transparent
       const g = ctx.createRadialGradient(E.x, E.y, 0, E.x, E.y, cell);
-      g.addColorStop(0, hexA(col, a0)); g.addColorStop(1, hexA(col, a1)); return g;
+      g.addColorStop(0, `rgba(255,255,255,${JUNCTION.tileIn})`);
+      g.addColorStop(1, `rgba(255,255,255,${JUNCTION.tile})`);
+      return g;
     };
-    ctx.save();
-    rrect(cx(n.c), cy(n.r), cell, cell, tileR(cell)); ctx.clip();
-    ctx.beginPath(); for (const S of surfaces) bodyPath(S, C);
-    ctx.fillStyle = ramp(curTrack(), JUNCTION.bodyIn, JUNCTION.body); ctx.fill();
-    grainFill(cx(n.c), cy(n.r), cell, cell, JUNCTION.grain);
-    ctx.beginPath(); for (const S of surfaces) railPath(S);
-    ctx.lineJoin = "round"; ctx.lineCap = "round";
-    ctx.strokeStyle = ramp(curRail(), JUNCTION.railIn, JUNCTION.rail);
-    ctx.lineWidth = Math.max(3, cell*TILE.railW);   // same weight as laid track
-    ctx.stroke();
-    ctx.restore();
+    // The same cross-section laid track has — ground, the beam's shadow, then the beam.
+    const track = curTrack();
+    // Ground, beam and rail are rendered together at FULL opacity off-screen, and only the
+    // finished tile is faded — one gradient, applied once, to the whole thing. Give any layer
+    // an alpha of its own and it blends with whatever is behind the tile instead of with the
+    // tile, and every overlap reads as a smudge.
+    const X = cx(n.c), Y = cy(n.r);
+    const DX = Math.floor(X*dpr) - 1, DY = Math.floor(Y*dpr) - 1;   // device-pixel aligned, so
+    const px = Math.ceil(cell*dpr) + 3;                             // the blit back is 1:1
+    if (jScratch.width !== px) { jScratch.width = jScratch.height = px; }
+    const g = jScratch.getContext("2d");
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, px, px);
+    g.setTransform(dpr, 0, 0, dpr, -DX, -DY);                       // same world coords as the board
+    const main = ctx; ctx = g;
+    try {
+      ctx.save();
+      rrect(X, Y, cell, cell, tileR(cell)); ctx.clip();
+      ctx.save();
+      ctx.beginPath(); for (const S of surfaces) bodyPath(S, C); ctx.clip();
+      ctx.fillStyle = shadeHex(track, TILE.underShade);
+      ctx.fillRect(X, Y, cell, cell);                               // the ground
+      if (TILE.pathW > 0 && TILE.shadowW > 0) {
+        ctx.fillStyle = shadeHex(track, TILE.underShade + TILE.shadowShade);
+        ctx.beginPath(); for (const S of surfaces) surfaceBand(S, C, cell*(TILE.pathW + TILE.shadowW)); ctx.fill();
+      }
+      if (TILE.pathW > 0) {
+        ctx.fillStyle = track;
+        ctx.beginPath(); for (const S of surfaces) surfaceBand(S, C, cell*TILE.pathW); ctx.fill();
+      }
+      grainFill(X, Y, cell, cell, JUNCTION.grain);
+      ctx.restore();                                                // out of the body clip
+      ctx.lineJoin = "round"; ctx.lineCap = "round";                 // the rail rides on top, opaque
+      ctx.strokeStyle = curRail();
+      ctx.lineWidth = Math.max(3, cell*TILE.railW);
+      ctx.beginPath(); for (const S of surfaces) railPath(S); ctx.stroke();
+      ctx.restore();
+      ctx.globalCompositeOperation = "destination-in";               // ...and only now, the fade
+      ctx.fillStyle = fade();
+      ctx.fillRect(X, Y, cell, cell);
+      ctx.globalCompositeOperation = "source-over";
+    } finally { ctx = main; }
+    ctx.drawImage(jScratch, DX/dpr, DY/dpr, px/dpr, px/dpr);
+
 
     // small direction arrows just OUTSIDE the tile — only for directions you can actually build into
     ctx.fillStyle = hexA(curRail(), JUNCTION.arrow);
@@ -3397,14 +3810,24 @@
     paintRunner(sx, sy, s, phase, angle, moving, ts, (state.status === "squash") ? squashK() : 0,
                 state.status !== "falling");
   }
+  const HAT_SCALE = 1.55;      // hats are drawn at RUNNER's scale, then blown up about the head
   // The runner himself, at an arbitrary place and size — knees, foot lift, bob, talisman and
   // all. Split out of drawRunner so the title screen and the opening cinematic can draw the
   // real character instead of a lookalike, and so there is only ever one of him to retune.
   function paintRunner(sx, sy, s, phase, angle, moving, ts, sq, grounded) {
-    const swing = moving ? Math.sin(phase) * s*RUNNER.swing : 0;
-    const bob   = moving ? Math.abs(Math.sin(phase)) * s*RUNNER.bob : 0;
+    // SWAGGER rides on top of the stock stride rather than replacing it — every field is a
+    // multiplier or an addition, so the numbers in RUNNER still drive all five styles.
+    const w = lookItem("swagger");
+    const mul = (v, d) => (v == null ? d : v);
+    const swing = moving ? Math.sin(phase) * s*RUNNER.swing * mul(w.swing, 1) : 0;
+    let   bob   = moving ? Math.abs(Math.sin(phase)) * s*RUNNER.bob * mul(w.bob, 1) : 0;
+    if (w.hop && moving) bob += Math.max(0, Math.sin(phase)) * s*w.hop;   // one big bounce a stride
+    // a hover sits him off the track and breathes, whether or not he is running
+    const hover = w.hover ? s*w.hover * (1 + 0.14*Math.sin(ts/430)) : 0;
     ctx.save();
     ctx.translate(sx, sy); ctx.rotate(angle);
+    if (hover) ctx.translate(0, -hover);
+    if (w.lean) ctx.rotate(w.lean);                       // tilt about the feet
     // Wall squash: in the local frame +x is travel, so compressing x and bulging y is
     // exactly "flattened against the face". Scale about the feet (y=0) so he stays on
     // the track, and nudge him forward by what he lost so he stays flush with the wall.
@@ -3433,11 +3856,12 @@
     // legs — same colour as body, no outline
     ctx.strokeStyle = pale; ctx.lineWidth = Math.max(3, s*RUNNER.legWidth); ctx.lineCap = "round"; ctx.lineJoin = "round";
     const hipY = -legL - bob - bodyH*(RUNNER.hipRise||0), kneeLead = s*RUNNER.kneeLead;
+    const feet = [];
     // A foot lifts while it is travelling FORWARD and is planted while it is travelling back —
     // that is what separates a run from a skate. Foot x is sin(phase), so its direction of
     // travel is cos(phase): positive = swinging forward. footLift is the peak height.
-    const lift = (ph) => moving ? -s*RUNNER.footLift * Math.pow(Math.max(0, Math.cos(ph)), RUNNER.footLiftPow) : 0;
-    for (const [hx, fx, fy] of [[-bodyW*RUNNER.legSplay, swing, lift(phase)],
+    const lift = (ph) => moving ? -s*RUNNER.footLift * mul(w.lift, 1) * Math.pow(Math.max(0, Math.cos(ph)), RUNNER.footLiftPow) : 0;
+    if (w.legs !== false) for (const [hx, fx, fy] of [[-bodyW*RUNNER.legSplay, swing, lift(phase)],
                                 [ bodyW*RUNNER.legSplay, -swing, lift(phase + Math.PI)]]) {
       if (RUNNER.knees) {
         const k = solveKnee(hx, hipY, fx, fy, RUNNER.kneeBend, RUNNER.kneeSplit, kneeLead);
@@ -3446,20 +3870,19 @@
       } else {
         ctx.beginPath(); ctx.moveTo(hx, hipY); ctx.lineTo(fx, fy); ctx.stroke();
       }
+      feet.push([fx, fy]);
+    }
+    // shoes ride on the feet, so the stride and the foot lift carry them for free
+    const shoe = lookItem("shoes");
+    if (shoe.draw) for (const [fx, fy] of feet) {
+      ctx.save(); ctx.translate(fx, fy); shoe.draw(ctx, s, shoe.col); ctx.restore();
     }
     const byTop = -(legL + bodyH) - bob;
-    // cape — pinned at the shoulders, trailing back along -x and swinging with the stride.
-    // Drawn BEFORE the body so it hangs behind him rather than over his chest.
-    const cape = lookItem("cape");
-    if (cape.col) {
-      const sway = (moving ? Math.sin(phase*0.5) : 0) * s*0.05;
-      const tipX = -bodyW*(1.15 + (moving ? 0.35 : 0.10)), tipY = byTop + bodyH*1.05 + sway;
-      ctx.fillStyle = cape.col;
-      ctx.beginPath();
-      ctx.moveTo(-bodyW*0.34, byTop + bodyH*0.10);
-      ctx.quadraticCurveTo(tipX*0.75, byTop + bodyH*0.35 + sway*0.5, tipX, tipY);
-      ctx.lineTo(-bodyW*0.10, byTop + bodyH*0.80);
-      ctx.closePath(); ctx.fill();
+    // A rolling swagger tumbles the whole body about its own centre. Done here rather than at
+    // the top so the legs (there aren't any) and the ground shadow stay where they belong.
+    if (w.spin) {
+      const bcy = byTop + bodyH/2;
+      ctx.translate(0, bcy); ctx.rotate((ts * w.spin) % (Math.PI*2)); ctx.translate(0, -bcy);
     }
     // body — rounded, no outline
     ctx.fillStyle = pale;
@@ -3496,8 +3919,15 @@
       ctx.beginPath(); ctx.arc(e1x + gx, eyeY + gy, eyeR, 0, Math.PI*2); ctx.fill();
       ctx.beginPath(); ctx.arc(e2x + gx, eyeY + gy, eyeR, 0, Math.PI*2); ctx.fill();
     }
-    const hat = lookItem("hat");                  // last, so it sits on top of everything
-    if (hat.draw) hat.draw(ctx, s, bodyW, byTop, hat.col);
+    // last, so it sits on top of everything. Scaled up about the crown of his head — at the
+    // shipped size the hats were a few pixels of trim on a small character and read as noise.
+    const hat = lookItem("hat");
+    if (hat.draw) {
+      ctx.save();
+      ctx.translate(0, byTop); ctx.scale(HAT_SCALE, HAT_SCALE); ctx.translate(0, -byTop);
+      hat.draw(ctx, s, bodyW, byTop, hat.col);
+      ctx.restore();
+    }
     ctx.restore();
   }
 
@@ -3915,9 +4345,12 @@
     glassA:     0.50,    // the pane's flat fill alpha
     glassGrain: 1.00,    // paper grain over the pane
     bodyGrain:  1.00,    // paper grain over a laid platform body
-    railW:      0.085,   // running-surface rail thickness, fraction of a cell
-  };
-  const tileR = s => s * TILE.radius;
+    railW:      0.075,   // running-surface rail thickness, fraction of a cell
+    pathW:      0.150,   // the beam directly under the rail, in the track colour
+    underShade: -50,     // how much darker the ground beneath it is, per channel
+    shadowW:    0.015,   // the shadow the beam casts onto the ground
+    shadowShade: -16,    // ...how much darker again that shadow is
+  };  const tileR = s => s * TILE.radius;
   // Direction bits for a tile's connected edges.
   const FN = 1, FE = 2, FS = 4, FW = 8;
   // which of a node's edges lead to something that is actually drawn right now
@@ -4044,6 +4477,7 @@
     if (titleActive) { leaveTitle(); return; }
     if (state.status !== "play") return;
     const { x, y } = screenXY(e);
+    if (dismissTalismanFlash(x, y)) return;    // the card is over the board; it gets the tap first
     const wx = x + camX, wy = y + camY;
     const { c, r } = cellAtWorld(wx, wy);
     if (!inBounds(c, r)) return;
@@ -4087,14 +4521,27 @@
       if (sl.axis === "h") sl.pos = clamp(wx/cell - 0.5, sl.lo, sl.hi);
       else                 sl.pos = clamp(wy/cell - 0.5, sl.lo, sl.hi);
       const nc = Math.round(sl.pos);
-      if (state.sliderDrag.lastCell !== nc) { if (state.sliderDrag.lastCell !== undefined) Sound.slide(); state.sliderDrag.lastCell = nc; }
+      if (state.sliderDrag.lastCell !== nc) {
+        if (state.sliderDrag.lastCell !== undefined) {
+          const sd = state.sliderDrag.sl;
+          if (nc === sd.lo || nc === sd.hi) Sound.clack(); else Sound.slide();
+        }
+        state.sliderDrag.lastCell = nc;
+      }
       return;
     }
     if (state.blockDrag) { e.preventDefault();
       const { x, y } = screenXY(e); const wx = x + camX, wy = y + camY, b = state.blockDrag.b;
       b.pos = clamp((b.axis === "h" ? wx : wy)/cell - 0.5, b.lo, b.hi); markOccDirty();
       const nc = Math.round(b.pos);   // a scrape each time the wall ratchets into a new cell
-      if (state.blockDrag.lastCell !== nc) { if (state.blockDrag.lastCell !== undefined) { Sound.slide(); haptic(4); } state.blockDrag.lastCell = nc; }
+      if (state.blockDrag.lastCell !== nc) {
+        if (state.blockDrag.lastCell !== undefined) {
+          const bd = state.blockDrag.b;
+          if (nc === bd.lo || nc === bd.hi) { Sound.clack(); haptic(9); }   // hit the stop
+          else { Sound.slide(); haptic(4); }
+        }
+        state.blockDrag.lastCell = nc;
+      }
       return;
     }
     if (state.mdoorDrag) { e.preventDefault();
@@ -4169,7 +4616,8 @@
       if (state.status === "falling") tickFall(dt);
       updateShards(dt);
       tickFx(dt);
-    } else { Sound.sawProximity(0); }        // silence the saw whir while paused
+      tickCoinProximity();
+    } else { Sound.sawProximity(0); Sound.coinProximity(0); }   // both drones off while paused
     updateCamera(dt);
     draw(ts);
     if (paused) drawPausedOverlay();
@@ -4252,6 +4700,23 @@
     } else { Sound.sawProximity(0); }
   }
   // decay transient visual feedback (shake, beat pulse, combo flash, pops)
+  // A choir swells as the runner closes on a coin — the cue that there is something worth
+  // detouring for just out of shot. 1.5 cells is close enough that it is a reward for
+  // getting near, not a metal detector you could sweep the whole board with.
+  const COIN_HEAR = 1.5;
+  function tickCoinProximity() {
+    const s = state;
+    if (!s || s.status !== "play" || !s.coinCells.size) { Sound.coinProximity(0); return; }
+    const rp = visualAt(s.runIdx + s.runT);
+    const rx = rp.x/cell, ry = rp.y/cell;
+    let best = 0;
+    for (const ck of s.coinCells) {
+      const i = ck.indexOf(","), c = +ck.slice(0, i), r = +ck.slice(i+1);
+      const d = Math.hypot(rx - (c+0.5), ry - (r+0.5));
+      if (d < COIN_HEAR) { const pp = 1 - d/COIN_HEAR; if (pp > best) best = pp; }
+    }
+    Sound.coinProximity(best);
+  }
   function tickFx(dt) {
     const s = state; if (!s) return;
     s.shake *= Math.pow(0.86, dt/16); if (s.shake < 0.3) s.shake = 0;
@@ -4272,10 +4737,16 @@
       for (const p of s.trail) p.life += dt;
       s.trail = s.trail.filter(p => p.life < TRAIL_MS);
       s.trailT -= dt;
-      if (s.trailT <= 0 && s.status === "play") {
+      // Sampled while he is falling too. Cutting the trail off the instant he leaves the
+      // track left the ribbon hanging in mid-air at the lip while he dropped away from it —
+      // it should follow him down, which is most of what makes the fall read.
+      const live = s.status === "play" || s.status === "falling" || s.status === "squash";
+      if (s.trailT <= 0 && live) {
         s.trailT = TRAIL_EVERY;
-        const ri = runnerInfo();
         const d = cell * (RUNNER.legLen + RUNNER.bodyH*0.5);      // up the body from the track
+        const ri = (s.status === "falling" && s.fall)
+          ? { sx: s.fall.x, sy: s.fall.y, angle: s.fall.angle }
+          : runnerInfo();
         s.trail.push({ x: ri.sx + Math.sin(ri.angle)*d,
                        y: ri.sy - Math.cos(ri.angle)*d, life: 0 });
       }
@@ -4298,26 +4769,30 @@
     });
     const band = cell * RUNNER.bodyH;                 // exactly as deep as he is
     const n = tr.cols.length, sw = band / n;
+    // The ribbon used to be STROKED: each stripe a fat polyline, cut into ten chunks at ten
+    // alphas, every chunk overlapping its neighbour by a point and every stripe overlapping
+    // the next by 0.75px. Two semi-transparent things laid on top of each other are darker
+    // than either, so both kinds of overlap drew themselves in as lines and the whole thing
+    // read as a stack of chunks. Filled QUADS instead: each piece meets its neighbours on a
+    // shared edge and never crosses one, so nothing is ever painted twice.
+    const SEGS = 26;                                  // steps in the fade; nothing overlaps now
     ctx.save();
-    ctx.lineCap = "butt"; ctx.lineJoin = "round";
-    ctx.lineWidth = sw + 0.75;                        // a hair of overlap, so no seams show
-    // The fade runs the WHOLE length rather than just the last few segments. Doing that per
-    // segment would be hundreds of strokes a frame at this length, so the ribbon is stroked
-    // in CHUNKS instead — each a short polyline at its own alpha, overlapping its neighbour
-    // by a point so no seam opens up. Ten steps across a trail this long reads as smooth.
-    const CHUNKS = 10;
     const at = (k, off) => ({ x: pts[k].x + nor[k].x*off, y: pts[k].y + nor[k].y*off });
     for (let i = 0; i < n; i++) {
-      const off = (i - (n-1)/2) * sw;
-      ctx.strokeStyle = tr.cols[i];
-      for (let c = 0; c < CHUNKS; c++) {
-        const a = Math.floor((N-1) * c / CHUNKS), b = Math.ceil((N-1) * (c+1) / CHUNKS);
+      // Sides get a hair of bleed so neighbouring stripes butt rather than leaving an
+      // antialiased hairline of background between them. Colours differ, so the overlap
+      // reads as a blend rather than the dark seam an alpha overlap would give.
+      const lo = (i - n/2) * sw - 0.35, hi = (i - n/2 + 1) * sw + 0.35;
+      ctx.fillStyle = tr.cols[i];
+      for (let c = 0; c < SEGS; c++) {
+        const a = Math.round((N-1) * c / SEGS), b = Math.round((N-1) * (c+1) / SEGS);
         if (b <= a) continue;
-        ctx.globalAlpha = Math.pow((c + 1) / CHUNKS, 1.4) * 0.92;   // oldest end nearly gone
+        ctx.globalAlpha = Math.pow((c + 1) / SEGS, 1.4) * 0.92;   // oldest end nearly gone
         ctx.beginPath();
-        for (let k = a; k <= b; k++) { const q = at(k, off);
+        for (let k = a; k <= b; k++) { const q = at(k, lo);
           if (k === a) ctx.moveTo(q.x, q.y); else ctx.lineTo(q.x, q.y); }
-        ctx.stroke();
+        for (let k = b; k >= a; k--) { const q = at(k, hi); ctx.lineTo(q.x, q.y); }
+        ctx.closePath(); ctx.fill();
       }
     }
     ctx.restore();
@@ -4325,6 +4800,7 @@
 
   // ---------- Buttons & menu ---------------------------------------------
   ovBtn.addEventListener("click", () => {
+    Sound.unlock(); Sound.tapBig();
     if (state.status === "win") {
       // finished the last level: drop the player into level select rather than
       // silently wrapping them back round to level 1
@@ -4333,46 +4809,61 @@
     }
     loadLevel(levelIdx);          // lose / retry
   });
-  document.getElementById("pauseFloat").addEventListener("click", () => { Sound.unlock(); openMenu("main"); });
-  document.getElementById("mech-ok").addEventListener("click", () => { Sound.unlock(); mechQueue.shift(); showNextMech(); });
+  // Straight from the clear screen into the shop, with the coins just banked. Leaves the
+  // overlay up underneath, so closing the shop drops you back on Next Level rather than
+  // into a level you have already finished.
+  ovShop.addEventListener("click", () => { Sound.unlock(); Sound.tap(); openMenu("shop", "overlay"); });
+  document.getElementById("pauseFloat").addEventListener("click", () => { Sound.unlock(); Sound.tap(); openMenu("main"); });
+  document.getElementById("mech-ok").addEventListener("click", () => { Sound.unlock(); Sound.tapBig(); mechQueue.shift(); showNextMech(); });
 
   const menuEl = document.getElementById("menu");
   const menuBody = document.getElementById("menu-body");
-  function openMenu(screen) { paused = true; buildMenu(screen || "main"); menuEl.classList.add("show"); }
-  function closeMenu() { paused = false; menuEl.classList.remove("show"); }
+  // menuReturn: opened from somewhere that is still on screen behind us (the level-clear
+  // card), so Back has to hand control straight back rather than land on the pause menu.
+  let menuReturn = null;
+  function openMenu(screen, ret) { paused = true; menuReturn = ret || null;
+                                   buildMenu(screen || "main"); menuEl.classList.add("show");
+                                   Sound.pauseMusic(true); }
+  function closeMenu() { paused = false; menuReturn = null; menuEl.classList.remove("show"); Sound.pauseMusic(false); }
 
-  function btn(label, fn) { const b = document.createElement("button"); b.textContent = label; b.onclick = fn; return b; }
+  // Every generated button clicks when pressed. Wired here rather than at each call site so
+  // a new menu button can never be added silently.
+  function btn(label, fn, big) {
+    const b = document.createElement("button"); b.textContent = label;
+    b.onclick = (e) => { Sound.unlock(); (big ? Sound.tapBig : Sound.tap)(); fn(e); };
+    return b;
+  }
   function toggle(label, on, fn) {
     const d = document.createElement("div"); d.className = "toggle" + (on ? "" : " off");
     d.innerHTML = "<span>" + label + "</span><span class='val'>" + (on ? "ON" : "OFF") + "</span>";
-    d.onclick = fn; return d;
+    d.onclick = (e) => { Sound.unlock(); Sound.tap(); fn(e); }; return d;
   }
   function sub(t){ const d = document.createElement("div"); d.className = "menu-sub"; d.textContent = t; return d; }
 
+  let shopTab = "colour";                 // the shop remembers which rack you were looking at
   function buildMenu(screen) {
     menuBody.innerHTML = "";
     const title = document.getElementById("menu-title");
     title.className = "";                      // only the main screen wears the logo treatment
-    // ---- character: a hub of categories, then a grid per category ----
-    if (screen === "character") {
-      title.textContent = "Character";
+    // ---- the shop: him at the top, a tab per category, then that tab's rack ----
+    if (screen === "shop" || screen.indexOf("shop:") === 0) {
+      if (screen.indexOf("shop:") === 0) shopTab = screen.slice(5);
+      if (!LOOK.some(l => l.key === shopTab)) shopTab = LOOK[0].key;
+      title.textContent = "Shop";
       saveWallet();                                   // banks whatever the last run earned
-      menuBody.appendChild(sub(wallet.tiles + " tile" + (wallet.tiles === 1 ? "" : "s") + " collected"));
 
-      // A picture of the runner as he is now, with a line out to each thing you can change.
-      const S = 300, map = document.createElement("div"); map.className = "char-map";
+      // A picture of him wearing everything currently on, standing on a real tile. It sits
+      // above the tabs so a change is visible the moment it is bought — the whole point of
+      // a shop screen is seeing what you are buying on the thing you are buying it for.
+      const S = 300, fig = document.createElement("div"); fig.className = "shop-fig";
       const cv = document.createElement("canvas"); cv.width = S; cv.height = S;
-      map.appendChild(cv);
+      fig.appendChild(cv);
       const g = cv.getContext("2d");
-
       const rs = S*0.52;                              // his size on this canvas
-      const foot = { x: S*0.50, y: S*0.66 };          // where his feet stand
-      const legL = rs*RUNNER.legLen, bodyH = rs*RUNNER.bodyH, bodyW = rs*RUNNER.bodyW;
-      const byTop = foot.y - (legL + bodyH);
+      const foot = { x: S*0.50, y: S*0.70 };          // where his feet stand
 
-      // A real tile for him to stand on — the game's own pane, body and rail, in whatever
-      // track skin is worn, so the tile design is on show here too rather than a stand-in.
-      // withCanvas translates for us, so cell (0,0) lands under his feet
+      // The game's own pane, body and rail, in whatever track skin is worn — so the track
+      // is on show here too rather than being represented by a stand-in.
       withCanvas(g, rs, foot.x - rs/2, foot.y - rs/2, () => {
         const n = { c:0, r:0 };
         drawGlass(0, 0, cell);
@@ -4382,79 +4873,71 @@
       // the worn trail, sketched behind him
       const tr = lookItem("trail");
       if (tr.cols) {
-        const band = rs*RUNNER.bodyH, n = tr.cols.length, sw = band/n;
+        const bandH = rs*RUNNER.bodyH, tn = tr.cols.length, tsw = bandH/tn;
         const cyb = foot.y - rs*(RUNNER.legLen + RUNNER.bodyH*0.5);
-        for (let i=0;i<n;i++){ g.fillStyle = tr.cols[i];
-          g.fillRect(S*0.04, cyb - band/2 + i*sw, foot.x - rs*0.22 - S*0.04, sw); }
+        for (let i=0;i<tn;i++){ g.fillStyle = tr.cols[i];
+          g.fillRect(S*0.04, cyb - bandH/2 + i*tsw, foot.x - rs*0.22 - S*0.04, tsw); }
       }
+      // ...and the runner himself, drawn by the game, mid-stride so the swagger reads
+      withCanvas(g, rs, 0, 0, () =>
+        paintRunner(foot.x, foot.y, rs, performance.now()/RUNNER.stepMs, 0, true, performance.now(), 0, true));
+      menuBody.appendChild(fig);
 
-      // ...and the runner himself, drawn by the game
-      withCanvas(g, rs, 0, 0, () => paintRunner(foot.x, foot.y, rs, Math.PI*0.5, 0, true, performance.now(), 0, true));
+      const purse = document.createElement("div"); purse.className = "shop-purse";
+      const pc = document.createElement("canvas"); pc.width = 34; pc.height = 34;
+      withCanvas(pc.getContext("2d"), 34, 0, 0, () => coinGlyph(17, 17, 26));
+      purse.appendChild(pc);
+      const pv = document.createElement("span"); pv.textContent = wallet.tiles;
+      const pl = document.createElement("i"); pl.textContent = "TILES";
+      purse.appendChild(pv); purse.appendChild(pl);
+      menuBody.appendChild(purse);
 
-      // Each hotspot: where it points on the picture, and where its label sits. Kept as
-      // fractions of the canvas so the two never drift apart if the size changes.
-      const SPOTS = [
-        { key:"hat",    at:[0.50, 0.30], label:[0.72, 0.13] },
-        { key:"colour", at:[0.50, 0.44], label:[0.05, 0.20] },
-        { key:"cape",   at:[0.40, 0.52], label:[0.03, 0.46] },
-        { key:"trail",  at:[0.22, 0.60], label:[0.05, 0.75] },
-        { key:"track",  at:[0.66, 0.72], label:[0.66, 0.82] },
-      ];
-      g.strokeStyle = "rgba(232,230,255,0.55)"; g.lineWidth = 1.5;
-      g.fillStyle = "rgba(232,230,255,0.9)";
-      for (const sp of SPOTS) {
-        const ax = sp.at[0]*S, ay = sp.at[1]*S;
-        const lx = (sp.label[0] + 0.13)*S, ly = (sp.label[1] + 0.045)*S;   // the label's inner edge
-        g.beginPath(); g.moveTo(ax, ay); g.lineTo(lx, ly); g.stroke();
-        g.beginPath(); g.arc(ax, ay, 3, 0, Math.PI*2); g.fill();
-      }
-      for (const sp of SPOTS) {
-        const cat = LOOK.find(l => l.key === sp.key);
-        const b = document.createElement("button");
-        b.className = "hot";
-        b.style.left = (sp.label[0]*100) + "%";
-        b.style.top  = (sp.label[1]*100) + "%";
-        b.innerHTML = "<b>" + cat.label + "</b><span>" + lookItem(sp.key).name + "</span>";
-        b.onclick = () => buildMenu("look:" + sp.key);
-        map.appendChild(b);
-      }
-      menuBody.appendChild(map);
-      menuBody.appendChild(btn("Back", () => buildMenu("main")));
-      return;
-    }
-    if (screen.indexOf("look:") === 0) {
-      const cat = LOOK.find(l => l.key === screen.slice(5)) || LOOK[0];
-      title.textContent = cat.label;
-      menuBody.appendChild(sub(wallet.tiles + " tiles"));
+      const tabs = document.createElement("div"); tabs.className = "shop-tabs";
+      LOOK.forEach(catg => {
+        const t = document.createElement("button");
+        t.textContent = catg.label;
+        if (catg.key === shopTab) t.className = "on";
+        t.onclick = () => { Sound.unlock(); Sound.tap(); buildMenu("shop:" + catg.key); };
+        tabs.appendChild(t);
+      });
+      menuBody.appendChild(tabs);
+
+      const cat = LOOK.find(l => l.key === shopTab);
+      const worn = document.createElement("div"); worn.className = "shop-worn";
+      worn.textContent = "Wearing: " + lookItem(cat.key).name;
+      menuBody.appendChild(worn);
+
       const grid = document.createElement("div"); grid.className = "tal-grid";
       const wornId = lookWorn(cat.key);
       cat.items.forEach(it => {
         const have = owns(it), on = wornId === it.id;
         const el = document.createElement("button");
         el.className = "tal" + (on ? " on" : "") + (have ? "" : " locked");
-        const cv = document.createElement("canvas"); cv.width = 96; cv.height = 96;
-        const g = cv.getContext("2d");
-        if (it.swatch) it.swatch(g, 96);
+        const sc = document.createElement("canvas"); sc.width = 96; sc.height = 96;
+        const sg = sc.getContext("2d");
+        if (it.swatch) it.swatch(sg, 96);
         if (!have) {                                   // unaffordable/unowned: greyed silhouette
-          g.globalCompositeOperation = "source-atop";
-          g.fillStyle = "rgba(120,124,150,0.85)"; g.fillRect(0, 0, 96, 96);
-          g.globalCompositeOperation = "source-over";
+          sg.globalCompositeOperation = "source-atop";
+          sg.fillStyle = "rgba(120,124,150,0.85)"; sg.fillRect(0, 0, 96, 96);
+          sg.globalCompositeOperation = "source-over";
         }
         const nm = document.createElement("span");
         nm.textContent = have ? it.name : it.cost + " ◆";
-        el.appendChild(cv); el.appendChild(nm);
+        el.appendChild(sc); el.appendChild(nm);
         el.onclick = () => {
-          if (have) { wearLook(cat.key, it.id); }
+          Sound.unlock();
+          if (have) { wearLook(cat.key, it.id); Sound.tap(); }
           else if (wallet.tiles >= it.cost) {           // buy, then wear it straight away
             wallet.tiles -= it.cost; wallet.owned.add(it.id); saveWallet();
-            wearLook(cat.key, it.id); Sound.unlock(); if (Sound.key) Sound.key();
-          } else { el.classList.add("nope"); setTimeout(() => el.classList.remove("nope"), 420); return; }
-          buildMenu(screen);
+            wearLook(cat.key, it.id); Sound.tapBig(); Sound.coin();
+          } else { Sound.tap(); el.classList.add("nope");
+                   setTimeout(() => el.classList.remove("nope"), 420); return; }
+          buildMenu("shop:" + cat.key);
         };
         grid.appendChild(el);
       });
       menuBody.appendChild(grid);
-      menuBody.appendChild(btn("Back", () => buildMenu("character")));
+      menuBody.appendChild(btn("Back", () => (menuReturn === "overlay" ? closeMenu() : buildMenu("main"))));
       return;
     }
     if (screen === "talismans") {
@@ -4513,7 +4996,7 @@
     menuBody.appendChild(btn("Resume", closeMenu));
     menuBody.appendChild(btn("Restart Level", () => { loadLevel(levelIdx); closeMenu(); }));
     menuBody.appendChild(btn("Levels", () => buildMenu("levels")));
-    menuBody.appendChild(btn("Character", () => buildMenu("character")));
+    menuBody.appendChild(btn("Shop", () => buildMenu("shop")));
     menuBody.appendChild(btn("Talismans", () => buildMenu("talismans")));
     menuBody.appendChild(toggle("Sound", !Sound.isMuted(), () => { Sound.unlock(); Sound.setMuted(!Sound.isMuted()); buildMenu(screen); }));
     menuBody.appendChild(toggle("Colorblind", colorblind, () => { colorblind = !colorblind; settings.colorblind = colorblind; saveSettings(); applyColorblind(); buildMenu(screen); }));
@@ -4564,7 +5047,8 @@
                  wear: (id) => { settings.talisman = id; saveSettings(); },
                  worn: () => settings.talisman || null,
                  onBoard: () => state.talismans.map(t=>({c:t.c,r:t.r,id:t.id,got:t.got})),
-                 reset: () => { talUnlocked = new Set(); saveTalismans(talUnlocked); } },
+                 reset: () => { talUnlocked = new Set(); saveTalismans(talUnlocked); },
+                 flash: (id) => flashTalisman(talById(id || TALISMANS[0].id)) },
     moveBlock: (i, pos) => { const b = state.blocks[i]; if (b) { b.pos = clamp(pos, b.lo, b.hi); markOccDirty(); } },
     openMDoor: (i) => { const md = state.manualDoors[i]; if (md) { md.left = 1; md.right = 1; markOccDirty(); } },
     ui: {
@@ -4579,7 +5063,6 @@
   // ---------- Title / attract screen -------------------------------------
   const TITLE_WORDS = ["TILE", "RUNNER"];
   const TITLE_TILE_DX = 0.13;            // how far left TILE sits, as a fraction of its size
-  const TITLE_BYLINE = "or how I learned to stop worrying and love the run";
   const TITLE_SPECTRUM = (function(){ const c = [];
     for (let i = 0; i < 8; i++) c.push("hsl(" + (i*45) + ",55%,33%)");
     return c; })();
@@ -4822,7 +5305,7 @@
   // The tile band used to sit on TITLE_CY, directly behind the logo. It now has its own
   // anchor further down the screen, so the lettering reads clean and the track runs beneath
   // it rather than through it.
-  const TITLE_BAND_CY = 0.64;
+  const TITLE_BAND_CY = 0.72;
   function introMetrics(){
     const s = cell || 90;                              // same size as the in-game tiles
     return { s, x0: -s*1.5, row0Y: viewH*TITLE_BAND_CY - s*0.5 };  // path rises above / dips below the band
@@ -4920,7 +5403,6 @@
     const m = introMetrics();
     const u = TITLE.u, lead = Math.floor(u + 1.6);
     ctx.save();
-    ctx.translate(viewW/2, cyT); ctx.rotate(-0.10); ctx.translate(-viewW/2, -cyT);   // tilt the whole stream
     // Only ever three tiles, exactly as in play: two under and ahead of the runner, and the
     // third in the air on its way from the back of the queue to the front.
     const i0 = Math.floor(u), f = u - i0;
@@ -4947,21 +5429,6 @@
     drawTitleWord(TITLE_WORDS[0], viewW/2 - size*TITLE_TILE_DX, y1, size, TITLE.t - 120, ts);
     drawTitleWord(TITLE_WORDS[1], viewW/2, y2, size, TITLE.t - 400, ts);   // RUNNER
 
-    // --- byline, sitting just under the logo ---
-    if (TITLE.t > 400 + 300){
-      const a = clamp((TITLE.t - 700) / 500, 0, 1);
-      ctx.save();
-      ctx.globalAlpha = a * 0.72;
-      ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillStyle = "#cfd3e6";
-      let bf = Math.min(viewW*0.040, 17);
-      const txt = TITLE_BYLINE.toUpperCase();
-      ctx.font = "900 " + Math.round(bf) + "px " + UI_FONT;
-      const maxW = viewW*0.86, tw = ctx.measureText(txt).width;   // it is a long line; shrink to fit
-      if (tw > maxW) { bf = bf * maxW / tw; ctx.font = "900 " + Math.round(bf) + "px " + UI_FONT; }
-      ctx.fillText(txt, viewW/2, cyT + size*1.3);   // hangs off the logo, so it follows it
-      ctx.restore();
-    }
     // --- tap-to-play prompt (after the title has landed) ---
     if (TITLE.t > 400 + 520){
       const pulse = 0.5 + 0.5*Math.sin(ts/380);
@@ -5001,11 +5468,6 @@
     // styled like the other headers (e.g. the gold "SPEED UP" name): flat gold face over a
     // stepped gold 3D shadow, just scaled up big — shallower & cleaner than the old shiny logo.
     const depth = Math.max(4, Math.round(size*0.11)), dx = 0.85, dy = 1.0;
-    ctx.save();                                                // one soft blurred drop (the headers' bottom layer)
-    ctx.shadowColor = "rgba(5,4,13,0.6)"; ctx.shadowBlur = size*0.13;
-    ctx.shadowOffsetX = size*0.05; ctx.shadowOffsetY = size*0.075;
-    ctx.fillStyle = "#5a3f0a"; ctx.fillText(text, X + depth*dx, Y + depth*dy);
-    ctx.restore();
     for (let i=depth;i>=1;i--){                                // stepped gold extrusion, dark far -> warm near
       const t = i/depth;
       const r = Math.round(0xc7 + (0x6b-0xc7)*t), g = Math.round(0x93 + (0x4c-0x93)*t), b = Math.round(0x20 + (0x0b-0x20)*t);
@@ -5022,7 +5484,6 @@
   function introDrawPlatform(cellObj, prev, next, m, content){
     const C = introCenter(cellObj, m), s = m.s, tx = C.x - s/2, ty = C.y - s/2;
     const S = introSurface(cellObj, prev, next, m);
-    ctx.fillStyle = "rgba(5,4,13,0.3)"; rrect(tx+3, ty+5, s, s, tileR(s)); ctx.fill();   // drop shadow
     ctx.save();
     rrect(tx, ty, s, s, tileR(s)); ctx.clip();
     ctx.fillStyle = "rgba(180,174,235,0.55)"; ctx.fillRect(tx, ty, s, s);              // glass base
