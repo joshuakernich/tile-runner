@@ -42,7 +42,8 @@
      once — the glass pane, a laid platform, the wall plate, stone, fixed platforms, blocks — which
      is the point: they used to be a dozen separate <code>0.16</code>s that could drift apart.
      The slab under the rail now has a <b>cross-section</b>: a beam in the track's own colour
-     hugging the running surface, and the ground beneath it in a darker shade of the same hue.
+     hugging the running surface, and the ground beneath it in its own colour and marking — the level's hue turned and drained, with flat bedding
+    lines, so it reads as cut earth rather than a darker copy of the track.
      Drawing is lifted from <code>index.html</code>. Tune, then <b>Copy TILE block</b> and paste it
      over the block above <code>drawGlass</code>.</p>
 </header>
@@ -93,6 +94,10 @@ const SHIPPED = {
   railW:      0.075,
   pathW:      0.150,
   underShade: -50,
+  underHue:   -26,
+  underSat:   0.42,
+  strata:     0.16,
+  strataN:    5,
   shadowW:    0.015,
   shadowShade: -16,
 };
@@ -110,6 +115,28 @@ function hslHex(h,s,l){ s/=100;l/=100; const k=n=>(n+h/30)%12, a=s*Math.min(l,1-
 function shade(hex, amt){ const n=parseInt(hex.replace("#",""),16);
   const cl=v=>Math.max(0,Math.min(255,v+amt));
   return "rgb("+cl((n>>16)&255)+","+cl((n>>8)&255)+","+cl(n&255)+")"; }
+// Turn a hex colour's hue, drain its saturation and shift its lightness, all at once.
+// shade() only moves lightness, which is why the ground could only ever be a darker copy
+// of the track — this lets it be a different material.
+function tintHex(hex, degrees, satMul, lightAmt) {
+  const n = parseInt(hex.replace("#",""), 16);
+  let r = ((n>>16)&255)/255, g = ((n>>8)&255)/255, b = (n&255)/255;
+  const mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx - mn;
+  let h = 0; const l = (mx+mn)/2;
+  let sat = d === 0 ? 0 : d / (1 - Math.abs(2*l - 1));
+  if (d !== 0) {
+    h = mx === r ? ((g-b)/d + (g < b ? 6 : 0)) : mx === g ? ((b-r)/d + 2) : ((r-g)/d + 4);
+    h *= 60;
+  }
+  h = (h + degrees + 360) % 360;
+  sat = Math.max(0, Math.min(1, sat * satMul));
+  const L = Math.max(0, Math.min(1, l + (lightAmt || 0)/255));
+  const C = (1 - Math.abs(2*L - 1)) * sat, X = C * (1 - Math.abs(((h/60) % 2) - 1)), m = L - C/2;
+  const seg = Math.floor(h/60) % 6;
+  const rgb = [[C,X,0],[X,C,0],[0,C,X],[0,X,C],[X,0,C],[C,0,X]][seg];
+  const to = v => Math.round((v + m)*255).toString(16).padStart(2,"0");
+  return "#" + to(rgb[0]) + to(rgb[1]) + to(rgb[2]);
+}
 function shadeHex(hex, amt){ const n=parseInt(hex.replace("#",""),16);
   const cl=v=>Math.max(0,Math.min(255,v+amt)); const to=v=>cl(v).toString(16).padStart(2,"0");
   return "#"+to((n>>16)&255)+to((n>>8)&255)+to(n&255); }
@@ -200,18 +227,43 @@ function drawGlass(x,y,s){
   ctx.save(); rrect(x,y,s,s,tileR(s)); ctx.clip();
   ctx.fillStyle="rgba(180,174,235,"+T.glassA+")"; ctx.fillRect(x,y,s,s);
   grainFill(x,y,s,s,T.glassGrain); ctx.restore(); }
+// The track is painted; the ground it is bolted to is not. It takes its own colour —
+// the level's hue turned and drained, so it still belongs to the palette without being a
+// darker copy of the beam — and its own marking: flat bedding lines, which read as cut
+// earth rather than as more track. The paper grain then goes over both, as before.
+function groundColour(fill) { return tintHex(fill, T.underHue, T.underSat, T.underShade); }
+function drawGroundStrata(x, y0v, s) {
+  if (!(T.strata > 0) || !(T.strataN > 0)) return;
+  const y0 = y0v, step = s / T.strataN;
+  ctx.save();
+  ctx.globalAlpha = T.strata;
+  ctx.fillStyle = "#05040d";
+  // Bedding runs level, and its spacing is keyed off the CELL rather than the screen, so
+  // the lines meet across a join instead of sliding past one another.
+  for (let k = 1; k < T.strataN; k++) {
+    const y = y0 + k*step, h = Math.max(1, s*0.012);
+    ctx.fillRect(x, y, s, h);
+    if (k % 2 === 0) {                                       // a broken seam between them
+      ctx.globalAlpha = T.strata * 0.5;
+      ctx.fillRect(x + s*0.18, y + step*0.42, s*0.42, h);
+      ctx.globalAlpha = T.strata;
+    }
+  }
+  ctx.restore();
+}
 function drawPlatformTile(n,prev,next){
   const S=tileSurface(n,prev,next);
   // beam in the track colour hugging the surface, ground beneath it in a darker shade —
   // the beam is a fat stroke clipped to the slab, so only its lower half survives
   ctx.save(); rrect(cx(n.c),cy(n.r),cell,cell,tileR(cell)); ctx.clip();
   ctx.beginPath(); bodyPath(S, nodeCenter(n)); ctx.clip();
-  ctx.fillStyle = shade(curTrack(), T.underShade);
+  ctx.fillStyle = groundColour(curTrack());          // the ground has its own colour...
   ctx.fillRect(cx(n.c),cy(n.r),cell,cell);
+  drawGroundStrata(cx(n.c), cy(n.r), cell);                                // ...and its own bedding
   ctx.lineJoin="round"; ctx.lineCap="butt";
   // shadow first as a wider stroke, beam laid over it — what shows below is shadowW deep
   if (T.pathW > 0 && T.shadowW > 0){
-    ctx.strokeStyle = shade(curTrack(), T.underShade + T.shadowShade);
+    ctx.strokeStyle = tintHex(curTrack(), T.underHue, T.underSat, T.underShade + T.shadowShade);
     ctx.lineWidth = Math.max(1, cell*(T.pathW + T.shadowW)*2);
     ctx.beginPath(); railPath(S); ctx.stroke();
   }
@@ -285,10 +337,10 @@ function drawJunction(n, prev){
     rrect(X, Y, cell, cell, tileR(cell)); ctx.clip();
     ctx.save();
     ctx.beginPath(); for (const S of surfaces) bodyPath(S, C); ctx.clip();
-    ctx.fillStyle = shadeHex(track, T.underShade);
+    ctx.fillStyle = groundColour(track);
     ctx.fillRect(X, Y, cell, cell);                               // the ground
     if (T.pathW > 0 && T.shadowW > 0) {
-      ctx.fillStyle = shadeHex(track, T.underShade + T.shadowShade);
+      ctx.fillStyle = tintHex(track, T.underHue, T.underSat, T.underShade + T.shadowShade);
       ctx.beginPath(); for (const S of surfaces) surfaceBand(S, C, cell*(T.pathW + T.shadowW)); ctx.fill();
     }
     if (T.pathW > 0) {

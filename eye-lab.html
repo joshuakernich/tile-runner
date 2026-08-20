@@ -1,0 +1,215 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Tile Runner — Eye Lab</title>
+<style>
+  :root{ --bg:#12102a; --panel:#1b1838; --line:#2b2850; --ink:#cfe9ff; --accent:#7dd0ff; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:16px 20px;border-bottom:1px solid var(--line);}
+  h1{margin:0 0 6px;font-size:15px;letter-spacing:2px;color:#ffd24a;text-transform:uppercase;}
+  p{margin:0;font-size:12px;line-height:1.55;color:#9aa3c7;max-width:70ch;}
+  .wrap{display:flex;gap:20px;padding:20px;flex-wrap:wrap;align-items:flex-start;}
+  canvas#cv{background:#0d0b22;border:1px solid var(--line);border-radius:10px;}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:290px;}
+  .grp{margin-bottom:12px} .grp h2{margin:0 0 6px;font-size:10px;letter-spacing:2px;color:var(--accent);text-transform:uppercase;}
+  .row{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:11px;}
+  .row label{width:86px;color:#9aa3c7;} .row input[type=range]{flex:1;}
+  .row output{width:52px;text-align:right;color:#ffd24a;}
+  textarea{width:100%;height:150px;background:#0d0b22;color:#bfe;border:1px solid var(--line);
+    border-radius:8px;padding:8px;font:inherit;font-size:11px;}
+  button{background:#233;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+    padding:7px 11px;cursor:pointer;font:inherit;font-size:11px;}
+  button.prim{background:#1c6;color:#04120a;font-weight:700;border:none;}
+</style></head><body>
+<header>
+  <h1>Tile Runner · Eye Lab</h1>
+  <p>Every face in the game wears one pair of eyes — the runner, all six monsters, and the walls.
+  Sizes are fractions of a <b>cell</b>, never of the body they sit on, which is the whole point: a
+  wall is several times the size of the runner's head and the eyes still have to match. Drawing is
+  lifted from <code>index.html</code>. Tune, then <b>Copy EYES block</b> and paste it over the
+  <code>const EYES = { … }</code> block above <code>const RUNNER</code>.</p>
+</header>
+<div class="wrap">
+  <canvas id="cv" width="700" height="430"></canvas>
+  <div class="panel">
+    <div class="grp"><h2>Shape</h2>
+      <div class="row"><label>radius</label><input type="range" id="r" min="0.01" max="0.1" step="0.001"><output></output></div>
+      <div class="row"><label>spacing</label><input type="range" id="gap" min="0.02" max="0.4" step="0.002"><output></output></div>
+      <div class="row"><label>look-bias</label><input type="range" id="bias" min="-0.1" max="0.1" step="0.002"><output></output></div>
+      <div class="row"><label>lid width</label><input type="range" id="lid" min="0.1" max="1.5" step="0.02"><output></output></div>
+    </div>
+    <div class="grp"><h2>Life</h2>
+      <div class="row"><label>glance x</label><input type="range" id="glanceX" min="0" max="0.09" step="0.002"><output></output></div>
+      <div class="row"><label>glance y</label><input type="range" id="glanceY" min="0" max="0.09" step="0.002"><output></output></div>
+      <div class="row"><label>glance ms</label><input type="range" id="glanceMs" min="1200" max="9000" step="100"><output></output></div>
+      <div class="row"><label>blink ms</label><input type="range" id="blinkMs" min="900" max="8000" step="100"><output></output></div>
+    </div>
+    <div class="grp"><h2>Scene</h2>
+      <div class="row"><label>cell</label><input type="range" id="cellPx" min="60" max="150" step="1"><output></output></div>
+      <div class="row"><label>freeze</label><input type="range" id="frozen" min="0" max="1" step="1"><output></output></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="prim" id="copy">Copy EYES block</button><button id="reset">Reset</button>
+    </div>
+    <textarea id="out" readonly></textarea>
+  </div>
+</div>
+<script>
+const SHIPPED = {
+  r:        0.038,   // radius
+  gap:      0.115,   // centre to centre
+  bias:     0.020,   // how far the pair sits toward the way the face is looking
+  lid:      0.60,    // shut-lid stroke width, as a fraction of the radius
+  glanceX:  0.030,   // how far the pupils dart sideways
+  glanceY:  0.024,   // ...and up
+  glanceMs: 5200,    // one full look-around
+  blinkMs:  3000,    // one blink cycle (it is a double-blink)
+};
+
+const EYES = Object.assign({}, SHIPPED);
+const RUNNER = {
+  stepMs:   110,     // ms per radian of stride phase — lower = faster legs
+  swing:    0.16,    // how far a foot reaches, fraction of a cell
+  bob:      0.064,   // body rise and fall per stride
+  legLen:   0.12,    // hip height above the track
+  legWidth: 0.05,    // stroke width of a leg
+  legSplay: 0.22,    // hip separation, fraction of body width
+  hipRise:  0.06,    // hips move UP inside the body, fraction of body height (0 = bottom edge, 1 = top)
+  footLift: 0.098,   // peak height of the swinging foot, fraction of a cell; 0 = feet pinned to the track
+  footLiftPow:1,     // shape of that lift: 1 = broad cosine hump, higher = a later, snappier kick
+  knees:    1,       // 1 bends each leg at a knee (two-bone IK), 0 is a straight hip-to-foot line
+  kneeBend: 0.045,   // how bent, as slack relative to hip-foot distance; 0 = straight
+  kneeSplit:0.5,     // how much of that is thigh
+  kneeLead: -0.002,  // extra forward push on the knee, 0 = pure IK
+  kneeR:    0,       // knee cap radius, 0 = none
+  bodyW:    0.26,
+  bodyH:    0.26,
+  bodyR:    0.07,    // corner radius of the body
+  shadow:   0.037,   // ground shadow: vertical RADIUS, so drawn height is twice this —
+                     // 0.074, a shade under the 0.085 rail it sits on
+  shadowW:  0.65,    // ground shadow width, fraction of body width
+  shadowA:  0.26,    // ground shadow opacity
+  shadowY:  0.01,    // shadow offset below the track, fraction of a cell
+  shadowBob:0.48,    // how much the shadow shrinks as he rises — 0 keeps it fixed, 1 in proportion to the bob
+  eyeR:     0.034,
+  eyeY:     0.38,    // down the body from its top, fraction of body height
+  eyeAx:    -0.02,   // rear eye, fraction of body width from centre
+  eyeBx:    0.28,    // front eye
+  glanceMs: 5200,    // one full look-around cycle
+  glanceX:  0.03,    // how far the pupils dart
+  glanceY:  0.024,
+  blinkMs:  3000,    // one blink cycle (it's a double-blink)
+  talCordY: 0.77,    // talisman cord, fraction of body height from its top
+  talHangY: 1.01,    // where the pendant hangs
+  talR:     0.052,   // pendant radius, fraction of a cell
+  talX:     0.165,   // pendant offset from centre, fraction of body width (- = back, + = forward)
+  talCordW: 0.02,    // cord thickness, fraction of a cell
+  talCordA: 0.75,    // cord opacity
+  talSpan:  0.485,   // where the cord meets the body's sides, fraction of body width
+  talSag:   -0.003,  // cord droop past the pendant, fraction of a cell (- pulls it taut)
+  body:  "#bfe6ff",
+  ink:   "#17263f",
+};
+
+let CELL = 110, FROZEN = 0;
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+const $ = id => document.getElementById(id);
+function rrect(g,x,y,w,h,r){ r=Math.max(0,Math.min(r,w/2,h/2));
+  g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r);
+  g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); }
+
+function drawEyes(g, cx0, cy0, s, col, face, t, off) {
+  const R = s*EYES.r, gap = s*EYES.gap, bias = s*EYES.bias*(face || 0);
+  const G = EYES.glanceMs, gt = (t + (off||0)) % G;
+  let gx = 0, gy = 0;
+  if (gt < G*0.125)                      gx = -s*EYES.glanceX;
+  else if (gt < G*0.25)                  gx =  s*EYES.glanceX;
+  else if (gt > G*0.654 && gt < G*0.779) gy = -s*EYES.glanceY;
+  const bt = (t + (off||0)) % EYES.blinkMs;
+  const shut = bt < EYES.blinkMs*0.04 || (bt > EYES.blinkMs*0.058 && bt < EYES.blinkMs*0.085);
+  const x1 = cx0 + bias - gap/2, x2 = cx0 + bias + gap/2;
+  if (shut) {
+    g.strokeStyle = col; g.lineWidth = Math.max(1, R*EYES.lid); g.lineCap = "round";
+    g.beginPath();
+    g.moveTo(x1 - R, cy0 + gy); g.lineTo(x1 + R, cy0 + gy);
+    g.moveTo(x2 - R, cy0 + gy); g.lineTo(x2 + R, cy0 + gy);
+    g.stroke();
+  } else {
+    g.fillStyle = col;
+    g.beginPath(); g.arc(x1 + gx, cy0 + gy, R, 0, Math.PI*2); g.fill();
+    g.beginPath(); g.arc(x2 + gx, cy0 + gy, R, 0, Math.PI*2); g.fill();
+  }
+}
+
+
+// ---- the four faces that wear them, at the sizes they really are -------------------
+function face(x, y, kind, t){
+  const s = CELL;
+  if (kind === "runner"){
+    const bw = s*RUNNER.bodyW, bh = s*RUNNER.bodyH, top = y - bh;
+    ctx.fillStyle = "#bfe6ff"; rrect(ctx, x-bw/2, top, bw, bh, s*RUNNER.bodyR); ctx.fill();
+    drawEyes(ctx, x, top + bh*RUNNER.eyeY, s, "#17263f", 1, t, 0);
+    return "runner";
+  }
+  if (kind === "biter"){                                   // a splitting monster's upper half
+    const S = s*0.86, h = S/2;
+    ctx.fillStyle = "#b24dff"; rrect(ctx, x-h, y-h, S, S*0.55, s*0.075); ctx.fill();
+    drawEyes(ctx, x, y - h + S*0.30, s, "#17263f", 1, t, 0);
+    return "biter";
+  }
+  if (kind === "rail"){
+    const S = s*0.62, h = S/2;
+    ctx.fillStyle = "#4dc9ff"; rrect(ctx, x-h, y-h, S, S, s*0.075); ctx.fill();
+    drawEyes(ctx, x, y, s, "#17263f", 1, t, 0);
+    return "rail";
+  }
+  const S = s, h = S/2;                                    // a wall plate
+  ctx.fillStyle = "#5c6474"; rrect(ctx, x-h, y-h, S, S, s*0.075); ctx.fill();
+  ctx.fillStyle = "rgba(74,80,96,0.75)";
+  const off = S*0.17, br = S*0.05;
+  for (const [bx,by] of [[-h+off,-h+off],[h-off,-h+off],[-h+off,h-off],[h-off,h-off]])
+    { ctx.beginPath(); ctx.arc(x+bx, y+by, br, 0, 7); ctx.fill(); }
+  drawEyes(ctx, x, y - h + S*0.42, s, "rgba(74,80,96,0.75)", 0, t, 0);
+  return "wall";
+}
+function render(t){
+  CELL = +$("cellPx").value; FROZEN = +$("frozen").value;
+  const ts = FROZEN ? 1200 : t;
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.fillStyle = "#0d0b22"; ctx.fillRect(0,0,cv.width,cv.height);
+  const y = 190, xs = [0.14,0.38,0.62,0.86].map(f=>cv.width*f);
+  const kinds = ["runner","biter","rail","wall"];
+  kinds.forEach((k,i)=>{ const name = face(xs[i], y, k, ts);
+    ctx.fillStyle="#8f88c8"; ctx.font="11px ui-monospace,monospace"; ctx.textAlign="center";
+    ctx.fillText(name, xs[i], y + CELL*0.9); });
+  // and a strip of walls, to show the blink stagger
+  ctx.fillStyle="#8f88c8"; ctx.font="11px ui-monospace,monospace"; ctx.textAlign="left";
+  ctx.fillText("a row of walls — blinks are staggered per cell", 22, 322);
+  for (let i=0;i<6;i++){
+    const s2 = 56, x = 40 + i*(s2+10), yy = 372;
+    ctx.fillStyle="#5c6474"; rrect(ctx, x-s2/2, yy-s2/2, s2, s2, s2*0.075); ctx.fill();
+    drawEyes(ctx, x, yy - s2/2 + s2*0.42, s2, "rgba(74,80,96,0.75)", 0, ts,
+             ((i*2654435761)%1000)/1000*EYES.blinkMs);
+  }
+  requestAnimationFrame(render);
+}
+// ---- wiring -----------------------------------------------------------------------
+const KEYS = ["r","gap","bias","lid","glanceX","glanceY","glanceMs","blinkMs"];
+const DP = { r:3, gap:3, bias:3, lid:2, glanceX:3, glanceY:3, glanceMs:0, blinkMs:0 };
+function syncOut(){
+  const lines = KEYS.map(k => "    " + (k+":").padEnd(10) + " " + (+EYES[k]).toFixed(DP[k]) + ",");
+  $("out").value = "  const EYES = {\n" + lines.join("\n") + "\n  };";
+}
+function sync(){
+  for (const k of KEYS){ const el=$(k); el.value = EYES[k];
+    el.parentElement.querySelector("output").textContent = (+EYES[k]).toFixed(DP[k]); }
+  for (const k of ["cellPx","frozen"]) $(k).parentElement.querySelector("output").textContent = $(k).value;
+  syncOut();
+}
+KEYS.forEach(k => $(k).addEventListener("input", e => { EYES[k] = +e.target.value; sync(); }));
+["cellPx","frozen"].forEach(k => $(k).addEventListener("input", sync));
+$("cellPx").value = 110; $("frozen").value = 0;
+$("reset").onclick = () => { Object.assign(EYES, SHIPPED); sync(); };
+$("copy").onclick = () => { $("out").select(); document.execCommand("copy"); };
+sync();
+requestAnimationFrame(render);
+</script></body></html>

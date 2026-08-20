@@ -88,7 +88,9 @@ head("TILE block parity");
 {
   const game = runnerBlock("index.html", "TILE");
   // junction-lab carries a mirror too — the junction rides on the same cross-section
-  for (const [file, name] of [["tile-lab.html", "SHIPPED"], ["junction-lab.html", "TILE"]]) {
+  // icon-lab draws the app icon's tile with the same cross-section, so it carries a mirror too
+  for (const [file, name] of [["tile-lab.html", "SHIPPED"], ["junction-lab.html", "TILE"],
+                              ["icon-lab.html", "TILE"]]) {
     const lab = runnerBlock(file, name);
     if (!game || !lab) { bad(`could not extract the TILE block from index.html or ${file}`); continue; }
     const diff = [...new Set([...Object.keys(game), ...Object.keys(lab)])]
@@ -100,6 +102,20 @@ head("TILE block parity");
 }
 
 // -------------------------------------------------- 2d. the coin block
+head("EYES block parity");
+{
+  const game = runnerBlock("index.html", "EYES");
+  const lab  = runnerBlock("eye-lab.html", "SHIPPED");
+  if (!game || !lab) bad("could not extract the EYES block from index.html or eye-lab.html");
+  else {
+    const diff = [...new Set([...Object.keys(game), ...Object.keys(lab)])]
+      .filter((k) => game[k] !== lab[k])
+      .map((k) => `${k}: game=${game[k]} lab=${lab[k]}`);
+    if (diff.length) bad(`eye-lab differs from the game — ${diff.join("; ")}`);
+    else ok(`eye-lab matches the game (${Object.keys(game).length} keys)`);
+  }
+}
+
 head("COIN block parity");
 {
   const game = runnerBlock("index.html", "COIN");
@@ -211,8 +227,11 @@ function levelsFrom(file, marker) {
       if (!Array.isArray(L.intro)) problems.push(`L${n} has no intro array`);
       else for (const k of L.intro) if (!VALID_INTRO.has(k)) problems.push(`L${n} intro "${k}" is not a live key`);
       const inside = ([c, r]) => c >= 0 && r >= 0 && c < L.cols && r < L.rows;
-      for (const [label, p] of [["start", L.start], ["goal", L.goal], ["init0", L.init?.[0]], ["init1", L.init?.[1]]])
+      for (const [label, p] of [["start", L.start], ["init0", L.init?.[0]], ["init1", L.init?.[1]]])
         if (!p || !inside(p)) problems.push(`L${n} ${label} is outside the ${L.cols}x${L.rows} board`);
+      // A level may have no exit at all — it then runs until he falls. If it HAS one it
+      // still has to be on the board.
+      if (L.goal && !inside(L.goal)) problems.push(`L${n} goal is outside the ${L.cols}x${L.rows} board`);
     });
     if (problems.length) problems.forEach(bad);
     else ok("every level has cps, a valid intro list, and in-bounds start/init/goal");

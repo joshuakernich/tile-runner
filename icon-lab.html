@@ -137,10 +137,16 @@ const TAL = {
 // ---------- the icon, described entirely by numbers ----------
 // x/y/size are FRACTIONS of the icon's width, so one config renders at every export size.
 const DEFAULT = {
-  bgStyle:"stripes", bg1:"#3b2f6e", bg2:"#241f4a", bgAngle:35, stripes:5, vignette:0.25,
-  tileOn:1, tileX:0.50, tileY:0.58, tileSize:0.58, tileRot:0, tileShape:"ew",
+  bgStyle:"patchwork", bg1:"#3b2f6e", bg2:"#241f4a", bgAngle:35, stripes:5, vignette:0.25,
+  // The 3x3 patchwork: nine squares of the game's own backdrop, listed reading order
+  // (top-left first). patchGap insets each one so the seams show as the grid does in play.
+  patchN:3, patchGap:0.010, patchRound:0.016,
+  patch1:"#be2d2d", patch2:"#be8e2d", patch3:"#8ebe2d",
+  patch4:"#2dbe2d", patch5:"#2dbe8e", patch6:"#2d8ebe",
+  patch7:"#2d2dbe", patch8:"#8e2dbe", patch9:"#be2d8e",
+  tileOn:1, tileX:0.50, tileY:0.50, tileSize:0.75, tileRot:0, tileShape:"ew",
   track:"#ffcf4d", rail:"#fff2c4", glass:0.55, glassCol:"#b4aeeb", tileR:0.16,
-  runOn:1, runX:0.50, runY:0.58, runScale:0.58, runRot:0, runStride:0.9,
+  runOn:1, runX:0.50, runY:0.50, runScale:0.75, runRot:0, runStride:0.9,
   knees:1, body:"#bfe6ff", ink:"#17263f", runShadow:1, talisman:"",
 };
 // The composition survives a reload — same idea as the level editor's autosave.
@@ -178,21 +184,110 @@ function tileSurface(size, shape){
 // solid body from the surface out to the tile edge, then the rail on top
 function hexA(hex,a){ const n=parseInt(String(hex).replace("#",""),16);
   return "rgba("+((n>>16)&255)+","+((n>>8)&255)+","+(n&255)+","+a+")"; }
+// Mirror of the game's TILE block — the icon has to be the same object the game draws, not
+// a lookalike that quietly drifts. Tuned in tile-lab.html and pasted here; check.mjs diffs it.
+const TILE = {
+  radius:     0.075,   // corner radius, fraction of a cell
+  glassA:     0.50,    // the pane's flat fill alpha
+  glassGrain: 1.00,    // paper grain over the pane
+  bodyGrain:  1.00,    // paper grain over a laid platform body
+  railW:      0.075,   // running-surface rail thickness, fraction of a cell
+  pathW:      0.150,   // the beam directly under the rail, in the track colour
+  underShade: -50,     // how much darker the ground beneath it is
+  underHue:   -26,     // ...and how far its hue is turned from the track's, in degrees
+  underSat:   0.42,    // ...and how much of the track's saturation it keeps (1 = all of it)
+  strata:     0.16,    // the ground's own bedding lines: their strength, 0 = bare
+  strataN:    5,       // how many of them per cell
+  shadowW:    0.015,   // the shadow the beam casts onto the ground
+  shadowShade: -16,    // ...how much darker again that shadow is
+};
+
+// Turn a hex colour's hue, drain its saturation and shift its lightness, all at once.
+// shade() only moves lightness, which is why the ground could only ever be a darker copy
+// of the track — this lets it be a different material.
+function tintHex(hex, degrees, satMul, lightAmt) {
+  const n = parseInt(hex.replace("#",""), 16);
+  let r = ((n>>16)&255)/255, g = ((n>>8)&255)/255, b = (n&255)/255;
+  const mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx - mn;
+  let h = 0; const l = (mx+mn)/2;
+  let sat = d === 0 ? 0 : d / (1 - Math.abs(2*l - 1));
+  if (d !== 0) {
+    h = mx === r ? ((g-b)/d + (g < b ? 6 : 0)) : mx === g ? ((b-r)/d + 2) : ((r-g)/d + 4);
+    h *= 60;
+  }
+  h = (h + degrees + 360) % 360;
+  sat = Math.max(0, Math.min(1, sat * satMul));
+  const L = Math.max(0, Math.min(1, l + (lightAmt || 0)/255));
+  const C = (1 - Math.abs(2*L - 1)) * sat, X = C * (1 - Math.abs(((h/60) % 2) - 1)), m = L - C/2;
+  const seg = Math.floor(h/60) % 6;
+  const rgb = [[C,X,0],[X,C,0],[0,C,X],[0,X,C],[X,0,C],[C,0,X]][seg];
+  const to = v => Math.round((v + m)*255).toString(16).padStart(2,"0");
+  return "#" + to(rgb[0]) + to(rgb[1]) + to(rgb[2]);
+}
+
+// The body of a laid tile: the running surface, then closed along the cell's own edges, so
+// the slab hangs BELOW the surface. Lifted from index.html's bodyPath — the old version here
+// offset every point 1.7 cells down its normal, which self-intersects on a corner.
+function tileBody(g, S, h){
+  const last = S.length-1, mid = last >> 1;
+  const a = S[Math.max(0,mid-1)], b = S[Math.min(last,mid+1)];
+  let tx=b.x-a.x, ty=b.y-a.y; const m=Math.hypot(tx,ty)||1; tx/=m; ty/=m;
+  const bx=-ty, by=tx;
+  g.moveTo(S[0].x, S[0].y);
+  for(let k=1;k<=last;k++) g.lineTo(S[k].x, S[k].y);
+  if(last===2){ g.lineTo(S[last].x+bx*h, S[last].y+by*h); g.lineTo(S[0].x+bx*h, S[0].y+by*h); }
+  else {
+    const O={x:S[0].x+S[last].x, y:S[0].y+S[last].y}, M=S[mid];
+    if((O.x-M.x)*bx + (O.y-M.y)*by > 0) g.lineTo(O.x, O.y);
+    else {
+      const cs=[{x:-h,y:-h},{x:h,y:-h},{x:h,y:h},{x:-h,y:h}];
+      let k0=0, best=Infinity;
+      for(let i=0;i<4;i++){ const d=Math.hypot(cs[i].x-O.x, cs[i].y-O.y); if(d<best){best=d;k0=i;} }
+      const n1=(k0+1)%4, n3=(k0+3)%4;
+      const first = Math.hypot(cs[n1].x-S[last].x, cs[n1].y-S[last].y)
+                  < Math.hypot(cs[n3].x-S[last].x, cs[n3].y-S[last].y) ? n1 : n3;
+      g.lineTo(cs[first].x, cs[first].y);
+      g.lineTo(cs[(k0+2)%4].x, cs[(k0+2)%4].y);
+      g.lineTo(cs[first===n1?n3:n1].x, cs[first===n1?n3:n1].y);
+    }
+  }
+  g.closePath();
+}
 function drawTile(g, cx, cy, size, rot, shape, track, rail, glass, tileR, glassCol){
   const S=tileSurface(size, shape), h=size/2;
   g.save(); g.translate(cx,cy); g.rotate(rot*Math.PI/180);
   rrect(g,-h,-h,size,size,size*tileR); g.save(); g.clip();
   if(glass>0){ g.fillStyle=hexA(glassCol||"#b4aeeb", glass); g.fillRect(-h,-h,size,size); }
   const n=S.length-1;
-  const nrm=S.map((pt,k)=>{ const a=S[Math.max(0,k-1)], b=S[Math.min(n,k+1)];
-    let tx=b.x-a.x, ty=b.y-a.y; const m=Math.hypot(tx,ty)||1; return {x:ty/m, y:-tx/m}; });
-  const far=S.map((pt,k)=>({x:pt.x-nrm[k].x*size*1.7, y:pt.y-nrm[k].y*size*1.7}));
-  g.beginPath(); g.moveTo(S[0].x,S[0].y);
-  for(let k=1;k<=n;k++) g.lineTo(S[k].x,S[k].y);
-  for(let k=n;k>=0;k--) g.lineTo(far[k].x,far[k].y);
-  g.closePath(); g.fillStyle=track; g.fill();
-  g.lineJoin="round"; g.lineCap="round"; g.strokeStyle=rail; g.lineWidth=size*0.06;
-  g.beginPath(); g.moveTo(S[0].x,S[0].y); for(let k=1;k<=n;k++) g.lineTo(S[k].x,S[k].y); g.stroke();
+  const line = () => { g.beginPath(); g.moveTo(S[0].x,S[0].y); for(let k=1;k<=n;k++) g.lineTo(S[k].x,S[k].y); };
+  // Exactly the in-game cross-section: ground in its own colour with its bedding, the beam's
+  // shadow, then the beam riding the surface, then the rail on top.
+  g.save();
+  g.beginPath(); tileBody(g, S, h); g.clip();
+  g.fillStyle = tintHex(track, TILE.underHue, TILE.underSat, TILE.underShade);
+  g.fillRect(-h,-h,size,size);
+  if(TILE.strata > 0 && TILE.strataN > 0){                     // bedding lines in the ground
+    g.save(); g.globalAlpha = TILE.strata; g.fillStyle = "#05040d";
+    const step = size/TILE.strataN, th = Math.max(1, size*0.012);
+    for(let k=1;k<TILE.strataN;k++){
+      const y = -h + k*step;
+      g.fillRect(-h, y, size, th);
+      if(k % 2 === 0){ g.globalAlpha = TILE.strata*0.5;
+        g.fillRect(-h + size*0.18, y + step*0.42, size*0.42, th); g.globalAlpha = TILE.strata; }
+    }
+    g.restore();
+  }
+  g.lineJoin="round"; g.lineCap="butt";
+  if(TILE.pathW>0 && TILE.shadowW>0){
+    g.strokeStyle = tintHex(track, TILE.underHue, TILE.underSat, TILE.underShade + TILE.shadowShade);
+    g.lineWidth = Math.max(1, size*(TILE.pathW+TILE.shadowW)*2); line(); g.stroke();
+  }
+  if(TILE.pathW>0){                                            // doubled: the top half is clipped
+    g.strokeStyle = track; g.lineWidth = Math.max(1, size*TILE.pathW*2); line(); g.stroke();
+  }
+  g.restore();                                                 // out of the body clip
+  g.lineJoin="round"; g.lineCap="round"; g.strokeStyle=rail;
+  g.lineWidth = Math.max(2, size*TILE.railW); line(); g.stroke();
   g.restore(); g.restore();
 }
 
@@ -251,6 +346,22 @@ function paintIcon(g, W, ts){
     const a=C.bgAngle*Math.PI/180, dx=Math.cos(a)*W, dy=Math.sin(a)*W;
     const gr=g.createLinearGradient(W/2-dx/2,W/2-dy/2,W/2+dx/2,W/2+dy/2);
     gr.addColorStop(0,C.bg1); gr.addColorStop(1,C.bg2); g.fillStyle=gr; g.fillRect(0,0,W,W);
+  } else if(C.bgStyle==="patchwork"){
+    // A quilt of flat squares, the way the board's backdrop reads at a glance. Nine of them
+    // at 3x3: big enough to be legible once the icon is 40px on a home screen, where the
+    // diagonal stripes just turned into mush.
+    const N=Math.max(1,C.patchN|0), cellW=W/N, gap=W*C.patchGap, rad=W*C.patchRound;
+    g.fillStyle=C.bg2; g.fillRect(0,0,W,W);       // the seam colour, showing through the gaps
+    const cols=[C.patch1,C.patch2,C.patch3,C.patch4,C.patch5,C.patch6,C.patch7,C.patch8,C.patch9];
+    for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+      const x=c*cellW+gap/2, y=r*cellW+gap/2, w=cellW-gap;
+      g.fillStyle=cols[(r*N+c)%cols.length]||C.bg1;
+      const rr=Math.min(rad,w/2);
+      g.beginPath(); g.moveTo(x+rr,y);
+      g.arcTo(x+w,y,x+w,y+w,rr); g.arcTo(x+w,y+w,x,y+w,rr);
+      g.arcTo(x,y+w,x,y,rr);     g.arcTo(x,y,x+w,y,rr);
+      g.closePath(); g.fill();
+    }
   } else {                                        // the game's diagonal stripe backdrop
     g.fillStyle=C.bg2; g.fillRect(0,0,W,W);
     g.save(); g.translate(W/2,W/2); g.rotate(C.bgAngle*Math.PI/180); g.translate(-W,-W);
@@ -298,11 +409,18 @@ function frame(now){
 // ---------- controls ----------
 const SPEC=[
   ["group","Background"],
-  ["pick","bgStyle","style",["stripes","gradient","flat"]],
-  ["col","bg1","colour A"], ["col","bg2","colour B"],
+  ["pick","bgStyle","style",["patchwork","stripes","gradient","flat"]],
+  ["col","bg1","colour A"], ["col","bg2","seam / colour B"],
   ["num","bgAngle","angle",0,180,1],
   ["num","stripes","stripes",2,14,1],
   ["num","vignette","vignette",0,0.7,0.01],
+  ["group","Patchwork"],
+  ["num","patchN","grid",2,4,1],
+  ["num","patchGap","seam",0,0.06,0.002],
+  ["num","patchRound","corner",0,0.2,0.005],
+  ["col","patch1","1"], ["col","patch2","2"], ["col","patch3","3"],
+  ["col","patch4","4"], ["col","patch5","5"], ["col","patch6","6"],
+  ["col","patch7","7"], ["col","patch8","8"], ["col","patch9","9"],
   ["group","Tile"],
   ["tog","tileOn","show tile"],
   ["pick","tileShape","platform",["ew","ns","ne","es","sw","wn"]],

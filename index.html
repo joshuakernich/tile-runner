@@ -89,6 +89,36 @@
     background:rgba(23,20,43,0.72); border:2px solid var(--grid-line); box-shadow:2px 2px 0 var(--shadow);
   }
   #pauseFloat span { width:4px; height:16px; background:var(--ink); border-radius:1px; }
+  /* The whirlpool eats the canvas, but the two floating buttons are DOM — so they get
+     pulled in too rather than simply blinking out a moment before everything else. */
+  body.vortex #pauseFloat, body.vortex #power {
+    transition: transform 2.4s cubic-bezier(.6,0,.85,.2), opacity 2.4s ease-in;
+    transform: scale(0.02) rotate(520deg); opacity: 0; pointer-events: none;
+  }
+  body.vortex #power { transform: translateX(-50%) scale(0.02) rotate(520deg); }
+  /* The talisman's one shot at this level. Bottom centre, clear of the board's top edge
+     (which is where the runner is heading) and clear of the pause button. */
+  #power {
+    position:fixed; z-index:15; display:none; align-items:center; gap:9px; overflow:hidden;
+    left:50%; transform:translateX(-50%);
+    bottom:calc(env(safe-area-inset-bottom) + 16px);
+    padding:9px 16px 9px 10px; cursor:pointer; font-family:inherit; text-align:left;
+    background:rgba(23,20,43,0.88); border:2px solid var(--grid-line); border-radius:0;
+    box-shadow:3px 3px 0 var(--shadow); color:var(--ink);
+  }
+  #power.on { display:flex; }
+  #power:active { transform:translateX(-50%) translate(2px,2px); box-shadow:none; }
+  #power canvas { width:30px; height:30px; display:block; flex:none; }
+  #power .power-txt { display:flex; flex-direction:column; line-height:1.15; }
+  #power b { font-size:11px; letter-spacing:1.5px; text-transform:uppercase; font-weight:900; }
+  #power i { font-size:10px; letter-spacing:0.4px; font-style:normal; color:var(--dim); font-weight:700; }
+  /* running: a bar draining along the bottom edge, set from JS */
+  #power-bar { position:absolute; left:0; bottom:0; height:3px; width:0; background:var(--goal); }
+  /* spent, or running — either way there is nothing left to press */
+  #power.dim { opacity:0.45; box-shadow:none; }
+  #power.dim:active { transform:translateX(-50%); }
+  /* armed and waiting to be aimed (the Finger) */
+  #power.armed { border-color:var(--goal); box-shadow:0 0 0 2px var(--goal) inset, 3px 3px 0 var(--shadow); }
   #pauseFloat:active { transform:translate(2px,2px); box-shadow:none; }
   #mechpop {
     position:fixed; inset:0; display:none; align-items:center; justify-content:center;
@@ -169,10 +199,13 @@
        can't be scrolled back to — which the shop, being the tallest screen here, does.
        safe-centring keeps it centred while it fits and pins it to the top once it doesn't. */
     position:fixed; inset:0; display:none; align-items:safe center; justify-content:center;
+    /* the shop is the tall one — it is pinned to the top so the runner and the tabs stay put
+       as you switch between racks of different lengths, instead of the whole card sliding */
     background:radial-gradient(ellipse 84% 70% at 50% 50%, rgba(5,4,13,0.58) 0%, rgba(5,4,13,0.48) 48%, rgba(5,4,13,0.14) 100%);
     z-index:30; padding:22px; overflow:auto;
   }
   #menu.show { display:flex; }
+  #menu.top { align-items:flex-start; }
   .menu-card { width:100%; max-width:330px; text-align:center; }
   .menu-ver { font-size:var(--body); letter-spacing:2px; color:var(--dim); margin-top:14px; opacity:0.7; }
   .menu-card h2 { font-size:18px; font-weight:900; letter-spacing:2px; text-transform:uppercase; color:var(--track);
@@ -188,6 +221,8 @@
   }
   #menu-body { display:flex; flex-direction:column; gap:9px; }
   #menu-body button { width:100%; }
+  /* armed, and about to throw everything away */
+  #menu-body button.danger { border-color:#ff6d6d; color:#ff9d9d; box-shadow:0 0 0 2px #ff6d6d inset; }
   .menu-sub { font-size:var(--btn); font-weight:900; letter-spacing:2px; text-transform:uppercase; color:var(--dim);
     margin:10px 0 2px; }
   .toggle { display:flex; justify-content:space-between; align-items:center;
@@ -206,22 +241,35 @@
   .tal-grid .tal span { font-size:11px; letter-spacing:0.2px; line-height:1.15;
                         text-align:center; hyphens:none; }
   .tal-grid .tal.locked span { color:var(--dim); }
+  /* what the charm actually does — the reason to pick one over another */
+  .tal-grid .tal .tal-blurb { font-size:9px; letter-spacing:0.2px; line-height:1.1; font-style:normal;
+    text-transform:none; font-weight:700; color:var(--track); text-align:center; }
   .tal-grid .tal.on { border-color:var(--goal); box-shadow:0 0 0 2px var(--goal) inset; }
-  /* the shop: a picture of the runner as he is, then a tab per category under him */
-  .shop-fig { width:100%; max-width:300px; margin:0 auto; }
+  /* SHOP wears the big title treatment — it is a destination, not a sub-menu */
+  #menu-title.shop { font-size:40px; letter-spacing:7px; margin-bottom:4px; }
+  /* the shop: him at the top, tucked right under the title, then a tab per category */
+  .shop-fig { width:100%; max-width:230px; margin:-6px auto 0; }
   .shop-fig canvas { display:block; width:100%; height:auto; }
   /* the wallet, sitting on the picture rather than costing a line of its own */
   .shop-purse { display:flex; align-items:center; justify-content:center; gap:7px;
-    margin:-4px auto 8px; font-size:13px; letter-spacing:1px; color:var(--track); font-weight:900; }
+    margin:-6px auto 8px; font-size:13px; letter-spacing:1px; color:var(--track); font-weight:900; }
   .shop-purse canvas { width:17px; height:17px; }
   .shop-purse i { font-style:normal; color:var(--dim); font-weight:700; letter-spacing:1px; }
   /* #menu-body button sets width:100%, and an id beats a class — so these have to match it */
-  .shop-tabs { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin-bottom:2px; }
-  #menu-body .shop-tabs button { width:100%; padding:8px 2px; font-size:10px; letter-spacing:1px;
-    border-width:2px; box-shadow:2px 2px 0 var(--shadow); }
+  .shop-tabs { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; margin-bottom:6px; }
+  #menu-body .shop-tabs button { width:100%; padding:5px 0 4px; font-size:7px; letter-spacing:0.2px;
+    border-width:2px; box-shadow:2px 2px 0 var(--shadow);
+    display:flex; flex-direction:column; align-items:center; gap:2px; line-height:1; }
+  #menu-body .shop-tabs button canvas { width:20px; height:20px; display:block; }
   #menu-body .shop-tabs button.on { border-color:var(--goal); color:var(--goal);
     box-shadow:0 0 0 2px var(--goal) inset; }
   #menu-body .shop-tabs button:active { transform:translate(2px,2px); box-shadow:none; }
+  /* the rack scrolls on its own, so the runner and the tabs stay put while you browse */
+  .shop-rack { max-height:44vh; overflow-y:auto; overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch; padding:2px; margin-bottom:10px;
+    border:2px solid var(--grid-line); background:rgba(5,4,13,0.28); }
+  /* the way out, and the only thing you can do wrong is not press it */
+  #menu-body .shop-go { font-size:12px; letter-spacing:1.5px; padding:13px 10px; line-height:1.2; }
   /* what the tab is showing, and what of it is on */
   .shop-worn { text-align:center; font-size:11px; letter-spacing:0.5px; color:var(--dim);
     text-transform:none; font-weight:700; margin:1px 0 2px; }
@@ -238,6 +286,11 @@
 <div id="app">
   <div id="board-wrap"><canvas id="game"></canvas></div>
   <button id="pauseFloat" aria-label="Menu"><span></span><span></span></button>
+  <button id="power" aria-label="Use talisman">
+    <canvas id="power-ic" width="72" height="72"></canvas>
+    <span class="power-txt"><b id="power-name"></b><i id="power-sub"></i></span>
+    <span id="power-bar"></span>
+  </button>
 </div>
 
 <div id="menu">
@@ -293,30 +346,34 @@
   // way to the key and the exit.
   // 50-level campaign: each new mechanic is introduced on its own level (see `intro`).
   const LEVELS = [
-    {"start":[2,6],"init":[[2,5],[2,4]],"goal":[2,0],"cols":5,"rows":7,"intro":["recycle","flag","coin"],"cps":0.8,"walls":[],"coins":[[1,1],[4,2]]},
-    {"start":[0,7],"init":[[0,6],[0,5]],"goal":[4,3],"cols":5,"rows":8,"intro":["turn"],"cps":0.8,"walls":[],"coins":[[3,4],[1,4],[2,4],[1,3],[2,3],[3,3]]},
-    {"start":[0,0],"init":[[0,1],[0,2]],"goal":[5,7],"cols":6,"rows":8,"intro":["offscreen"],"cps":0.8,"walls":[],"talismans":[[5,2,"ember"]],"coins":[[4,1],[2,4],[0,6]]},
+    {"start":[2,6],"init":[[2,5],[2,4]],"goal":[2,0],"cols":5,"rows":7,"intro":["recycle","flag","coin"],"cps":0.8,"walls":[]},
+    {"start":[0,7],"init":[[0,6],[0,5]],"cols":5,"rows":8,"intro":["turn"],"cps":0.8,"goal":[4,3],"walls":[],"coins":[[1,3],[2,3],[3,3]]},
+    {"start":[0,0],"init":[[0,1],[0,2]],"cols":6,"rows":8,"intro":["offscreen"],"cps":0.8,"goal":[5,7],"walls":[],"talismans":[[5,2,"clock"]],"coins":[[4,1],[2,4],[0,6]]},
     {"start":[1,7],"init":[[1,6],[1,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["wall"],"cps":0.8,"walls":[[0,3],[1,3],[2,3],[4,3]],"coins":[[1,1],[1,4],[2,6]]},
     {"start":[1,12],"init":[[1,11],[1,10]],"goal":[1,0],"cols":5,"rows":13,"intro":[],"cps":0.8,"walls":[[0,2],[1,2],[2,2],[4,2],[0,5],[2,5],[3,5],[4,5],[0,8],[1,8],[2,8],[4,8]],"coins":[[4,1],[0,6],[0,9],[2,11]]},
-    {"start":[0,3],"init":[[1,3],[2,3]],"goal":[1,6],"cols":9,"rows":9,"intro":[],"cps":0.8,"walls":[[4,0],[4,2],[4,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[8,4],[4,5],[4,6],[4,8]],"talismans":[[8,1,"tide"]],"coins":[[0,1],[8,2],[0,6],[7,7]]},
+    {"start":[0,3],"init":[[1,3],[2,3]],"goal":[1,6],"cols":9,"rows":9,"intro":[],"cps":0.8,"walls":[[4,0],[4,2],[4,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[8,4],[4,5],[4,6],[4,8]],"talismans":[[8,1,"magnet"]],"coins":[[0,1],[8,2],[0,6],[7,7]]},
     {"start":[4,7],"init":[[4,6],[4,5]],"goal":[1,7],"cols":8,"rows":8,"intro":[],"cps":0.8,"walls":[[5,0],[2,1],[0,2],[2,2],[3,2],[4,2],[5,2],[7,2],[2,3],[5,3],[2,4],[5,4],[1,5],[2,5],[5,5],[6,5],[2,6],[2,7]],"coins":[[7,0],[4,3],[3,4],[0,7]]},
-    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["block"],"cps":0.8,"walls":[[0,2],[1,2],[3,2],[4,2]],"blocks":[{"axis":"h","r":3,"lo":2,"hi":3,"pos0":2}],"coins":[[4,1],[1,4],[2,6]]},
+    {"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["block"],"cps":0.8,"walls":[[0,2],[1,2],[3,2],[4,2]],"blocks":[{"axis":"h","r":3,"pos0":3,"lo":2,"hi":3}],"coins":[[2,2],[2,4]]},
     {"start":[3,15],"init":[[3,14],[3,13]],"goal":[1,0],"cols":5,"rows":16,"intro":[],"cps":0.8,"walls":[[0,2],[1,2],[2,2],[4,2],[0,7],[2,7],[3,7],[4,7],[0,10],[1,10],[3,10],[4,10]],"blocks":[{"axis":"h","r":11,"lo":2,"hi":3,"pos0":2},{"axis":"h","r":6,"lo":0,"hi":1,"pos0":1},{"axis":"h","r":3,"lo":3,"hi":4,"pos0":3}],"coins":[[2,3],[4,5],[0,11],[1,13]]},
-    {"start":[0,9],"init":[[1,9],[2,9]],"goal":[6,9],"cols":9,"rows":11,"intro":[],"cps":0.8,"walls":[[4,0],[4,1],[4,3],[4,4],[0,5],[1,5],[3,5],[4,5],[5,5],[7,5],[8,5],[4,6],[4,7],[4,8],[4,9],[4,10]],"blocks":[{"axis":"h","r":6,"lo":5,"hi":6,"pos0":6},{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"h","r":6,"lo":2,"hi":3,"pos0":2},{"axis":"v","c":3,"lo":1,"hi":2,"pos0":2}],"talismans":[[8,0,"cog"]],"coins":[[5,1],[5,3],[8,6],[8,8]]},
+    {"start":[0,9],"init":[[1,9],[2,9]],"goal":[6,9],"cols":9,"rows":11,"intro":[],"cps":0.8,"walls":[[4,0],[4,1],[4,3],[4,4],[0,5],[1,5],[3,5],[4,5],[5,5],[7,5],[8,5],[4,6],[4,7],[4,8],[4,9],[4,10]],"blocks":[{"axis":"h","r":6,"lo":5,"hi":6,"pos0":6},{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"h","r":6,"lo":2,"hi":3,"pos0":2},{"axis":"v","c":3,"lo":1,"hi":2,"pos0":2}],"talismans":[[8,0,"star"]],"coins":[[5,1],[2,5],[1,6],[3,4]]},
     {"start":[1,3],"init":[[1,2],[1,1]],"goal":[13,11],"cols":14,"rows":14,"intro":[],"cps":0.8,"walls":[[4,0],[8,0],[4,1],[8,2],[4,3],[8,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[10,4],[11,4],[13,4],[5,5],[9,5],[9,6],[5,7],[5,8],[9,8],[0,9],[1,9],[3,9],[4,9],[5,9],[6,9],[7,9],[8,9],[9,9],[10,9],[11,9],[12,9],[13,9],[4,10],[8,10],[8,11],[4,12],[4,13],[8,13]],"blocks":[{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"v","c":9,"lo":0,"hi":1,"pos0":1},{"axis":"h","r":5,"lo":11,"hi":12,"pos0":12},{"axis":"v","c":8,"lo":6,"hi":7,"pos0":7},{"axis":"v","c":4,"lo":5,"hi":6,"pos0":6},{"axis":"h","r":10,"lo":1,"hi":2,"pos0":2},{"axis":"v","c":5,"lo":10,"hi":11,"pos0":11},{"axis":"v","c":9,"lo":11,"hi":12,"pos0":12}],"coins":[[1,5],[3,7],[0,10],[0,12]]},
-    {"start":[2,7],"init":[[2,6],[2,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["saw"],"cps":0.8,"walls":[],"hazards":[{"kind":"saw","axis":"h","r":3,"lo":0,"hi":4,"speed":4000,"phase":0}],"coins":[[4,1],[4,5],[2,3]]},
-    {"start":[2,12],"init":[[2,11],[2,10]],"goal":[2,0],"cols":5,"rows":13,"intro":[],"cps":0.8,"walls":[],"hazards":[{"phase":0,"kind":"saw","axis":"h","r":8,"lo":0,"hi":4,"speed":3600},{"phase":0,"kind":"saw","axis":"h","r":5,"lo":0,"hi":4,"speed":4400},{"phase":0,"kind":"saw","axis":"h","r":2,"lo":0,"hi":4,"speed":5200}],"coins":[[2,2],[4,8],[3,5],[1,5],[0,8]]},
-    {"start":[1,8],"init":[[1,7],[1,6]],"goal":[6,0],"cols":7,"rows":9,"intro":[],"cps":0.8,"walls":[[0,0],[1,1],[3,4],[5,7],[6,8]],"hazards":[{"phase":0,"kind":"saw","axis":"v","c":3,"lo":0,"hi":3,"speed":4000},{"phase":0,"kind":"saw","axis":"v","c":3,"lo":5,"hi":8,"speed":4000},{"phase":0,"kind":"saw","axis":"h","r":4,"lo":0,"hi":2,"speed":4000},{"phase":0,"kind":"saw","axis":"h","r":4,"lo":4,"hi":6,"speed":4000}],"coins":[[5,4],[3,1],[1,4],[3,7]]},
+    {"start":[2,7],"init":[[2,6],[2,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["saw"],"cps":0.8,"walls":[],"hazards":[{"phase":0,"kind":"monster","axis":"h","r":3,"lo":0,"hi":4,"speed":4000,"variant":"hrail"}],"coins":[[4,1],[4,5],[2,3]]},
+    {"start":[2,12],"init":[[2,11],[2,10]],"goal":[2,0],"cols":5,"rows":13,"intro":[],"cps":0.8,"walls":[],"hazards":[{"phase":0,"kind":"monster","axis":"h","r":8,"lo":0,"hi":4,"speed":3600,"variant":"hrail"},{"phase":0,"kind":"monster","axis":"h","r":5,"lo":0,"hi":4,"speed":4400,"variant":"hrail"},{"phase":0,"kind":"monster","axis":"h","r":2,"lo":0,"hi":4,"speed":5200,"variant":"hrail"}],"coins":[[2,2],[4,8],[3,5],[1,5],[0,8]]},
+    {"start":[1,8],"init":[[1,7],[1,6]],"goal":[6,0],"cols":7,"rows":9,"intro":[],"cps":0.8,"walls":[[0,0],[1,1],[3,4],[5,7],[6,8]],"hazards":[{"phase":0,"kind":"monster","axis":"v","c":3,"lo":0,"hi":3,"speed":4000,"variant":"vrail"},{"phase":0,"kind":"monster","axis":"v","c":3,"lo":5,"hi":8,"speed":4000,"variant":"vrail"},{"phase":0,"kind":"monster","axis":"h","r":4,"lo":0,"hi":2,"speed":4000,"variant":"hrail"},{"phase":0,"kind":"monster","axis":"h","r":4,"lo":4,"hi":6,"speed":4000,"variant":"hrail"}],"coins":[[5,4],[3,1],[1,4],[3,7]]},
     {"start":[1,7],"init":[[1,6],[1,5]],"goal":[3,0],"cols":7,"rows":8,"intro":["key","door"],"cps":0.8,"walls":[[0,3],[1,3],[2,3],[4,3],[5,3],[6,3]],"doors":[[3,3,"#ffd24a"]],"keys":[[6,7,"#ffd24a"]],"coins":[[4,1],[1,4],[0,6]]},
-    {"start":[0,0],"init":[[1,0],[2,0]],"goal":[6,9],"cols":8,"rows":11,"intro":[],"cps":0.8,"walls":[[0,2],[2,2],[3,2],[4,2],[4,3],[5,3],[6,3],[7,3],[0,5],[1,5],[2,5],[3,5],[2,7],[3,7],[4,7],[5,7],[7,7],[4,8],[4,9],[4,10]],"doors":[[1,2,"#ffd24a"],[6,7,"#c77dff"]],"keys":[[6,1,"#ffd24a"],[2,9,"#c77dff"]],"talismans":[[7,0,"sun"]],"coins":[[5,1],[7,4],[1,7],[3,9]]},
+    {"start":[0,0],"init":[[1,0],[2,0]],"goal":[6,9],"cols":8,"rows":11,"intro":[],"cps":0.8,"walls":[[0,2],[2,2],[3,2],[4,2],[4,3],[5,3],[6,3],[7,3],[0,5],[1,5],[2,5],[3,5],[2,7],[3,7],[4,7],[5,7],[7,7],[4,8],[4,9],[4,10]],"doors":[[1,2,"#ffd24a"],[6,7,"#c77dff"]],"keys":[[6,1,"#ffd24a"],[2,9,"#c77dff"]],"talismans":[[7,0,"finger"]],"coins":[[5,1],[7,4],[1,7],[3,9]]},
     {"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["stone"],"cps":0.8,"walls":[[0,3],[1,3],[2,3],[4,3]],"stone":[[3,3,2]],"coins":[[2,1],[1,4],[2,6]]},
     {"start":[1,0],"init":[[1,1],[1,2]],"goal":[3,10],"cols":7,"rows":12,"intro":[],"cps":0.8,"walls":[[3,0],[3,1],[3,3],[0,4],[1,4],[2,4],[3,4],[5,4],[6,4],[3,5],[6,5],[1,6],[3,6],[4,6],[6,6],[1,7],[6,7],[1,8],[2,8],[3,8],[4,8],[5,8],[6,8]],"stone":[[3,2,2],[4,4,2],[5,6,2],[2,6,2],[0,8,2]],"coins":[[2,1],[0,3],[5,9],[6,10]]},
     {"start":[4,9],"init":[[4,8],[4,7]],"goal":[1,0],"cols":6,"rows":10,"intro":["platform"],"cps":0.8,"walls":[[0,2],[1,2],[2,2],[3,2],[3,4],[0,5],[2,5],[3,5],[4,5],[5,5]],"platforms":[[1,5,"ns"],[3,3,"ew"]],"coins":[[0,1],[0,4],[5,6],[3,8]]},
-    {"start":[2,1],"init":[[3,1],[4,1]],"goal":[5,8],"cols":7,"rows":10,"intro":[],"cps":0.8,"walls":[[0,3],[1,3],[3,3],[4,3],[5,3],[6,3],[4,4],[1,5],[4,5],[1,6],[4,7],[0,8],[4,8],[4,9]],"platforms":[[2,3,"ns"],[1,4,"ew"],[1,7,"sw"],[4,6,"ew"]],"talismans":[[0,0,"shard"]],"coins":[[1,1],[6,2],[6,5],[1,8]]},
+    {"start":[2,1],"init":[[3,1],[4,1]],"goal":[5,8],"cols":7,"rows":10,"intro":[],"cps":0.8,"walls":[[0,3],[1,3],[3,3],[4,3],[5,3],[6,3],[4,4],[1,5],[4,5],[1,6],[4,7],[0,8],[4,8],[4,9]],"platforms":[[2,3,"ns"],[1,4,"ew"],[1,7,"sw"],[4,6,"ew"]],"talismans":[[0,0,"mush"]],"coins":[[1,1],[6,2],[6,5],[1,8]]},
     {"start":[0,8],"init":[[1,8],[2,8]],"goal":[1,2],"cols":14,"rows":10,"intro":[],"cps":0.8,"walls":[[11,0],[8,1],[9,1],[11,2],[3,3],[11,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[11,4],[13,4],[11,5],[4,6],[8,6],[11,6],[4,7],[5,7],[7,7],[8,7],[11,7],[4,8],[8,8],[4,9],[8,9]],"platforms":[[6,7,"ns"],[10,1,"ne"],[4,5,"ew"],[8,5,"ew"],[10,4,"ns"],[12,4,"ns"],[11,1,"ew"],[7,0,"es"],[7,1,"ns"],[7,2,"ns"],[7,3,"wn"],[3,0,"es"],[3,1,"ns"],[3,2,"wn"]],"coins":[[0,1],[9,2],[13,5],[1,7],[13,8]]},
     {"start":[1,8],"init":[[1,7],[1,6]],"goal":[7,8],"cols":10,"rows":10,"intro":[],"cps":0.8,"walls":[[5,1],[6,1],[8,1],[9,1],[5,2],[9,2],[5,3],[9,3],[0,4],[1,4],[2,4],[5,4],[9,4],[5,5],[9,5],[5,6],[9,6],[5,7],[9,7],[5,8],[9,8],[5,9],[9,9]],"blocks":[{"axis":"v","c":4,"pos0":4,"lo":3,"hi":5},{"axis":"v","c":3,"pos0":4,"lo":3,"hi":5},{"axis":"h","r":3,"pos0":8,"lo":6,"hi":8},{"axis":"h","r":2,"pos0":7,"lo":6,"hi":8},{"axis":"h","r":4,"pos0":7,"lo":6,"hi":8},{"axis":"h","r":5,"pos0":6,"lo":6,"hi":8}],"stone":[[7,1,2]],"coins":[[6,4],[3,5],[4,5],[0,0],[1,1]]},
-    {"start":[2,9],"init":[[2,8],[2,7]],"goal":[2,0],"cols":5,"rows":10,"intro":[],"cps":0.8,"walls":[],"stone":[[0,4,2],[1,4,2],[2,4,2],[3,4,2],[4,4,2],[4,3,2],[3,3,2],[2,3,2],[1,3,2],[0,3,2],[0,2,2],[1,2,2],[2,2,2],[3,2,2],[0,5,2],[1,5,2],[2,5,2],[3,5,2],[4,5,2],[4,2,2]],"talismans":[[4,7,"sprig"]],"coins":[[1,1],[4,6],[1,8]]},
-    {"start":[1,3],"init":[[1,2],[1,1]],"goal":[12,6],"cols":14,"rows":8,"intro":[],"cps":0.8,"walls":[],"hazards":[{"phase":0.07,"kind":"saw","axis":"v","c":3,"lo":0,"hi":7,"speed":4000},{"phase":0.14,"kind":"saw","axis":"v","c":4,"lo":0,"hi":7,"speed":4000},{"phase":0.21,"kind":"saw","axis":"v","c":5,"lo":0,"hi":7,"speed":4000},{"phase":0.43,"kind":"saw","axis":"v","c":8,"lo":0,"hi":7,"speed":4000},{"phase":0.36,"kind":"saw","axis":"v","c":9,"lo":0,"hi":7,"speed":4000},{"kind":"saw","axis":"v","c":10,"lo":0,"hi":7,"speed":4000,"phase":0.29}],"coins":[[13,1],[3,3],[6,4],[8,5],[11,6]]},
+    {"start":[2,9],"init":[[2,8],[2,7]],"goal":[2,0],"cols":5,"rows":10,"intro":[],"cps":0.8,"walls":[],"stone":[[0,4,2],[4,4,2],[4,3,2],[0,3,2],[0,2,2],[2,2,2],[3,2,2],[0,5,2],[4,5,2],[4,2,2],[3,5,1],[3,4,1],[2,4,1],[1,4,1],[1,3,1],[1,2,1],[1,5,3],[2,5,3],[2,3,3],[3,3,3]],"talismans":[[4,7,"star"]]},
+    {"start":[1,3],"init":[[1,2],[1,1]],"goal":[12,6],"cols":14,"rows":8,"intro":[],"cps":0.8,"walls":[],"hazards":[{"phase":0.07,"kind":"monster","axis":"v","c":3,"lo":0,"hi":7,"speed":4000,"variant":"vrail"},{"phase":0.14,"kind":"monster","axis":"v","c":4,"lo":0,"hi":7,"speed":4000,"variant":"vrail"},{"phase":0.21,"kind":"monster","axis":"v","c":5,"lo":0,"hi":7,"speed":4000,"variant":"vrail"},{"phase":0.43,"kind":"monster","axis":"v","c":8,"lo":0,"hi":7,"speed":4000,"variant":"vrail"},{"phase":0.36,"kind":"monster","axis":"v","c":9,"lo":0,"hi":7,"speed":4000,"variant":"vrail"},{"kind":"monster","axis":"v","c":10,"lo":0,"hi":7,"speed":4000,"phase":0.29,"variant":"vrail"}],"coins":[[13,1],[3,3],[6,4],[8,5],[11,6]]},
+    {"start":[2,8],"init":[[2,7],[2,6]],"goal":[2,0],"cols":5,"rows":9,"intro":["monster"],"cps":0.8,"walls":[],"hazards":[{"kind":"monster","path":[[0,4],[4,4]],"speed":2600,"variant":"patrol"}],"coins":[[0,1],[4,2],[0,7]]},
+    {"start":[3,9],"init":[[3,8],[3,7]],"goal":[3,0],"cols":7,"rows":10,"intro":[],"cps":0.8,"walls":[],"hazards":[{"kind":"monster","path":[[0,6],[5,6]],"speed":2200,"variant":"patrol"},{"kind":"monster","path":[[6,3],[1,3]],"speed":2200,"variant":"patrol"}],"coins":[[6,8],[0,5],[6,1],[0,0]]},
+    {"start":[2,11],"init":[[2,10],[2,9]],"goal":[3,0],"cols":6,"rows":12,"intro":[],"cps":0.8,"walls":[],"hazards":[{"kind":"monster","path":[[0,8],[5,8]],"speed":1500,"variant":"patrol"},{"kind":"monster","path":[[5,4],[0,4]],"speed":1900,"variant":"patrol"},{"kind":"monster","path":[[0,6],[5,6]],"speed":2500,"variant":"patrol"}],"coins":[[5,10],[0,7],[5,5],[0,1]]},
+    {"start":[0,15],"init":[[0,14],[0,13],[0,12]],"cols":9,"rows":16,"intro":[],"cps":0.8,"walls":[]},
   ];
 
   // ---------- DOM ---------------------------------------------------------
@@ -395,6 +452,7 @@
     let MELODY = [0, 4, 7, 4,  9, 7, 4, 2,  0, 4, 7, 12,  9, 7, 4, 2];
     let CHORDS = [ {root:0,tones:[0,4,7]}, {root:5,tones:[5,9,12]}, {root:9,tones:[9,12,16]}, {root:7,tones:[7,11,14]} ];
     let ac = null, master = null, sendBus = null, noiseBuf = null;
+    let warpDry = null, warpWet = null, warpLfo = null;
     let muted = false, step = 0, beatSec = 1.15;
 
     // pick a fresh pentatonic melody + chord progression from a seed (each level differs)
@@ -418,7 +476,29 @@
       ac = new AC();
       master = ac.createGain();
       master.gain.value = 0.16;
-      master.connect(ac.destination);
+      // Everything leaves through one of two legs. Dry is the normal one. Wet runs the whole
+      // mix through a modulated delay (a delay whose length wobbles IS a pitch wobble, which
+      // is what a warped tape sounds like), then a distortion curve, then a lowpass whose
+      // corner sways — the Mushroom. warp() crossfades between the two.
+      warpDry = ac.createGain(); warpDry.gain.value = 1;
+      warpWet = ac.createGain(); warpWet.gain.value = 0;
+      master.connect(warpDry); warpDry.connect(ac.destination);
+      const wd = ac.createDelay(0.2); wd.delayTime.value = 0.035;
+      const shaper = ac.createWaveShaper();
+      const curve = new Float32Array(1024);                        // a soft-clip fold
+      for (let i = 0; i < 1024; i++) { const v = i/511.5 - 1; curve[i] = Math.tanh(v*3.2)*0.72; }
+      shaper.curve = curve; shaper.oversample = "2x";
+      const wlp = ac.createBiquadFilter(); wlp.type = "lowpass";
+      wlp.frequency.value = 1400; wlp.Q.value = 6;
+      master.connect(wd); wd.connect(shaper); shaper.connect(wlp);
+      wlp.connect(warpWet); warpWet.connect(ac.destination);
+      warpLfo = ac.createOscillator(); warpLfo.type = "sine"; warpLfo.frequency.value = 2.4;
+      const wg = ac.createGain(); wg.gain.value = 0.011;           // +/- 11ms of wobble
+      warpLfo.connect(wg); wg.connect(wd.delayTime);
+      const flt = ac.createOscillator(); flt.type = "sine"; flt.frequency.value = 0.7;
+      const fg = ac.createGain(); fg.gain.value = 900;
+      flt.connect(fg); fg.connect(wlp.frequency);
+      warpLfo.start(); flt.start();
       // Damped feedback delay = a ringing echo tail so tones resonate.
       const delay = ac.createDelay(1.0); delay.delayTime.value = 0.24;
       const fb    = ac.createGain();     fb.gain.value = 0.34;      // echo regeneration
@@ -443,6 +523,7 @@
         b.buffer = ac.createBuffer(1, 1, ac.sampleRate);
         b.connect(ac.destination); b.start(0);
       } catch (_) {}
+      ambientResume();          // the title asks for music before a gesture is allowed
     }
     // iOS suspends the audio context when the app is backgrounded / the phone locks — wake it on return
     if (typeof document !== "undefined") {
@@ -873,46 +954,217 @@
       const g = Math.max(0, Math.min(1, p)) * 0.13;               // peak whir gain
       sawGain.gain.setTargetAtTime(g, ac.currentTime, 0.06);      // smooth swell/fade
     }
-    // ---- pause-screen music ------------------------------------------------------
-    // The board's arrangement is driven by cleared tiles, so a paused game is silent — which
-    // makes the menu feel like the game crashed. This is its own thing: the level's own chord
-    // loop, taken slow and soft, as a pad with a lazy arpeggio over it. Scheduled a bar at a
-    // time on the audio clock (a setInterval only decides WHEN to schedule, never when a note
-    // sounds), so it stays in time even if the main thread stalls behind a menu rebuild.
-    let pauseTimer = null, pauseAt = 0, pauseBar = 0;
-    const PAUSE_BEAT = 0.62;                              // seconds — about half the game's pace
-    function pauseTick(){
-      if (!ac || muted) return;
+    // ---- the theme, outside a level ----------------------------------------------
+    // In a level the arrangement is driven by cleared tiles, so everything OUTSIDE one used
+    // to be silent. These three screens share one tune: the same eight-note motif over the
+    // same four-bar progression, in three settings — bright on the title, sparse and growing
+    // under the cinematic, soft and slow behind the pause menu. The bar counter deliberately
+    // does NOT reset between them, so tapping past the title carries the phrase straight into
+    // the opening cinematic rather than restarting it.
+    const MOTIF = [0, 7, 4, 9, 7, 4, 2, 0];      // semitones over the bar's root, one a beat
+    const MOTIF_CHORDS = [ {root:0, tones:[0,4,7]}, {root:5, tones:[5,9,12]},
+                           {root:9, tones:[9,12,16]}, {root:7, tones:[7,11,14]} ];
+    // beat  seconds per beat        pad/bass/lead  levels     lift  octaves above the root
+    const AMBIENCE = {
+      title: { beat:0.46, pad:0.10,  bass:0.085, lead:0.075, wave:"triangle", lift:12, grow:0 },
+      intro: { beat:0.78, pad:0.085, bass:0.060, lead:0.055, wave:"sine",     lift:12, grow:2 },
+      pause: { beat:0.62, pad:0.085, bass:0.075, lead:0.055, wave:"sine",     lift:12, grow:0 },
+    };
+    let ambTimer = null, ambAt = 0, ambBar = 0, ambMode = null, ambSince = 0;
+    function ambTick(){
+      if (!ac || muted || !ambMode) return;
+      const M = AMBIENCE[ambMode];
       const horizon = ac.currentTime + 1.2;
-      while (pauseAt < horizon) {
-        const chord = CHORDS[pauseBar % CHORDS.length];
-        const t = pauseAt, bar = PAUSE_BEAT*4;
-        for (const semi of chord.tones)                   // the pad: whole bar, very soft
-          voice(t, semi - 12, "sine", bar*1.05, 0.085, bar*0.35, true);
-        voice(t, chord.root - 24, "triangle", bar*0.9, 0.075, 0.05, false);   // bass
-        const arp = [0, 2, 1, 2];                         // a lazy figure over the top
-        for (let k = 0; k < 4; k++)
-          voice(t + PAUSE_BEAT*k + PAUSE_BEAT*0.5, chord.tones[arp[k]] + 12,
-                "sine", PAUSE_BEAT*1.6, 0.055, 0.03, true, true);
-        pauseAt += bar; pauseBar++;
+      while (ambAt < horizon) {
+        const chord = MOTIF_CHORDS[ambBar % MOTIF_CHORDS.length];
+        const t = ambAt, bar = M.beat*4, age = ambBar - ambSince;
+        for (const semi of chord.tones)                        // the bed, always there
+          voice(t, semi - 12, "sine", bar*1.05, M.pad, bar*0.35, true);
+        if (age >= M.grow)                                     // the cinematic earns its bass
+          voice(t, chord.root - 24, "triangle", bar*0.9, M.bass, 0.05, false);
+        if (age >= M.grow*2)                                   // ...and then its melody
+          for (let k = 0; k < 4; k++)
+            voice(t + M.beat*k, MOTIF[(ambBar*4 + k) % MOTIF.length] + chord.root + M.lift,
+                  M.wave, M.beat*1.7, M.lead, 0.03, true, true);
+        ambAt += bar; ambBar++;
       }
     }
-    function pauseMusic(on){
-      if (!on) {
-        if (pauseTimer) { clearInterval(pauseTimer); pauseTimer = null; }
-        return;
+    // mode: "title" | "intro" | "pause" | null. Remembered even when the context is still
+    // locked, so the theme starts the instant the first tap wakes the audio.
+    function ambient(mode){
+      if (mode === ambMode) return;
+      ambMode = mode || null;
+      if (!ambMode) { if (ambTimer) { clearInterval(ambTimer); ambTimer = null; } return; }
+      if (!ac || ac.state !== "running" || muted) return;      // pending — unlock() will start it
+      ambSince = ambBar;                                       // this setting's build-in starts now
+      if (!ambTimer) { ambAt = ac.currentTime + 0.08; ambTimer = setInterval(ambTick, 400); }
+      ambTick();
+    }
+    function ambientResume(){                                  // called from unlock()
+      if (ambMode && !ambTimer && ac && ac.state === "running" && !muted) {
+        ambSince = ambBar; ambAt = ac.currentTime + 0.08;
+        ambTimer = setInterval(ambTick, 400); ambTick();
       }
-      if (pauseTimer || !ac || ac.state !== "running" || muted) return;
-      pauseAt = ac.currentTime + 0.08; pauseBar = 0;
-      pauseTick();
-      pauseTimer = setInterval(pauseTick, 400);
+    }
+    // ---- talisman powers ---------------------------------------------------------
+    // The Mushroom, on the whole mix. Not an effect on one voice: the point is that the
+    // GAME sounds wrong for six seconds, so it has to sit across everything.
+    function warp(on){
+      if (!ac || !warpDry) return;
+      const t = ac.currentTime;
+      warpDry.gain.setTargetAtTime(on ? 0.15 : 1, t, on ? 0.12 : 0.35);
+      warpWet.gain.setTargetAtTime(on ? 0.95 : 0, t, on ? 0.12 : 0.35);
+    }
+    // Each power announces itself differently — you should be able to tell which one you
+    // pressed without looking, since after that you are watching the board, not the button.
+    function power(id){
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime;
+      const ping = (semi, at, dur, wave, vel) => {
+        const t = t0 + at;
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = wave; o.frequency.setValueAtTime(BASE * Math.pow(2, semi/12), t);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(vel, t + 0.006);
+        g.gain.exponentialRampToValueAtTime(0.0006, t + dur);
+        o.connect(g); g.connect(master); g.connect(sendBus);
+        o.start(t); o.stop(t + dur + 0.05);
+      };
+      if (id === "clock") {                        // winding down
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "triangle";
+        o.frequency.setValueAtTime(BASE*3, t0); o.frequency.exponentialRampToValueAtTime(BASE*0.75, t0 + 0.7);
+        g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.22, t0 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0006, t0 + 0.8);
+        o.connect(g); g.connect(master); g.connect(sendBus); o.start(t0); o.stop(t0 + 0.85);
+      } else if (id === "magnet") {                // a hum that snaps into tune
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "sawtooth";
+        o.frequency.setValueAtTime(BASE*0.5, t0); o.frequency.exponentialRampToValueAtTime(BASE*2, t0 + 0.4);
+        const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.Q.value = 8;
+        lp.frequency.setValueAtTime(300, t0); lp.frequency.exponentialRampToValueAtTime(4200, t0 + 0.4);
+        g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.16, t0 + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.0006, t0 + 0.5);
+        o.connect(lp); lp.connect(g); g.connect(master); o.start(t0); o.stop(t0 + 0.55);
+      } else if (id === "star") {                  // a fanfare up the chord
+        [12, 16, 19, 24, 28].forEach((semi, i) => ping(semi, i*0.055, 0.5, "triangle", 0.24));
+      } else if (id === "finger") {                // a choir stab from on high
+        [24, 28, 31, 36].forEach(semi => ping(semi, 0, 1.1, "sine", 0.16));
+      } else {                                     // the Mushroom: a sour, bending chord
+        [12, 18, 25].forEach((semi, i) => {
+          const t = t0 + i*0.02;
+          const o = ac.createOscillator(), g = ac.createGain();
+          o.type = "sawtooth";
+          o.frequency.setValueAtTime(BASE * Math.pow(2, semi/12), t);
+          o.frequency.exponentialRampToValueAtTime(BASE * Math.pow(2, (semi-5)/12), t + 0.9);
+          g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.13, t + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0006, t + 1.0);
+          o.connect(g); g.connect(master); g.connect(sendBus); o.start(t); o.stop(t + 1.05);
+        });
+      }
+    }
+    // The vortex: a noise roar swept upward by a bandpass that climbs as the pull tightens,
+    // under a drone bent up a fifth. One voice, held for the whole sequence, cut at the end.
+    let vxSrc = null, vxGain = null, vxBp = null, vxOsc = null;
+    function vortex(on){
+      if (!ac || ac.state !== "running") return;
+      if (!on) {
+        if (vxGain) vxGain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.18);
+        const s0 = vxSrc, o0 = vxOsc;
+        setTimeout(() => { try { s0 && s0.stop(); o0 && o0.stop(); } catch(_){} }, 700);
+        vxSrc = vxOsc = null; return;
+      }
+      if (vxSrc || muted || !noiseBuf) return;
+      const t = ac.currentTime, RUN = 6.0;
+      vxGain = ac.createGain();
+      vxGain.gain.setValueAtTime(0.0001, t);
+      vxGain.gain.exponentialRampToValueAtTime(0.30, t + RUN*0.7);
+      vxGain.connect(master);
+      vxBp = ac.createBiquadFilter(); vxBp.type = "bandpass"; vxBp.Q.value = 1.6;
+      vxBp.frequency.setValueAtTime(160, t);
+      vxBp.frequency.exponentialRampToValueAtTime(5200, t + RUN);
+      vxBp.connect(vxGain);
+      vxSrc = ac.createBufferSource(); vxSrc.buffer = noiseBuf; vxSrc.loop = true;
+      vxSrc.connect(vxBp); vxSrc.start(t);
+      vxOsc = ac.createOscillator(); vxOsc.type = "sawtooth";
+      vxOsc.frequency.setValueAtTime(BASE*0.5, t);
+      vxOsc.frequency.exponentialRampToValueAtTime(BASE*1.5, t + RUN);
+      const og = ac.createGain();
+      og.gain.setValueAtTime(0.0001, t);
+      og.gain.exponentialRampToValueAtTime(0.14, t + RUN*0.6);
+      vxOsc.connect(og); og.connect(master); og.connect(sendBus); vxOsc.start(t);
+    }
+    // One bite. A short band of noise for the splintering, under a fast falling thud for the
+    // weight of the two halves meeting. Dry — no reverb send: it is happening on the board,
+    // not in a hall.
+    function crunch(vol){
+      if (muted || !ac || ac.state !== "running" || !noiseBuf) return;
+      const t = ac.currentTime, v = Math.max(0, Math.min(1, vol));
+      const src = ac.createBufferSource(); src.buffer = noiseBuf;
+      src.playbackRate.value = 0.7 + Math.random()*0.5;           // never quite the same bite twice
+      const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 0.9;
+      bp.frequency.setValueAtTime(1900, t);
+      bp.frequency.exponentialRampToValueAtTime(620, t + 0.09);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.95*v, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0004, t + 0.13);
+      src.connect(bp); bp.connect(g); g.connect(master);
+      src.start(t); src.stop(t + 0.16);
+      const o = ac.createOscillator(), og = ac.createGain();      // the two halves meeting
+      o.type = "triangle";
+      o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(52, t + 0.09);
+      og.gain.setValueAtTime(0.0001, t);
+      og.gain.exponentialRampToValueAtTime(0.60*v, t + 0.005);
+      og.gain.exponentialRampToValueAtTime(0.0004, t + 0.14);
+      o.connect(og); og.connect(master); o.start(t); o.stop(t + 0.17);
+    }
+    // The idle noise between bites — a low throaty rumble, wobbled so it sounds like breath
+    // through something rather than a held note. Longer and softer than the crunch, and heard
+    // from further off: this is the one that tells you a monster is nearby at all.
+    function growl(vol){
+      if (muted || !ac || ac.state !== "running") return;
+      const t = ac.currentTime, v = Math.max(0, Math.min(1, vol)), DUR = 0.75 + Math.random()*0.35;
+      const out = ac.createGain();
+      out.gain.setValueAtTime(0.0001, t);
+      out.gain.exponentialRampToValueAtTime(0.55*v, t + DUR*0.35);
+      out.gain.exponentialRampToValueAtTime(0.0004, t + DUR);
+      const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.Q.value = 5;
+      lp.frequency.setValueAtTime(240, t);
+      lp.frequency.linearRampToValueAtTime(520, t + DUR*0.4);
+      lp.frequency.linearRampToValueAtTime(160, t + DUR);
+      lp.connect(out); out.connect(master);
+      const base = 52 + Math.random()*22;
+      for (const det of [-9, 8]) {                                // two, apart enough to beat
+        const o = ac.createOscillator(); o.type = "sawtooth";
+        o.frequency.setValueAtTime(base*1.25, t);
+        o.frequency.exponentialRampToValueAtTime(base, t + DUR*0.7);
+        o.detune.value = det;
+        o.connect(lp); o.start(t); o.stop(t + DUR + 0.05);
+      }
+      const wob = ac.createOscillator(), wg = ac.createGain();    // the throaty flutter
+      wob.frequency.value = 17 + Math.random()*9; wg.gain.value = 26;
+      wob.connect(wg); wg.connect(lp.frequency); wob.start(t); wob.stop(t + DUR + 0.05);
+      if (noiseBuf) {                                             // breath through the teeth
+        const n = ac.createBufferSource(); n.buffer = noiseBuf; n.loop = true;
+        const nb = ac.createBiquadFilter(); nb.type = "bandpass"; nb.frequency.value = 420; nb.Q.value = 1.1;
+        const ng = ac.createGain();
+        ng.gain.setValueAtTime(0.0001, t);
+        ng.gain.exponentialRampToValueAtTime(0.16*v, t + DUR*0.4);
+        ng.gain.exponentialRampToValueAtTime(0.0004, t + DUR);
+        n.connect(nb); nb.connect(ng); ng.connect(master); n.start(t); n.stop(t + DUR + 0.05);
+      }
     }
     function resetMelody() { step = 0; }
     function setMuted(m) { muted = !!m;
-      if (m) { if (sawGain) sawGain.gain.value = 0; if (voxGain) voxGain.gain.value = 0; pauseMusic(false); } }
+      if (m) { if (sawGain) sawGain.gain.value = 0; if (voxGain) voxGain.gain.value = 0;
+               if (ambTimer) { clearInterval(ambTimer); ambTimer = null; }
+               warp(false); }
+      else ambientResume(); }
     function isMuted() { return muted; }
     return { unlock, clearTile, smash, win, lose, fall, death, boost, slow, coin, key, doorOpen,
-             slide, clack, tap, tapBig, sawProximity, coinProximity, pauseMusic,
+             slide, clack, tap, tapBig, power, warp, vortex, crunch, growl,
+             sawProximity, coinProximity, ambient,
              introGather, introFlash, setSong, setTempo, resetMelody, setMuted, isMuted };
   })();
 
@@ -937,7 +1189,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v6.9";                    // shown on the title & pause screens
+  const VERSION = "v7.0";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -963,57 +1215,107 @@
   // A set of unique collectibles. Passing over one unlocks it forever; an unlocked
   // talisman can be worn round the runner's neck from the menu. Cosmetic for now —
   // `perk` is the hook for giving one an effect later without reshaping any of this.
+  // A talisman is a WORN CHARM that grants one power per level — armed when you start the
+  // level, spent the moment you press the button at the bottom of the screen. One per level
+  // is what keeps it a decision rather than a crutch: the interesting question is which
+  // moment in a level is worth spending it on, not whether to spend it at all.
+  //
+  //   ms    how long the effect runs; 0 means it stays armed until it is spent on something
+  //   blurb one line, shown on the button and in the talisman screen
   const TALISMANS = [
-    { id:"ember",  name:"Emberdrop", col:"#ff8a3d", perk:null,
-      draw:(g,x,y,r)=>{ g.beginPath(); g.moveTo(x, y-r);
-        g.bezierCurveTo(x+r*0.95, y-r*0.1, x+r*0.72, y+r, x, y+r);
-        g.bezierCurveTo(x-r*0.72, y+r, x-r*0.95, y-r*0.1, x, y-r); g.closePath();
-        g.fillStyle="#ff8a3d"; g.fill();
-        g.beginPath(); g.moveTo(x, y-r*0.36);
-        g.bezierCurveTo(x+r*0.5, y+r*0.1, x+r*0.34, y+r*0.62, x, y+r*0.62);
-        g.bezierCurveTo(x-r*0.34, y+r*0.62, x-r*0.5, y+r*0.1, x, y-r*0.36); g.closePath();
-        g.fillStyle="#ffd24a"; g.fill(); } },
-    { id:"tide",   name:"Tidestone", col:"#4dd6ff", perk:null,
-      draw:(g,x,y,r)=>{ g.beginPath(); g.arc(x,y,r,0,7); g.fillStyle="#2b7fb8"; g.fill();
-        g.save(); g.beginPath(); g.arc(x,y,r,0,7); g.clip();
-        g.strokeStyle="#4dd6ff"; g.lineWidth=r*0.26; g.lineCap="round";
-        for(let k=-1;k<=1;k++){ g.beginPath(); g.moveTo(x-r, y+k*r*0.5);
-          g.quadraticCurveTo(x, y+k*r*0.5-r*0.34, x+r, y+k*r*0.5); g.stroke(); }
-        g.restore(); } },
-    { id:"cog",    name:"Brass Cog", col:"#e0a53c", perk:null,
-      draw:(g,x,y,r)=>{ g.beginPath();
-        for(let k=0;k<16;k++){ const a=k/16*Math.PI*2, rr=(k%2?r:r*0.66);
-          const X=x+Math.cos(a)*rr, Y=y+Math.sin(a)*rr; k?g.lineTo(X,Y):g.moveTo(X,Y); }
-        g.closePath(); g.fillStyle="#e0a53c"; g.fill();
-        g.beginPath(); g.arc(x,y,r*0.28,0,7); g.fillStyle="#7a5a18"; g.fill(); } },
-    { id:"sun",    name:"Sunwheel",  col:"#ffd24a", perk:null,
-      draw:(g,x,y,r)=>{ g.strokeStyle="#ffd24a"; g.lineWidth=r*0.2; g.lineCap="round";
-        for(let k=0;k<8;k++){ const a=k/8*Math.PI*2; g.beginPath();
-          g.moveTo(x+Math.cos(a)*r*0.52, y+Math.sin(a)*r*0.52);
-          g.lineTo(x+Math.cos(a)*r, y+Math.sin(a)*r); g.stroke(); }
-        g.beginPath(); g.arc(x,y,r*0.46,0,7); g.fillStyle="#ffd24a"; g.fill();
-        g.beginPath(); g.arc(x,y,r*0.2,0,7); g.fillStyle="#b8781a"; g.fill(); } },
-    { id:"shard",  name:"Nightshard", col:"#c77dff", perk:null,
-      draw:(g,x,y,r)=>{ g.beginPath(); g.moveTo(x, y-r); g.lineTo(x+r*0.62, y-r*0.2);
-        g.lineTo(x+r*0.4, y+r); g.lineTo(x-r*0.4, y+r); g.lineTo(x-r*0.62, y-r*0.2);
-        g.closePath(); g.fillStyle="#7d4bb8"; g.fill();
-        g.beginPath(); g.moveTo(x, y-r); g.lineTo(x+r*0.62, y-r*0.2); g.lineTo(x, y+r);
-        g.closePath(); g.fillStyle="#c77dff"; g.fill(); } },
-    { id:"sprig",  name:"Green Sprig", col:"#7dff6b", perk:null,
-      draw:(g,x,y,r)=>{ g.strokeStyle="#3f8f34"; g.lineWidth=r*0.16; g.lineCap="round";
-        g.beginPath(); g.moveTo(x, y+r); g.lineTo(x, y-r*0.2); g.stroke();
-        g.beginPath(); g.moveTo(x, y-r*0.2);
-        g.bezierCurveTo(x+r*0.95, y-r*0.5, x+r*0.5, y-r*1.05, x, y-r);
-        g.bezierCurveTo(x-r*0.5, y-r*1.05, x-r*0.95, y-r*0.5, x, y-r*0.2);
-        g.closePath(); g.fillStyle="#7dff6b"; g.fill();
-        g.strokeStyle="#3f8f34"; g.lineWidth=r*0.1;
-        g.beginPath(); g.moveTo(x, y-r*0.24); g.lineTo(x, y-r*0.92); g.stroke(); } },
+    { id:"clock", name:"Clock", col:"#8fd8ff", ms:5000,
+      blurb:"Slows time down",
+      draw:(g,x,y,r)=>{
+        g.beginPath(); g.arc(x,y,r,0,7); g.fillStyle="#2b6f96"; g.fill();
+        g.beginPath(); g.arc(x,y,r*0.80,0,7); g.fillStyle="#e8f6ff"; g.fill();
+        g.strokeStyle="#8fd8ff"; g.lineWidth=r*0.10; g.lineCap="round";
+        for(let k=0;k<12;k++){ const a=k/12*Math.PI*2;          // the hour ticks
+          g.beginPath();
+          g.moveTo(x+Math.cos(a)*r*0.66, y+Math.sin(a)*r*0.66);
+          g.lineTo(x+Math.cos(a)*r*0.76, y+Math.sin(a)*r*0.76); g.stroke(); }
+        g.strokeStyle="#17263f"; g.lineWidth=r*0.13;            // ten past ten, as clocks always are
+        g.beginPath(); g.moveTo(x,y); g.lineTo(x-r*0.40, y-r*0.30); g.stroke();
+        g.lineWidth=r*0.10;
+        g.beginPath(); g.moveTo(x,y); g.lineTo(x+r*0.30, y-r*0.50); g.stroke();
+        g.beginPath(); g.arc(x,y,r*0.10,0,7); g.fillStyle="#17263f"; g.fill(); } },
+
+    { id:"magnet", name:"Magnet", col:"#ff6d6d", ms:5000,
+      blurb:"Pulls coins in",
+      draw:(g,x,y,r)=>{
+        // a horseshoe: a fat half-ring, then the two poles painted on its ends
+        g.lineCap="butt"; g.lineWidth=r*0.46;
+        g.strokeStyle="#ff6d6d";
+        g.beginPath(); g.arc(x, y+r*0.12, r*0.62, Math.PI, 0); g.stroke();
+        const px = r*0.62, top = y+r*0.12, bot = y+r*0.86;
+        g.fillStyle="#ff6d6d";
+        g.fillRect(x-px-r*0.23, top, r*0.46, bot-top);
+        g.fillRect(x+px-r*0.23, top, r*0.46, bot-top);
+        g.fillStyle="#e8eeff";                                   // the bare pole tips
+        g.fillRect(x-px-r*0.23, bot-r*0.26, r*0.46, r*0.26);
+        g.fillRect(x+px-r*0.23, bot-r*0.26, r*0.46, r*0.26); } },
+
+    { id:"star", name:"Star", col:"#ffd24a", ms:6000,
+      blurb:"Shrug off hazards",
+      draw:(g,x,y,r)=>{
+        const pt=(rad,a)=>[x+Math.cos(a)*rad, y+Math.sin(a)*rad];
+        g.beginPath();
+        for(let k=0;k<10;k++){ const a=-Math.PI/2 + k*Math.PI/5;
+          const [X,Y]=pt(k%2?r*0.46:r, a); k?g.lineTo(X,Y):g.moveTo(X,Y); }
+        g.closePath(); g.fillStyle="#ffd24a"; g.fill();
+        g.beginPath();                                           // a lit half, so it isn't flat
+        for(let k=0;k<10;k++){ const a=-Math.PI/2 + k*Math.PI/5;
+          const [X,Y]=pt(k%2?r*0.30:r*0.64, a); k?g.lineTo(X,Y):g.moveTo(X,Y); }
+        g.closePath(); g.fillStyle="#fff3c4"; g.fill(); } },
+
+    { id:"finger", name:"Finger of God", col:"#ffe9a8", ms:0,
+      blurb:"Move any laid tile",
+      draw:(g,x,y,r)=>{
+        // A fist with the index finger pointing down. The first pass at this was a hand
+        // under a cloud, which at grid size read unmistakably as an ice cream.
+        const rr=(X,Y,W,H,R)=>{ g.beginPath(); g.moveTo(X+R,Y);
+          g.arcTo(X+W,Y,X+W,Y+H,R); g.arcTo(X+W,Y+H,X,Y+H,R);
+          g.arcTo(X,Y+H,X,Y,R); g.arcTo(X,Y,X+W,Y,R); g.closePath(); g.fill(); };
+        g.fillStyle="#e8eeff";                                   // cuff
+        rr(x-r*0.66, y-r*0.98, r*1.32, r*0.34, r*0.10);
+        g.fillStyle="#ffd9a8";                                   // fist
+        rr(x-r*0.62, y-r*0.72, r*1.20, r*0.86, r*0.26);
+        g.fillStyle="#ffc98a";                                   // knuckle line, for a bit of read
+        g.fillRect(x-r*0.52, y-r*0.30, r*0.98, r*0.07);
+        g.fillStyle="#ffd9a8";                                   // the pointing finger
+        rr(x-r*0.52, y-r*0.06, r*0.40, r*0.92, r*0.19);
+        g.globalAlpha=0.9; g.fillStyle="#ffe9a8";                // and the spark off its tip
+        g.beginPath(); g.arc(x-r*0.32, y+r*0.94, r*0.19, 0, 7); g.fill();
+        g.globalAlpha=0.45;
+        g.beginPath(); g.arc(x-r*0.32, y+r*0.94, r*0.34, 0, 7); g.fill();
+        g.globalAlpha=1; } },
+
+    { id:"mush", name:"Mushroom", col:"#ff8fc8", ms:6000,
+      blurb:"Everything goes wobbly",
+      draw:(g,x,y,r)=>{
+        g.fillStyle="#f2e6d2";                                   // stem
+        g.beginPath();
+        g.moveTo(x-r*0.30, y+r*0.02); g.lineTo(x+r*0.30, y+r*0.02);
+        g.lineTo(x+r*0.24, y+r*0.86); g.lineTo(x-r*0.24, y+r*0.86);
+        g.closePath(); g.fill();
+        g.fillStyle="#ff5f9e";                                   // cap
+        g.beginPath(); g.ellipse(x, y+r*0.06, r, r*0.72, 0, Math.PI, 0); g.fill();
+        g.fillRect(x-r, y, r*2, r*0.10);
+        g.fillStyle="#ffd8ea";                                   // spots
+        g.beginPath(); g.arc(x-r*0.46, y-r*0.20, r*0.17, 0, 7);
+        g.arc(x+r*0.10, y-r*0.38, r*0.20, 0, 7);
+        g.arc(x+r*0.56, y-r*0.14, r*0.14, 0, 7); g.fill(); } },
   ];
   const talById = id => TALISMANS.find(t => t.id === id) || null;
   const TAL_KEY = "tilerunner:talismans";
   function loadTalismans(){ try { return new Set(JSON.parse(localStorage.getItem(TAL_KEY)) || []); } catch(_){ return new Set(); } }
   function saveTalismans(set){ try { localStorage.setItem(TAL_KEY, JSON.stringify([...set])); } catch(_){} }
   let talUnlocked = loadTalismans();
+  {                                          // the set changed — forget ids that no longer exist
+    const live = new Set(TALISMANS.map(t => t.id));
+    let dropped = false;
+    for (const id of [...talUnlocked]) if (!live.has(id)) { talUnlocked.delete(id); dropped = true; }
+    if (dropped) saveTalismans(talUnlocked);
+  }
   function unlockTalisman(id){ if (talUnlocked.has(id)) return false; talUnlocked.add(id); saveTalismans(talUnlocked); return true; }
   // the pendant currently worn (an id, or null)
   function wornTalisman(){ const w = settings.talisman; return w && talUnlocked.has(w) ? talById(w) : null; }
@@ -1117,6 +1419,28 @@
         const w=bw*0.52, t=byTop - s*0.075, b=byTop + s*0.012;
         g.moveTo(-w,b); g.lineTo(-w,t); g.lineTo(-w*0.5,b*0.55+t*0.45); g.lineTo(0,t);
         g.lineTo(w*0.5,b*0.55+t*0.45); g.lineTo(w,t); g.lineTo(w,b); g.closePath(); g.fill(); } },
+    { id:"beanie", name:"Beanie", cost:80, col:"#5ac8e0",
+      draw(g,s,bw,byTop,col){ g.fillStyle=col;
+        g.beginPath(); g.ellipse(0, byTop + s*0.004, bw*0.54, s*0.062, 0, Math.PI, 0); g.fill();
+        g.fillRect(-bw*0.56, byTop, bw*1.12, s*0.022);
+        g.beginPath(); g.arc(0, byTop - s*0.062, s*0.022, 0, 7); g.fill(); } },
+    { id:"cowboy", name:"Stetson", cost:200, col:"#a5713c",
+      draw(g,s,bw,byTop,col){ g.fillStyle=col;
+        g.beginPath(); g.ellipse(0, byTop, bw*0.86, s*0.030, 0, 0, Math.PI*2); g.fill();
+        g.beginPath(); g.ellipse(0, byTop - s*0.030, bw*0.40, s*0.048, 0, Math.PI, 0); g.fill();
+        g.fillStyle="rgba(40,24,10,0.5)"; g.fillRect(-bw*0.40, byTop - s*0.026, bw*0.80, s*0.014); } },
+    { id:"halo", name:"Halo", cost:300, col:"#fff3a8",
+      draw(g,s,bw,byTop,col){ g.strokeStyle=col; g.lineWidth=Math.max(1.5, s*0.020);
+        g.beginPath(); g.ellipse(0, byTop - s*0.062, bw*0.46, s*0.020, 0, 0, Math.PI*2); g.stroke(); } },
+    { id:"horns", name:"Horns", cost:260, col:"#f2ead6",
+      draw(g,s,bw,byTop,col){ g.fillStyle=col;
+        for (const side of [-1, 1]) {
+          g.beginPath();
+          g.moveTo(side*bw*0.30, byTop + s*0.010);
+          g.quadraticCurveTo(side*bw*0.62, byTop - s*0.030, side*bw*0.46, byTop - s*0.080);
+          g.quadraticCurveTo(side*bw*0.44, byTop - s*0.026, side*bw*0.16, byTop + s*0.010);
+          g.closePath(); g.fill();
+        } } },
   ];
   HATS.forEach(h => { if (h.id === "none") return;
     h.swatch = (g,S) => { const b = swatchBust(g,S,"#bfe6ff","#17263f");
@@ -1233,6 +1557,28 @@
       g.fillStyle=t.rail;  g.fillRect(S*0.18,S*0.50,S*0.64,S*0.035); }; });
 
   // one table so the shop, the save format and the drawing all agree on what exists
+  // A picture per category for the shop's tab strip. Six tabs across a phone leaves about
+  // twenty pixels each, which is not enough for a word — so each draws the thing it sells.
+  const LOOK_ICONS = {
+    colour: (g,S) => { rr2(g, S*0.20, S*0.24, S*0.60, S*0.52, S*0.10); g.fillStyle="#bfe6ff"; g.fill();
+      g.fillStyle="#17263f";
+      g.beginPath(); g.arc(S*0.40, S*0.46, S*0.055, 0, 7); g.arc(S*0.62, S*0.46, S*0.055, 0, 7); g.fill(); },
+    hat: (g,S) => { g.fillStyle="#2b2740";
+      g.fillRect(S*0.14, S*0.58, S*0.72, S*0.10);
+      rr2(g, S*0.30, S*0.24, S*0.40, S*0.36, S*0.04); g.fill(); },
+    trail: (g,S) => { const cols=["#ff595e","#ff924c","#ffca3a","#8ac926","#1982c4"];
+      cols.forEach((c,i)=>{ g.fillStyle=c; g.fillRect(S*0.10, S*0.30 + i*S*0.08, S*0.80, S*0.08); }); },
+    swagger: (g,S) => { g.strokeStyle="#bfe6ff"; g.lineWidth=S*0.10; g.lineCap="round";
+      g.beginPath(); g.moveTo(S*0.30,S*0.28); g.lineTo(S*0.52,S*0.52); g.lineTo(S*0.34,S*0.78); g.stroke();
+      g.beginPath(); g.moveTo(S*0.52,S*0.52); g.lineTo(S*0.74,S*0.72); g.stroke(); },
+    shoes: (g,S) => { g.fillStyle="#f2f4ff";
+      rr2(g, S*0.16, S*0.44, S*0.44, S*0.24, S*0.08); g.fill();
+      rr2(g, S*0.44, S*0.32, S*0.40, S*0.36, S*0.08); g.fill();
+      g.fillStyle="rgba(23,38,63,0.45)"; g.fillRect(S*0.14, S*0.66, S*0.72, S*0.10); },
+    track: (g,S) => { rr2(g, S*0.12, S*0.30, S*0.76, S*0.40, S*0.07); g.fillStyle="#8d86c9"; g.fill();
+      g.fillStyle="#ffcf4d"; g.fillRect(S*0.12, S*0.52, S*0.76, S*0.18);
+      g.fillStyle="#fff2c4"; g.fillRect(S*0.12, S*0.49, S*0.76, S*0.05); },
+  };
   const LOOK = [
     { key:"colour", label:"Colour",  items:SKIN_COLOURS },
     { key:"hat",    label:"Hat",     items:HATS },
@@ -1241,6 +1587,7 @@
     { key:"shoes",   label:"Shoes",   items:SHOES },
     { key:"track",   label:"Track",   items:TRACKS },
   ];
+  LOOK.forEach(l => { l.icon = LOOK_ICONS[l.key]; });
   const lookWorn = k => (settings.look && settings.look[k]) || LOOK.find(l=>l.key===k).items[0].id;
   const lookItem = k => { const cat = LOOK.find(l=>l.key===k);
                           return cat.items.find(i => i.id === lookWorn(k)) || cat.items[0]; };
@@ -1290,7 +1637,8 @@
   const curTrack = () => lookItem("track").track || (state && state.trackPal && state.trackPal.track) || getVar("--track");
   const curRail  = () => lookItem("track").rail  || (state && state.trackPal && state.trackPal.rail)  || getVar("--rail");
 
-  function loadLevel(i) { levelIdx = clamp(i, 0, LEVELS.length - 1);
+  function loadLevel(i) { Sound.warp(false); Sound.ambient(null);   // the tiles drive the music now
+    levelIdx = clamp(i, 0, LEVELS.length - 1);
     levelAttempts[levelIdx] = (levelAttempts[levelIdx] || 0) + 1;      // count each start (incl. retries)
     beginLevel(LEVELS[levelIdx], String(levelIdx + 1));
     state.attempts = levelAttempts[levelIdx];
@@ -1322,7 +1670,10 @@
       stones: new Map((L.stone || []).map((w, i) => [key(w[0], w[1]),
         { hp: w[2] || 1, max: w[2] || 1, hit: 0, vi: (i + stoneRot) % _STONE_VARS.length }])),
       shards: [],
-      goal:{ c:L.goal[0], r:L.goal[1] },
+      // A level may have NO exit at all, in which case there is nothing to reach and the
+      // run only ends when he falls. Everything downstream checks for null rather than
+      // assuming a cell, so an endless level needs no other special case.
+      goal: L.goal ? { c:L.goal[0], r:L.goal[1] } : null,
       keyCollected:false,
       runIdx:0, runT:0, msPerCell:effSpeed, speedMult:1, cpsNow: 1000/effSpeed,
       status:"play", drag:null, fall:null, runPhase:0,
@@ -1346,18 +1697,55 @@
       boost: new Set((L.boost||[]).map(c=>key(c[0],c[1]))),
       slow:  new Set((L.slow ||[]).map(c=>key(c[0],c[1]))),
       speedFx: { kind: null, t: 0 },        // active timed speed effect from a collected pickup
+      // The worn talisman's one shot at this level: armed on load, spent on the button.
+      // kind is the id while the effect runs; armed survives past it for the Finger, which
+      // waits for a tile to be pressed rather than running on a clock.
+      power: { spent: false, kind: null, t: 0, ms: 0, armed: false },
+      coinFly: [],                          // coins on their way to him, pulled by the Magnet
+      loop: null,                           // a circuit he is going round, once we are sure
+      vortex: null,                         // ...and what happens to the world when he is
       crumble: new Set((L.crumble||[]).map(c=>key(c[0],c[1]))),
       crumbled: new Set(),
       // fixed platforms: permanent free track cast into a wall plinth (see trackConnects)
       platforms: (L.platforms||[]).map((p,i)=>({ id:i, c:p[0], r:p[1], dirs:parsePfDirs(p[2]), lit:0 })),
       platformMap: new Map(),
       hazards: (L.hazards||[]).map(h=>{ const ax = h.axis||"h", kind = h.kind||"saw";
-        if (kind === "monster") {                       // patrols a waypoint path
+        if (kind === "monster") {
+          const CW = cell || 90;
+          // A variant may be named outright; otherwise it is inferred, so the older data that
+          // only carried a path still means what it always did.
+          const variant = h.variant || (h.path ? "patrol" : ax === "v" ? "vrail" : "hrail");
+          const K = MONSTER_KINDS[variant] || MONSTER_KINDS.patrol;
+          const base = { kind, variant, speed:h.speed||4600, faceX:1, chompT:0 };
+          if (K.move === "rail") {
+            // Rail monsters move EXACTLY as the saws they replace: one traverse takes `speed`
+            // ms whatever the rail's length, ping-ponging, with `phase` staggering the start.
+            // Keeping the maths identical is what lets the tuned saw levels survive the swap.
+            const ph = (((h.phase || 0) % 1) + 1) % 1, u = ph * 2;
+            const t = u <= 1 ? u : 2 - u, dir = u <= 1 ? 1 : -1;
+            const p0 = h.lo + (h.hi - h.lo) * t, cell0 = Math.round(p0);
+            return { ...base, axis:ax, lo:h.lo, hi:h.hi, c:h.c, r:h.r, t, dir, pos:p0,
+                     cc: ax==="h"?cell0:h.c, cr: ax==="h"?h.r:cell0,
+                     wx: (ax==="h"?p0:h.c)*CW + CW/2, wy: (ax==="h"?h.r:p0)*CW + CW/2 };
+          }
+          if (K.move === "trap") {
+            return { ...base, c:h.c, r:h.r, cc:h.c, cr:h.r, trapT: (h.phase||0)*TRAP_CYCLE,
+                     wx:(h.c+0.5)*CW, wy:(h.r+0.5)*CW };
+          }
+          if (K.move === "wander") {
+            return { ...base, cc:h.c, cr:h.r, from:[h.c,h.r], to:[h.c,h.r], segT:1, pause:0,
+                     wx:(h.c+0.5)*CW, wy:(h.r+0.5)*CW };
+          }
+          // a path: given outright, or generated as the ring of a square
           const path = h.path ? h.path.map(p=>p.slice())
-                              : (ax==="h" ? [[h.lo,h.r],[h.hi,h.r]] : [[h.c,h.lo],[h.c,h.hi]]);
+            : variant === "square"
+              ? (() => { const w = (h.w||2), hh = (h.h||2), c0 = h.c, r0 = h.r;
+                         return [[c0,r0],[c0+w,r0],[c0+w,r0+hh],[c0,r0+hh]]; })()
+              : (ax==="h" ? [[h.lo,h.r],[h.hi,h.r]] : [[h.c,h.lo],[h.c,h.hi]]);
           const A = path[0];
-          return { kind, speed:h.speed||4600, path, loop:!!h.loop, seg:0, segT:0, mdir:1, pause:0,
-                   wx:(A[0]+0.5)*(cell||90), wy:(A[1]+0.5)*(cell||90), cc:A[0], cr:A[1], faceX:1 };
+          return { ...base, path, loop: variant === "square" ? true : !!h.loop,
+                   seg:0, segT:0, mdir:1, pause:0,
+                   wx:(A[0]+0.5)*CW, wy:(A[1]+0.5)*CW, cc:A[0], cr:A[1] };
         }
         // `phase` (0..1) is how far into the full ping-pong cycle this saw starts:
         // 0 = parked at lo heading for hi, 0.5 = at hi heading back. Without it, every saw
@@ -1398,9 +1786,11 @@
     snapCamera();                 // camera at the runner's start
     // if the finish flag starts off-screen, open on the flag and glide back to the start
     const startCam = { x: camX, y: camY };
-    const gx = (state.goal.c + 0.5) * cell, gy = (state.goal.r + 0.5) * cell;
+    const g = state.goal;
+    const gx = g ? (g.c + 0.5) * cell : 0, gy = g ? (g.r + 0.5) * cell : 0;
     const gsx = gx - startCam.x, gsy = gy - startCam.y;
-    const goalOnScreen = gsx >= 0 && gsx <= viewW && gsy >= 0 && gsy <= viewH;
+    // no flag = nothing to open on, so skip the fly-in and start where he stands
+    const goalOnScreen = !g || (gsx >= 0 && gsx <= viewW && gsy >= 0 && gsy <= viewH);
     // Hold on the start until any pop-ups are cleared; only THEN run the opening pan +
     // character intro, so neither plays out behind the tutorial / speed-up cards.
     state.introPlan = { goalOnScreen, startCam, gx, gy };
@@ -1955,8 +2345,8 @@
   // when a tile moves or a stone breaks, so we build it once and reuse it until marked
   // dirty. The genuinely per-frame parts (doors easing open, moving hazards, sliders)
   // are layered on top of a cheap copy.
-  let occDirty = true, _occStatic = null, _occStaticKey = -2;
-  function markOccDirty() { occDirty = true; }
+  let occDirty = true, _occStatic = null, _occStaticKey = -2, occGen = 0;
+  function markOccDirty() { occDirty = true; occGen++; }
   function buildStaticOcc(dragId) {
     const occ = new Set(state.walls);
     for (const sk of state.stones.keys()) occ.add(sk);        // intact stone blocks placement
@@ -1973,7 +2363,10 @@
     const occ = new Set(_occStatic);                          // cheap copy of the cached static layer
     for (const d of state.doors) if (!d.open) occ.add(key(d.c, d.r));                 // closed colored doors
     for (const grp of state.gateGroups) if (grp.openT < 0.85) occ.add(grp.doorKey);  // sliding door still closed
-    for (const h of state.hazards) if ((h.kind||"saw")!=="saw") occ.add(key(h.cc, h.cr));  // hazards block placement — except saws: you can lay track across the rail (timing challenge)
+    // Only the monsters that hold ground block placement. The ones that slide along a rail,
+    // and the trap you are meant to run through, you build across and time instead.
+    for (const h of state.hazards)
+      if (h.kind === "monster" ? monKind(h).blocks : false) occ.add(key(h.cc, h.cr));
     for (const sl of (state.sliders||[])) {                    // slider band = wall, except the platform's cell
       const cur = Math.round(sl.pos);
       if (sl.axis === "h") { for (let c=sl.lo;c<=sl.hi;c++) if (c!==cur) occ.add(key(c, sl.r)); }
@@ -2127,20 +2520,73 @@
   // beside a live path segment the runner is still on or heading toward (other than
   // the head it attaches to). Blocking these keeps the runner from ever instantly
   // turning around and running backwards alongside its own track.
-  function foldsBack(c, r) {
+  // Two separate rules live here, and only one of them is inviolable.
+  //
+  //   (1) NO U-TURN. You may not lay a tile on the cell the runner is on, or the one he has
+  //       just left. Cells cleared long ago are fair game again. This one is the engine.
+  //   (2) NO FORKING. You may not lay a tile alongside live track at or ahead of the runner,
+  //       because the drawn track would appear to branch. This one is only tidiness.
+  //
+  // Rule (2) must never be the thing that ENDS a run. Backed into a corner, it can forbid
+  // every remaining neighbour of the head — the runner is standing on one of them, so any
+  // cell beside him is "a fork" — and then the freed tile has nowhere to go and he dies with
+  // tiles in hand. That is reachable with four tiles and up, because the extra tile keeps the
+  // runner's own cell live in the check for longer; with three he has always moved past it.
+  // So when nothing at all is legal, rule (2) stands down and only the U-turn rule applies.
+  function foldsBackAt(c, r, strict) {
     const p = state.path;
-    const recent = state.runIdx - 1;           // cells still on, or just behind, the runner
-    for (let i = 0; i < p.length - 1; i++) {   // every node except the head
+    const on = state.runIdx;                   // the node he is standing on right now
+    // Neither rule can fire below `on`, and on an endless level the path never stops
+    // growing — so start there rather than walking the whole history every time.
+    // A tile clears at the MIDPOINT of its cell, but both rules below used to hold that cell
+    // until he had left it entirely — so on a closed loop the tile sat there as a loose tile
+    // for half a beat before snapping back into the track. The cell under his feet, once he
+    // is past its midpoint, is the one exception to both: its track is already drawn and he
+    // is already leaving, so re-linking it adds nothing to the picture and no gap to the eye.
+    const under = p[on];
+    const underfoot = !!under && under.exited && under.c === c && under.r === r;
+    // (0) NEVER straight back the way he came. The step out of the front must not reverse
+    //     the step into it. Occupancy usually covers this — the cell behind the front still
+    //     holds its tile — but not once that tile has cleared, and then the exemption above
+    //     would happily re-link it. With three tiles the front's predecessor IS the cell he
+    //     is standing on, so every renewal became a flip and the run turned into a two-cell
+    //     shuttle. A new tile goes in front of the front, or beside it. Never behind it.
+    const before = p[p.length - 2];
+    if (before && before.c === c && before.r === r) return true;
+    for (let i = on; i < p.length - 1; i++) {  // every node except the head
       const n = p[i];
-      // (1) don't re-enter a cell the runner is on or recently left — that's an instant U-turn.
-      //     Cells cleared long ago are fair game again (and their junction arrows show).
-      if (i >= recent && n.c === c && n.r === r) return true;
-      // (2) don't run parallel to still-live track ahead of the runner (prevents forks).
-      if (!n.exited && i >= state.runIdx &&
+      // (1) the cell he is on, and every cell still ahead of him, are spoken for. Cells he
+      //     has already left are free to use again — that is what lets a circuit close.
+      if (!(i === on && underfoot) && n.c === c && n.r === r) return true;
+      // (2) nothing alongside live track AHEAD of him. Strictly ahead: his OWN cell is not
+      //     "ahead", and treating it as such was what made a ring impossible — every cell of
+      //     a 2x2 ring is beside the one before it, so closing one always looked like a fork.
+      if (strict && i > on && !n.exited && !underfoot &&
           Math.abs(n.c - c) + Math.abs(n.r - r) === 1) return true;
     }
     return false;
   }
+  // Is there anywhere at all the head can legally go under the strict rules? Cached per
+  // (path length, runner position, occupancy), so a long run does not pay for it every frame.
+  let _boxedKey = null, _boxedVal = false;
+  function headBoxedIn() {
+    const p = state.path, h = p[p.length - 1];
+    if (!h) return false;
+    const k = p.length + ":" + state.runIdx + ":" + occGen;
+    if (k === _boxedKey) return _boxedVal;
+    const hand = state.drag ? state.drag.tile
+               : state.tiles.find(t => t.status === "free" || t.status === "parked");
+    const occ = occupiedFor(hand || null);
+    let boxed = true;
+    for (const [dc, dr] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+      const c = h.c + dc, r = h.r + dr;
+      if (!inBounds(c, r) || occ.has(key(c, r))) continue;
+      if (!foldsBackAt(c, r, true)) { boxed = false; break; }
+    }
+    _boxedKey = k; _boxedVal = boxed;
+    return boxed;
+  }
+  function foldsBack(c, r) { return foldsBackAt(c, r, !headBoxedIn()); }
   function linkParkedTiles() {
     const s = state;
     let linked = false, guard = 0;
@@ -2157,7 +2603,14 @@
         linked = true;
         continue;
       }
-      const t = s.tiles.find(t => t.status === "parked" && trackConnects(h, { c:t.c, r:t.r }) && !foldsBack(t.c, t.r));
+      // "parked" is a tile you have just dropped. "free" is one the runner has cleared and
+      // left lying where it was. A free tile normally waits to be dragged — but if it is
+      // ALREADY sitting on a cell that legally continues the track from the front, dragging
+      // it would only put it back where it is. That is what a closed circuit is: the tile
+      // the runner just cleared is the very next tile of the loop. So it re-links itself,
+      // and four tiles laid in a square carry him round for ever with no input at all.
+      const t = s.tiles.find(t => (t.status === "parked" || t.status === "free") &&
+                                  trackConnects(h, { c:t.c, r:t.r }) && !foldsBack(t.c, t.r));
       if (!t) break;
       t.status = "active";
       s.path.push({ c: t.c, r: t.r, kind: "tile", tileId: t.id });
@@ -2173,7 +2626,7 @@
     s.runPhase += dt / RUNNER.stepMs;       // legs animate while running
     s.elapsed += dt;                        // level clock (for time bonus / stars)
     // the flag snaps down and plants itself once a tile is laid on the exit cell
-    const planted = s.path.some(n => n.kind === "tile" && n.c === s.goal.c && n.r === s.goal.r);
+    const planted = !!s.goal && s.path.some(n => n.kind === "tile" && n.c === s.goal.c && n.r === s.goal.r);
     s.flagPlantT += ((planted ? 1 : 0) - s.flagPlantT) * Math.min(1, dt/70);
     // sliding doors ease open once all their linked switches are pressed
     for (const grp of s.gateGroups) {
@@ -2190,6 +2643,7 @@
       else if (s.speedFx.kind === "slow") factor *= SLOW_MULT;
       if (s.speedFx.t <= 0) { s.speedFx.kind = null; s.speedFx.t = 0; }
     }
+    if (powerActive("clock")) factor *= CLOCK_MULT;   // the Clock, dragging on everything
     // fixed pace for now — no within-level combo speed-up (was: 1 + min(combo*0.01, 0.5))
     const comboSpeed = 1;
     factor *= comboSpeed;
@@ -2200,7 +2654,8 @@
       s.runT -= 1;
       s.runIdx++;
       const now = s.path[s.runIdx];
-      if (now.c === s.goal.c && now.r === s.goal.r) { s.runT = 0; endWin(); return; }
+      if (s.goal && now.c === s.goal.c && now.r === s.goal.r) { s.runT = 0; endWin(); return; }
+      noticeLoop();
     }
     freeClearedTiles();
     collectKey();
@@ -2235,6 +2690,206 @@
     updateReadyHud();
   }
 
+  // ---------- The vortex ---------------------------------------------------
+  // Close the track into a circuit and he can run for ever. Rather than leave that as a
+  // soft-lock, the game notices, winds him up to a flat sprint, and then folds the whole
+  // picture — board, HUD and all — into the middle of the loop he built.
+  const LOOP_MIN = 4, LOOP_MAX = 14;   // circuit lengths we look for, in cells
+  const LOOP_LAPS = 2;                 // clean laps before we are sure it is a circuit
+  const VORTEX = {
+    cps:   4.0,     // the sprint he is wound up to
+    ramp:  2400,    // ms winding up to it
+    hold:  900,     // ms at full pelt before the world lets go
+    pull:  2600,    // ms of whirlpool
+    black: 1500,    // ms of nothing, then back to the title
+    rings: 42,      // annuli the frame is torn into — more is smoother and slower
+    turns: 2.6,     // how many full twists the innermost ring takes
+  };
+  // The cell he just entered is one he entered L steps ago, and so is every cell between.
+  // Checked over two laps so a path that merely crosses itself once does not count.
+  function circuitLength() {
+    const p = state.path, i = state.runIdx;
+    for (let L = LOOP_MIN; L <= LOOP_MAX; L++) {
+      // the furthest back we reach is i-(L-1)-LOOP_LAPS*L; anything shorter and there is
+      // simply not enough history yet to tell a circuit from a coincidence
+      if (i - (LOOP_LAPS + 1)*L + 1 < 0) break;
+      let same = true;
+      for (let lap = 1; lap <= LOOP_LAPS && same; lap++)
+        for (let k = 0; k < L && same; k++)
+          same = p[i-k].c === p[i-k-lap*L].c && p[i-k].r === p[i-k-lap*L].r;
+      if (same) return L;
+    }
+    return 0;
+  }
+  function noticeLoop() {
+    const s = state;
+    if (s.vortex) return;
+    const L = circuitLength();
+    if (!L) { s.loop = null; return; }
+    if (!s.loop || s.loop.len !== L) { s.loop = { len: L, at: s.runIdx }; return; }
+    // The middle of the circuit, in world units — where everything is about to go — and
+    // which way round he is going. Walked FORWARD (the loop above collects backwards), so the
+    // shoelace comes out with the sign of his actual travel.
+    const ring = [];
+    for (let k = L - 1; k >= 0; k--) ring.push(s.path[s.runIdx - k]);
+    let cx = 0, cy = 0, area = 0;
+    for (let k = 0; k < L; k++) {
+      const a = ring[k], b = ring[(k + 1) % L];
+      cx += a.c + 0.5; cy += a.r + 0.5;
+      area += (a.c + 0.5)*(b.r + 0.5) - (b.c + 0.5)*(a.r + 0.5);
+    }
+    // Canvas y runs downward, so a positive shoelace is a CLOCKWISE lap on screen — and a
+    // positive rotate() is clockwise too. Taking the sign straight across means the
+    // whirlpool turns the way he runs rather than against him.
+    s.vortex = { phase: "ramp", t: 0, wx: cx/L, wy: cy/L, len: L, spin: area >= 0 ? 1 : -1 };
+    Sound.vortex(true);
+    document.body.classList.add("vortex");        // the DOM buttons go down with the ship
+  }
+  function tickVortex(dt) {
+    const s = state, v = s.vortex; if (!v) return;
+    v.t += dt;
+    if (v.phase === "ramp") {
+      const u = Math.min(1, v.t / VORTEX.ramp);
+      s.cpsNow = s.cpsNow + (VORTEX.cps - s.cpsNow) * Math.min(1, dt/220);
+      s.msPerCell = 1000 / s.cpsNow;
+      Sound.setTempo(s.msPerCell);
+      if (u >= 1) { v.phase = "hold"; v.t = 0; }
+    } else if (v.phase === "hold") {
+      s.cpsNow = VORTEX.cps; s.msPerCell = 1000 / VORTEX.cps;
+      if (v.t >= VORTEX.hold) { v.phase = "pull"; v.t = 0; s.status = "vortex"; }
+    } else if (v.phase === "pull") {
+      if (v.t >= VORTEX.pull) { v.phase = "black"; v.t = 0; Sound.vortex(false); Sound.ambient(null); }
+    } else if (v.phase === "black") {
+      if (v.t >= VORTEX.black) {
+        s.vortex = null;
+        document.body.classList.remove("vortex");
+        startTitle();                              // out the other side, back to the beginning
+      }
+    }
+  }
+  // The whirlpool itself. The finished frame is copied off and redrawn as a stack of rings,
+  // each rotated further and pulled further in than the one outside it — the swirl is in the
+  // difference between them. Everything on the canvas goes, HUD included.
+  let vortexCv = null;
+  function drawVortex(ts) {
+    const v = state.vortex; if (!v || (v.phase !== "pull" && v.phase !== "black")) return;
+    const W = canvas.width, H = canvas.height;
+    if (v.phase === "black") {
+      const u = Math.min(1, v.t / 260);
+      ctx.save(); ctx.setTransform(dpr,0,0,dpr,0,0);
+      ctx.fillStyle = "#000"; ctx.globalAlpha = 1; ctx.fillRect(0,0,viewW,viewH); ctx.restore();
+      return;
+    }
+    const u = Math.min(1, v.t / VORTEX.pull);
+    const ease = u*u;                                       // slow to start, then it lets go
+    if (!vortexCv) vortexCv = document.createElement("canvas");
+    if (vortexCv.width !== W || vortexCv.height !== H) { vortexCv.width = W; vortexCv.height = H; }
+    const g = vortexCv.getContext("2d");
+    g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,W,H); g.drawImage(canvas, 0, 0);
+    const px = v.wx*cell - camX, py = v.wy*cell - camY;     // the eye, in screen units
+    const far = Math.hypot(Math.max(px, viewW-px), Math.max(py, viewH-py)) + cell;
+    ctx.save();
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.fillStyle = "#000"; ctx.fillRect(0,0,viewW,viewH);
+    for (let i = VORTEX.rings; i >= 1; i--) {
+      const r0 = far * (i-1)/VORTEX.rings, r1 = far * i/VORTEX.rings;
+      const k = 1 - (i-1)/VORTEX.rings;                     // 0 at the rim, 1 at the eye
+      const twist = v.spin * ease * VORTEX.turns * Math.PI*2 * k*k;
+      const draw  = 1 - ease * (0.35 + 0.65*k);             // inner rings fall in fastest
+      ctx.save();
+      ctx.beginPath();                                      // the annulus this ring lives in
+      ctx.arc(px, py, r1, 0, Math.PI*2);
+      ctx.arc(px, py, r0, 0, Math.PI*2, true);
+      ctx.clip("evenodd");
+      ctx.translate(px, py); ctx.rotate(twist); ctx.scale(draw, draw); ctx.translate(-px, -py);
+      ctx.globalAlpha = Math.max(0, 1 - ease*ease*(0.2 + 0.8*k));
+      ctx.drawImage(vortexCv, 0, 0, W, H, 0, 0, viewW, viewH);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  // ---------- Talisman powers ---------------------------------------------
+  const CLOCK_MULT = 0.42;     // how far the Clock drags time down
+  const MAGNET_CELLS = 2;      // the Magnet's reach, in tiles
+  const COIN_FLY_MS = 240;     // how long a pulled coin takes to reach him
+  // Press the button: the worn talisman gives up its one power for this level.
+  function firePower() {
+    const s = state, def = wornTalisman();
+    if (!s || s.status !== "play" || !def || s.power.spent) return false;
+    s.power.spent = true;
+    s.power.kind = def.id;
+    s.power.ms = def.ms;
+    s.power.t = def.ms;                 // 0 for the Finger — it waits to be spent instead
+    s.power.armed = true;
+    spawnPop(runnerCell().c, runnerCell().r, def.col);
+    Sound.power(def.id);
+    haptic([10, 30, 14]);
+    if (def.id === "mush") Sound.warp(true);
+    return true;
+  }
+  const powerActive = id => state && state.power.kind === id && state.power.t > 0;
+  function runnerCell() {
+    const n = state.path[Math.min(state.runIdx, state.path.length-1)] || state.path[0];
+    return { c: n.c, r: n.r };
+  }
+  // Runs every frame while a timed power is up: counts it down, and does whatever that
+  // particular power does per-tick. The Finger has no clock, so it is absent from here.
+  function tickPower(dt) {
+    const s = state;
+    if (s.coinFly.length) {                       // coins already in flight, wherever from
+      for (const f of s.coinFly) f.t += dt;
+      for (const f of s.coinFly) if (f.t >= COIN_FLY_MS && !f.done) { f.done = true; grabCoin(f.c, f.r); }
+      s.coinFly = s.coinFly.filter(f => !f.done);
+    }
+    if (!s.power.kind || s.power.t <= 0) return;
+    s.power.t -= dt;
+    if (s.power.kind === "magnet") {
+      // Anything within reach comes off the board now and flies in; the pickup itself
+      // lands when it arrives, so the sound and the score follow the coin rather than
+      // the button press.
+      const rp = visualAt(s.runIdx + s.runT), rx = rp.x/cell, ry = rp.y/cell;
+      for (const ck of Array.from(s.coinCells)) {
+        const i = ck.indexOf(","), c = +ck.slice(0, i), r = +ck.slice(i+1);
+        if (Math.hypot(rx - (c+0.5), ry - (r+0.5)) > MAGNET_CELLS) continue;
+        s.coinCells.delete(ck);
+        s.coinFly.push({ c, r, t: 0, done: false });
+      }
+    }
+    if (s.power.t <= 0) {                          // done — put everything back
+      if (s.power.kind === "mush") Sound.warp(false);
+      s.power.kind = null; s.power.t = 0; s.power.armed = false;
+    }
+  }
+  // one coin, collected — shared by passing over it and by the Magnet reeling it in
+  function grabCoin(c, r) {
+    const s = state;
+    s.coinsGot++; s.score = computeScore(); updateScoreHud();
+    wallet.tiles += COIN_TILES; saveWallet();      // a golden tile is worth a stack of them
+    spawnPop(c, r, "#ffd24a"); spawnLight(c, r); Sound.coin(); haptic(6);
+  }
+  // The Finger of God: lift a tile that has already been laid, along with everything laid
+  // after it, and put it back in your hand. Only ahead of the runner — pulling the ground
+  // out from under him would just be a scripted death.
+  function fingerLift(c, r) {
+    const s = state;
+    if (!(s.power.kind === "finger" && s.power.armed)) return null;
+    const idx = s.path.findIndex(n => n.kind === "tile" && n.c === c && n.r === r);
+    if (idx <= s.runIdx + 1) return null;          // he is on it, or about to step onto it
+    const t = s.tiles[s.path[idx].tileId];
+    if (!t) return null;
+    while (s.path.length > idx) {                  // everything from here forward comes off
+      const n = s.path.pop();
+      if (n.kind === "tile" && s.tiles[n.tileId]) s.tiles[n.tileId].status = "free";
+      else if (n.kind === "platform") { const pf = (s.platforms||[]).find(p => p.id === n.pfId); if (pf) pf.lit = 0; }
+    }
+    s.power.armed = false; s.power.kind = null;    // spent
+    s.lastPlacedId = null;
+    markOccDirty(); updateReadyHud();
+    spawnPop(c, r, "#ffe9a8");
+    return t;
+  }
+
   // the runner grabs the key by passing over its cell
   function collectKey() {
     const s = state;
@@ -2244,9 +2899,7 @@
     // coins: grabbed by passing over them
     for (const ck of Array.from(s.coinCells)) {
       const [c, r] = ck.split(",").map(Number);
-      if (near(c, r)) { s.coinCells.delete(ck); s.coinsGot++; s.score = computeScore(); updateScoreHud();
-                        wallet.tiles += COIN_TILES; saveWallet();     // a golden tile is worth a stack of them
-                        spawnPop(c, r, "#ffd24a"); spawnLight(c, r); Sound.coin(); haptic(6); }
+      if (near(c, r)) { s.coinCells.delete(ck); grabCoin(c, r); }
     }
     // talismans: passing over one unlocks it permanently, win or lose
     for (const t of s.talismans) {
@@ -2256,7 +2909,10 @@
       const fresh = unlockTalisman(t.id);
       spawnPop(t.c, t.r, def ? def.col : "#ffd24a"); spawnLight(t.c, t.r);
       Sound.coin(); haptic([8, 30, 8]);
+      // There are six placements across the campaign and five talismans, so the last one is
+      // always a charm you already own. Rather than a pickup that does nothing, it pays out.
       if (fresh) flashTalisman(def);
+      else { wallet.tiles += COIN_TILES*2; saveWallet(); s.score = computeScore(); updateScoreHud(); }
     }
     // boost / slow pickups: grabbed by passing over them → a time-limited speed effect
     for (const bk of Array.from(s.boost)) {
@@ -2551,6 +3207,7 @@
 
     if (wallLayerDirty) buildWallLayer();
     if (wallLayer) ctx.drawImage(wallLayer, 0, 0, worldW, worldH);   // whole static wall layer, one blit
+    drawWallEyes(ts);                             // ...and the eyes, which cannot be baked in
     for (const [sk, st] of state.stones) {
       const [c, r] = sk.split(",").map(Number);
       drawStone(c, r, ts, st);
@@ -2579,6 +3236,13 @@
     // Coins last of everything on the board. They hover off the surface, so a saw or a
     // block passing over one used to swallow it and the player would never know it was there.
     for (const ck of state.coinCells) { const [c,r] = ck.split(",").map(Number); drawCoin((c+0.5)*cell, (r+0.5)*cell, ts); }
+    drawMagnetField(ts);
+    for (const f of state.coinFly) {                 // reeled in: coin -> runner, over COIN_FLY_MS
+      const rp = visualAt(state.runIdx + state.runT);
+      const u = Math.min(1, f.t / COIN_FLY_MS), e = u*u*(3 - 2*u);   // ease so it accelerates in
+      drawCoin((f.c+0.5)*cell + ((rp.x) - (f.c+0.5)*cell)*e,
+               (f.r+0.5)*cell + ((rp.y - cell*0.3) - (f.r+0.5)*cell)*e, ts);
+    }
 
     if (state.drag) {
       const d = state.drag;
@@ -2591,16 +3255,53 @@
       if (!state.keyCollected)
         for (const k of state.keys) if (!k.got)
           drawOffscreenArrow((k.c+0.5)*cell, (k.r+0.5)*cell, k.color, "key");
-      drawOffscreenArrow((state.goal.c+0.5)*cell, (state.goal.r+0.5)*cell, "#ffffff", "flag");   // white flag
+      if (state.goal)
+        drawOffscreenArrow((state.goal.c+0.5)*cell, (state.goal.r+0.5)*cell, "#ffffff", "flag");   // white flag
     }
     drawSpeedHud();
     drawTalismanFlash(16, ts);
+    drawWobble(ts);                     // the Mushroom, over the top of the finished frame
+    drawVortex(ts);                     // ...and the whirlpool, over the top of everything
+  }
+
+  // The Mushroom's visuals. Rather than warping every drawing routine, the finished frame is
+  // copied off and repainted as a stack of horizontal strips, each slid sideways on a
+  // travelling sine — the old scanline-warp trick. It costs one full-canvas copy and a
+  // strip's worth of blits, and only while the power is up. The whole frame goes through it,
+  // HUD included: for six seconds the game itself is what's unwell.
+  let wobbleCv = null;
+  const WOBBLE_STRIP = 5;               // CSS px per strip; smaller = smoother, more blits
+  function drawWobble(ts) {
+    if (!powerActive("mush")) return;
+    const p = state.power, ms = p.ms || 1;
+    // eased in and out, so it swims up and settles rather than snapping on and off
+    const k = Math.min(1, (ms - p.t) / 420) * Math.min(1, p.t / 500);
+    if (k <= 0.001) return;
+    if (!wobbleCv) wobbleCv = document.createElement("canvas");
+    const W = canvas.width, H = canvas.height;
+    if (wobbleCv.width !== W || wobbleCv.height !== H) { wobbleCv.width = W; wobbleCv.height = H; }
+    const g = wobbleCv.getContext("2d");
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, H);
+    g.drawImage(canvas, 0, 0);
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = "#0a0817"; ctx.fillRect(0, 0, viewW, viewH);   // strips slide, so clear first
+    ctx.filter = "hue-rotate(" + Math.round(Math.sin(ts/700)*46*k) + "deg) saturate(" + (1 + 0.55*k) + ")";
+    const amp = cell * 0.16 * k, amp2 = cell * 0.05 * k;
+    for (let y = 0; y < viewH; y += WOBBLE_STRIP) {
+      const h = Math.min(WOBBLE_STRIP, viewH - y);
+      const dx = Math.sin(y/38 + ts/230)*amp + Math.sin(y/13 - ts/150)*amp2;
+      const dy = Math.sin(y/90 + ts/380)*amp*0.35;
+      ctx.drawImage(wobbleCv, 0, y*dpr, W, h*dpr, dx, y + dy, viewW, h);
+    }
+    ctx.filter = "none";
+    ctx.restore();
   }
 
   // live runner speed, top-left (screen space). Shown as cells/second on a dark pill.
   function drawSpeedHud() {
     const s = state;
-    if (!s || (s.status !== "play" && s.status !== "falling")) return;
+    if (!s || (s.status !== "play" && s.status !== "falling" && s.status !== "vortex")) return;
     const factor = s.liveFactor != null ? s.liveFactor : 1;
     const cps = 1000 * factor / (s.msPerCell || 1000);      // cells per second
     const m = Math.round(Math.min(viewW, viewH) * 0.028);
@@ -2659,6 +3360,21 @@
     ctx.fillText(bank, x + padX + ic + gap + hw + gap, midY + 1);
     ctx.restore();
   }
+  // The Magnet's reach, while it is up: a pulsing ring on the board so the two tiles it
+  // covers are a thing you can see rather than a number in a menu.
+  function drawMagnetField(ts) {
+    if (!powerActive("magnet")) return;
+    const rp = visualAt(state.runIdx + state.runT);
+    const R = MAGNET_CELLS * cell, puls = 0.5 + 0.5*Math.sin(ts/150);
+    ctx.save();
+    ctx.globalAlpha = 0.10 + 0.06*puls; ctx.fillStyle = "#ff6d6d";
+    ctx.beginPath(); ctx.arc(rp.x, rp.y - cell*0.3, R, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 0.45 + 0.25*puls; ctx.strokeStyle = "#ff9d9d";
+    ctx.lineWidth = Math.max(2, cell*0.03); ctx.setLineDash([cell*0.16, cell*0.12]);
+    ctx.lineDashOffset = -ts/26;
+    ctx.beginPath(); ctx.arc(rp.x, rp.y - cell*0.3, R, 0, Math.PI*2); ctx.stroke();
+    ctx.restore();
+  }
   // the coin as a flat badge, for the HUD and the shop — no float, no shine, just the shape
   function coinGlyph(cxp, cyp, s2) {
     const h = s2/2, r = s2*TILE.radius;
@@ -2682,7 +3398,7 @@
     // a node carries a platform until the runner exits it (per-node flag, so a
     // re-placed tile's stale old node never affects its fresh placement).
     const live = (n) => n.kind === "tile" && !n.exited;
-    const onGoal = (n) => n.c === state.goal.c && n.r === state.goal.r;
+    const onGoal = (n) => !!state.goal && n.c === state.goal.c && n.r === state.goal.r;
 
     drawPathGlass(p.slice(idx).filter(live));
 
@@ -2694,7 +3410,7 @@
       }
 
     // the exit is a floating flag on its cell; you must lay a tile there to finish
-    drawFlag(state.goal.c, state.goal.r, ts, false);   // never locked (no primary key)
+    if (state.goal) drawFlag(state.goal.c, state.goal.r, ts, false);   // never locked (no primary key)
   }
 
   // floating finish flag; you place a tile on its cell to reach the exit
@@ -2881,6 +3597,28 @@
     const to = v => cl(v).toString(16).padStart(2, "0");
     return "#" + to((n>>16)&255) + to((n>>8)&255) + to(n&255);
   }
+  // Turn a hex colour's hue, drain its saturation and shift its lightness, all at once.
+  // shade() only moves lightness, which is why the ground could only ever be a darker copy
+  // of the track — this lets it be a different material.
+  function tintHex(hex, degrees, satMul, lightAmt) {
+    const n = parseInt(hex.replace("#",""), 16);
+    let r = ((n>>16)&255)/255, g = ((n>>8)&255)/255, b = (n&255)/255;
+    const mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx - mn;
+    let h = 0; const l = (mx+mn)/2;
+    let sat = d === 0 ? 0 : d / (1 - Math.abs(2*l - 1));
+    if (d !== 0) {
+      h = mx === r ? ((g-b)/d + (g < b ? 6 : 0)) : mx === g ? ((b-r)/d + 2) : ((r-g)/d + 4);
+      h *= 60;
+    }
+    h = (h + degrees + 360) % 360;
+    sat = Math.max(0, Math.min(1, sat * satMul));
+    const L = Math.max(0, Math.min(1, l + (lightAmt || 0)/255));
+    const C = (1 - Math.abs(2*L - 1)) * sat, X = C * (1 - Math.abs(((h/60) % 2) - 1)), m = L - C/2;
+    const seg = Math.floor(h/60) % 6;
+    const rgb = [[C,X,0],[X,C,0],[0,C,X],[0,X,C],[X,0,C],[C,0,X]][seg];
+    const to = v => Math.round((v + m)*255).toString(16).padStart(2,"0");
+    return "#" + to(rgb[0]) + to(rgb[1]) + to(rgb[2]);
+  }
   function shade(hex, amt) {
     const n = parseInt(hex.replace("#",""), 16);
     const cl = v => Math.max(0, Math.min(255, v + amt));
@@ -2893,17 +3631,42 @@
   function drawHazards(ts) {
     for (const h of state.hazards) {
       if (h.kind === "monster") {
+        const K = monKind(h);
+        if (K.move === "rail") {                       // the rail it slides along
+          const x1 = h.axis==="h" ? (h.lo+0.5)*cell : (h.c+0.5)*cell;
+          const y1 = h.axis==="h" ? (h.r+0.5)*cell  : (h.lo+0.5)*cell;
+          const x2 = h.axis==="h" ? (h.hi+0.5)*cell : (h.c+0.5)*cell;
+          const y2 = h.axis==="h" ? (h.r+0.5)*cell  : (h.hi+0.5)*cell;
+          ctx.save();
+          ctx.strokeStyle = hexA(K.body, 0.30); ctx.lineWidth = Math.max(2, cell*0.04);
+          ctx.lineCap = "round"; ctx.setLineDash([cell*0.14, cell*0.11]);
+          ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+          ctx.setLineDash([]); ctx.restore();
+        }
+        if (K.move === "trap") {                       // a ring that winds down to the snap
+          const p = trapPhase(h.trapT || 0);
+          ctx.save();
+          ctx.strokeStyle = hexA(K.body, p.wide ? 0.75 : 0.30);
+          ctx.lineWidth = Math.max(2, cell*0.045);
+          ctx.beginPath();
+          ctx.arc(h.wx, h.wy, cell*0.46, -Math.PI/2, -Math.PI/2 + Math.PI*2*p.open, false);
+          ctx.stroke(); ctx.restore();
+        }
         // faint dashed patrol path so its route is readable
         if (h.path && h.path.length > 1) {
           ctx.save();
-          ctx.strokeStyle = "rgba(178,77,255,0.28)"; ctx.lineWidth = Math.max(1.5, cell*0.028);
+          ctx.strokeStyle = hexA(K.body, 0.28); ctx.lineWidth = Math.max(1.5, cell*0.028);
           ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.setLineDash([cell*0.12, cell*0.1]);
           ctx.beginPath(); ctx.moveTo((h.path[0][0]+0.5)*cell, (h.path[0][1]+0.5)*cell);
           for (let i=1;i<h.path.length;i++) ctx.lineTo((h.path[i][0]+0.5)*cell, (h.path[i][1]+0.5)*cell);
           if (h.loop) ctx.closePath();
           ctx.stroke(); ctx.setLineDash([]); ctx.restore();
         }
-        drawMonster(h.wx, h.wy, ts, h.faceX);
+        // A trap runs its own slow cycle instead of the family's quick bite.
+        const phase = K.move === "trap"
+          ? 0.5 * trapPhase(h.trapT || 0).open        // 0.5 of the sine is full gape
+          : (h.chompT || 0) / MONSTER.chompMs;
+        drawMonster(h.wx, h.wy, ts, h.faceX, phase, K);
         continue;
       }
       {
@@ -3033,47 +3796,178 @@
       ctx.restore();
     }
   }
-  // a little flying monster that patrols back and forth — touching it is fatal
-  // the monster mirrors the runner's body & eyes, but has no legs — it flies on flapping wings
-  function drawMonster(x, y, ts, faceX) {
-    const s = cell, flap = Math.sin(ts/150), bob = Math.sin(ts/260)*s*0.05;
-    const face = faceX < 0 ? -1 : 1;                        // face its direction of travel
-    y += bob;
-    const bodyW = s*0.26, bodyH = s*0.26, body = "#b24dff", wing = "#8a3df0";
+  // The thing that patrols the board is a TILE — the same rounded square everything here is
+  // built from — that SPLITS IN HALF to eat. The two halves draw apart, the gap between them
+  // is the mouth, and the teeth stand on the cut faces. That is the joke: the board's own
+  // material has turned on you, and you can see exactly what it is made of when it opens.
+  const MONSTER = {
+    size:    0.86,   // the tile, as a fraction of a cell
+    chompMs: 620,    // one full bite
+    gap:     0.30,   // how far EACH half draws back at full gape, fraction of the tile
+    teeth:   6,      // per cut face
+    toothH:  0.13,   // tooth length, fraction of the tile
+    overbite:0.50,   // how far PAST the mesh the jaws close, as a fraction of a tooth
+    tilt:    0.03,   // a little hinge-swing on each half, radians, so the bite is not a slide
+    bob:     0.03,   // idle rise and fall
+    grain:   0.85,   // paper texture, the same as every other surface here
+    hear:    3,      // how many tiles away his BITE carries
+    growlHear: 6,    // ...and how far the growl does — you hear him before you see him
+    growlMin: 1900,  // ms between growls, at least
+    growlVary: 2600, // ...plus up to this much, so several monsters never fall into step
+    // The rail monsters are a different animal: they do not split. They are a smaller, whole
+    // tile with a ring of teeth running round the outside of it, like a chain on a sprocket.
+    railSize:   0.62,   // body, fraction of a cell — noticeably smaller than the biters
+    railTeeth:  12,     // teeth around the rim
+    railToothH: 0.13,   // how far each stands off the edge, fraction of the body
+    railToothW: 0.60,   // how much of its share of the rim each one occupies
+    railSpinMs: 1100,   // ms for the teeth to travel once around
+  };
+  // The family. One tile-shaped body, five ways of behaving — told apart by colour and by
+  // which way the tile splits, so you can read what a monster does before it does it.
+  //
+  //   move   how it gets about: a rail it slides along, a waypoint path, a random walk, or
+  //          nothing at all (the trap)
+  //   split  "h" halves part up and down; "v" they part left and right. Set to the axis it
+  //          travels along, so it always bites in the direction it is going.
+  //   blocks whether you may lay track through its cell. The movers you can build across and
+  //          time your run through; only the patrols hold ground.
+  const MONSTER_KINDS = {
+    hrail:  { move:"rail",   split:"h", body:"#b24dff", blocks:false },   // was a horizontal saw
+    vrail:  { move:"rail",   split:"v", body:"#4dc9ff", blocks:false },   // was a vertical saw
+    patrol: { move:"path",   split:"h", body:"#b24dff", blocks:true  },   // the waypoint walker
+    square: { move:"path",   split:"h", body:"#ff9b3d", blocks:true  },   // round and round a ring
+    wander: { move:"wander", split:"h", body:"#7dff6b", blocks:true  },   // a fresh route every run
+    trap:   { move:"trap",   split:"h", body:"#ff5c5c", blocks:false,     // sits still and waits
+              gap: 1.30 },                                               // ...yawning a tile wide
+  };
+  const monKind = h => MONSTER_KINDS[h.variant] || MONSTER_KINDS.patrol;
+  // The trap's cycle, in ms: shut, yawning open, held wide (safe to run through), then the snap.
+  const TRAP = { rest: 1500, open: 620, hold: 2600, snap: 150 };
+  function trapPhase(t) {
+    const T = TRAP, a = T.rest, b = a + T.open, c = b + T.hold, d = c + T.snap;
+    const u = t % d;
+    if (u < a) return { open: 0,                     lethal: true,  wide: false };
+    if (u < b) return { open: (u - a)/T.open,        lethal: true,  wide: false };
+    if (u < c) return { open: 1,                     lethal: false, wide: true  };
+    return       { open: 1 - (u - c)/T.snap,         lethal: true,  wide: false };
+  }
+  const TRAP_CYCLE = TRAP.rest + TRAP.open + TRAP.hold + TRAP.snap;
+  // `phase` is 0..1 through one bite, kept on the hazard so the sound and the picture cannot
+  // drift apart. Without one it falls back to the wall clock, which is what the mechanic
+  // card's static icon wants.
+  // A point on the outline of a rounded square, by distance around it. Returns the point and
+  // the outward normal there, so a tooth can stand on the rim wherever it happens to be.
+  function rimPoint(h, R, u) {
+    const side = 2*h - 2*R, arc = Math.PI/2*R, total = 4*side + 4*arc;
+    let d = ((u % 1) + 1) % 1 * total;
+    // top edge, then round clockwise: corner, side, corner, side...
+    const legs = [
+      { kind:"s", x0:-h+R, y0:-h, dx: 1, dy: 0, len: side, nx: 0, ny:-1 },
+      { kind:"a", cx: h-R, cy:-h+R, a0:-Math.PI/2, len: arc },
+      { kind:"s", x0: h,   y0:-h+R, dx: 0, dy: 1, len: side, nx: 1, ny: 0 },
+      { kind:"a", cx: h-R, cy: h-R, a0: 0,         len: arc },
+      { kind:"s", x0: h-R, y0: h,   dx:-1, dy: 0, len: side, nx: 0, ny: 1 },
+      { kind:"a", cx:-h+R, cy: h-R, a0: Math.PI/2, len: arc },
+      { kind:"s", x0:-h,   y0: h-R, dx: 0, dy:-1, len: side, nx:-1, ny: 0 },
+      { kind:"a", cx:-h+R, cy:-h+R, a0: Math.PI,   len: arc },
+    ];
+    for (const L of legs) {
+      if (d > L.len) { d -= L.len; continue; }
+      if (L.kind === "s") {
+        return { x: L.x0 + L.dx*d, y: L.y0 + L.dy*d, nx: L.nx, ny: L.ny };
+      }
+      const a = L.a0 + (d/arc)*(Math.PI/2);
+      return { x: L.cx + Math.cos(a)*R, y: L.cy + Math.sin(a)*R, nx: Math.cos(a), ny: Math.sin(a) };
+    }
+    return { x:-h+R, y:-h, nx:0, ny:-1 };
+  }
+  // The rail monster: one whole tile, teeth marching round the outside of it. It never opens —
+  // the menace is the ring, not a mouth — which is also what tells it apart at a glance from
+  // the ones that split.
+  function drawRailMonster(x, y, ts, dir, K) {
+    const s = cell, S = s*MONSTER.railSize, h = S/2, R = tileR(S);
+    const body = K.body || "#b24dff", tooth = "#fdf3ff", ink = "#17263f";
+    const spin = (ts / MONSTER.railSpinMs) * (dir < 0 ? -1 : 1);
+    ctx.save();
+    ctx.translate(x, y + Math.sin(ts/260)*s*MONSTER.bob);
+    const n = MONSTER.railTeeth, tl = S*MONSTER.railToothH, w = MONSTER.railToothW/n;
+    ctx.fillStyle = tooth;
+    for (let k = 0; k < n; k++) {
+      const u = k/n + spin;
+      const a = rimPoint(h, R, u - w/2), b = rimPoint(h, R, u + w/2), m = rimPoint(h, R, u);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+      ctx.lineTo(m.x + m.nx*tl, m.y + m.ny*tl);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle = body; rrect(-h, -h, S, S, R); ctx.fill();     // the tile, over the tooth roots
+    ctx.save(); rrect(-h, -h, S, S, R); ctx.clip();
+    grainFill(-h, -h, S, S, MONSTER.grain);
+    ctx.restore();
+    // the family's eyes, upright — the body does not turn, only the ring around it
+    drawEyes(ctx, 0, 0, s, ink, 1, ts, 0);
+    ctx.restore();
+  }
+  function drawMonster(x, y, ts, faceX, phase, cfg) {
+    const K = cfg || MONSTER_KINDS.patrol;
+    if (K.move === "rail") return drawRailMonster(x, y, ts, faceX, K);
+    const s = cell, S = s*MONSTER.size, h = S/2, R = tileR(S);
+    const face = faceX < 0 ? -1 : 1;
+    // Shut, then a fast snap open, then shut again. Held near zero for most of the cycle,
+    // which reads as chomping; a plain sine reads as breathing.
+    const u = phase != null ? phase : (ts % MONSTER.chompMs) / MONSTER.chompMs;
+    const open = Math.pow(Math.max(0, Math.sin(u*Math.PI)), 0.7);
+    y += Math.sin(ts/260)*s*MONSTER.bob;
+    // He never shuts fully. Closed is the MESHED position: the tips reach past the other
+    // jaw's cut face by `overbite`, so the halves stay apart and all that is left between
+    // them is the zigzag channel between the teeth. Derived from the tooth length rather than
+    // typed in, so lengthening the teeth closes the bite by exactly as much.
+    const shut = h*MONSTER.toothH*(1 - MONSTER.overbite);         // tips past the far face
+    const wide = Math.max(shut, h*(K.gap != null ? K.gap : MONSTER.gap));
+    const lift = shut + (wide - shut)*open, tilt = MONSTER.tilt*open;
+    const body = K.body || "#b24dff", tooth = "#fdf3ff";
+    const ink = "#17263f";                                        // the runner's own eye colour
+
     ctx.save();
     ctx.translate(x, y);
-    // menace glow (danger cue)
-    ctx.globalAlpha = 0.22; ctx.fillStyle = "#d54de0";
-    ctx.beginPath(); ctx.arc(0, 0, s*0.42, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1;
-    ctx.scale(face, 1);
-    // small, fairly upright flapping wings (drawn behind the body)
-    ctx.fillStyle = wing;
-    for (const side of [-1, 1]) {
+    // A vertical mover splits left/right instead of up/down, so it still bites along its own
+    // line of travel. One rotation does it — everything below is written once.
+    if (K.split === "v") ctx.rotate(Math.PI/2);
+    ctx.scale(face, 1);                                           // face the way it travels
+
+    // No dark backing behind the gap: when he opens, you see the board straight through him,
+    // which is what makes the split read as a split rather than a painted-on mouth.
+
+    // Each half is the WHOLE tile drawn behind a straight cut, so both keep the rounded
+    // outer corners and neither can show a corner the tile never had.
+    for (const j of [-1, 1]) {                                    // upper half, then lower
       ctx.save();
-      ctx.translate(side*bodyW*0.3, -bodyH*0.24);
-      ctx.rotate(side * (0.95 + (0.5 + 0.5*flap)*0.3));      // upright, gentle flap
-      ctx.beginPath(); ctx.ellipse(side*s*0.045, -s*0.05, s*0.13, s*0.06, 0, 0, Math.PI*2); ctx.fill();
+      ctx.translate(0, j*lift);
+      ctx.rotate(j*tilt*face);                                    // a slight hinge swing
+      ctx.save();
+      ctx.beginPath();                                            // keep only this half
+      if (j < 0) ctx.rect(-S, -S*2, S*2, S*2);                    // everything above the cut
+      else       ctx.rect(-S, 0, S*2, S*2);                       // ...and below it
+      ctx.clip();
+      ctx.fillStyle = body; rrect(-h, -h, S, S, R); ctx.fill();
+      rrect(-h, -h, S, S, R); ctx.clip();                         // grain stays on the tile
+      grainFill(-h, -h, S, S, MONSTER.grain);                     // the same paper as everything
+      ctx.restore();                                              // the teeth stand PAST the cut,
+      ctx.fillStyle = tooth;                                      // so they must not be clipped to it
+      // The two rows MESH: the lower jaw is offset half a tooth and carries one fewer, so its
+      // teeth sit in the gaps between the upper ones instead of meeting them point to point.
+      const n = MONSTER.teeth, span = S*0.86, x0 = -span/2, tw = span/n, tl = S*MONSTER.toothH;
+      const cnt = j < 0 ? n : n - 1, off = j < 0 ? 0 : tw*0.5;
+      for (let k = 0; k < cnt; k++) {
+        const tx = x0 + off + k*tw;
+        ctx.beginPath();
+        ctx.moveTo(tx, 0); ctx.lineTo(tx + tw*0.84, 0);
+        ctx.lineTo(tx + tw*0.42, -j*tl);                          // pointing into the gap
+        ctx.closePath(); ctx.fill();
+      }
+      // the same eyes as everything else, on the upper half
+      if (j < 0) drawEyes(ctx, 0, -h + S*0.30, s, ink, 1, ts, 0);
       ctx.restore();
-    }
-    // body — rounded like the runner, in menace purple (no shine)
-    const byTop = -bodyH*0.5;
-    ctx.fillStyle = body;
-    rrect(-bodyW/2, byTop, bodyW, bodyH, s*RUNNER.bodyR); ctx.fill();
-    // round eyes that glance around and blink (like the runner)
-    const eyeR = s*0.037, eyeY = byTop + bodyH*0.40, e1x = -bodyW*0.02, e2x = bodyW*0.28;
-    const gt = ts % 5200; let gx = 0, gy = 0;
-    if (gt < 650) gx = -s*0.03; else if (gt < 1300) gx = s*0.03; else if (gt > 3400 && gt < 4050) gy = -s*0.024;
-    const B = RUNNER.blinkMs, bt = ts % B, blink = bt < B*0.04 || (bt > B*0.058 && bt < B*0.085);
-    ctx.fillStyle = "#2a0f47";
-    if (blink) {
-      ctx.strokeStyle = "#2a0f47"; ctx.lineWidth = Math.max(1.5, s*0.02); ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(e1x - eyeR, eyeY + gy); ctx.lineTo(e1x + eyeR, eyeY + gy);
-      ctx.moveTo(e2x - eyeR, eyeY + gy); ctx.lineTo(e2x + eyeR, eyeY + gy);
-      ctx.stroke();
-    } else {
-      ctx.beginPath(); ctx.arc(e1x + gx, eyeY + gy, eyeR, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(e2x + gx, eyeY + gy, eyeR, 0, Math.PI*2); ctx.fill();
     }
     ctx.restore();
   }
@@ -3333,15 +4227,54 @@
     ctx.fillRect(x - s*0.02, y - (used? -s*0.02 : s*0.12), s*0.04, s*0.16);    // lever flips when used
     ctx.restore();
   }
+  // The blade. Bigger than it was, with a lot of small teeth instead of a few big ones, a
+  // plain disc inside the tooth ring, and a collared hole at the centre — so it reads as a
+  // piece of machinery rather than a spiky blob. Only the teeth and the plate spin; the
+  // collar and hole are concentric, so rotating them would cost work and change nothing.
+  const SAW = {
+    r:      0.44,   // blade radius, fraction of a cell
+    teeth:  38,     // how many
+    toothD: 0.10,   // how deep each one bites, fraction of the blade radius
+    plate:  0.80,   // the disc inside the teeth
+    collar: 0.34,   // the ring around the hole
+    hole:   0.19,   // the hole itself — clipped out, so it is a genuine hole
+    spinMs: 160,    // ms per radian
+    grain:  0.60,   // paper texture over the blade, like every other surface
+  };
   function drawSaw(x, y, ts) {
-    const s = cell*0.30, rot = ts/120;
-    ctx.save(); ctx.globalAlpha = 0.25; ctx.fillStyle = pal("saw");
-    ctx.beginPath(); ctx.arc(x, y, cell*0.42, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1;   // danger glow
-    ctx.translate(x, y); ctx.rotate(rot); ctx.fillStyle = "#c9ced6";
+    const R = cell*SAW.r, rot = ts/SAW.spinMs;
+    ctx.save();
+    // A real hole, not a light disc: everything the blade draws is clipped to a ring, so
+    // the centre is never painted at all and whatever is behind it shows through. Two arcs,
+    // the inner one reversed, and an even-odd clip — the middle is simply outside the clip.
     ctx.beginPath();
-    for (let k=0;k<24;k++){ const a=k/24*Math.PI*2, rr = k%2?s:s*0.66; ctx.lineTo(Math.cos(a)*rr, Math.sin(a)*rr); }
+    ctx.arc(x, y, R*1.02, 0, Math.PI*2);
+    ctx.arc(x, y, R*SAW.hole, 0, Math.PI*2, true);
+    ctx.clip("evenodd");
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.save(); ctx.rotate(rot);
+    ctx.fillStyle = "#c9ced6";                             // the toothed rim
+    ctx.beginPath();
+    const N = SAW.teeth*2, inner = R*(1 - SAW.toothD);
+    for (let k = 0; k < N; k++) {
+      const a = k/N*Math.PI*2, rr = k%2 ? R : inner;
+      const px = Math.cos(a)*rr, py = Math.sin(a)*rr;
+      k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    }
     ctx.closePath(); ctx.fill();
-    ctx.fillStyle = getVar("--shadow"); ctx.beginPath(); ctx.arc(0,0,s*0.25,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = "#b6bcc7";                             // the disc just inside them
+    ctx.beginPath(); ctx.arc(0, 0, R*SAW.plate, 0, Math.PI*2); ctx.fill();
+    ctx.restore();                                         // the collar is concentric — no spin needed
+    ctx.fillStyle = "#9099a6";                             // the ring around the hole
+    ctx.beginPath(); ctx.arc(0, 0, R*SAW.collar, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+
+    // Grain in WORLD space, not the blade's: the paper is the surface everything in this
+    // game is printed on, and it does not spin just because the saw does. Still inside the
+    // ring clip, so it stops at the hole like everything else.
+    grainFill(x - R, y - R, R*2, R*2, SAW.grain);
     ctx.restore();
   }
 
@@ -3509,18 +4442,43 @@
   // The beam is a fat stroke laid along the surface line and clipped to the body, so only
   // its lower half survives — that keeps it hugging every curve of a corner for free,
   // rather than needing a second offset polyline that could drift from the rail.
+  // The track is painted; the ground it is bolted to is not. It takes its own colour —
+  // the level's hue turned and drained, so it still belongs to the palette without being a
+  // darker copy of the beam — and its own marking: flat bedding lines, which read as cut
+  // earth rather than as more track. The paper grain then goes over both, as before.
+  function groundColour(fill) { return tintHex(fill, TILE.underHue, TILE.underSat, TILE.underShade); }
+  function drawGroundStrata(x, y0v, s) {
+    if (!(TILE.strata > 0) || !(TILE.strataN > 0)) return;
+    const y0 = y0v, step = s / TILE.strataN;
+    ctx.save();
+    ctx.globalAlpha = TILE.strata;
+    ctx.fillStyle = "#05040d";
+    // Bedding runs level, and its spacing is keyed off the CELL rather than the screen, so
+    // the lines meet across a join instead of sliding past one another.
+    for (let k = 1; k < TILE.strataN; k++) {
+      const y = y0 + k*step, h = Math.max(1, s*0.012);
+      ctx.fillRect(x, y, s, h);
+      if (k % 2 === 0) {                                       // a broken seam between them
+        ctx.globalAlpha = TILE.strata * 0.5;
+        ctx.fillRect(x + s*0.18, y + step*0.42, s*0.42, h);
+        ctx.globalAlpha = TILE.strata;
+      }
+    }
+    ctx.restore();
+  }
   function drawPlatformBody(n, S, fill) {
     ctx.save();
     rrect(cx(n.c), cy(n.r), cell, cell, tileR(cell)); ctx.clip();
     ctx.beginPath(); bodyPath(S, nodeCenter(n)); ctx.clip();   // everything below stays in the slab
-    ctx.fillStyle = shade(fill, TILE.underShade);              // the ground
+    ctx.fillStyle = groundColour(fill);                        // the ground, in its own colour
     ctx.fillRect(cx(n.c), cy(n.r), cell, cell);
+    drawGroundStrata(cx(n.c), cy(n.r), cell);                  // ...and its own bedding
     ctx.lineJoin = "round"; ctx.lineCap = "butt";
     // The beam's shadow first, as a WIDER stroke on the same line: the beam is then laid
     // over the top of it, and what is left showing below is exactly shadowW deep. Drawing
     // it this way means the shadow follows a corner's curve as precisely as the beam does.
     if (TILE.pathW > 0 && TILE.shadowW > 0) {
-      ctx.strokeStyle = shade(fill, TILE.underShade + TILE.shadowShade);
+      ctx.strokeStyle = tintHex(fill, TILE.underHue, TILE.underSat, TILE.underShade + TILE.shadowShade);
       ctx.lineWidth = Math.max(1, cell*(TILE.pathW + TILE.shadowW)*2);
       ctx.beginPath(); railPath(S); ctx.stroke();
     }
@@ -3633,10 +4591,10 @@
       rrect(X, Y, cell, cell, tileR(cell)); ctx.clip();
       ctx.save();
       ctx.beginPath(); for (const S of surfaces) bodyPath(S, C); ctx.clip();
-      ctx.fillStyle = shadeHex(track, TILE.underShade);
+      ctx.fillStyle = groundColour(track);
       ctx.fillRect(X, Y, cell, cell);                               // the ground
       if (TILE.pathW > 0 && TILE.shadowW > 0) {
-        ctx.fillStyle = shadeHex(track, TILE.underShade + TILE.shadowShade);
+        ctx.fillStyle = tintHex(track, TILE.underHue, TILE.underSat, TILE.underShade + TILE.shadowShade);
         ctx.beginPath(); for (const S of surfaces) surfaceBand(S, C, cell*(TILE.pathW + TILE.shadowW)); ctx.fill();
       }
       if (TILE.pathW > 0) {
@@ -3726,6 +4684,44 @@
   // lengths are fractions of the cell size, so the little chap scales with the board.
   // `runner-lab.html` edits exactly this block and prints it back out — keep the two
   // in step, and paste whole rather than hand-patching individual values.
+  // Every face in the game wears the same eyes — the runner, all six monsters and the walls.
+  // Sizes are fractions of a CELL, not of the body they sit on, which is the whole point: a
+  // wall is four times the size of the runner's head and the eyes still have to match. Tune
+  // in eye-lab.html and paste the block back; tools/check.mjs diffs the two.
+  const EYES = {
+    r:        0.038,   // radius
+    gap:      0.115,   // centre to centre
+    bias:     0.020,   // how far the pair sits toward the way the face is looking
+    lid:      0.60,    // shut-lid stroke width, as a fraction of the radius
+    glanceX:  0.030,   // how far the pupils dart sideways
+    glanceY:  0.024,   // ...and up
+    glanceMs: 5200,    // one full look-around
+    blinkMs:  3000,    // one blink cycle (it is a double-blink)
+  };
+  // Draws one pair, wherever a face wants them. `face` is +1/-1 for which way it looks, `t`
+  // is the clock, `off` staggers the blink so a row of walls never shutters as one.
+  function drawEyes(g, cx0, cy0, s, col, face, t, off) {
+    const R = s*EYES.r, gap = s*EYES.gap, bias = s*EYES.bias*(face || 0);
+    const G = EYES.glanceMs, gt = (t + (off||0)) % G;
+    let gx = 0, gy = 0;
+    if (gt < G*0.125)                      gx = -s*EYES.glanceX;
+    else if (gt < G*0.25)                  gx =  s*EYES.glanceX;
+    else if (gt > G*0.654 && gt < G*0.779) gy = -s*EYES.glanceY;
+    const bt = (t + (off||0)) % EYES.blinkMs;
+    const shut = bt < EYES.blinkMs*0.04 || (bt > EYES.blinkMs*0.058 && bt < EYES.blinkMs*0.085);
+    const x1 = cx0 + bias - gap/2, x2 = cx0 + bias + gap/2;
+    if (shut) {
+      g.strokeStyle = col; g.lineWidth = Math.max(1, R*EYES.lid); g.lineCap = "round";
+      g.beginPath();
+      g.moveTo(x1 - R, cy0 + gy); g.lineTo(x1 + R, cy0 + gy);
+      g.moveTo(x2 - R, cy0 + gy); g.lineTo(x2 + R, cy0 + gy);
+      g.stroke();
+    } else {
+      g.fillStyle = col;
+      g.beginPath(); g.arc(x1 + gx, cy0 + gy, R, 0, Math.PI*2); g.fill();
+      g.beginPath(); g.arc(x2 + gx, cy0 + gy, R, 0, Math.PI*2); g.fill();
+    }
+  }
   const RUNNER = {
     stepMs:   110,     // ms per radian of stride phase — lower = faster legs
     swing:    0.16,    // how far a foot reaches, fraction of a cell
@@ -3798,6 +4794,20 @@
     const s = cell;
     const phase = state.runPhase;
 
+    // The Star: a spinning halo of sparks, so "nothing can touch me" is legible at a glance.
+    if (powerActive("star")) {
+      const puls = 0.62 + 0.38*Math.sin(ts/90);
+      ctx.save();
+      ctx.globalAlpha = 0.30 + 0.18*puls; ctx.fillStyle = "#ffd24a";
+      ctx.beginPath(); ctx.arc(sx, sy - s*0.22, s*0.46*puls, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 0.9; ctx.fillStyle = "#fff3c4";
+      for (let k = 0; k < 6; k++) {
+        const a = ts/260 + k*Math.PI/3, rr = s*0.44;
+        const px = sx + Math.cos(a)*rr, py = sy - s*0.22 + Math.sin(a)*rr*0.7;
+        ctx.beginPath(); ctx.arc(px, py, s*0.035*(0.6 + 0.4*Math.sin(ts/110 + k)), 0, Math.PI*2); ctx.fill();
+      }
+      ctx.restore();
+    }
     // aura while a timed boost/slow effect is active
     if (state.speedFx && state.speedFx.t > 0) {
       const col = state.speedFx.kind === "boost" ? pal("boost") : pal("slow");
@@ -3810,7 +4820,7 @@
     paintRunner(sx, sy, s, phase, angle, moving, ts, (state.status === "squash") ? squashK() : 0,
                 state.status !== "falling");
   }
-  const HAT_SCALE = 1.55;      // hats are drawn at RUNNER's scale, then blown up about the head
+  const HAT_SCALE = 1.15;      // hats are drawn at RUNNER's scale, then nudged up about the head
   // The runner himself, at an arbitrary place and size — knees, foot lift, bob, talisman and
   // all. Split out of drawRunner so the title screen and the opening cinematic can draw the
   // real character instead of a lookalike, and so there is only ever one of him to retune.
@@ -3848,10 +4858,17 @@
     // shadow pinned under a plummeting character is the tell that it was never really there.
     if (grounded !== false) {
       const shk = 1 - RUNNER.shadowBob * (bob / Math.max(1e-6, s*RUNNER.bob || 1e-6)) * 0.5;
+      ctx.save();
+      // The shadow is cast ON THE TRACK, so it must not come along for the ride: undo the
+      // swagger's lean and its hover before drawing it. Leaning back tipped the ellipse up
+      // on its edge, which read as him dragging a plank rather than casting a shadow.
+      if (w.lean) ctx.rotate(-w.lean);
+      if (hover) ctx.translate(0, hover);
       ctx.fillStyle = "rgba(5,4,13," + RUNNER.shadowA + ")";
       ctx.beginPath();
       ctx.ellipse(0, -1 + s*RUNNER.shadowY, bodyW*RUNNER.shadowW*shk, s*RUNNER.shadow*shk, 0, 0, Math.PI*2);
       ctx.fill();
+      ctx.restore();
     }
     // legs — same colour as body, no outline
     ctx.strokeStyle = pale; ctx.lineWidth = Math.max(3, s*RUNNER.legWidth); ctx.lineCap = "round"; ctx.lineJoin = "round";
@@ -3898,27 +4915,8 @@
       ctx.quadraticCurveTo(px, hangY + s*RUNNER.talSag, span, cordY); ctx.stroke();
       worn.draw(ctx, px, hangY, s*RUNNER.talR);
     }
-    // little round eyes (facing +x = travel direction) — they blink and glance around
-    ctx.fillStyle = inkCol;
-    const eyeR = s*RUNNER.eyeR, eyeY = byTop + bodyH*RUNNER.eyeY;
-    const e1x = bodyW*RUNNER.eyeAx, e2x = bodyW*RUNNER.eyeBx;
-    // occasional glance: pupils dart forward/back, sometimes up
-    const G = RUNNER.glanceMs, gt = ts % G; let gx = 0, gy = 0;
-    if (gt < G*0.125)                       gx = -s*RUNNER.glanceX;
-    else if (gt < G*0.25)                   gx =  s*RUNNER.glanceX;
-    else if (gt > G*0.654 && gt < G*0.779)  gy = -s*RUNNER.glanceY;
-    // blink (a quick double-blink) roughly every 3s
-    const bt = ts % 3000, blink = bt < 120 || (bt > 175 && bt < 255);
-    if (blink) {
-      ctx.strokeStyle = inkCol; ctx.lineWidth = Math.max(1.5, s*RUNNER.eyeR*0.6); ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(e1x - eyeR, eyeY + gy); ctx.lineTo(e1x + eyeR, eyeY + gy);
-      ctx.moveTo(e2x - eyeR, eyeY + gy); ctx.lineTo(e2x + eyeR, eyeY + gy);
-      ctx.stroke();
-    } else {
-      ctx.beginPath(); ctx.arc(e1x + gx, eyeY + gy, eyeR, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(e2x + gx, eyeY + gy, eyeR, 0, Math.PI*2); ctx.fill();
-    }
+    // the shared eyes, facing +x = the way he is travelling
+    drawEyes(ctx, 0, byTop + bodyH*RUNNER.eyeY, s, inkCol, 1, ts, 0);
     // last, so it sits on top of everything. Scaled up about the crown of his head — at the
     // shipped size the hats were a few pixels of trim on a small character and read as noise.
     const hat = lookItem("hat");
@@ -3952,9 +4950,75 @@
   // single drawImage inside the camera transform.
   let wallLayer = null, wallLayerDirty = true;
   function markWallLayerDirty() { wallLayerDirty = true; }
+  // The walls are watching. They cannot go into the baked wall layer — that is drawn once per
+  // level and blitted — so they are painted over the top each frame, which is what lets them
+  // blink and follow him. Two circles per wall is nothing next to the rest of a frame.
+  // The walls wear the same eyes as everything else — only where they sit and how far they
+  // will look are the walls' own business. They cannot go into the baked wall layer (that is
+  // drawn once per level and blitted), so they are painted over the top each frame.
+  const WALL_EYES = {
+    y:     0.42,                  // down the tile from its top
+    track: 0.020,                 // how far the pupils slide toward the runner
+    reach: 6,                     // how many tiles away they stop bothering to look
+    col:   "rgba(74,80,96,0.75)", // the rivets' colour — cast in, not painted on
+  };
+  function drawWallEyes(ts) {
+    const s = state; if (!s.walls.size) return;
+    let rx = null, ry = null;
+    if (s.status === "play" || s.status === "falling") {
+      const rp = s.status === "falling" && s.fall ? s.fall : visualAt(s.runIdx + s.runT);
+      rx = rp.x; ry = rp.y;
+    }
+    ctx.save();
+    for (const wk of s.walls) {
+      const i = wk.indexOf(","), c = +wk.slice(0, i), r = +wk.slice(i+1);
+      const cx0 = (c + 0.5)*cell, cy0 = (r + WALL_EYES.y)*cell;
+      // Each wall blinks on its own offset, or a row of them shutters like a Mexican wave.
+      const off = (_sHash(c + 1, r + 1) % 1000) / 1000 * EYES.blinkMs;
+      drawEyes(ctx, cx0, cy0, cell, WALL_EYES.col, 0, ts, off);
+      // ...and the pupils follow him, which the shared painter knows nothing about
+      if (rx != null) {
+        const dx = rx - cx0, dy = ry - cy0, d = Math.hypot(dx, dy) / cell;
+        if (d < WALL_EYES.reach && d > 0.01) {
+          const k2 = cell*WALL_EYES.track * (1 - d/WALL_EYES.reach);
+          const bt = (ts + off) % EYES.blinkMs;
+          const shut = bt < EYES.blinkMs*0.04 || (bt > EYES.blinkMs*0.058 && bt < EYES.blinkMs*0.085);
+          if (!shut) {                                   // redraw the pupils, nudged his way
+            ctx.fillStyle = WALL_EYES.col;
+            const R = cell*EYES.r, gap = cell*EYES.gap;
+            for (const ex of [cx0 - gap/2, cx0 + gap/2]) {
+              ctx.beginPath();
+              ctx.arc(ex + dx/(d*cell)*k2, cy0 + dy/(d*cell)*k2, R, 0, Math.PI*2); ctx.fill();
+            }
+          }
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  // The plate's inscribed square: a fine line set just inside the edge, following the same
+  // corner as the plate itself. Shared by all three painters — the baked wall layer, the live
+  // wall and the platform plinth — because three copies of a detail is three chances to drift.
+  const PLATE_PAD = 0.055;          // inset, fraction of the tile
+  function platePanel(g, x, y, s, rad) {
+    const p = s*PLATE_PAD, r2 = Math.max(0, rad - p*0.6), w = s - 2*p;
+    g.save();
+    g.strokeStyle = "rgba(74,80,96,0.75)";        // the rivets' colour
+    g.lineWidth = Math.max(1, s*0.014);
+    g.beginPath();
+    g.moveTo(x+p+r2, y+p);
+    g.arcTo(x+p+w, y+p,   x+p+w, y+p+w, r2);
+    g.arcTo(x+p+w, y+p+w, x+p,   y+p+w, r2);
+    g.arcTo(x+p,   y+p+w, x+p,   y+p,   r2);
+    g.arcTo(x+p,   y+p,   x+p+w, y+p,   r2);
+    g.closePath(); g.stroke();
+    g.restore();
+  }
+
   // self-contained wall painter (targets an arbitrary context, no reliance on global ctx)
   function paintWallInto(g, x, y, s) {
-    const rad = s * 0.16;
+    const rad = tileR(s);           // was a hardcoded 0.16 — the one plate the radius pass missed
     const rp = (r) => { r = Math.max(0, Math.min(r, s/2)); g.beginPath(); g.moveTo(x+r,y);
       g.arcTo(x+s,y,x+s,y+s,r); g.arcTo(x+s,y+s,x,y+s,r); g.arcTo(x,y+s,x,y,r); g.arcTo(x,y,x+s,y,r); g.closePath(); };
     const grd = g.createLinearGradient(x, y, x, y + s);
@@ -3963,6 +5027,7 @@
     g.save(); rp(rad); g.clip();
     if (paperTile) { g.globalAlpha = 0.9; g.fillStyle = g.createPattern(paperTile, "repeat"); g.fillRect(x, y, s, s); g.globalAlpha = 1; }
     g.restore();
+    platePanel(g, x, y, s, rad);
     const off = s*0.17, br = s*0.05;
     for (const [bx, by] of [[off,off],[s-off,off],[off,s-off],[s-off,s-off]]) {
       g.fillStyle = "rgba(74,80,96,0.75)"; g.beginPath(); g.arc(x+bx, y+by, br, 0, Math.PI*2); g.fill();
@@ -3991,6 +5056,7 @@
     grainFill(x, y, s, s, 0.9);                       // paper grain on the wall tile (no sheen)
     ctx.restore();
     // corner bolts (matte, no shine)
+    platePanel(ctx, x, y, s, rad);
     const off = s*0.17, br = s*0.05;
     for (const [bx, by] of [[off,off],[s-off,off],[off,s-off],[s-off,s-off]]) {
       ctx.fillStyle = "rgba(74,80,96,0.75)"; ctx.beginPath(); ctx.arc(x+bx, y+by, br, 0, Math.PI*2); ctx.fill();
@@ -4014,6 +5080,7 @@
     ctx.save(); rrect(x, y, s, s, rad); ctx.clip();
     grainFill(x, y, s, s, 0.9);
     ctx.restore();
+    platePanel(ctx, x, y, s, rad);
     const off = s*0.17, br = s*0.05;
     for (const [bx, by] of [[off,off],[s-off,off],[off,s-off],[s-off,s-off]]) {
       ctx.fillStyle = "rgba(74,80,96,0.75)"; ctx.beginPath(); ctx.arc(x+bx, y+by, br, 0, Math.PI*2); ctx.fill();
@@ -4347,7 +5414,11 @@
     bodyGrain:  1.00,    // paper grain over a laid platform body
     railW:      0.075,   // running-surface rail thickness, fraction of a cell
     pathW:      0.150,   // the beam directly under the rail, in the track colour
-    underShade: -50,     // how much darker the ground beneath it is, per channel
+    underShade: -50,     // how much darker the ground beneath it is
+    underHue:   -26,     // ...and how far its hue is turned from the track's, in degrees
+    underSat:   0.42,    // ...and how much of the track's saturation it keeps (1 = all of it)
+    strata:     0.16,    // the ground's own bedding lines: their strength, 0 = bare
+    strataN:    5,       // how many of them per cell
     shadowW:    0.015,   // the shadow the beam casts onto the ground
     shadowShade: -16,    // ...how much darker again that shadow is
   };  const tileR = s => s * TILE.radius;
@@ -4481,7 +5552,10 @@
     const wx = x + camX, wy = y + camY;
     const { c, r } = cellAtWorld(wx, wy);
     if (!inBounds(c, r)) return;
-    const tile = freeTileAt(c, r);
+    // The Finger of God, if it is armed, gets the tap first: it can lift a tile that is
+    // already laid, which freeTileAt would never find.
+    const lifted = fingerLift(c, r);
+    const tile = lifted || freeTileAt(c, r);
     if (!tile) {
       // grab a sliding platform (tap the platform itself and drag it along its rail)
       for (const sl of (state.sliders||[])) {
@@ -4616,20 +5690,66 @@
       if (state.status === "falling") tickFall(dt);
       updateShards(dt);
       tickFx(dt);
+      tickVortex(dt);
+      tickPower(dt);
       tickCoinProximity();
     } else { Sound.sawProximity(0); Sound.coinProximity(0); }   // both drones off while paused
     updateCamera(dt);
     draw(ts);
     if (paused) drawPausedOverlay();
     updatePauseBtn();
+    updatePowerBtn();
     requestAnimationFrame(frame);
   }
   // the floating pause/menu button only shows during active play (hidden on the
   // title, during the intro/cam-pan, while falling, on win/lose, and while paused).
   let _pauseVis = null;
+  // ---------- the talisman button ----------------------------------------
+  // Redrawn from state every frame like the pause button, rather than being poked at from
+  // half a dozen places. The icon is only repainted when the worn talisman changes — it is
+  // a canvas, and there is no reason to repaint it sixty times a second.
+  const powerEl = document.getElementById("power");
+  const powerIc = document.getElementById("power-ic");
+  const powerName = document.getElementById("power-name");
+  const powerSub = document.getElementById("power-sub");
+  const powerBar = document.getElementById("power-bar");
+  let _powerIcId = null, _powerCls = null, _powerSub = null;
+  powerEl.addEventListener("click", (e) => {
+    e.preventDefault(); Sound.unlock();
+    if (firePower()) return;
+    Sound.tap();
+  });
+  function updatePowerBtn() {
+    const def = (!titleActive && !paused && state &&
+                 (state.status === "play" || state.status === "vortex")) ? wornTalisman() : null;
+    if (!def) { if (_powerCls !== "off") { powerEl.className = ""; _powerCls = "off"; } return; }
+    if (_powerIcId !== def.id) {                    // the pendant changed — repaint the icon
+      const g = powerIc.getContext("2d");
+      g.clearRect(0, 0, 72, 72); def.draw(g, 36, 36, 28);
+      powerName.textContent = def.name;
+      _powerIcId = def.id; _powerSub = null;
+    }
+    const p = state.power;
+    let cls = "on", sub = def.blurb;
+    if (p.kind && p.t > 0) {                        // running
+      cls = "on dim"; sub = (p.t/1000).toFixed(1) + "s";
+      powerBar.style.width = Math.max(0, Math.min(1, p.t / (p.ms || 1)))*100 + "%";
+    } else if (p.kind === "finger" && p.armed) {    // waiting to be aimed at a tile
+      cls = "on armed"; sub = "Tap a laid tile";
+      powerBar.style.width = "0";
+    } else if (p.spent) {
+      cls = "on dim"; sub = "Spent";
+      powerBar.style.width = "0";
+    } else {
+      powerBar.style.width = "0";
+    }
+    if (cls !== _powerCls) { powerEl.className = cls; _powerCls = cls; }
+    if (sub !== _powerSub) { powerSub.textContent = sub; _powerSub = sub; }
+  }
   function updatePauseBtn() {
     const pf = document.getElementById("pauseFloat"); if (!pf) return;
-    const show = !titleActive && !paused && state && state.status === "play";
+    const show = !titleActive && !paused && state &&
+                 (state.status === "play" || state.status === "vortex");
     const v = show ? "" : "none";
     if (v !== _pauseVis) { pf.style.display = v; _pauseVis = v; }
   }
@@ -4644,6 +5764,50 @@
   function updateHazards(dt) {
     const s = state; if (!s || !s.hazards.length) { Sound.sawProximity(0); return; }
     for (const h of s.hazards) {
+      if (h.kind === "monster") {
+        const K = monKind(h);
+        if (K.move === "rail") {                    // exactly the saw motion it replaces
+          h.t += dt / h.speed * h.dir;
+          if (h.t > 1) { h.t = 1; h.dir = -1; }
+          if (h.t < 0) { h.t = 0; h.dir = 1; }
+          const p = h.lo + (h.hi - h.lo) * h.t;
+          h.pos = p;
+          if (h.axis === "h") { h.cc = Math.round(p); h.cr = h.r; h.faceX = h.dir; }
+          else                { h.cc = h.c; h.cr = Math.round(p); h.faceX = h.dir; }
+          h.wx = (h.axis === "h" ? p : h.c)*cell + cell/2;
+          h.wy = (h.axis === "h" ? h.r : p)*cell + cell/2;
+          monsterNoise(h, dt);
+          continue;
+        }
+        if (K.move === "trap") {                    // sits still, yawns, then snaps
+          h.trapT = (h.trapT || 0) + dt;
+          h.wx = (h.c + 0.5)*cell; h.wy = (h.r + 0.5)*cell;
+          monsterNoise(h, dt, trapPhase(h.trapT).open < 0.2);
+          continue;
+        }
+        if (K.move === "wander") {
+          // A fresh route every run: at each cell it picks a random open neighbour, avoiding
+          // the one it came from unless that is the only way on. No path is ever the same.
+          h.segT += dt / Math.max(1, h.speed);
+          if (h.segT >= 1) {
+            h.segT = 0; h.from = h.to.slice();
+            const opts = [], back = [];
+            for (const [dc, dr] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+              const c = h.from[0] + dc, r = h.from[1] + dr;
+              if (!inBounds(c, r) || s.walls.has(key(c, r)) || s.stones.has(key(c, r))) continue;
+              (h.came && c === h.came[0] && r === h.came[1] ? back : opts).push([c, r]);
+            }
+            const pick = (opts.length ? opts : back);
+            if (pick.length) { h.came = h.from.slice(); h.to = pick[Math.floor(Math.random()*pick.length)]; }
+          }
+          const fx = h.from[0] + (h.to[0]-h.from[0])*h.segT, fy = h.from[1] + (h.to[1]-h.from[1])*h.segT;
+          h.wx = (fx+0.5)*cell; h.wy = (fy+0.5)*cell;
+          h.cc = Math.round(fx); h.cr = Math.round(fy);
+          if (h.to[0] !== h.from[0]) h.faceX = h.to[0] < h.from[0] ? -1 : 1;
+          monsterNoise(h, dt);
+          continue;
+        }
+      }
       if (h.path) {                                 // monster — move along its waypoint path
         const at = h.seg;
         const nextIdx = h.loop ? (at + 1) % h.path.length
@@ -4670,6 +5834,10 @@
         h.wx = (fx + 0.5) * cell; h.wy = (fy + 0.5) * cell;
         h.cc = Math.round(fx); h.cr = Math.round(fy);
         if (B[0] !== A[0]) h.faceX = B[0] < A[0] ? -1 : 1;
+        // The bite runs on the hazard's own clock so the crunch lands exactly as the jaws
+        // meet. Volume falls off with distance and is silent past MONSTER.hear tiles — near
+        // one of these you should hear it working before you can see it.
+        monsterNoise(h, dt);
         continue;
       }
       // saw — smooth ping-pong along the rail
@@ -4686,8 +5854,12 @@
       const rcx = Math.floor(rp.x/cell), rcy = Math.floor(rp.y/cell);
       const runCX = rp.x/cell, runCY = rp.y/cell;                   // runner centre in cell units
       let struck = false, prox = 0;
+      const shielded = powerActive("star");                        // the Star: hazards can't touch him
       for (const h of s.hazards) {
-        if (h.cc === rcx && h.cr === rcy) struck = true;            // any hazard on the runner's cell kills
+        // A trap held wide open is a doorway, not a hazard — that is the whole point of it.
+        // Everything else on his cell is fatal on contact.
+        const safe = h.kind === "monster" && monKind(h).move === "trap" && !trapPhase(h.trapT||0).lethal;
+        if (h.cc === rcx && h.cr === rcy && !shielded && !safe) struck = true;
         if ((h.kind || "saw") === "saw") {                          // saw whir swells with proximity
           const scx = (h.axis === "h" ? h.pos : h.c) + 0.5, scy = (h.axis === "h" ? h.r : h.pos) + 0.5;
           const d = Math.hypot(runCX - scx, runCY - scy);
@@ -4699,6 +5871,31 @@
       if (struck) startFall();                                      // struck — the runner goes down
     } else { Sound.sawProximity(0); }
   }
+  // The bite clock and the two voices, shared by every variant. `mute` holds the crunch
+  // for a trap that is sitting wide open — it is not chewing, it is waiting.
+  function monsterNoise(h, dt, mute) {
+    const s = state;
+    const near = s.status === "play"
+      ? (() => { const rp = visualAt(s.runIdx + s.runT);
+                 return Math.hypot(rp.x - h.wx, rp.y - h.wy) / cell; })()
+      : Infinity;
+    h.chompT = (h.chompT || 0) + dt;
+    if (h.chompT >= MONSTER.chompMs) {
+      h.chompT -= MONSTER.chompMs;
+      // Falls off linearly, not squared: squared put the bite near silence at any distance
+      // you would actually be at, which is why he could not be heard at all.
+      const v = Math.max(0, 1 - near / MONSTER.hear);
+      if (v > 0.02 && !mute) Sound.crunch(v);
+    }
+    if (h.growlT == null) h.growlT = MONSTER.growlMin*Math.random();
+    h.growlT -= dt;
+    if (h.growlT <= 0) {
+      h.growlT = MONSTER.growlMin + Math.random()*MONSTER.growlVary;
+      const v = Math.max(0, 1 - near / MONSTER.growlHear);
+      if (v > 0.02) Sound.growl(v);
+    }
+  }
+
   // decay transient visual feedback (shake, beat pulse, combo flash, pops)
   // A choir swells as the runner closes on a coin — the cue that there is something worth
   // detouring for just out of shot. 1.5 cells is close enough that it is a reward for
@@ -4823,8 +6020,9 @@
   let menuReturn = null;
   function openMenu(screen, ret) { paused = true; menuReturn = ret || null;
                                    buildMenu(screen || "main"); menuEl.classList.add("show");
-                                   Sound.pauseMusic(true); }
-  function closeMenu() { paused = false; menuReturn = null; menuEl.classList.remove("show"); Sound.pauseMusic(false); }
+                                   Sound.ambient("pause"); }
+  function closeMenu() { paused = false; menuReturn = null; menuEl.classList.remove("show");
+                         Sound.ambient(cineActive ? "intro" : titleActive ? "title" : null); }
 
   // Every generated button clicks when pressed. Wired here rather than at each call site so
   // a new menu button can never be added silently.
@@ -4843,13 +6041,14 @@
   let shopTab = "colour";                 // the shop remembers which rack you were looking at
   function buildMenu(screen) {
     menuBody.innerHTML = "";
+    menuEl.classList.toggle("top", screen === "shop" || screen.indexOf("shop:") === 0);
     const title = document.getElementById("menu-title");
     title.className = "";                      // only the main screen wears the logo treatment
     // ---- the shop: him at the top, a tab per category, then that tab's rack ----
     if (screen === "shop" || screen.indexOf("shop:") === 0) {
       if (screen.indexOf("shop:") === 0) shopTab = screen.slice(5);
-      if (!LOOK.some(l => l.key === shopTab)) shopTab = LOOK[0].key;
-      title.textContent = "Shop";
+      if (!LOOK.some(l => l.key === shopTab) && shopTab !== "talisman") shopTab = LOOK[0].key;
+      title.textContent = "Shop"; title.className = "shop";
       saveWallet();                                   // banks whatever the last run earned
 
       // A picture of him wearing everything currently on, standing on a real tile. It sits
@@ -4859,8 +6058,8 @@
       const cv = document.createElement("canvas"); cv.width = S; cv.height = S;
       fig.appendChild(cv);
       const g = cv.getContext("2d");
-      const rs = S*0.52;                              // his size on this canvas
-      const foot = { x: S*0.50, y: S*0.70 };          // where his feet stand
+      const rs = S*0.56;                              // his size on this canvas
+      const foot = { x: S*0.50, y: S*0.72 };          // where his feet stand
 
       // The game's own pane, body and rail, in whatever track skin is worn — so the track
       // is on show here too rather than being represented by a stand-in.
@@ -4870,13 +6069,24 @@
         drawPlatformSurface(n, tileSurface(n, { c:-1, r:0 }, { c:1, r:0 }), curTrack());
       });
 
-      // the worn trail, sketched behind him
+      // The worn trail, leaving him the way it does in play: exactly as deep as his body,
+      // running out from UNDER him — it is drawn before he is, so his body covers the join
+      // and it reads as attached — and fading along its length on the same curve the game
+      // uses, rather than stopping dead in a flat block short of his back.
       const tr = lookItem("trail");
       if (tr.cols) {
         const bandH = rs*RUNNER.bodyH, tn = tr.cols.length, tsw = bandH/tn;
         const cyb = foot.y - rs*(RUNNER.legLen + RUNNER.bodyH*0.5);
-        for (let i=0;i<tn;i++){ g.fillStyle = tr.cols[i];
-          g.fillRect(S*0.04, cyb - bandH/2 + i*tsw, foot.x - rs*0.22 - S*0.04, tsw); }
+        const headX = foot.x + rs*RUNNER.bodyW*0.20, tailX = S*0.03;
+        for (let i = 0; i < tn; i++) {
+          const grd = g.createLinearGradient(tailX, 0, headX, 0);
+          for (let k = 0; k <= 6; k++) {                        // matches drawTrail's ramp
+            const t = k/6;
+            grd.addColorStop(t, hexA(tr.cols[i], Math.pow(t, 1.4) * 0.92));
+          }
+          g.fillStyle = grd;
+          g.fillRect(tailX, cyb - bandH/2 + i*tsw - 0.35, headX - tailX, tsw + 0.7);
+        }
       }
       // ...and the runner himself, drawn by the game, mid-stride so the swagger reads
       withCanvas(g, rs, 0, 0, () =>
@@ -4892,22 +6102,60 @@
       purse.appendChild(pv); purse.appendChild(pl);
       menuBody.appendChild(purse);
 
+      // Six tabs across, so each gets a picture rather than a word — at this width the
+      // labels alone were unreadable, and the icon is what you actually scan for.
+      // Seven tabs: the six worn categories, then the talismans. They are not BOUGHT — you
+      // find them on the board — but they are still "what you take into a level", which is
+      // what this screen is for, so they belong beside the rest of the kit.
+      const TABS = LOOK.concat([{ key:"talisman", label:"Charm", icon:(g,S)=>TALISMANS[2].draw(g,S/2,S/2,S*0.34) }]);
       const tabs = document.createElement("div"); tabs.className = "shop-tabs";
-      LOOK.forEach(catg => {
+      TABS.forEach(catg => {
         const t = document.createElement("button");
-        t.textContent = catg.label;
+        const ic = document.createElement("canvas"); ic.width = 44; ic.height = 44;
+        catg.icon(ic.getContext("2d"), 44);
+        const lb = document.createElement("span"); lb.textContent = catg.label;
+        t.appendChild(ic); t.appendChild(lb);
         if (catg.key === shopTab) t.className = "on";
         t.onclick = () => { Sound.unlock(); Sound.tap(); buildMenu("shop:" + catg.key); };
         tabs.appendChild(t);
       });
       menuBody.appendChild(tabs);
 
-      const cat = LOOK.find(l => l.key === shopTab);
-      const worn = document.createElement("div"); worn.className = "shop-worn";
-      worn.textContent = "Wearing: " + lookItem(cat.key).name;
-      menuBody.appendChild(worn);
-
+      const rack = document.createElement("div"); rack.className = "shop-rack";
       const grid = document.createElement("div"); grid.className = "tal-grid";
+      if (shopTab === "talisman") {                    // the charms: found, not bought
+        const worn = settings.talisman;
+        TALISMANS.forEach(t => {
+          const got = talUnlocked.has(t.id), on = got && worn === t.id;
+          const el = document.createElement("button");
+          el.className = "tal" + (on ? " on" : "") + (got ? "" : " locked");
+          const tc = document.createElement("canvas"); tc.width = 96; tc.height = 96;
+          const tg = tc.getContext("2d");
+          tg.save(); t.draw(tg, 48, 48, 30);
+          if (!got) {                                  // not found yet: a flat silhouette
+            tg.globalCompositeOperation = "source-atop";
+            tg.fillStyle = "rgba(120,124,150,0.85)"; tg.fillRect(0, 0, 96, 96);
+          }
+          tg.restore();
+          const nm = document.createElement("span"); nm.textContent = got ? t.name : "???";
+          const bl = document.createElement("i"); bl.className = "tal-blurb";
+          bl.textContent = got ? t.blurb : "";
+          el.appendChild(tc); el.appendChild(nm); el.appendChild(bl);
+          if (got) el.onclick = () => { Sound.unlock(); Sound.tap();
+            settings.talisman = (worn === t.id) ? null : t.id; saveSettings(); buildMenu("shop:talisman"); };
+          grid.appendChild(el);
+        });
+        rack.appendChild(grid); menuBody.appendChild(rack);
+        const n = talUnlocked.size;
+        menuBody.appendChild(sub(n + " of " + TALISMANS.length + " found" +
+          (n === TALISMANS.length ? " — the whole set" : "") + " · one power per level"));
+        const go2 = btn("Keep calm and carry on \u203a",
+                        () => (menuReturn === "overlay" ? closeMenu() : buildMenu("main")), true);
+        go2.className = "shop-go";
+        menuBody.appendChild(go2);
+        return;
+      }
+      const cat = LOOK.find(l => l.key === shopTab);
       const wornId = lookWorn(cat.key);
       cat.items.forEach(it => {
         const have = owns(it), on = wornId === it.id;
@@ -4936,40 +6184,12 @@
         };
         grid.appendChild(el);
       });
-      menuBody.appendChild(grid);
-      menuBody.appendChild(btn("Back", () => (menuReturn === "overlay" ? closeMenu() : buildMenu("main"))));
-      return;
-    }
-    if (screen === "talismans") {
-      title.textContent = "Talismans";
-      const grid = document.createElement("div"); grid.className = "tal-grid";
-      const worn = settings.talisman;
-      TALISMANS.forEach(t => {
-        const got = talUnlocked.has(t.id), on = got && worn === t.id;
-        const el = document.createElement("button");
-        el.className = "tal" + (on ? " on" : "") + (got ? "" : " locked");
-        const cv = document.createElement("canvas"); cv.width = 96; cv.height = 96;
-        const g = cv.getContext("2d");
-        if (got) t.draw(g, 48, 48, 30);
-        else {                                            // locked: a flat silhouette
-          g.save(); t.draw(g, 48, 48, 30);
-          g.globalCompositeOperation = "source-atop";
-          g.fillStyle = "rgba(120,124,150,0.85)"; g.fillRect(0, 0, 96, 96); g.restore();
-        }
-        const nm = document.createElement("span");
-        nm.textContent = got ? t.name : "???";
-        el.appendChild(cv); el.appendChild(nm);
-        if (got) el.onclick = () => {                     // click to wear, click again to take off
-          settings.talisman = (worn === t.id) ? null : t.id; saveSettings(); buildMenu("talismans");
-        };
-        grid.appendChild(el);
-      });
-      menuBody.appendChild(grid);
-      const n = talUnlocked.size;
-      menuBody.appendChild(sub(n + " of " + TALISMANS.length + " found" +
-        (n === TALISMANS.length ? " — the whole set" : "")));
-      if (worn) menuBody.appendChild(btn("Take it off", () => { settings.talisman = null; saveSettings(); buildMenu("talismans"); }));
-      menuBody.appendChild(btn("Back", () => buildMenu("main")));
+      rack.appendChild(grid);
+      menuBody.appendChild(rack);
+      const go = btn("Keep calm and carry on \u203a",
+                     () => (menuReturn === "overlay" ? closeMenu() : buildMenu("main")), true);
+      go.className = "shop-go";
+      menuBody.appendChild(go);
       return;
     }
     if (screen === "levels") {
@@ -4997,17 +6217,27 @@
     menuBody.appendChild(btn("Restart Level", () => { loadLevel(levelIdx); closeMenu(); }));
     menuBody.appendChild(btn("Levels", () => buildMenu("levels")));
     menuBody.appendChild(btn("Shop", () => buildMenu("shop")));
-    menuBody.appendChild(btn("Talismans", () => buildMenu("talismans")));
     menuBody.appendChild(toggle("Sound", !Sound.isMuted(), () => { Sound.unlock(); Sound.setMuted(!Sound.isMuted()); buildMenu(screen); }));
     menuBody.appendChild(toggle("Colorblind", colorblind, () => { colorblind = !colorblind; settings.colorblind = colorblind; saveSettings(); applyColorblind(); buildMenu(screen); }));
-    // Wipes the record of which mechanics have been taught, so the tutorial cards come back
-    // on the next level that uses one. Confirms in the label rather than in a dialog — it is
-    // harmless and instantly repeatable, so an "are you sure?" would just be in the way.
-    const rb = btn("Reset Tutorials", () => {
-      try { localStorage.removeItem(SEEN_KEY); } catch(_) {}
+    // Wipes EVERYTHING the player has: levels cleared, coins, everything bought and worn,
+    // talismans found, settings, and the record of which tutorials have been seen. The old
+    // tutorials-only reset needed no confirmation because it was harmless and instantly
+    // repeatable. This is neither, so the button arms itself first and you have to mean it.
+    let armed = false, armT = null;
+    const rb = btn("Reset All Data", () => {
       Sound.unlock();
-      rb.textContent = "Tutorials reset";
-      setTimeout(() => { if (rb.isConnected) rb.textContent = "Reset Tutorials"; }, 1300);
+      if (!armed) {
+        armed = true; rb.textContent = "Tap again to erase it all"; rb.classList.add("danger");
+        armT = setTimeout(() => { armed = false;
+          if (rb.isConnected) { rb.textContent = "Reset All Data"; rb.classList.remove("danger"); } }, 3200);
+        return;
+      }
+      clearTimeout(armT);
+      for (const k of [SEEN_KEY, BEST_KEY, WALLET_KEY, TAL_KEY, SET_KEY])
+        { try { localStorage.removeItem(k); } catch(_) {} }
+      rb.textContent = "Erased — starting over";
+      // A reload is the honest way back to a fresh player: every default is read at boot.
+      setTimeout(() => { try { location.reload(); } catch(_) {} }, 480);
     });
     menuBody.appendChild(rb);
     const ver = document.createElement("div"); ver.className = "menu-ver"; ver.textContent = VERSION;
@@ -5035,6 +6265,8 @@
     stones: () => [...state.stones],
     smash: (c, r) => breakStone(c, r),
     sound: Sound,
+    power: { fire: () => firePower(), state: () => state.power,
+             lift: (c, r) => !!fingerLift(c, r) },
     load: (i) => { titleActive = false; const pf = document.getElementById("pauseFloat"); if (pf) pf.style.display = "";
                    levelIdx = clamp(i, 0, LEVELS.length - 1); loadLevel(levelIdx); },
     tapCell: (c, r) => {                       // simulate a tap at a grid cell (stone/switch)
@@ -5053,6 +6285,11 @@
     openMDoor: (i) => { const md = state.manualDoors[i]; if (md) { md.left = 1; md.right = 1; markOccDirty(); } },
     ui: {
       undo: () => undoLast(),
+      relink: () => linkParkedTiles(),      // the pass update() runs every frame
+      monster: (x, y, ts, face, phase, cfg) => drawMonster(x, y, ts, face, phase, cfg),
+      monsterKinds: () => Object.keys(MONSTER_KINDS),
+      trapPhase: (t) => trapPhase(t),
+      noticeLoop: () => noticeLoop(),       // the circuit check update() runs on every step
       openMenu: (s) => openMenu(s), closeMenu: () => closeMenu(),
       isPaused: () => paused,
       setColorblind: (v) => { colorblind = v; applyColorblind(); }, isColorblind: () => colorblind,
@@ -5080,6 +6317,7 @@
     titleTheme.colors = TITLE_SPECTRUM;
     titleTheme.stripeW = 2;
     const pf = document.getElementById("pauseFloat"); if (pf) pf.style.display = "none";
+    Sound.ambient("title");
   }
   function leaveTitle(){
     if (!titleActive) return;
@@ -5089,7 +6327,7 @@
     // Level one opens with the cinematic; it loads the level itself when it ends. Resuming
     // further in skips straight to the board — the creation myth only fits in front of the
     // first level, not in front of level 14.
-    if (levelIdx === 0) startCine("level");
+    if (levelIdx === 0) startCine("level");   // the cinematic picks the theme up from here
     else loadLevel(levelIdx);            // start the level fresh (with its own intro + any tutorial pop)
   }
 
@@ -5140,10 +6378,12 @@
         col: Math.random() < 0.7 ? getVar("--runner") : "#ffffff" });
     }
     const pf = document.getElementById("pauseFloat"); if (pf) pf.style.display = "none";
+    Sound.ambient("intro");
   }
   function endCine(){
     if (!cineActive) return;
     cineActive = false;
+    Sound.ambient(null);                                // the level's own arrangement takes over
     if (cineNext === "menu") openMenu("levels");        // replayed from the menu — go back to it
     else loadLevel(levelIdx);                           // opening run — straight into the level
   }
@@ -5484,17 +6724,34 @@
   function introDrawPlatform(cellObj, prev, next, m, content){
     const C = introCenter(cellObj, m), s = m.s, tx = C.x - s/2, ty = C.y - s/2;
     const S = introSurface(cellObj, prev, next, m);
+    // The same cross-section a laid tile has in play, on the intro's own geometry: this
+    // used to be a flat gold slab with its own hardcoded alphas, and it drifted every time
+    // the tile was retuned. Every number now comes from TILE.
+    const track = getVar("--track");
+    const line = () => { ctx.beginPath(); ctx.moveTo(S[0].x, S[0].y);
+                         for (let k = 1; k < S.length; k++) ctx.lineTo(S[k].x, S[k].y); };
     ctx.save();
     rrect(tx, ty, s, s, tileR(s)); ctx.clip();
-    ctx.fillStyle = "rgba(180,174,235,0.55)"; ctx.fillRect(tx, ty, s, s);              // glass base
-    grainFill(tx, ty, s, s, 0.85);
+    ctx.fillStyle = "rgba(180,174,235," + TILE.glassA + ")"; ctx.fillRect(tx, ty, s, s);   // the pane
+    grainFill(tx, ty, s, s, TILE.glassGrain);
     if (content === false) { ctx.restore(); return; }
-    // solid gold beam body hanging from the surface to the tile edge (clipped to the tile)
-    ctx.beginPath(); introBodyPath(S, m, introCenter(cellObj, m)); ctx.fillStyle = getVar("--track"); ctx.fill();
-    grainFill(tx, ty, s, s, 0.45);
-    // bright rail along the running surface
-    ctx.strokeStyle = getVar("--rail"); ctx.lineWidth = Math.max(3, s*0.06); ctx.lineCap = "round"; ctx.lineJoin = "round";
-    ctx.beginPath(); ctx.moveTo(S[0].x, S[0].y); for (let k=1;k<S.length;k++) ctx.lineTo(S[k].x, S[k].y); ctx.stroke();
+    ctx.save();
+    ctx.beginPath(); introBodyPath(S, m, introCenter(cellObj, m)); ctx.clip();
+    ctx.fillStyle = groundColour(track);                       // the ground, in its own colour
+    ctx.fillRect(tx, ty, s, s);
+    drawGroundStrata(tx, ty, s);                               // ...and its own bedding
+    ctx.lineJoin = "round"; ctx.lineCap = "butt";
+    if (TILE.pathW > 0 && TILE.shadowW > 0) {
+      ctx.strokeStyle = tintHex(track, TILE.underHue, TILE.underSat, TILE.underShade + TILE.shadowShade);
+      ctx.lineWidth = Math.max(1, s*(TILE.pathW + TILE.shadowW)*2); line(); ctx.stroke();
+    }
+    if (TILE.pathW > 0) {                                      // doubled: the top half is clipped
+      ctx.strokeStyle = track; ctx.lineWidth = Math.max(1, s*TILE.pathW*2); line(); ctx.stroke();
+    }
+    grainFill(tx, ty, s, s, TILE.bodyGrain);
+    ctx.restore();                                             // out of the body clip
+    ctx.strokeStyle = getVar("--rail"); ctx.lineWidth = Math.max(3, s*TILE.railW);
+    ctx.lineCap = "round"; ctx.lineJoin = "round"; line(); ctx.stroke();
     ctx.restore();
   }
   // the beam body polygon: the surface, then a far edge offset to the underside, clipped to the tile
