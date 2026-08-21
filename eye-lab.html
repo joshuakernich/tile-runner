@@ -163,13 +163,37 @@ function face(x, y, kind, t){
     return "rail";
   }
   const S = s, h = S/2;                                    // a wall plate
-  ctx.fillStyle = "#5c6474"; rrect(ctx, x-h, y-h, S, S, s*0.075); ctx.fill();
-  ctx.fillStyle = "rgba(74,80,96,0.75)";
+  const grd = plateGrad(x-h, y-h, S);                      // rivets and eyes both take this
+  ctx.fillStyle = grd; rrect(ctx, x-h, y-h, S, S, s*0.075); ctx.fill();
+  platePanel(x-h, y-h, S, s*0.075);
+  ctx.fillStyle = grd;
   const off = S*0.17, br = S*0.05;
   for (const [bx,by] of [[-h+off,-h+off],[h-off,-h+off],[-h+off,h-off],[h-off,h-off]])
     { ctx.beginPath(); ctx.arc(x+bx, y+by, br, 0, 7); ctx.fill(); }
-  drawEyes(ctx, x, y - h + S*0.42, s, "rgba(74,80,96,0.75)", 0, t, 0);
+  drawEyes(ctx, x, y - h + S*0.42, s, grd, 0, t, 0);
   return "wall";
+}
+// mirrors index.html's PLATE_STOPS / plateGrad / platePanel, so the lab's wall is the game's
+// wall. The panel matters here and isn't decoration: the eyes are the plate's own colour, so
+// the recessed face behind them is the ONLY thing they read against. Without it the lab shows
+// a blank wall and you'd tune the eyes to fix a problem the game doesn't have.
+const PLATE_STOPS = [[0, "#697082"], [0.5, "#5c6474"], [1, "#4e5564"]];
+const PLATE_PAD = 0.055, PLATE_SHADE = 0.16;
+function plateGrad(x, y, s){
+  const gd = ctx.createLinearGradient(x, y, x, y + s);
+  for (const st of PLATE_STOPS) gd.addColorStop(st[0], st[1]);
+  return gd;
+}
+function platePanel(x, y, s, rad){
+  const p = s*PLATE_PAD, r2 = Math.max(0, rad - p*0.6), w = s - 2*p;
+  ctx.save(); ctx.fillStyle = "rgba(5,4,13," + PLATE_SHADE + ")";
+  ctx.beginPath();
+  ctx.moveTo(x+p+r2, y+p);
+  ctx.arcTo(x+p+w, y+p,   x+p+w, y+p+w, r2);
+  ctx.arcTo(x+p+w, y+p+w, x+p,   y+p+w, r2);
+  ctx.arcTo(x+p,   y+p+w, x+p,   y+p,   r2);
+  ctx.arcTo(x+p,   y+p,   x+p+w, y+p,   r2);
+  ctx.closePath(); ctx.fill(); ctx.restore();
 }
 function render(t){
   CELL = +$("cellPx").value; FROZEN = +$("frozen").value;
@@ -186,8 +210,10 @@ function render(t){
   ctx.fillText("a row of walls — blinks are staggered per cell", 22, 322);
   for (let i=0;i<6;i++){
     const s2 = 56, x = 40 + i*(s2+10), yy = 372;
-    ctx.fillStyle="#5c6474"; rrect(ctx, x-s2/2, yy-s2/2, s2, s2, s2*0.075); ctx.fill();
-    drawEyes(ctx, x, yy - s2/2 + s2*0.42, s2, "rgba(74,80,96,0.75)", 0, ts,
+    const grd = plateGrad(x-s2/2, yy-s2/2, s2);
+    ctx.fillStyle = grd; rrect(ctx, x-s2/2, yy-s2/2, s2, s2, s2*0.075); ctx.fill();
+    platePanel(x-s2/2, yy-s2/2, s2, s2*0.075);
+    drawEyes(ctx, x, yy - s2/2 + s2*0.42, s2, grd, 0, ts,
              ((i*2654435761)%1000)/1000*EYES.blinkMs);
   }
   requestAnimationFrame(render);
