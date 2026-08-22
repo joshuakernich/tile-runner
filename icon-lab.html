@@ -27,6 +27,12 @@
   .rowline{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px;margin:3px 0;}
   .rowline label{opacity:.85;}
   button.act{background:#233;color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:6px 10px;cursor:pointer;font:inherit;font-size:11px;}
+  .pals{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:4px 0 8px;}
+  button.pal{display:flex;flex-direction:column;align-items:center;gap:3px;background:#1a2430;
+    border:1px solid var(--line);border-radius:7px;padding:5px 2px 4px;cursor:pointer;font:inherit;
+    font-size:9px;letter-spacing:.3px;color:var(--ink);opacity:.85;}
+  button.pal:hover{opacity:1;border-color:#4a7;}
+  button.pal canvas{display:block;width:36px;height:36px;border-radius:3px;}
   button.act:hover{border-color:var(--accent);}
   button.act.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
   button.prim{background:#1c6;color:#04120a;font-weight:700;border:none;}
@@ -134,6 +140,41 @@ const TAL = {
     g.strokeStyle="#3f8f34"; g.lineWidth=r*0.1; g.beginPath(); g.moveTo(x,y-r*0.24); g.lineTo(x,y-r*0.92); g.stroke(); },
 };
 
+// ---------- palettes for the patchwork ----------
+// Nine patches in reading order plus the seam colour showing through the gaps. Kept as whole
+// sets rather than as a hue-and-spread formula: a quilt lives or dies on which colours sit
+// NEXT to each other, and a generated sweep gives you nine that are all equally spaced and
+// none that are deliberately placed. Picking one only writes patch1..9 and bg2 — grid, seam
+// width and corner radius are yours, so a palette never undoes your composition.
+const PALETTES = [
+  { name:"Rainbow", seam:"#241f4a",
+    cols:["#be2d2d","#be8e2d","#8ebe2d","#2dbe2d","#2dbe8e","#2d8ebe","#2d2dbe","#8e2dbe","#be2d8e"] },
+  { name:"Sunset", seam:"#2b1330",
+    cols:["#f2603c","#f58a3c","#f7b13f","#e8484f","#c93a6a","#a63577","#7e2f79","#f9c96b","#d9455c"] },
+  { name:"Ocean", seam:"#08202e",
+    cols:["#0e4d64","#12617a","#1a7b8f","#2494a1","#37acae","#56c3bb","#1b5f86","#2a7fa8","#0d3a52"] },
+  { name:"Forest", seam:"#0e2113",
+    cols:["#1e4620","#2a5a26","#37702c","#468635","#5b9b41","#77b055","#8fc069","#2f6b3c","#1a5233"] },
+  { name:"Berry", seam:"#210c26",
+    cols:["#5c1a4e","#7a1f5c","#98246a","#b62a74","#cf3a80","#e05493","#8e2b7e","#6b2470","#a83a92"] },
+  { name:"Citrus", seam:"#2c2408",
+    cols:["#c8a318","#d9b820","#e8cf2c","#b9c722","#93b81e","#6fa61c","#e0a91e","#f0c534","#a8b91d"] },
+  { name:"Candy", seam:"#2a2140",
+    cols:["#ff9ec4","#ffb8d2","#ffd0c2","#ffe6a8","#c8f0c0","#a8e6e0","#b8d0ff","#d4bcff","#f2b8e8"] },
+  // The muted band genTheme actually draws the board's backdrop in — the closest of these to
+  // what the game looks like behind the tiles.
+  { name:"Dusk", seam:"#151030",
+    cols:["#3b2f6e","#453a7d","#4f4a86","#3a4a7d","#2f5a84","#37628a","#5a4a86","#6b4a7e","#2e3a6b"] },
+  { name:"Earth", seam:"#241b12",
+    cols:["#7a5a34","#8f6b3c","#a37c46","#b58f56","#c9a468","#96693a","#7d5330","#6b4a2c","#ad8450"] },
+  { name:"Neon", seam:"#0a0a14",
+    cols:["#ff2e88","#ff6b2e","#ffe22e","#8cff2e","#2effa0","#2ee0ff","#2e6bff","#a02eff","#ff2ee0"] },
+  { name:"Ice", seam:"#122234",
+    cols:["#2b5570","#356780","#417b92","#5091a5","#63a7b6","#7cbcc6","#98d0d6","#2f6a86","#245c78"] },
+  { name:"Slate", seam:"#101018",
+    cols:["#2f3440","#383e4c","#424958","#4d5566","#5a6272","#48505f","#353b48","#5f6878","#272c36"] },
+];
+
 // ---------- the icon, described entirely by numbers ----------
 // x/y/size are FRACTIONS of the icon's width, so one config renders at every export size.
 const DEFAULT = {
@@ -146,6 +187,11 @@ const DEFAULT = {
   patch7:"#2d2dbe", patch8:"#8e2dbe", patch9:"#be2d8e",
   tileOn:1, tileX:0.50, tileY:0.50, tileSize:0.75, tileRot:0, tileShape:"ew",
   track:"#ffcf4d", rail:"#fff2c4", glass:0.55, glassCol:"#b4aeeb", tileR:0.16,
+  tileBlur:0.018,        // frosted glass: how far the tile smears what is behind it
+  // The ground under the beam. Normally DERIVED from the track colour by the game's own TILE
+  // rules, so the icon stays honest to what a tile looks like in play; turn groundAuto off to
+  // drive it yourself. The beam's shadow follows whichever one is in force.
+  groundAuto:1, ground:"#6b5a2e",
   runOn:1, runX:0.50, runY:0.50, runScale:0.75, runRot:0, runStride:0.9,
   knees:1, body:"#bfe6ff", ink:"#17263f", runShadow:1, talisman:"",
 };
@@ -253,10 +299,33 @@ function tileBody(g, S, h){
   }
   g.closePath();
 }
-function drawTile(g, cx, cy, size, rot, shape, track, rail, glass, tileR, glassCol){
+// Frosted glass: the tile shows what is behind it, out of focus.
+//
+// ctx.filter blurs what you DRAW, never what is already on the canvas — so there is no way to
+// blur a region in place. The trick is to snapshot everything painted so far, then draw that
+// snapshot back through a blur, clipped to the tile. Two details make it work: the clip is
+// stored in device space, so resetting the transform to blit the snapshot 1:1 does not move
+// it; and the snapshot covers the WHOLE icon, so the blur has real pixels to pull in from
+// outside the tile rather than smearing transparent black inwards from the tile's own edge.
+const _bgBufs = new Map();                       // one scratch canvas per export size
+function frostBehind(g, blurPx){
+  const W = g.canvas.width;
+  let buf = _bgBufs.get(W);
+  if(!buf){ buf = document.createElement("canvas"); buf.width = buf.height = W; _bgBufs.set(W, buf); }
+  const b = buf.getContext("2d");
+  b.setTransform(1,0,0,1,0,0); b.clearRect(0,0,W,W); b.drawImage(g.canvas,0,0);
+  g.save();
+  g.setTransform(1,0,0,1,0,0);
+  g.filter = "blur(" + blurPx + "px)";
+  g.drawImage(buf,0,0);
+  g.filter = "none";
+  g.restore();
+}
+function drawTile(g, cx, cy, size, rot, shape, track, rail, glass, tileR, glassCol, blur, ground){
   const S=tileSurface(size, shape), h=size/2;
   g.save(); g.translate(cx,cy); g.rotate(rot*Math.PI/180);
   rrect(g,-h,-h,size,size,size*tileR); g.save(); g.clip();
+  if(blur>0) frostBehind(g, blur);               // ...behind the tint, so the tint sits ON the frost
   if(glass>0){ g.fillStyle=hexA(glassCol||"#b4aeeb", glass); g.fillRect(-h,-h,size,size); }
   const n=S.length-1;
   const line = () => { g.beginPath(); g.moveTo(S[0].x,S[0].y); for(let k=1;k<=n;k++) g.lineTo(S[k].x,S[k].y); };
@@ -264,7 +333,9 @@ function drawTile(g, cx, cy, size, rot, shape, track, rail, glass, tileR, glassC
   // shadow, then the beam riding the surface, then the rail on top.
   g.save();
   g.beginPath(); tileBody(g, S, h); g.clip();
-  g.fillStyle = tintHex(track, TILE.underHue, TILE.underSat, TILE.underShade);
+  // Derived from the track the way the game does it, unless the lab has been given a colour.
+  const groundCol = ground || tintHex(track, TILE.underHue, TILE.underSat, TILE.underShade);
+  g.fillStyle = groundCol;
   g.fillRect(-h,-h,size,size);
   if(TILE.strata > 0 && TILE.strataN > 0){                     // bedding lines in the ground
     g.save(); g.globalAlpha = TILE.strata; g.fillStyle = "#05040d";
@@ -279,7 +350,9 @@ function drawTile(g, cx, cy, size, rot, shape, track, rail, glass, tileR, glassC
   }
   g.lineJoin="round"; g.lineCap="butt";
   if(TILE.pathW>0 && TILE.shadowW>0){
-    g.strokeStyle = tintHex(track, TILE.underHue, TILE.underSat, TILE.underShade + TILE.shadowShade);
+    // Darken whatever the ground ended up being, rather than re-deriving from the track: a
+    // hand-picked ground with a shadow still tied to the track reads as two different tiles.
+    g.strokeStyle = tintHex(groundCol, 0, 1, TILE.shadowShade);
     g.lineWidth = Math.max(1, size*(TILE.pathW+TILE.shadowW)*2); line(); g.stroke();
   }
   if(TILE.pathW>0){                                            // doubled: the top half is clipped
@@ -374,7 +447,8 @@ function paintIcon(g, W, ts){
     vg.addColorStop(0,"rgba(0,0,0,0)"); vg.addColorStop(1,"rgba(0,0,0,"+C.vignette+")");
     g.fillStyle=vg; g.fillRect(0,0,W,W);
   }
-  if(C.tileOn) drawTile(g, C.tileX*W, C.tileY*W, C.tileSize*W, C.tileRot, C.tileShape, C.track, C.rail, C.glass, C.tileR, C.glassCol);
+  if(C.tileOn) drawTile(g, C.tileX*W, C.tileY*W, C.tileSize*W, C.tileRot, C.tileShape, C.track, C.rail,
+                        C.glass, C.tileR, C.glassCol, W*C.tileBlur, C.groundAuto ? "" : C.ground);
   if(C.runOn)  paintRunner(g, C.runX*W, C.runY*W, C.runScale*W, C.runStride, ts, C.runRot, C);
 }
 
@@ -415,6 +489,7 @@ const SPEC=[
   ["num","stripes","stripes",2,14,1],
   ["num","vignette","vignette",0,0.7,0.01],
   ["group","Patchwork"],
+  ["palettes"],
   ["num","patchN","grid",2,4,1],
   ["num","patchGap","seam",0,0.06,0.002],
   ["num","patchRound","corner",0,0.2,0.005],
@@ -427,7 +502,9 @@ const SPEC=[
   ["num","tileX","x",0,1,0.005], ["num","tileY","y",0,1,0.005],
   ["num","tileSize","size",0.1,1.1,0.005], ["num","tileRot","rotate",-180,180,1],
   ["num","tileR","corner",0,0.5,0.005], ["num","glass","glass",0,1,0.01],
+  ["num","tileBlur","frost",0,0.04,0.001],
   ["col","glassCol","tile"], ["col","track","track"], ["col","rail","rail"],
+  ["tog","groundAuto","ground from track"], ["col","ground","ground"],
   ["group","Runner"],
   ["tog","runOn","show runner"], ["tog","knees","knees"], ["tog","runShadow","shadow"],
   ["num","runX","x",0,1,0.005], ["num","runY","y",0,1,0.005],
@@ -440,6 +517,28 @@ const panel=$("panel");
 for(const row of SPEC){
   const kind=row[0];
   if(kind==="group"){ const d=document.createElement("div"); d.className="group"; d.textContent=row[1]; panel.appendChild(d); continue; }
+  if(kind==="palettes"){
+    // Each chip is the palette drawn as the quilt it will become, because a row of nine
+    // stripes tells you the colours but not what they look like laid out three by three.
+    const wrap=document.createElement("div"); wrap.className="pals";
+    for(const P of PALETTES){
+      const b=document.createElement("button"); b.className="pal"; b.title=P.name;
+      const c=document.createElement("canvas"); c.width=c.height=36;
+      const pg=c.getContext("2d");
+      pg.fillStyle=P.seam; pg.fillRect(0,0,36,36);
+      for(let i=0;i<9;i++){ pg.fillStyle=P.cols[i];
+        pg.fillRect((i%3)*12+0.5,(i/3|0)*12+0.5,11,11); }
+      const t=document.createElement("span"); t.textContent=P.name;
+      b.appendChild(c); b.appendChild(t);
+      b.addEventListener("click",()=>{
+        for(let i=0;i<9;i++) C["patch"+(i+1)]=P.cols[i];
+        C.bg2=P.seam; C.bgStyle="patchwork";
+        syncUI(); refresh();
+      });
+      wrap.appendChild(b);
+    }
+    panel.appendChild(wrap); continue;
+  }
   const key=row[1], label=row[2];
   if(kind==="num"){
     const [,,,min,max,step]=row;
@@ -471,7 +570,7 @@ for(const row of SPEC){
 }
 function syncUI(){
   for(const row of SPEC){
-    if(row[0]==="group") continue;
+    if(row[0]==="group" || row[0]==="palettes") continue;
     const key=row[1], el=$("i_"+key); if(!el) continue;
     if(row[0]==="tog") el.classList.toggle("on",!!C[key]);
     else el.value=C[key];
