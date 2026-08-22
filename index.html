@@ -263,12 +263,19 @@
   .lvl-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
   .lvl-grid button { display:flex; flex-direction:column; gap:3px; padding:12px 0; line-height:1.1; }
   .tal-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
-  .tal-grid .tal { display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 3px; }
-  .tal-grid .tal canvas { width:46px; height:46px; }
+  /* Stock is a square of glass, not a button: no outline, no offset plate, just a 5% white
+     wash. A shop item is a thing on a shelf — fifteen bevelled plates read as a wall of
+     controls. The border is kept and made transparent so .on and .nope can still colour it
+     without shifting anything by 3px. The swatch is the item, so it gets the room. */
+  .tal-grid .tal { display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:3px; padding:7px 3px; aspect-ratio:1;
+    background:rgba(255,255,255,0.05); border-color:transparent; box-shadow:none; color:#fff; }
+  .tal-grid .tal:active { transform:none; background:rgba(255,255,255,0.14); }
+  .tal-grid .tal canvas { width:62px; height:62px; }
   /* names are long ("Nightshard", "Green Sprig") and the cells are a third of a narrow
      menu — well below body size, tight leading, and allowed to wrap to two lines. */
   .tal-grid .tal span { font-size:11px; letter-spacing:0.2px; line-height:1.15;
-                        text-align:center; hyphens:none; }
+                        text-align:center; hyphens:none; color:#fff; }
   .tal-grid .tal.locked span { color:var(--dim); }
   /* what the talisman actually does — the reason to pick one over another */
   .tal-grid .tal .tal-blurb { font-size:9px; letter-spacing:0.2px; line-height:1.1; font-style:normal;
@@ -311,8 +318,7 @@
   #menu-body .shop-tabs button:active { transform:translate(2px,2px); box-shadow:none; }
   /* the rack scrolls on its own, so the runner and the tabs stay put while you browse */
   .shop-rack { max-height:44vh; overflow-y:auto; overscroll-behavior:contain;
-    -webkit-overflow-scrolling:touch; padding:2px; margin-bottom:10px;
-    border:2px solid var(--grid-line); background:rgba(5,4,13,0.28); }
+    -webkit-overflow-scrolling:touch; padding:2px; margin-bottom:10px; }
   /* the way out, and the only thing you can do wrong is not press it */
   /* The way out is pinned to the viewport, not to the end of the rack: the racks are
      different lengths and the shop is top-aligned, so otherwise it wanders down the page and
@@ -334,6 +340,11 @@
   .tal-grid .tal.nope { animation:nope 0.4s; border-color:#ff8f74; }
   @keyframes nope { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-4px);}
                     50%{transform:translateX(4px);} 75%{transform:translateX(-2px);} }
+  /* The level rack scrolls inside itself, exactly as the shop's does, so cells never slide
+     under the pinned BACK. It has no runner or tab strip above it, so it takes everything
+     between the INTRO button and the button's landing strip. */
+  .lvl-rack { max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 210px);
+              min-height:180px; }
   .lvl-grid .st { font-size:var(--body); color:var(--goal); letter-spacing:1px; font-weight:900; }
   .lvl-grid .st.none { color:var(--dim); font-weight:400; }
 
@@ -1257,7 +1268,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v7.4";                    // shown on the title & pause screens
+  const VERSION = "v7.5";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -3382,11 +3393,7 @@
     g.globalAlpha = e;
     g.rotate(Math.sin(relicShowT/900) * 0.10);          // a slow hang, not a spin
     const R = 74;
-    g.strokeStyle = def.edge; g.lineWidth = Math.max(2, (R/0.26)*TAL.loopW);
-    g.lineCap = "round";
-    g.beginPath();
-    g.arc(0, -(R/0.26)*TAL.loopY, (R/0.26)*TAL.loopR, Math.PI*0.15, Math.PI*0.85, true);
-    g.stroke();
+    talHook(g, 0, 0, R, def);
     def.draw(g, 0, 0, R);
     g.restore();
   }
@@ -3904,15 +3911,8 @@
           ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
           ctx.setLineDash([]); ctx.restore();
         }
-        if (K.move === "trap") {                       // a ring that winds down to the snap
-          const p = trapPhase(h.trapT || 0);
-          ctx.save();
-          ctx.strokeStyle = hexA(K.body, p.wide ? 0.75 : 0.30);
-          ctx.lineWidth = Math.max(2, cell*0.045);
-          ctx.beginPath();
-          ctx.arc(h.wx, h.wy, cell*0.46, -Math.PI/2, -Math.PI/2 + Math.PI*2*p.open, false);
-          ctx.stroke(); ctx.restore();
-        }
+        // The trap used to wear a ring winding down to its snap. Gone — the gape itself is
+        // the tell: it yawns, holds, then bites, and the jaws say all of that already.
         // faint dashed patrol path so its route is readable
         if (h.path && h.path.length > 1) {
           ctx.save();
@@ -4392,16 +4392,7 @@
     }
     const y = y0 + Math.sin(ts/320) * cell * 0.05;
     ctx.save();
-    // The loop it hangs from, in the badge's own edge metal rather than a white cord — drawn
-    // BEFORE the badge so its lower ends disappear behind the tile and it reads as attached
-    // rather than balanced on top.
-    ctx.strokeStyle = def.edge || "#8d7c58";
-    // Floor at half a pixel, not 1.5 — a canvas stroke renders sub-pixel widths perfectly well
-    // antialiased, and the old floor swallowed the bottom third of loopW's range so the thin
-    // end of the slider did nothing at all.
-    ctx.lineWidth = Math.max(0.5, cell*TAL.loopW); ctx.lineCap = "round";
-    ctx.beginPath(); ctx.arc(x, y - cell*TAL.loopY, cell*TAL.loopR, Math.PI*0.15, Math.PI*0.85, true);
-    ctx.stroke();
+    talHook(ctx, x, y, cell * 0.26, def);
     def.draw(ctx, x, y, cell * 0.26);
     ctx.restore();
   }
@@ -4511,6 +4502,25 @@
     let p = _talGrain.get(g);
     if (!p) { p = g.createPattern(paperTile, "repeat"); _talGrain.set(g, p); }
     return p;
+  }
+  // The loop a talisman hangs from, in the tile's OUTER colour — the face, the same lighter
+  // metal the frame is — so the hook reads as part of the charm rather than as a dark cord
+  // behind it. Drawn BEFORE the badge everywhere it appears, so its ends disappear behind the
+  // tile and it looks attached.
+  //
+  // TAL's numbers are fractions of a CELL and a badge is drawn at 0.26 of one, so the cell a
+  // badge of radius r stands in is r/0.26. Scale the hook by anything else — a canvas width,
+  // say — and it lands inside the tile, hidden.
+  function talHook(g, x, y, r, def) {
+    const CE = r / 0.26;
+    g.save();
+    g.strokeStyle = def.face || "#e8dcc0";
+    g.lineWidth = Math.max(0.5, CE*TAL.loopW);
+    g.lineCap = "round";
+    g.beginPath();
+    g.arc(x, y - CE*TAL.loopY, CE*TAL.loopR, Math.PI*0.15, Math.PI*0.85, true);
+    g.stroke();
+    g.restore();
   }
   function talBadge(g, x, y, r, def) {
     const s2 = r*1.9, h = s2/2, rad = s2*TILE.radius;
@@ -6474,8 +6484,12 @@
       const def = talById(id); if (!def) return;
       const b = document.createElement("button");
       b.className = "pw"; b.setAttribute("aria-label", def.name);
-      const c = document.createElement("canvas"); c.width = 96; c.height = 96;
-      def.draw(c.getContext("2d"), 48, 48, 34);
+      // Taller than wide so the hook has somewhere to go: the badge sits low with the loop
+      // standing above it, the same object you picked up off the board.
+      const c = document.createElement("canvas"); c.width = 112; c.height = 112;
+      const cg = c.getContext("2d");
+      talHook(cg, 56, 62, 34, def);
+      def.draw(cg, 56, 62, 34);
       const bar = document.createElement("span"); bar.className = "pw-bar";
       b.appendChild(c); b.appendChild(bar);
       b.style.setProperty("--tilt", TAL_TILT[i % TAL_TILT.length] + "deg");
@@ -6899,7 +6913,8 @@
     stopShopFig(); stopRelics();          // whatever was animating is about to leave the DOM
     relicPainters = [];
     menuBody.innerHTML = "";
-    menuEl.classList.toggle("top", screen === "shop" || screen.indexOf("shop:") === 0);
+    menuEl.classList.toggle("top",
+      screen === "shop" || screen.indexOf("shop:") === 0 || screen === "levels");
     const title = document.getElementById("menu-title");
     title.className = "";                      // only the main screen wears the logo treatment
     // ---- the shop: him at the top, a tab per category, then that tab's rack ----
@@ -7044,18 +7059,12 @@
         const g = c.getContext("2d");
         // Each hangs on its own bob, offset so the five drift out of step with one another —
         // a row of them rising and falling together reads as one object, not five.
-        // TAL's loop numbers are fractions of a CELL, and the badge is drawn at 0.26 of one —
-        // so the cell this canvas stands in is R/0.26, not the canvas width. Scaling the loop
-        // by the canvas instead put it inside the badge, hidden.
-        const R = 40, CELL_EQ = R / 0.26;
+        const R = 40;
         const paint = (ts) => {
           g.clearRect(0, 0, 150, 150);
           const y = 82 + Math.sin(ts/900 + i*1.3) * 5;
           g.save();
-          g.strokeStyle = t.edge; g.lineWidth = Math.max(1.5, CELL_EQ*TAL.loopW);
-          g.lineCap = "round";
-          g.beginPath(); g.arc(75, y - CELL_EQ*TAL.loopY, CELL_EQ*TAL.loopR, Math.PI*0.15, Math.PI*0.85, true);
-          g.stroke();
+          talHook(g, 75, y, R, t);
           t.draw(g, 75, y, R);
           if (!got) {                                  // not found yet: a flat silhouette
             g.globalCompositeOperation = "source-atop";
@@ -7084,8 +7093,11 @@
       return;
     }
     if (screen === "levels") {
-      title.textContent = "Levels";
+      // Laid out like the shop: the header stays under the notch at the top, the grid scrolls
+      // on its own, and BACK is pinned to the viewport instead of trailing 33 cells down.
+      title.textContent = "Tileverse"; title.className = "shop";
       menuBody.appendChild(btn("Intro", () => { closeMenu(); startCine("menu"); }));   // first item
+      const rack = document.createElement("div"); rack.className = "shop-rack lvl-rack";
       const grid = document.createElement("div"); grid.className = "lvl-grid";
       const best = loadBest();
       LEVELS.forEach((L, i) => {
@@ -7096,8 +7108,11 @@
         el.onclick = () => { levelIdx = i; loadLevel(i); closeMenu(); };
         grid.appendChild(el);
       });
-      menuBody.appendChild(grid);
-      menuBody.appendChild(btn("Back", () => buildMenu("main")));
+      rack.appendChild(grid);
+      menuBody.appendChild(rack);
+      const back = btn("Back", () => buildMenu("main"));
+      back.className = "shop-go";
+      menuBody.appendChild(back);
       return;
     }
     // main / pause screen
@@ -7106,7 +7121,7 @@
     title.className = "logo";
     menuBody.appendChild(btn("Resume", closeMenu));
     menuBody.appendChild(btn("Restart Level", () => { loadLevel(levelIdx); closeMenu(); }));
-    menuBody.appendChild(btn("Levels", () => buildMenu("levels")));
+    menuBody.appendChild(btn("Tileverse", () => buildMenu("levels")));
     menuBody.appendChild(btn("Shop", () => buildMenu("shop")));
     menuBody.appendChild(btn("Holy Talismans", () => buildMenu("talismans")));
     menuBody.appendChild(toggle("Sound", !Sound.isMuted(), () => { Sound.unlock(); Sound.setMuted(!Sound.isMuted()); buildMenu(screen); }));
