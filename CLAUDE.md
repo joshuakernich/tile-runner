@@ -50,6 +50,10 @@ bump and installed home-screen copies keep serving the old icons and manifest.
 | `runner-lab.html` | Live editor for the runner. A slider per `RUNNER` key, onion skin, stride scrub, guides, real-size previews standing on real track. **Copy RUNNER block** → paste wholesale. |
 | `icon-lab.html` | App-icon composer. Exports `icon-1024/512/192/180.png` named for the manifest. |
 | `music-lab.html` | Backing-track editor with per-level overrides and a piano roll. Not yet wired into the game. |
+| `coin-lab.html` | The golden coin: float, rock, shine and its inscribed panel. **Copy COIN block**. |
+| `eye-lab.html` | The one pair of eyes every face wears — runner, monsters, walls, stones. **Copy EYES block**. |
+| `talisman-lab.html` | The five charms: loop, inscribed panel, raised icon. **Copy TAL block**. |
+| `tile-lab.html` / `junction-lab.html` | The laid tile's cross-section and the leading tile's 3-way junction. **Copy TILE / JUNCTION block**. |
 | `stone-generator.html` | Design reference for the stone crack art. |
 | `tools/` | The two check scripts. |
 

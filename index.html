@@ -100,28 +100,52 @@
      side a thumb is already on. Just the icon: the name never changed between presses and the
      sub-line's job is done by the class — dim for spent or running, armed for waiting, plus
      the bar draining along the bottom. */
+  /* Every talisman you have found, along the bottom of the level. No plate, no border, no
+     shadow — each is just the object itself, the way it looks lying on the board. A row of
+     bordered buttons down there read as UI chrome competing with the track. */
   #power {
-    position:fixed; z-index:15; display:none; align-items:center; justify-content:center; overflow:hidden;
-    right:calc(env(safe-area-inset-right) + 16px);
-    bottom:calc(env(safe-area-inset-bottom) + 16px);
-    padding:9px; cursor:pointer; font-family:inherit;
-    background:rgba(23,20,43,0.88); border:2px solid var(--grid-line); border-radius:0;
-    box-shadow:3px 3px 0 var(--shadow); color:var(--ink);
+    position:fixed; z-index:15; display:none; align-items:flex-end; justify-content:center;
+    gap:2px; left:0; right:0;
+    bottom:calc(env(safe-area-inset-bottom) + 10px);
+    pointer-events:none;                 /* the strip is a layout box; only the charms take taps */
   }
   #power.on { display:flex; }
-  #power:active { transform:translate(2px,2px); box-shadow:none; }
-  #power canvas { width:34px; height:34px; display:block; flex:none; }
-  /* running: a bar draining along the bottom edge, set from JS */
-  #power-bar { position:absolute; left:0; bottom:0; height:3px; width:0; background:var(--goal); }
-  /* spent, or running — either way there is nothing left to press */
-  #power.dim { opacity:0.45; box-shadow:none; }
-  #power.dim:active { transform:none; }
-  /* armed and waiting to be aimed (the Finger) */
-  #power.armed { border-color:var(--goal); box-shadow:0 0 0 2px var(--goal) inset, 3px 3px 0 var(--shadow); }
+  #power .pw {
+    /* box-shadow has to be cleared explicitly: the global `button` rule paints a 3px offset
+       plate shadow, and killing only the background and border left that behind — which is
+       exactly the button shape that was still showing through. */
+    position:relative; background:none; border:0; box-shadow:none; padding:0; margin:0;
+    cursor:pointer; pointer-events:auto; line-height:0;
+    /* Each hangs at its own slight angle, set per charm in JS — five identical uprights read
+       as a toolbar, a few degrees apart reads as things you collected. The tilt lives in a
+       custom property so :active can add its nudge without throwing the rotation away. */
+    transform:rotate(var(--tilt, 0deg));
+    transition:opacity 0.18s, transform 0.12s;
+  }
+  #power .pw canvas { width:58px; height:58px; display:block; }
+  #power .pw:active { transform:rotate(var(--tilt, 0deg)) translateY(2px); }
+  /* running: a bar draining under the one that is up */
+  #power .pw-bar { position:absolute; left:12%; bottom:2px; height:3px; width:0; background:var(--goal); }
+  /* one power per level: once any has fired, the rest have nothing left to give */
+  #power .pw.dim { opacity:0.30; cursor:default; }
+  #power .pw.live { opacity:1; }
+  /* armed and waiting to be aimed (the Hammer) */
+  #power .pw.armed canvas { filter:drop-shadow(0 0 6px var(--goal)); }
   #pauseFloat:active { transform:translate(2px,2px); box-shadow:none; }
+  /* A talisman maze's win card. Bigger title, the charm itself where the stars normally go,
+     and no score furniture — this screen is about the object, not the run. */
+  #overlay.relic #ov-title { font-size:26px; letter-spacing:3px; color:var(--goal); }
+  .ov-relic { width:170px; height:170px; display:block; margin:2px auto -6px; }
+  .ov-relic-does { display:block; font-size:15px; letter-spacing:2px; line-height:1.35;
+    color:var(--ink); text-transform:uppercase; font-weight:900; margin:4px auto 2px; }
+  /* the standing rule, last and quietest */
+  #overlay.relic #ov-msg { font-size:11px; letter-spacing:0.6px; line-height:1.5;
+    color:var(--dim); text-transform:none; font-weight:700; max-width:34ch; margin:2px auto 0; }
   #mechpop {
     position:fixed; inset:0; display:none; align-items:center; justify-content:center;
-    background:rgba(5,4,13,0.86); z-index:35; padding:24px;
+    background:rgba(5,4,13,0.86); z-index:35;
+    padding:calc(env(safe-area-inset-top) + 24px) calc(env(safe-area-inset-right) + 24px)
+            calc(env(safe-area-inset-bottom) + 24px) calc(env(safe-area-inset-left) + 24px);
   }
   #mechpop.show { display:flex; }
   .mech-card {
@@ -146,7 +170,9 @@
   #overlay {
     position:fixed; inset:0; display:none; align-items:center; justify-content:center;
     background:radial-gradient(ellipse 76% 56% at 50% 46%, rgba(5,4,13,0.52) 0%, rgba(5,4,13,0.42) 45%, rgba(5,4,13,0.10) 100%);
-    z-index:20; text-align:center; padding:24px;
+    z-index:20; text-align:center;
+    padding:calc(env(safe-area-inset-top) + 24px) calc(env(safe-area-inset-right) + 24px)
+            calc(env(safe-area-inset-bottom) + 24px) calc(env(safe-area-inset-left) + 24px);
   }
   #overlay.show { display:flex; }
   #overlay .card { max-width:340px; }
@@ -201,7 +227,11 @@
     /* the shop is the tall one — it is pinned to the top so the runner and the tabs stay put
        as you switch between racks of different lengths, instead of the whole card sliding */
     background:radial-gradient(ellipse 84% 70% at 50% 50%, rgba(5,4,13,0.58) 0%, rgba(5,4,13,0.48) 48%, rgba(5,4,13,0.14) 100%);
-    z-index:30; padding:22px; overflow:auto;
+    z-index:30; overflow:auto;
+    /* #app pads for the notch, but a fixed inset:0 layer sits OUTSIDE it and covers the whole
+       screen — so the shop's title landed under the notch. Add the insets here as well. */
+    padding:calc(env(safe-area-inset-top) + 22px) calc(env(safe-area-inset-right) + 22px)
+            calc(env(safe-area-inset-bottom) + 22px) calc(env(safe-area-inset-left) + 22px);
   }
   #menu.show { display:flex; }
   #menu.top { align-items:flex-start; }
@@ -240,10 +270,25 @@
   .tal-grid .tal span { font-size:11px; letter-spacing:0.2px; line-height:1.15;
                         text-align:center; hyphens:none; }
   .tal-grid .tal.locked span { color:var(--dim); }
-  /* what the charm actually does — the reason to pick one over another */
+  /* what the talisman actually does — the reason to pick one over another */
   .tal-grid .tal .tal-blurb { font-size:9px; letter-spacing:0.2px; line-height:1.1; font-style:normal;
     text-transform:none; font-weight:700; color:var(--track); text-align:center; }
   .tal-grid .tal.on { border-color:var(--goal); box-shadow:0 0 0 2px var(--goal) inset; }
+  /* The talisman shelf. Deliberately NOT buttons: no border, no plate, no shadow — a talisman
+     is a thing you found, and dressing it in the same chrome as RESUME made it stock. What
+     marks the worn one is a soft halo of its own colour, not a pressed-in frame. */
+  .relic-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:4px 0; margin:2px 0 10px; }
+  .relic { display:flex; flex-direction:column; align-items:center; gap:1px;
+    background:none; border:0; padding:0; cursor:pointer; }
+  .relic canvas { width:96px; height:96px; display:block; }
+  .relic span { font-size:10px; letter-spacing:0.4px; line-height:1.15; text-align:center;
+    text-transform:uppercase; font-weight:900; color:var(--ink); }
+  .relic i { font-size:9px; letter-spacing:0.2px; line-height:1.1; font-style:normal;
+    font-weight:700; color:var(--track); text-align:center; }
+  .relic.locked { cursor:default; }
+  .relic.locked span { color:var(--dim); }
+  .relic.on canvas { filter:drop-shadow(0 0 7px var(--goal)); }
+  .relic.on span { color:var(--goal); }
   /* SHOP wears the big title treatment — it is a destination, not a sub-menu */
   #menu-title.shop { font-size:40px; letter-spacing:7px; margin-bottom:4px; }
   /* the shop: him at the top, tucked right under the title, then a tab per category */
@@ -298,10 +343,7 @@
 <div id="app">
   <div id="board-wrap"><canvas id="game"></canvas></div>
   <button id="pauseFloat" aria-label="Menu"><span></span><span></span></button>
-  <button id="power" aria-label="Use talisman">
-    <canvas id="power-ic" width="72" height="72"></canvas>
-    <span id="power-bar"></span>
-  </button>
+  <div id="power" aria-label="Talismans"></div>
 </div>
 
 <div id="menu">
@@ -359,30 +401,35 @@
   const LEVELS = [
     {"start":[2,6],"init":[[2,5],[2,4]],"cols":5,"rows":7,"intro":["recycle","flag","coin"],"cps":0.8,"goal":[2,0],"walls":[],"coins":[[2,2]]},
     {"start":[0,7],"init":[[0,6],[0,5]],"cols":5,"rows":8,"intro":["turn"],"cps":0.8,"goal":[4,3],"walls":[],"coins":[[1,3],[2,3],[3,3]]},
-    {"start":[0,0],"init":[[0,1],[0,2]],"cols":6,"rows":8,"intro":["offscreen"],"cps":0.8,"goal":[5,7],"walls":[],"talismans":[[5,2,"clock"]],"coins":[[2,4],[3,5],[4,6]]},
+    {"start":[0,0],"init":[[0,1],[0,2]],"cols":6,"rows":8,"intro":["offscreen"],"cps":0.8,"goal":[5,7],"walls":[],"coins":[[2,4],[3,5],[4,6]]},
     {"start":[1,7],"init":[[1,6],[1,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["wall"],"cps":0.8,"walls":[[0,3],[1,3],[2,3],[4,3]],"coins":[[1,1],[1,4],[2,6]]},
     {"start":[1,12],"init":[[1,11],[1,10]],"goal":[1,0],"cols":5,"rows":13,"intro":[],"cps":0.8,"walls":[[0,2],[1,2],[2,2],[4,2],[0,5],[2,5],[3,5],[4,5],[0,8],[1,8],[2,8],[4,8]],"coins":[[4,1],[0,6],[0,9],[2,11]]},
-    {"start":[0,3],"init":[[1,3],[2,3]],"goal":[1,6],"cols":9,"rows":9,"intro":[],"cps":0.8,"walls":[[4,0],[4,2],[4,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[8,4],[4,5],[4,6],[4,8]],"talismans":[[8,1,"magnet"]],"coins":[[0,1],[8,2],[0,6],[7,7]]},
+    {"start":[1,13],"init":[[1,12],[1,11]],"cols":9,"rows":15,"intro":[],"cps":0.8,"walls":[[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[8,0],[0,1],[2,1],[8,1],[0,2],[2,2],[4,2],[5,2],[6,2],[8,2],[0,3],[4,3],[8,3],[0,4],[2,4],[3,4],[4,4],[6,4],[8,4],[0,5],[2,5],[6,5],[8,5],[0,6],[2,6],[4,6],[5,6],[6,6],[7,6],[8,6],[0,7],[2,7],[8,7],[0,8],[2,8],[3,8],[4,8],[5,8],[6,8],[8,8],[0,9],[2,9],[6,9],[8,9],[0,10],[2,10],[4,10],[5,10],[6,10],[8,10],[0,11],[4,11],[8,11],[0,12],[2,12],[3,12],[4,12],[6,12],[8,12],[0,13],[6,13],[8,13],[0,14],[1,14],[2,14],[3,14],[4,14],[5,14],[6,14],[7,14],[8,14]],"talismans":[[7,1,"clock"]]},
+    {"start":[0,3],"init":[[1,3],[2,3]],"goal":[1,6],"cols":9,"rows":9,"intro":[],"cps":0.8,"walls":[[4,0],[4,2],[4,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[8,4],[4,5],[4,6],[4,8]],"coins":[[0,1],[8,2],[0,6],[7,7]]},
     {"start":[4,7],"init":[[4,6],[4,5]],"goal":[1,7],"cols":8,"rows":8,"intro":[],"cps":0.8,"walls":[[5,0],[2,1],[0,2],[2,2],[3,2],[4,2],[5,2],[7,2],[2,3],[5,3],[2,4],[5,4],[1,5],[2,5],[5,5],[6,5],[2,6],[2,7]],"coins":[[7,0],[4,3],[3,4],[0,7]]},
     {"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["block"],"cps":0.8,"walls":[[0,2],[1,2],[3,2],[4,2]],"blocks":[{"axis":"h","r":3,"pos0":3,"lo":2,"hi":3}],"coins":[[2,2],[2,4]]},
     {"start":[3,15],"init":[[3,14],[3,13]],"goal":[1,0],"cols":5,"rows":16,"intro":[],"cps":0.8,"walls":[[0,2],[1,2],[2,2],[4,2],[0,7],[2,7],[3,7],[4,7],[0,10],[1,10],[3,10],[4,10]],"blocks":[{"axis":"h","r":11,"lo":2,"hi":3,"pos0":2},{"axis":"h","r":6,"lo":0,"hi":1,"pos0":1},{"axis":"h","r":3,"lo":3,"hi":4,"pos0":3}],"coins":[[2,3],[4,5],[0,11],[1,13]]},
-    {"start":[0,9],"init":[[1,9],[2,9]],"goal":[6,9],"cols":9,"rows":11,"intro":[],"cps":0.8,"walls":[[4,0],[4,1],[4,3],[4,4],[0,5],[1,5],[3,5],[4,5],[5,5],[7,5],[8,5],[4,6],[4,7],[4,8],[4,9],[4,10]],"blocks":[{"axis":"h","r":6,"lo":5,"hi":6,"pos0":6},{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"h","r":6,"lo":2,"hi":3,"pos0":2},{"axis":"v","c":3,"lo":1,"hi":2,"pos0":2}],"talismans":[[8,0,"star"]],"coins":[[5,1],[2,5],[1,6],[3,4]]},
+    {"start":[0,9],"init":[[1,9],[2,9]],"goal":[6,9],"cols":9,"rows":11,"intro":[],"cps":0.8,"walls":[[4,0],[4,1],[4,3],[4,4],[0,5],[1,5],[3,5],[4,5],[5,5],[7,5],[8,5],[4,6],[4,7],[4,8],[4,9],[4,10]],"blocks":[{"axis":"h","r":6,"lo":5,"hi":6,"pos0":6},{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"h","r":6,"lo":2,"hi":3,"pos0":2},{"axis":"v","c":3,"lo":1,"hi":2,"pos0":2}],"coins":[[5,1],[2,5],[1,6],[3,4]]},
+    {"start":[1,15],"init":[[1,14],[1,13]],"cols":9,"rows":17,"intro":[],"cps":0.8,"walls":[[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[8,0],[0,1],[6,1],[8,1],[0,2],[2,2],[3,2],[4,2],[6,2],[8,2],[0,3],[2,3],[6,3],[8,3],[0,4],[2,4],[4,4],[5,4],[6,4],[8,4],[0,5],[2,5],[4,5],[8,5],[0,6],[2,6],[4,6],[5,6],[6,6],[8,6],[0,7],[2,7],[8,7],[0,8],[2,8],[3,8],[4,8],[5,8],[6,8],[8,8],[0,9],[2,9],[6,9],[8,9],[0,10],[2,10],[3,10],[4,10],[6,10],[8,10],[0,11],[4,11],[8,11],[0,12],[1,12],[2,12],[4,12],[6,12],[7,12],[8,12],[0,13],[4,13],[8,13],[0,14],[2,14],[3,14],[4,14],[5,14],[6,14],[8,14],[0,15],[2,15],[8,15],[0,16],[1,16],[2,16],[3,16],[4,16],[5,16],[6,16],[7,16],[8,16]],"talismans":[[7,1,"magnet"]]},
     {"start":[1,3],"init":[[1,2],[1,1]],"goal":[13,11],"cols":14,"rows":14,"intro":[],"cps":0.8,"walls":[[4,0],[8,0],[4,1],[8,2],[4,3],[8,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[10,4],[11,4],[13,4],[5,5],[9,5],[9,6],[5,7],[5,8],[9,8],[0,9],[1,9],[3,9],[4,9],[5,9],[6,9],[7,9],[8,9],[9,9],[10,9],[11,9],[12,9],[13,9],[4,10],[8,10],[8,11],[4,12],[4,13],[8,13]],"blocks":[{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"v","c":9,"lo":0,"hi":1,"pos0":1},{"axis":"h","r":5,"lo":11,"hi":12,"pos0":12},{"axis":"v","c":8,"lo":6,"hi":7,"pos0":7},{"axis":"v","c":4,"lo":5,"hi":6,"pos0":6},{"axis":"h","r":10,"lo":1,"hi":2,"pos0":2},{"axis":"v","c":5,"lo":10,"hi":11,"pos0":11},{"axis":"v","c":9,"lo":11,"hi":12,"pos0":12}],"coins":[[1,5],[3,7],[0,10],[0,12]]},
     {"start":[2,7],"init":[[2,6],[2,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["saw"],"cps":0.8,"walls":[],"hazards":[{"phase":0,"kind":"monster","axis":"h","r":3,"lo":0,"hi":4,"speed":4000,"variant":"hrail"}],"coins":[[4,1],[4,5],[2,3]]},
     {"start":[2,12],"init":[[2,11],[2,10]],"goal":[2,0],"cols":5,"rows":13,"intro":[],"cps":0.8,"walls":[],"hazards":[{"phase":0,"kind":"monster","axis":"h","r":8,"lo":0,"hi":4,"speed":3600,"variant":"hrail"},{"phase":0,"kind":"monster","axis":"h","r":5,"lo":0,"hi":4,"speed":4400,"variant":"hrail"},{"phase":0,"kind":"monster","axis":"h","r":2,"lo":0,"hi":4,"speed":5200,"variant":"hrail"}],"coins":[[2,2],[4,8],[3,5],[1,5],[0,8]]},
     {"start":[1,8],"init":[[1,7],[1,6]],"goal":[6,0],"cols":7,"rows":9,"intro":[],"cps":0.8,"walls":[[0,0],[1,1],[3,4],[5,7],[6,8]],"hazards":[{"phase":0,"kind":"monster","axis":"v","c":3,"lo":0,"hi":3,"speed":4000,"variant":"vrail"},{"phase":0,"kind":"monster","axis":"v","c":3,"lo":5,"hi":8,"speed":4000,"variant":"vrail"},{"phase":0,"kind":"monster","axis":"h","r":4,"lo":0,"hi":2,"speed":4000,"variant":"hrail"},{"phase":0,"kind":"monster","axis":"h","r":4,"lo":4,"hi":6,"speed":4000,"variant":"hrail"}],"coins":[[5,4],[3,1],[1,4],[3,7]]},
     {"start":[1,7],"init":[[1,6],[1,5]],"goal":[3,0],"cols":7,"rows":8,"intro":["key","door"],"cps":0.8,"walls":[[0,3],[1,3],[2,3],[4,3],[5,3],[6,3]],"doors":[[3,3,"#ffd24a"]],"keys":[[6,7,"#ffd24a"]],"coins":[[4,1],[1,4],[0,6]]},
-    {"start":[0,0],"init":[[1,0],[2,0]],"goal":[6,9],"cols":8,"rows":11,"intro":[],"cps":0.8,"walls":[[0,2],[2,2],[3,2],[4,2],[4,3],[5,3],[6,3],[7,3],[0,5],[1,5],[2,5],[3,5],[2,7],[3,7],[4,7],[5,7],[7,7],[4,8],[4,9],[4,10]],"doors":[[1,2,"#ffd24a"],[6,7,"#c77dff"]],"keys":[[6,1,"#ffd24a"],[2,9,"#c77dff"]],"talismans":[[7,0,"finger"]],"coins":[[5,1],[7,4],[1,7],[3,9]]},
+    {"start":[1,15],"init":[[1,14],[1,13]],"cols":11,"rows":17,"intro":[],"cps":0.8,"walls":[[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[8,0],[9,0],[10,0],[0,1],[6,1],[10,1],[0,2],[1,2],[2,2],[4,2],[5,2],[6,2],[8,2],[10,2],[0,3],[4,3],[8,3],[10,3],[0,4],[2,4],[3,4],[4,4],[6,4],[7,4],[8,4],[10,4],[0,5],[6,5],[10,5],[0,6],[1,6],[2,6],[3,6],[4,6],[5,6],[6,6],[8,6],[10,6],[0,7],[8,7],[10,7],[0,8],[2,8],[3,8],[4,8],[5,8],[6,8],[7,8],[8,8],[10,8],[0,9],[2,9],[6,9],[10,9],[0,10],[2,10],[4,10],[5,10],[6,10],[8,10],[9,10],[10,10],[0,11],[2,11],[6,11],[10,11],[0,12],[2,12],[3,12],[4,12],[6,12],[7,12],[8,12],[10,12],[0,13],[4,13],[8,13],[10,13],[0,14],[2,14],[4,14],[6,14],[8,14],[10,14],[0,15],[4,15],[6,15],[10,15],[0,16],[1,16],[2,16],[3,16],[4,16],[5,16],[6,16],[7,16],[8,16],[9,16],[10,16]],"talismans":[[9,1,"star"]]},
+    {"start":[0,0],"init":[[1,0],[2,0]],"goal":[6,9],"cols":8,"rows":11,"intro":[],"cps":0.8,"walls":[[0,2],[2,2],[3,2],[4,2],[4,3],[5,3],[6,3],[7,3],[0,5],[1,5],[2,5],[3,5],[2,7],[3,7],[4,7],[5,7],[7,7],[4,8],[4,9],[4,10]],"doors":[[1,2,"#ffd24a"],[6,7,"#c77dff"]],"keys":[[6,1,"#ffd24a"],[2,9,"#c77dff"]],"coins":[[5,1],[7,4],[1,7],[3,9]]},
     {"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["stone"],"cps":0.8,"walls":[[0,3],[1,3],[2,3],[4,3]],"stone":[[3,3,2]],"coins":[[2,1],[1,4],[2,6]]},
     {"start":[1,0],"init":[[1,1],[1,2]],"goal":[3,10],"cols":7,"rows":12,"intro":[],"cps":0.8,"walls":[[3,0],[3,1],[3,3],[0,4],[1,4],[2,4],[3,4],[5,4],[6,4],[3,5],[6,5],[1,6],[3,6],[4,6],[6,6],[1,7],[6,7],[1,8],[2,8],[3,8],[4,8],[5,8],[6,8]],"stone":[[3,2,2],[4,4,2],[5,6,2],[2,6,2],[0,8,2]],"coins":[[2,1],[0,3],[5,9],[6,10]]},
     {"start":[4,9],"init":[[4,8],[4,7]],"goal":[1,0],"cols":6,"rows":10,"intro":["platform"],"cps":0.8,"walls":[[0,2],[1,2],[2,2],[3,2],[3,4],[0,5],[2,5],[3,5],[4,5],[5,5]],"platforms":[[1,5,"ns"],[3,3,"ew"]],"coins":[[0,1],[0,4],[5,6],[3,8]]},
-    {"start":[2,1],"init":[[3,1],[4,1]],"goal":[5,8],"cols":7,"rows":10,"intro":[],"cps":0.8,"walls":[[0,3],[1,3],[3,3],[4,3],[5,3],[6,3],[4,4],[1,5],[4,5],[1,6],[4,7],[0,8],[4,8],[4,9]],"platforms":[[2,3,"ns"],[1,4,"ew"],[1,7,"sw"],[4,6,"ew"]],"talismans":[[0,0,"mush"]],"coins":[[1,1],[6,2],[6,5],[1,8]]},
+    {"start":[2,1],"init":[[3,1],[4,1]],"goal":[5,8],"cols":7,"rows":10,"intro":[],"cps":0.8,"walls":[[0,3],[1,3],[3,3],[4,3],[5,3],[6,3],[4,4],[1,5],[4,5],[1,6],[4,7],[0,8],[4,8],[4,9]],"platforms":[[2,3,"ns"],[1,4,"ew"],[1,7,"sw"],[4,6,"ew"]],"coins":[[1,1],[6,2],[6,5],[1,8]]},
+    {"start":[1,17],"init":[[1,16],[1,15]],"cols":11,"rows":19,"intro":[],"cps":0.8,"walls":[[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[8,0],[9,0],[10,0],[0,1],[10,1],[0,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[10,2],[0,3],[2,3],[8,3],[10,3],[0,4],[2,4],[4,4],[5,4],[6,4],[8,4],[10,4],[0,5],[2,5],[4,5],[10,5],[0,6],[2,6],[4,6],[5,6],[6,6],[7,6],[8,6],[9,6],[10,6],[0,7],[2,7],[10,7],[0,8],[2,8],[3,8],[4,8],[5,8],[6,8],[7,8],[8,8],[10,8],[0,9],[2,9],[8,9],[10,9],[0,10],[2,10],[4,10],[5,10],[6,10],[8,10],[10,10],[0,11],[4,11],[8,11],[10,11],[0,12],[1,12],[2,12],[3,12],[4,12],[6,12],[7,12],[8,12],[10,12],[0,13],[6,13],[10,13],[0,14],[1,14],[2,14],[3,14],[4,14],[5,14],[6,14],[8,14],[9,14],[10,14],[0,15],[6,15],[10,15],[0,16],[2,16],[3,16],[4,16],[6,16],[7,16],[8,16],[10,16],[0,17],[2,17],[10,17],[0,18],[1,18],[2,18],[3,18],[4,18],[5,18],[6,18],[7,18],[8,18],[9,18],[10,18]],"talismans":[[9,1,"finger"]]},
     {"start":[0,8],"init":[[1,8],[2,8]],"goal":[1,2],"cols":14,"rows":10,"intro":[],"cps":0.8,"walls":[[11,0],[8,1],[9,1],[11,2],[3,3],[11,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[11,4],[13,4],[11,5],[4,6],[8,6],[11,6],[4,7],[5,7],[7,7],[8,7],[11,7],[4,8],[8,8],[4,9],[8,9]],"platforms":[[6,7,"ns"],[10,1,"ne"],[4,5,"ew"],[8,5,"ew"],[10,4,"ns"],[12,4,"ns"],[11,1,"ew"],[7,0,"es"],[7,1,"ns"],[7,2,"ns"],[7,3,"wn"],[3,0,"es"],[3,1,"ns"],[3,2,"wn"]],"coins":[[0,1],[9,2],[13,5],[1,7],[13,8]]},
     {"start":[1,8],"init":[[1,7],[1,6]],"goal":[7,8],"cols":10,"rows":10,"intro":[],"cps":0.8,"walls":[[5,1],[6,1],[8,1],[9,1],[5,2],[9,2],[5,3],[9,3],[0,4],[1,4],[2,4],[5,4],[9,4],[5,5],[9,5],[5,6],[9,6],[5,7],[9,7],[5,8],[9,8],[5,9],[9,9]],"blocks":[{"axis":"v","c":4,"pos0":4,"lo":3,"hi":5},{"axis":"v","c":3,"pos0":4,"lo":3,"hi":5},{"axis":"h","r":3,"pos0":8,"lo":6,"hi":8},{"axis":"h","r":2,"pos0":7,"lo":6,"hi":8},{"axis":"h","r":4,"pos0":7,"lo":6,"hi":8},{"axis":"h","r":5,"pos0":6,"lo":6,"hi":8}],"stone":[[7,1,2]],"coins":[[6,4],[3,5],[4,5],[0,0],[1,1]]},
-    {"start":[2,9],"init":[[2,8],[2,7]],"goal":[2,0],"cols":5,"rows":10,"intro":[],"cps":0.8,"walls":[],"stone":[[0,4,2],[4,4,2],[4,3,2],[0,3,2],[0,2,2],[2,2,2],[3,2,2],[0,5,2],[4,5,2],[4,2,2],[3,5,1],[3,4,1],[2,4,1],[1,4,1],[1,3,1],[1,2,1],[1,5,3],[2,5,3],[2,3,3],[3,3,3]],"talismans":[[4,7,"star"]]},
+    {"start":[2,9],"init":[[2,8],[2,7]],"goal":[2,0],"cols":5,"rows":10,"intro":[],"cps":0.8,"walls":[],"stone":[[0,4,2],[4,4,2],[4,3,2],[0,3,2],[0,2,2],[2,2,2],[3,2,2],[0,5,2],[4,5,2],[4,2,2],[3,5,1],[3,4,1],[2,4,1],[1,4,1],[1,3,1],[1,2,1],[1,5,3],[2,5,3],[2,3,3],[3,3,3]]},
     {"start":[1,3],"init":[[1,2],[1,1]],"goal":[12,6],"cols":14,"rows":8,"intro":[],"cps":0.8,"walls":[],"hazards":[{"phase":0.07,"kind":"monster","axis":"v","c":3,"lo":0,"hi":7,"speed":4000,"variant":"vrail"},{"phase":0.14,"kind":"monster","axis":"v","c":4,"lo":0,"hi":7,"speed":4000,"variant":"vrail"},{"phase":0.21,"kind":"monster","axis":"v","c":5,"lo":0,"hi":7,"speed":4000,"variant":"vrail"},{"phase":0.43,"kind":"monster","axis":"v","c":8,"lo":0,"hi":7,"speed":4000,"variant":"vrail"},{"phase":0.36,"kind":"monster","axis":"v","c":9,"lo":0,"hi":7,"speed":4000,"variant":"vrail"},{"kind":"monster","axis":"v","c":10,"lo":0,"hi":7,"speed":4000,"phase":0.29,"variant":"vrail"}],"coins":[[13,1],[3,3],[6,4],[8,5],[11,6]]},
     {"start":[2,8],"init":[[2,7],[2,6]],"cols":5,"rows":9,"intro":["monster"],"cps":0.8,"goal":[2,0],"walls":[],"hazards":[{"kind":"monster","variant":"wander","c":2,"r":3,"speed":2200}],"coins":[[0,1],[4,2],[0,7]]},
-    {"start":[3,9],"init":[[3,8],[3,7]],"cols":7,"rows":10,"intro":[],"cps":0.8,"goal":[3,0],"walls":[[0,3],[1,3],[2,3],[3,3],[3,5],[4,5],[5,5],[6,5]],"hazards":[{"kind":"monster","variant":"trap","c":3,"r":4,"speed":2200}],"coins":[[2,4],[1,4],[0,4],[4,4],[5,4],[6,4]]},
+    {"start":[1,17],"init":[[1,16],[1,15]],"cols":13,"rows":19,"intro":[],"cps":0.8,"walls":[[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[8,0],[9,0],[10,0],[11,0],[12,0],[0,1],[4,1],[10,1],[12,1],[0,2],[2,2],[4,2],[6,2],[8,2],[10,2],[12,2],[0,3],[2,3],[4,3],[6,3],[8,3],[12,3],[0,4],[1,4],[2,4],[4,4],[6,4],[8,4],[9,4],[10,4],[11,4],[12,4],[0,5],[4,5],[6,5],[12,5],[0,6],[2,6],[3,6],[4,6],[6,6],[7,6],[8,6],[9,6],[10,6],[12,6],[0,7],[2,7],[6,7],[8,7],[12,7],[0,8],[2,8],[4,8],[5,8],[6,8],[8,8],[10,8],[11,8],[12,8],[0,9],[2,9],[8,9],[12,9],[0,10],[2,10],[4,10],[5,10],[6,10],[7,10],[8,10],[9,10],[10,10],[12,10],[0,11],[4,11],[8,11],[12,11],[0,12],[2,12],[3,12],[4,12],[6,12],[8,12],[10,12],[12,12],[0,13],[2,13],[6,13],[10,13],[12,13],[0,14],[2,14],[4,14],[5,14],[6,14],[7,14],[8,14],[9,14],[10,14],[12,14],[0,15],[2,15],[6,15],[8,15],[12,15],[0,16],[2,16],[3,16],[4,16],[6,16],[8,16],[10,16],[11,16],[12,16],[0,17],[6,17],[12,17],[0,18],[1,18],[2,18],[3,18],[4,18],[5,18],[6,18],[7,18],[8,18],[9,18],[10,18],[11,18],[12,18]],"talismans":[[11,1,"mush"]]},
+    {"start":[3,9],"init":[[3,8],[3,7]],"cols":7,"rows":10,"intro":[],"cps":0.8,"goal":[3,0],"walls":[[0,3],[1,3],[2,3],[4,5],[5,5],[6,5]],"hazards":[{"kind":"monster","variant":"trap","c":3,"r":4,"speed":2200}],"coins":[[2,4],[1,4],[0,4],[4,4],[5,4],[6,4]]},
     {"start":[3,11],"init":[[3,10],[3,9]],"cols":7,"rows":12,"intro":[],"cps":0.8,"goal":[3,0],"walls":[[0,4],[1,4],[5,4],[6,4],[1,5],[5,5],[0,6],[1,6],[5,6],[6,6]],"hazards":[{"kind":"monster","variant":"square","c":2,"r":4,"w":2,"h":2,"speed":2200}]},
     {"start":[1,10],"init":[[2,10],[4,4],[3,10]],"cols":9,"rows":12,"intro":[],"cps":0.8,"walls":[]},
   ];
@@ -439,6 +486,10 @@
   // it by only its top sliver. Going past ~0.46 opens a visible gap instead, which reads as
   // the board having slipped down the screen rather than as breathing room.
   const CAM_TOP_PAD = 0.38;
+  // ...and the BOTTOM gets its own, because the talisman rack lives down there on every level.
+  // The rack is 58px of charm plus a 10px gap — about 0.54 of a cell — so this clears it with
+  // a little to spare rather than leaving the last row half-buried under the charms.
+  const CAM_BOTTOM_PAD = 0.60;
   const TRACK_T = 0.44;        // platform thickness as fraction of cell (hangs below centre)
   const SAMPLE_D = 0.42;       // tangent smoothing window (path-param units)
   const FALL_G = 0.0022, FALL_MS = 850;   // gravity fall on lose
@@ -1206,7 +1257,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v7.3";                    // shown on the title & pause screens
+  const VERSION = "v7.4";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -1243,7 +1294,7 @@
     // Each is the golden tile in its own metal, with the motif cut into the face — see
     // talBadge. `etch` draws GEOMETRY ONLY: the badge painter sets the colour before each of
     // its two passes, so an etch that picks its own would come out flat.
-    { id:"clock", name:"Clock", col:"#8fd8ff", ms:5000,
+    { id:"clock", name:"Hands of Time", col:"#8fd8ff", ms:5000,
       face:"#7cc9f0", edge:"#2b6f96",
       blurb:"Slows time down",
       etch:(g,x,y,r)=>{
@@ -1259,7 +1310,7 @@
         g.lineWidth=r*0.10;
         g.beginPath(); g.moveTo(x,y); g.lineTo(x+r*0.22, y-r*0.42); g.stroke(); } },
 
-    { id:"magnet", name:"Magnet", col:"#ff6d6d", ms:5000,
+    { id:"magnet", name:"Cosmic Magnetite", col:"#ff6d6d", ms:5000,
       face:"#f2685f", edge:"#8f2820",
       blurb:"Pulls coins in",
       etch:(g,x,y,r)=>{
@@ -1272,7 +1323,7 @@
 
     // amber rather than gold: gold is what a coin is, and a talisman that reads as currency
     // on the board is a talisman nobody picks up
-    { id:"star", name:"Star", col:"#ffd24a", ms:6000,
+    { id:"star", name:"Cloak of Light", col:"#ffd24a", ms:6000,
       face:"#ffab2e", edge:"#a55600",
       blurb:"Shrug off hazards",
       etch:(g,x,y,r)=>{
@@ -1281,22 +1332,27 @@
           const X=x+Math.cos(a)*rad, Y=y+Math.sin(a)*rad; k?g.lineTo(X,Y):g.moveTo(X,Y); }
         g.closePath(); g.fill(); } },
 
-    { id:"finger", name:"Finger of God", col:"#ffe9a8", ms:0,
+    // The id stays "finger": it is written into level 16's data, into the editor's picker and
+    // into every save that has unlocked it, and none of that is worth churning for a name only
+    // the player ever sees.
+    { id:"finger", name:"Hammer of God", col:"#ffe9a8", ms:0,
       face:"#e8dcc0", edge:"#8d7c58",
       blurb:"Move any laid tile",
       etch:(g,x,y,r)=>{
-        // A fist with the index finger pointing down. The first pass at this was a hand
-        // under a cloud, which at grid size read unmistakably as an ice cream. Cut rather
-        // than painted, it loses the cuff and the spark — an engraving has no second colour
-        // to spend on them, and they only muddied the silhouette.
+        // A sledge, head-on: a broad head with the haft hanging from the middle of it. The
+        // two overlap by a hair so they fill as one solid silhouette rather than a head
+        // balanced on a stick — at badge size a gap between them reads as a join coming apart.
         const rr=(X,Y,W,H,R)=>{ g.beginPath(); g.moveTo(X+R,Y);
           g.arcTo(X+W,Y,X+W,Y+H,R); g.arcTo(X+W,Y+H,X,Y+H,R);
           g.arcTo(X,Y+H,X,Y,R); g.arcTo(X,Y,X+W,Y,R); g.closePath(); g.fill(); };
-        // The digit hangs from the MIDDLE of the fist, not off one side. Off to the left it
-        // read as a flag on a pole at badge size — the shape has to be symmetrical about the
-        // fist for the eye to take it as a hand pointing at something.
-        rr(x-r*0.48, y-r*0.62, r*0.96, r*0.56, r*0.22);          // the fist
-        rr(x-r*0.15, y-r*0.12, r*0.30, r*0.76, r*0.15); } },     // ...and the finger, pointing down
+        // The head is a WEDGE, not a bar: a flat striking face on the left tapering to a peen
+        // on the right, and deep enough to outweigh the haft two to one. A rectangular head on
+        // a haft of similar width is not a hammer at badge size — it is the letter T.
+        g.beginPath();
+        g.moveTo(x-r*0.68, y-r*0.74); g.lineTo(x+r*0.62, y-r*0.60);
+        g.lineTo(x+r*0.62, y-r*0.14); g.lineTo(x-r*0.68, y-r*0.00);
+        g.closePath(); g.fill();
+        rr(x-r*0.13, y-r*0.30, r*0.26, r*1.00, r*0.10); } },     // ...and the haft
 
     { id:"mush", name:"Mushroom", col:"#ff8fc8", ms:6000,
       face:"#ff7fb8", edge:"#9e2a60",
@@ -1333,7 +1389,18 @@
   function loadBest(){ try { return JSON.parse(localStorage.getItem(BEST_KEY)) || {}; } catch(_){ return {}; } }
   function saveBest(o){ try { localStorage.setItem(BEST_KEY, JSON.stringify(o)); } catch(_){} }
   const SET_KEY = "tilerunner:settings";
-  function loadSettings(){ try { return JSON.parse(localStorage.getItem(SET_KEY)) || {}; } catch(_){ return {}; } }
+  function loadSettings(){
+    let o; try { o = JSON.parse(localStorage.getItem(SET_KEY)) || {}; } catch(_){ o = {}; }
+    // Two shop categories were renamed. The stored wardrobe is keyed by category, so without
+    // this everyone silently loses whatever they were wearing in those two and reverts to the
+    // first item — a rename should never cost a player something they bought.
+    if (o.look) {
+      if (o.look.shoes  != null && o.look.kicks == null) o.look.kicks = o.look.shoes;
+      if (o.look.colour != null && o.look.drip  == null) o.look.drip  = o.look.colour;
+      delete o.look.shoes; delete o.look.colour;
+    }
+    return o;
+  }
   function saveSettings(){ try { localStorage.setItem(SET_KEY, JSON.stringify(settings)); } catch(_){} }
   const settings = loadSettings();
   let paused = false;
@@ -1580,9 +1647,9 @@
     g.restore();
   }; });
 
-  // SHOES — drawn at each foot, in the runner's local frame, +x being travel. The foot
+  // KICKS — drawn at each foot, in the runner's local frame, +x being travel. The foot
   // itself is the anchor, so they follow the stride and the lift for free.
-  const SHOES = [
+  const KICKS = [
     { id:"none", name:"Barefoot", cost:0, draw:null, swatch:(g,S)=>swatchBust(g,S,"#bfe6ff","#17263f") },
     { id:"sneaker", name:"Sneakers", cost:90, col:"#f2f4ff",
       draw(g,s,col){ g.fillStyle = col;
@@ -1608,7 +1675,7 @@
         rr2(g, -s*0.032, -s*0.034, s*0.086, s*0.056, s*0.018); g.fill();
         g.fillStyle = "rgba(255,255,255,0.65)"; g.fillRect(-s*0.026, -s*0.026, s*0.070, s*0.010); } },
   ];
-  SHOES.forEach(sh => { if (!sh.draw) return;
+  KICKS.forEach(sh => { if (!sh.draw) return;
     sh.swatch = (g,S) => { const b = swatchBust(g,S,"#bfe6ff","#17263f");
       g.strokeStyle = "#bfe6ff"; g.lineWidth = S*0.05; g.lineCap = "round";
       g.beginPath();
@@ -1647,7 +1714,7 @@
   // A picture per category for the shop's tab strip. Six tabs across a phone leaves about
   // twenty pixels each, which is not enough for a word — so each draws the thing it sells.
   const LOOK_ICONS = {
-    colour: (g,S) => { rr2(g, S*0.20, S*0.24, S*0.60, S*0.52, S*0.10); g.fillStyle="#bfe6ff"; g.fill();
+    drip: (g,S) => { rr2(g, S*0.20, S*0.24, S*0.60, S*0.52, S*0.10); g.fillStyle="#bfe6ff"; g.fill();
       g.fillStyle="#17263f";
       g.beginPath(); g.arc(S*0.40, S*0.46, S*0.055, 0, 7); g.arc(S*0.62, S*0.46, S*0.055, 0, 7); g.fill(); },
     hat: (g,S) => { g.fillStyle="#2b2740";
@@ -1658,7 +1725,7 @@
     swagger: (g,S) => { g.strokeStyle="#bfe6ff"; g.lineWidth=S*0.10; g.lineCap="round";
       g.beginPath(); g.moveTo(S*0.30,S*0.28); g.lineTo(S*0.52,S*0.52); g.lineTo(S*0.34,S*0.78); g.stroke();
       g.beginPath(); g.moveTo(S*0.52,S*0.52); g.lineTo(S*0.74,S*0.72); g.stroke(); },
-    shoes: (g,S) => { g.fillStyle="#f2f4ff";
+    kicks: (g,S) => { g.fillStyle="#f2f4ff";
       rr2(g, S*0.16, S*0.44, S*0.44, S*0.24, S*0.08); g.fill();
       rr2(g, S*0.44, S*0.32, S*0.40, S*0.36, S*0.08); g.fill();
       g.fillStyle="rgba(23,38,63,0.45)"; g.fillRect(S*0.14, S*0.66, S*0.72, S*0.10); },
@@ -1667,11 +1734,11 @@
       g.fillStyle="#fff2c4"; g.fillRect(S*0.12, S*0.49, S*0.76, S*0.05); },
   };
   const LOOK = [
-    { key:"colour", label:"Colour",  items:SKIN_COLOURS },
+    { key:"drip",   label:"Drip",    items:SKIN_COLOURS },
     { key:"hat",    label:"Hat",     items:HATS },
     { key:"trail",   label:"Trail",   items:TRAILS },
     { key:"swagger", label:"Swagger", items:SWAGGERS },
-    { key:"shoes",   label:"Shoes",   items:SHOES },
+    { key:"kicks",   label:"Kicks",   items:KICKS },
     { key:"track",   label:"Track",   items:TRACKS },
   ];
   LOOK.forEach(l => { l.icon = LOOK_ICONS[l.key]; });
@@ -1839,6 +1906,7 @@
           }
           if (K.move === "wander") {
             return { ...base, cc:h.c, cr:h.r, from:[h.c,h.r], to:[h.c,h.r], segT:1, pause:0,
+                     rowT:0, rowP:0, headSplit:"h", headDir:1,
                      wx:(h.c+0.5)*CW, wy:(h.r+0.5)*CW };
           }
           // a path: given outright, or generated as the ring of a square
@@ -2408,12 +2476,17 @@
   // keeps the first row clear of the speed plate and the pause button.
   const camPad = () => cell * CAM_EDGE_PAD;
   const camTopPad = () => cell * CAM_TOP_PAD;
+  const camBotPad = () => cell * CAM_BOTTOM_PAD;
   function camClampY(py) {
-    if (worldH <= viewH) {                                         // whole level fits — centre it,
-      const slack = (viewH - worldH) / 2;                          // then drop it clear of the UI
-      return -(slack + Math.min(camTopPad(), slack));              // by as much as its own slack allows
+    if (worldH <= viewH) {
+      // Whole level fits: centre it, then drop it clear of the top UI — but never so far that
+      // the last row slides under the talismans. The two pads compete for one pool of slack,
+      // and the bottom one wins, because the rack is something you have to be able to press.
+      const slack = (viewH - worldH) / 2;
+      const drop = Math.min(camTopPad(), Math.max(0, slack - camBotPad()));
+      return -(slack + drop);
     }
-    return clamp(py - viewH/2, -camTopPad(), worldH - viewH + camPad());
+    return clamp(py - viewH/2, -camTopPad(), worldH - viewH + camBotPad());
   }
   function camClampX(px) {
     const pad = camPad();
@@ -2757,7 +2830,7 @@
       else if (s.speedFx.kind === "slow") factor *= SLOW_MULT;
       if (s.speedFx.t <= 0) { s.speedFx.kind = null; s.speedFx.t = 0; }
     }
-    if (powerActive("clock")) factor *= CLOCK_MULT;   // the Clock, dragging on everything
+    if (powerActive("clock")) factor *= CLOCK_MULT;   // Hands of Time, dragging on everything
     // fixed pace for now — no within-level combo speed-up (was: 1 + min(combo*0.01, 0.5))
     const comboSpeed = 1;
     factor *= comboSpeed;
@@ -2928,8 +3001,11 @@
   const MAGNET_CELLS = 2;      // the Magnet's reach, in tiles
   const COIN_FLY_MS = 240;     // how long a pulled coin takes to reach him
   // Press the button: the worn talisman gives up its one power for this level.
-  function firePower() {
-    const s = state, def = wornTalisman();
+  // A level still allows ONE power — that has always been the balance — but which one is now
+  // decided at the moment you use it rather than committed to in a menu beforehand.
+  function firePower(id) {
+    const s = state;
+    const def = id ? (talUnlocked.has(id) ? talById(id) : null) : wornTalisman();
     if (!s || s.status !== "play" || !def || s.power.spent) return false;
     s.power.spent = true;
     s.power.kind = def.id;
@@ -2982,7 +3058,7 @@
     wallet.tiles += COIN_TILES; saveWallet(); showTally(c, r);
     spawnPop(c, r, "#ffd24a"); spawnLight(c, r); Sound.coin(); haptic(6);
   }
-  // The Finger of God: lift a tile that has already been laid, along with everything laid
+  // The Hammer of God: lift a tile that has already been laid, along with everything laid
   // after it, and put it back in your hand. Only ahead of the runner — pulling the ground
   // out from under him would just be a scripted death.
   function fingerLift(c, r) {
@@ -3023,8 +3099,10 @@
       const fresh = unlockTalisman(t.id);
       spawnPop(t.c, t.r, def ? def.col : "#ffd24a"); spawnLight(t.c, t.r);
       Sound.coin(); haptic([8, 30, 8]);
-      // There are six placements across the campaign and five talismans, so the last one is
-      // always a charm you already own. Rather than a pickup that does nothing, it pays out.
+      // A level with a talisman and NO flag is that talisman's own maze: the charm IS the
+      // exit, so picking it up finishes the level. Everywhere else it is just a pickup.
+      if (!s.goal) { endWin(def); return; }
+      // A talisman you already own pays out instead of doing nothing.
       if (fresh) flashTalisman(def);
       else { wallet.tiles += COIN_TILES*2; saveWallet(); showTally(t.c, t.r);
              s.score = computeScore(); updateScoreHud(); }
@@ -3248,7 +3326,7 @@
   ];
   const pickQuip = a => a[(Math.random() * a.length) | 0];
 
-  function endWin() {
+  function endWin(relic) {
     state.status = "win";
     const att = state.attempts || 1;
     saveWallet();                               // bank the tiles this run collected
@@ -3262,13 +3340,55 @@
     winAnimToken++;                             // cancel any in-flight score reveal
     ovStars.textContent = "";
     ovScore.innerHTML = "";
-    overlay.className = "win show";
     const last = levelIdx >= LEVELS.length - 1;
+    // A talisman maze gets its own curtain call: the charm itself, big and turning, its name
+    // and what it does. Reaching the end of one of these is the only time the game hands you
+    // a new verb, so it does not share the ordinary "Level Clear" card.
+    if (relic) {
+      overlay.className = "win relic show";
+      ovTitle.textContent = relic.name;
+      ovStars.innerHTML = "";
+      const c = document.createElement("canvas"); c.width = 260; c.height = 260;
+      c.className = "ov-relic";
+      ovStars.appendChild(c);
+      const g = c.getContext("2d");
+      relicShowT = 0; relicShow = { g, def: relic };     // the frame loop turns it
+      // The card reads top to bottom: the charm, its name, what it DOES, then the standing
+      // rule. ov-score sits above ov-msg in the markup, so the blurb goes in score.
+      ovScore.innerHTML = "<span class='ov-relic-does'></span>";
+      ovScore.firstChild.textContent = relic.blurb;
+      setByline(ovMsg, "A new talisman. Use it from the foot of any level — one power per run.");
+      ovBtn.textContent = last ? "Level Select" : "Continue";
+      return;
+    }
+    relicShow = null;
+    overlay.className = "win show";
     ovTitle.textContent = last ? "That's All of Them" : "Level Clear";
     setByline(ovMsg, last
       ? "All " + LEVELS.length + " levels. You've run out of track — and excuses."
       : pickQuip(att > 1 ? WIN_QUIPS_RETRY : WIN_QUIPS));
     ovBtn.textContent = last ? "Level Select" : "Next Level";
+  }
+  // The charm on the win card: it rises into place, then hangs there turning gently.
+  let relicShow = null, relicShowT = 0;
+  function tickRelicShow(dt) {
+    if (!relicShow) return;
+    relicShowT += dt;
+    const { g, def } = relicShow, S = 260;
+    const inK = Math.min(1, relicShowT/460), e = 1 - Math.pow(1 - inK, 3);
+    g.clearRect(0, 0, S, S);
+    g.save();
+    g.translate(S/2, S*0.52 + (1 - e)*40);
+    g.globalAlpha = e;
+    g.rotate(Math.sin(relicShowT/900) * 0.10);          // a slow hang, not a spin
+    const R = 74;
+    g.strokeStyle = def.edge; g.lineWidth = Math.max(2, (R/0.26)*TAL.loopW);
+    g.lineCap = "round";
+    g.beginPath();
+    g.arc(0, -(R/0.26)*TAL.loopY, (R/0.26)*TAL.loopR, Math.PI*0.15, Math.PI*0.85, true);
+    g.stroke();
+    def.draw(g, 0, 0, R);
+    g.restore();
   }
   const LOSE_QUIPS = [
     "Gravity: still undefeated.",
@@ -3514,8 +3634,14 @@
   function coinGlyph(cxp, cyp, s2) {
     const h = s2/2, r = s2*TILE.radius;
     ctx.save();
-    rrect(cxp - h + s2*0.06, cyp - h + s2*0.10, s2, s2, r); ctx.fillStyle = "#c78b16"; ctx.fill();
+    rrect(cxp - h + s2*0.06, cyp - h + s2*0.10, s2, s2, r); ctx.fillStyle = COIN_EDGE; ctx.fill();
     rrect(cxp - h, cyp - h, s2, s2, r); ctx.fillStyle = "#ffd24a"; ctx.fill();
+    if (COIN.panelA > 0) {                                        // the same pressed panel
+      const ip = s2*COIN.panelPad;
+      ctx.globalAlpha = COIN.panelA; ctx.fillStyle = COIN_EDGE;
+      rrect(cxp - h + ip, cyp - h + ip, s2 - 2*ip, s2 - 2*ip, Math.max(0, r - ip*0.6)); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
     ctx.strokeStyle = "rgba(255,255,255,0.55)"; ctx.lineWidth = Math.max(1, s2*0.07);
     ctx.beginPath(); ctx.moveTo(cxp - h + r, cyp - h + ctx.lineWidth*0.5);
     ctx.lineTo(cxp + h - r, cyp - h + ctx.lineWidth*0.5); ctx.stroke();
@@ -3800,9 +3926,13 @@
         // A trap runs its own slow cycle instead of the family's quick bite.
         const phase = K.move === "trap"
           ? 0.5 * trapPhase(h.trapT || 0).open        // 0.5 of the sine is full gape
-          : K.move === "rail" ? (h.rowP || 0)          // a rower's stroke, not a bite
+          : (K.move === "rail" || K.look === "rail") ? (h.rowP || 0)   // a stroke, not a bite
           : (h.chompT || 0) / MONSTER.chompMs;
-        drawMonster(h.wx, h.wy, ts, h.faceX, phase, K);
+        // A roamer's banks and eyes follow whichever way it is currently swimming, so its
+        // kind's fixed `split` is overridden with the heading it last actually moved on.
+        const KD = (K.look === "rail" && h.headSplit) ? { ...K, split: h.headSplit } : K;
+        const dirN = (K.look === "rail" && h.headDir) ? h.headDir : h.faceX;
+        drawMonster(h.wx, h.wy, ts, dirN, phase, KD);
         continue;
       }
       {
@@ -4001,8 +4131,14 @@
     hrail:  { move:"rail",   split:"h", body:"#b24dff", blocks:false },   // was a horizontal saw
     vrail:  { move:"rail",   split:"v", body:"#4dc9ff", blocks:false },   // was a vertical saw
     patrol: { move:"path",   split:"h", body:"#b24dff", blocks:true  },   // the waypoint walker
-    square: { move:"path",   split:"h", body:"#ff9b3d", blocks:true  },   // round and round a ring
-    wander: { move:"wander", split:"h", body:"#7dff6b", blocks:true  },   // a fresh route every run
+    // Round and round a ring — and it turns corners, so oars on two faces would be the wrong
+    // two half the time. `banks:"all"` puts spikes on every face: the pair perpendicular to
+    // travel row, the other pair simply bristle in and out with the stroke.
+    square: { move:"path", look:"rail", banks:"all", split:"h", body:"#ff9b3d", blocks:true },
+    // Wanders like nothing else, but SWIMS like the rail pair: `look:"rail"` draws it with
+    // banks of oars instead of jaws, and its banks turn with it — whichever way it is heading,
+    // they sit on the two sides perpendicular to that.
+    wander: { move:"wander", look:"rail", banks:"all", split:"h", body:"#7dff6b", blocks:true },
     trap:   { move:"trap",   split:"h", body:"#ff5c5c", blocks:false,     // sits still and waits
               gap: 1.30 },                                               // ...yawning a tile wide
   };
@@ -4119,24 +4255,35 @@
     // stays inside its own spacing (railToothW is 0.6 of a step, so even at 1.55 it does not
     // reach a neighbour) so the teeth never merge at the extremes of the stroke.
     const midK = (per % 2) ? (per - 1)/2 : -1;
-    for (const side of [-1, 1]) {
-      for (let k = 0; k < per; k++) {
-        const big = (k === midK) ? MONSTER.railMidSpike : 1;
-        const c = base + amp/2 + (k + 0.5)*step + slide;
-        const hw = tw*big/2, len = tl*big;
-        ctx.beginPath();
-        if (vert) {
-          ctx.moveTo(side*h, c - hw);
-          ctx.lineTo(side*h, c + hw);
-          ctx.lineTo(side*(h + len), c);
-        } else {
-          ctx.moveTo(c - hw, side*h);
-          ctx.lineTo(c + hw, side*h);
-          ctx.lineTo(c, side*(h + len));
+    // One pair of banks. `downY` puts them on the left and right faces (spikes out along x,
+    // spaced down y); otherwise on the top and bottom. `sl` is how far along their own face
+    // they have slid — the rowing pair get the stroke, any others get none.
+    const bank = (downY, sl) => {
+      for (const side of [-1, 1]) {
+        for (let k = 0; k < per; k++) {
+          const big = (k === midK) ? MONSTER.railMidSpike : 1;
+          const c = base + amp/2 + (k + 0.5)*step + sl;
+          const hw = tw*big/2, len = tl*big;
+          ctx.beginPath();
+          if (downY) {
+            ctx.moveTo(side*h, c - hw);
+            ctx.lineTo(side*h, c + hw);
+            ctx.lineTo(side*(h + len), c);
+          } else {
+            ctx.moveTo(c - hw, side*h);
+            ctx.lineTo(c + hw, side*h);
+            ctx.lineTo(c, side*(h + len));
+          }
+          ctx.closePath(); ctx.fill();
         }
-        ctx.closePath(); ctx.fill();
       }
-    }
+    };
+    // The rowing pair sit on the faces PARALLEL to travel, because those are the only ones a
+    // spike can sweep backwards along. A monster that turns corners also carries a second pair
+    // on the faces it is heading into and away from; those cannot row — sliding them would be
+    // sideways — so they just bristle in and out on `reach` with the rest.
+    bank(vert, slide);
+    if (K.banks === "all") bank(!vert, 0);
     ctx.fillStyle = body; rrect(-h, -h, S, S, R); ctx.fill();     // the tile, over the tooth roots
     ctx.save(); rrect(-h, -h, S, S, R); ctx.clip();
     grainFill(-h, -h, S, S, MONSTER.grain);
@@ -4163,7 +4310,7 @@
     // `phase` for a rail monster is its position along its own rail. Feeding it in as a
     // stroke offset is enough to break the lockstep: with only the shared clock, a rank of
     // six rowed in perfect unison, which reads as clockwork rather than as six animals.
-    if (K.move === "rail") return drawRailMonster(x, y, ts, faceX, K, phase);
+    if (K.move === "rail" || K.look === "rail") return drawRailMonster(x, y, ts, faceX, K, phase);
     const s = cell, S = s*MONSTER.size, h = S/2, R = tileR(S);
     const face = faceX < 0 ? -1 : 1;
     // Shut, then a fast snap open, then shut again. Held near zero for most of the cycle,
@@ -4245,9 +4392,16 @@
     }
     const y = y0 + Math.sin(ts/320) * cell * 0.05;
     ctx.save();
-    // cord loop above it, so it reads as something you'd wear
-    ctx.strokeStyle = "rgba(255,255,255,0.75)"; ctx.lineWidth = Math.max(1.5, cell*0.022);
-    ctx.beginPath(); ctx.arc(x, y - cell*0.26, cell*0.09, Math.PI*0.15, Math.PI*0.85, true); ctx.stroke();
+    // The loop it hangs from, in the badge's own edge metal rather than a white cord — drawn
+    // BEFORE the badge so its lower ends disappear behind the tile and it reads as attached
+    // rather than balanced on top.
+    ctx.strokeStyle = def.edge || "#8d7c58";
+    // Floor at half a pixel, not 1.5 — a canvas stroke renders sub-pixel widths perfectly well
+    // antialiased, and the old floor swallowed the bottom third of loopW's range so the thin
+    // end of the slider did nothing at all.
+    ctx.lineWidth = Math.max(0.5, cell*TAL.loopW); ctx.lineCap = "round";
+    ctx.beginPath(); ctx.arc(x, y - cell*TAL.loopY, cell*TAL.loopR, Math.PI*0.15, Math.PI*0.85, true);
+    ctx.stroke();
     def.draw(ctx, x, y, cell * 0.26);
     ctx.restore();
   }
@@ -4317,7 +4471,13 @@
     sweepMs:  2200,   // how often it crosses
     spark:    0.80,   // corner twinkle strength
     sparkMs:  2600,   // how often it twinkles
+    panelPad: 0.15,   // the inscribed square's inset, fraction of the coin
+    panelA:   1.00,   // ...and how solidly it is filled, in COIN_EDGE
   };
+  // The darker gold the coin is extruded on. The inscribed panel is filled with the SAME
+  // colour, so the face reads as a gold ring pressed down onto the metal underneath it —
+  // one constant, or the two drift the moment either is retuned.
+  const COIN_EDGE = "#c78b16";
   // Coins ARE the shop's currency, one for one — running over a plain tile used to pay too,
   // which meant the wallet filled up on its own and the coins hidden off the route were
   // pointless. NOTE: SHOP PRICES ARE STILL ON THE OLD 25:1 SCALE (60 to 800), so at one coin
@@ -4333,6 +4493,25 @@
   // lip of the groove, then the dark copy on top for the incision itself. That pair is the
   // whole illusion, and it only works because the offset agrees with the gloss: both are lit
   // from the top-left. Flip one and the motif pops out as a relief instead.
+  // Talisman badge geometry. No lab tunes these, so they live here rather than in a block.
+  const TAL = {
+    loopR:    0.050,  // the hanging loop's radius, fraction of a CELL
+    loopY:    0.255,  // ...and how far above the badge's centre it sits
+    loopW:    0.046,  // ...and how thick its line is
+    panelPad: 0.100,  // the inscribed square's inset
+    panelA:   0.250,  // ...and how far it darkens the face under it
+    lift:     0.000,  // the icon's drop shadow, fraction of the icon. 0 = none at all
+    grain:    0.85,   // paper texture over the badge, as everything else in the game wears
+  };
+  // createPattern belongs to the context that made it, and talismans are painted onto the
+  // board, a dozen swatch canvases and the power button — so cache one per context rather
+  // than rebuilding it every frame or handing the wrong context's pattern around.
+  const _talGrain = new WeakMap();
+  function talGrain(g) {
+    let p = _talGrain.get(g);
+    if (!p) { p = g.createPattern(paperTile, "repeat"); _talGrain.set(g, p); }
+    return p;
+  }
   function talBadge(g, x, y, r, def) {
     const s2 = r*1.9, h = s2/2, rad = s2*TILE.radius;
     const rr = (X, Y, W, H, R) => { g.beginPath(); g.moveTo(X+R,Y);
@@ -4342,26 +4521,36 @@
     rr(x-h+s2*0.06, y-h+s2*0.10, s2, s2, rad); g.fillStyle = def.edge || "#8d7c58"; g.fill();
     rr(x-h, y-h, s2, s2, rad); g.fillStyle = def.face || "#e8dcc0"; g.fill();
     g.save(); rr(x-h, y-h, s2, s2, rad); g.clip();
+    // The same paper the board, the walls and the monsters are printed on. Under the panel,
+    // as on a monster, so the panel reads as a recess in the paper rather than a sticker.
+    if (TAL.grain > 0 && paperTile) {
+      g.globalAlpha = TAL.grain;
+      g.fillStyle = talGrain(g);
+      g.fillRect(x-h, y-h, s2, s2);
+      g.globalAlpha = 1;
+    }
+    // the inscribed panel the whole family carries
+    const ip = s2*TAL.panelPad;
+    g.fillStyle = "rgba(9,6,20," + TAL.panelA + ")";
+    rr(x-h+ip, y-h+ip, s2-2*ip, s2-2*ip, Math.max(0, rad - ip*0.6)); g.fill();
     if (def.etch) {
-      const d = Math.max(0.6, r*0.055);
+      // RAISED, and in the tile's OUTER colour — the face, not the edge — so the icon sits
+      // lighter than the panel it stands on. That is what makes it read as standing proud:
+      // the panel is the face darkened, so an icon at full face colour is the one thing on
+      // the badge catching light. Its shadow falls down and right, away from the same corner
+      // the rest of the game is lit from.
+      // A floor of 0.6px keeps the shadow visible at small sizes — but only once there is a
+      // shadow to keep. At lift 0 it is skipped outright, or the slider's own minimum would
+      // still leave a sub-pixel smudge and "off" would be unreachable.
+      const d = TAL.lift > 0 ? Math.max(0.6, r*TAL.lift) : 0;
       g.lineJoin = "round";
-      g.fillStyle = g.strokeStyle = "rgba(255,255,255,0.50)"; def.etch(g, x + d, y + d, r*0.80);
-      g.fillStyle = g.strokeStyle = "rgba(0,0,0,0.44)";       def.etch(g, x,     y,     r*0.80);
+      if (d > 0) { g.fillStyle = g.strokeStyle = "rgba(9,6,20,0.38)"; def.etch(g, x + d, y + d, r*0.80); }
+      g.fillStyle = g.strokeStyle = def.face || "#e8dcc0";    def.etch(g, x,     y,     r*0.80);
     }
-    if (COIN.gloss > 0) {                       // the sheen sits OVER the etch — it is one
-      const gl = g.createLinearGradient(x-h, y-h, x+h, y+h);   // surface, and the motif is under it
-      gl.addColorStop(0,    "rgba(255,255,255," + COIN.gloss + ")");
-      gl.addColorStop(0.45, "rgba(255,255,255,0)");
-      gl.addColorStop(1,    "rgba(0,0,0," + (COIN.gloss*0.34) + ")");
-      g.fillStyle = gl; g.fillRect(x-h, y-h, s2, s2);
-    }
+    // No diagonal gloss and no lit top edge: a talisman is flat colour. It borrowed both from
+    // the coin, which left it looking like currency — the one thing on the board it must not
+    // be mistaken for. Three flat tones now do the work: the edge, the face, and the panel.
     g.restore();
-    if (COIN.rim > 0) {                                        // the bright top edge
-      g.strokeStyle = "rgba(255,255,255," + COIN.rim + ")";
-      g.lineWidth = Math.max(1, s2*0.05);
-      g.beginPath(); g.moveTo(x-h+rad, y-h+g.lineWidth*0.5);
-      g.lineTo(x+h-rad, y-h+g.lineWidth*0.5); g.stroke();
-    }
     g.restore();
   }
   function drawCoin(x, y, ts) {
@@ -4376,12 +4565,21 @@
     ctx.beginPath(); ctx.ellipse(x, y + cell*0.13, s2*0.42*k, s2*0.12*k, 0, 0, Math.PI*2); ctx.fill();
     ctx.globalAlpha = 1;
     ctx.translate(x, y - lift); ctx.rotate(tilt);
-    ctx.fillStyle = "#c78b16";                                    // the edge it sits on
+    ctx.fillStyle = COIN_EDGE;                                    // the edge it sits on
     rrect(-h + s2*0.06, -h + s2*0.10, s2, s2, r); ctx.fill();
     ctx.fillStyle = "#ffd24a";                                    // the face
     rrect(-h, -h, s2, s2, r); ctx.fill();
     ctx.save();
     rrect(-h, -h, s2, s2, r); ctx.clip();                         // everything below stays on the tile
+    // The inscribed panel every struck face in the game carries — walls, monsters, stones.
+    // Under the shine, not over it: the gloss and the travelling glint are the surface, and a
+    // panel laid on top of them would read as printed on rather than pressed in.
+    if (COIN.panelA > 0) {
+      const ip = s2*COIN.panelPad;
+      ctx.globalAlpha = COIN.panelA; ctx.fillStyle = COIN_EDGE;
+      rrect(-h + ip, -h + ip, s2 - 2*ip, s2 - 2*ip, Math.max(0, r - ip*0.6)); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
     if (COIN.gloss > 0) {                                         // lit from the top-left
       const g = ctx.createLinearGradient(-h, -h, h, h);
       g.addColorStop(0,    "rgba(255,255,255," + COIN.gloss + ")");
@@ -5245,7 +5443,7 @@
     // local frame: +x = travel, feet at y=0, body toward -y (surface "up")
     // A worn colour replaces RUNNER's two rather than editing the block the labs paste
     // between themselves — the tuning stays the tuning, the skin is just what's on today.
-    const skin = lookItem("colour");
+    const skin = lookItem("drip");
     const pale = skin.body || RUNNER.body, inkCol = skin.ink || RUNNER.ink;
     const legL = s*RUNNER.legLen, bodyH = s*RUNNER.bodyH, bodyW = s*RUNNER.bodyW;
     // soft ground shadow (not an outline). shadowBob ties it to the body's rise, so a
@@ -5343,7 +5541,7 @@
       feet.push([fx, fy]);
     }
     // shoes ride on the feet, so the stride and the foot lift carry them for free
-    const shoe = lookItem("shoes");
+    const shoe = lookItem("kicks");
     if (shoe.draw) for (const [fx, fy] of feet) {
       ctx.save(); ctx.translate(fx, fy); shoe.draw(ctx, s, shoe.col); ctx.restore();
     }
@@ -5599,10 +5797,9 @@
   // three deterministic crack polylines (unit coords), revealed one per tap taken
   // ---- breakable stone: 3 crack variations, staged by remaining taps (hp) ----
   // Each stone picks a variation by position; the crack set grows as hp falls (3=pristine wear,
-  // 2=one fissure through, 1=four fissures / shattered). Rendered to an offscreen buffer and
-  // blitted so the carved gaps reveal the level background behind rather than a flat void.
-  const _stoneBuf = document.createElement("canvas");
-  const _sg = _stoneBuf.getContext("2d");
+  // 2=one fissure through, 1=four fissures / shattered). Baked into a cached bitmap per
+  // (variant, grain, taps) and blitted, so the carved gaps reveal the level background behind
+  // rather than a flat void — see stoneBitmap.
   function _srr(g,x,y,w,h,r){ g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); }
   // 32-bit avalanche. The old version multiplied with `*`, which leaves 32-bit range and
   // loses the low bits to float rounding — the result was visibly skewed (over a 16x16
@@ -5686,17 +5883,34 @@
   // Evenly stepped rather than running down to near-black: the one-tap shade only has to be
   // the darkest of the three, and it still has to sit clearly above STONE_EDGE or a nearly
   // broken stone reads as a solid dark block with no face on it at all.
-  const STONE_FACE = ["#c9bc93", "#ad9f78", "#91835f"];
-  function drawStone(c, r, ts, st) {
-    const x = cx(c), y = cy(r), s = cell, rad = tileR(s);
-    const hp = st ? st.hp : 1, taps = Math.max(1, Math.min(3, hp));
-    const v = _STONE_VARS[(st && st.vi != null ? st.vi : _sHash(c*7+3, r*13+5)) % _STONE_VARS.length];
+  // Evenly stepped: the gauge only works if 3 taps, 2 and 1 are equally far apart. Lifting
+  // the darkest alone would have squeezed the last step to half the first, and "nearly
+  // broken" is the reading that matters most.
+  const STONE_FACE = ["#c9bc93", "#b3a582", "#9d8f6d"];
+  // A stone is EXPENSIVE to draw and almost never changes. Two passes of grain (some 700
+  // fillRects), a resize of the scratch buffer, four carved cracks and a composite — per
+  // stone, per frame. Twenty of them cost ~2.9ms a frame on a desktop, which is a sixth of
+  // the 60fps budget before the rest of the board is drawn at all.
+  //
+  // So bake it. What a stone looks like depends only on its size, which crack set it is on
+  // (variant + taps) and which grain it drew — and the last two only change when it is hit.
+  // Everything that genuinely animates (the tappable shimmer, the fresh-hit flash, the eyes)
+  // is cheap and goes over the top per frame.
+  const _stoneCache = new Map();
+  let _stoneCacheS = 0;
+  const STONE_GRAINS = 4;          // distinct grain draws, so same-state neighbours don't twin
+  function stoneBitmap(S, s, rad, vi, gi, taps) {
+    if (_stoneCacheS !== S) { _stoneCache.clear(); _stoneCacheS = S; }   // cell resized
+    const key = vi + "|" + gi + "|" + taps;
+    const hit = _stoneCache.get(key);
+    if (hit) return hit;
+    const v = _STONE_VARS[vi % _STONE_VARS.length];
     const cfg = _stoneCracks(v, taps);
-    const S = Math.ceil(s); _stoneBuf.width = S; _stoneBuf.height = S;   // (re)size clears the buffer
-    const g = _sg;
+    const bm = document.createElement("canvas"); bm.width = S; bm.height = S;
+    const g = bm.getContext("2d");
     g.save(); _srr(g,0,0,s,s,rad); g.clip();
     g.fillStyle = STONE_EDGE; g.fillRect(0,0,s,s);          // the surround, identical on every stone
-    _sTexture(g, s, _sHash(c*41+9, r*11+5));                // ...but grained, so it isn't a dead band
+    _sTexture(g, s, gi*977 + 41);                           // ...but grained, so it isn't a dead band
     // The wall's treatment, on the thing you are allowed to smash: a face inscribed in the
     // tile, in the shade that says how much of it is left. Grain, the fresh-hit flash and the
     // "tappable" shimmer are all clipped to it, so nothing ever disturbs the surround.
@@ -5710,25 +5924,45 @@
       g.closePath(); };
     panel(); g.fillStyle = STONE_FACE[3 - taps] || STONE_FACE[2]; g.fill();
     g.save(); panel(); g.clip();
-    _sTexture(g, s, _sHash(c*31+7, r*17+3));
-    if (st && st.hit > 0) { g.globalAlpha = st.hit*0.45; g.fillStyle = "#ffffff"; g.fillRect(0,0,s,s); g.globalAlpha = 1; }   // fresh-hit flash
-    const pulse = 0.5 + 0.5*Math.sin(ts/380 + (c+r));                                                                        // faint "tappable" shimmer
-    g.globalAlpha = 0.05 + 0.07*pulse; g.fillStyle = "#fff0c4"; g.fillRect(0,0,s,s); g.globalAlpha = 1;
+    _sTexture(g, s, gi*613 + 31);
     g.restore();
-    // The eyes are the surround's colour, so they read against the face and nothing else —
-    // the same rule the wall plate's rivets follow. They go on BEFORE the cracks, so a crack
-    // carves through the face as the stone gives way, and each stone gets its own blink offset
-    // so a wall of them doesn't blink in unison.
-    drawEyes(g, s*0.5, s*0.44, s, STONE_EDGE, 0, ts, _sHash(c*23+11, r*29+7) % 4000);
     cfg.cracks.forEach((cr,idx)=> _sCarve(g, s, cr[0], cfg.w*cr[1], idx*3.7+1.3));   // carve the gaps -> transparent
     g.restore();
+    bm._panel = panel;                    // the overlays need the same face path
+    _stoneCache.set(key, bm);
+    return bm;
+  }
+  function drawStone(c, r, ts, st) {
+    const x = cx(c), y = cy(r), s = cell, rad = tileR(s);
+    const hp = st ? st.hp : 1, taps = Math.max(1, Math.min(3, hp));
+    const vi = (st && st.vi != null ? st.vi : _sHash(c*7+3, r*13+5)) % _STONE_VARS.length;
+    const gi = _sHash(c*41+9, r*11+5) % STONE_GRAINS;
+    const S = Math.ceil(s);
+    const bm = stoneBitmap(S, s, rad, vi, gi, taps);
     // The cracks are carved to TRANSPARENT so a break reads as a real gap rather than a
     // painted line. This sits behind them: the surround's own colour, so a crack that runs off
     // the face and out onto the edge doesn't change shade halfway along.
     ctx.save();
     rrect(x, y, s, s, rad); ctx.fillStyle = STONE_EDGE; ctx.fill();
     ctx.restore();
-    ctx.drawImage(_stoneBuf, 0, 0, S, S, x, y, s, s);                    // blit; the gaps reveal that backdrop
+    ctx.drawImage(bm, 0, 0, S, S, x, y, s, s);                           // blit; the gaps reveal that backdrop
+    // Everything that actually moves, over the top — three cheap ops instead of a rebuild.
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.beginPath(); bm._panel(); ctx.clip();          // the face, exactly as the bitmap has it
+    if (st && st.hit > 0) {                            // fresh-hit flash
+      ctx.globalAlpha = st.hit*0.45; ctx.fillStyle = "#ffffff"; ctx.fillRect(0,0,s,s);
+    }
+    const pulse = 0.5 + 0.5*Math.sin(ts/380 + (c+r));  // faint "tappable" shimmer
+    ctx.globalAlpha = 0.05 + 0.07*pulse; ctx.fillStyle = "#fff0c4"; ctx.fillRect(0,0,s,s);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    // The eyes are the surround's colour, and a carved crack shows the surround behind it —
+    // the same colour — so drawing them over the cracks rather than under is indistinguishable
+    // from the old order, and keeps them out of the baked bitmap where they would have
+    // multiplied it by every blink and glance. Each stone keeps its own offset so a wall of
+    // them doesn't blink in unison.
+    drawEyes(ctx, x + s*0.5, y + s*0.44, s, STONE_EDGE, 0, ts, _sHash(c*23+11, r*29+7) % 4000);
   }
 
   // ---- parallax procedural backdrop (drawn in screen space) --------------
@@ -6068,7 +6302,7 @@
     const wx = x + camX, wy = y + camY;
     const { c, r } = cellAtWorld(wx, wy);
     if (!inBounds(c, r)) return;
-    // The Finger of God, if it is armed, gets the tap first: it can lift a tile that is
+    // The Hammer of God, if it is armed, gets the tap first: it can lift a tile that is
     // already laid, which freeTileAt would never find.
     const lifted = fingerLift(c, r);
     const tile = lifted || freeTileAt(c, r);
@@ -6215,6 +6449,7 @@
     if (paused) drawPausedOverlay();
     updatePauseBtn();
     updatePowerBtn();
+    tickRelicShow(dt);
     requestAnimationFrame(frame);
   }
   // the floating pause/menu button only shows during active play (hidden on the
@@ -6225,38 +6460,54 @@
   // half a dozen places. The icon is only repainted when the worn talisman changes — it is
   // a canvas, and there is no reason to repaint it sixty times a second.
   const powerEl = document.getElementById("power");
-  const powerIc = document.getElementById("power-ic");
-  const powerBar = document.getElementById("power-bar");
-  let _powerIcId = null, _powerCls = null;
-  powerEl.addEventListener("click", (e) => {
-    e.preventDefault(); Sound.unlock();
-    if (firePower()) return;
-    Sound.tap();
-  });
+  let _powerCls = null;                 // each talisman in the rack wires its own tap
+  // Every talisman you have found, along the bottom of the level, any of them usable. The
+  // rack is rebuilt only when the SET changes — not every frame — so the per-frame cost is a
+  // couple of class swaps.
+  // Hand-placed angles rather than a formula: a repeating pattern of the same few degrees
+  // still reads as regular, and alternating +/- reads as a zigzag. These are just scattered.
+  const TAL_TILT = [-7, 4, -3, 8, -5];
+  let _rackIds = "";
+  function buildPowerRack(ids) {
+    powerEl.innerHTML = "";
+    ids.forEach((id, i) => {
+      const def = talById(id); if (!def) return;
+      const b = document.createElement("button");
+      b.className = "pw"; b.setAttribute("aria-label", def.name);
+      const c = document.createElement("canvas"); c.width = 96; c.height = 96;
+      def.draw(c.getContext("2d"), 48, 48, 34);
+      const bar = document.createElement("span"); bar.className = "pw-bar";
+      b.appendChild(c); b.appendChild(bar);
+      b.style.setProperty("--tilt", TAL_TILT[i % TAL_TILT.length] + "deg");
+      b.addEventListener("click", (e) => {
+        e.preventDefault(); Sound.unlock();
+        if (firePower(id)) return;
+        Sound.tap();
+      });
+      powerEl.appendChild(b);
+    });
+    _rackIds = ids.join(",");
+  }
   function updatePowerBtn() {
-    const def = (!titleActive && !paused && state &&
-                 (state.status === "play" || state.status === "vortex")) ? wornTalisman() : null;
-    if (!def) { if (_powerCls !== "off") { powerEl.className = ""; _powerCls = "off"; } return; }
-    if (_powerIcId !== def.id) {                    // the pendant changed — repaint the icon
-      const g = powerIc.getContext("2d");
-      g.clearRect(0, 0, 72, 72); def.draw(g, 36, 36, 28);
-      _powerIcId = def.id;
-    }
+    const live = !titleActive && !paused && state &&
+                 (state.status === "play" || state.status === "vortex");
+    const ids = live ? TALISMANS.filter(t => talUnlocked.has(t.id)).map(t => t.id) : [];
+    if (!ids.length) { if (_powerCls !== "off") { powerEl.className = ""; _powerCls = "off"; } return; }
+    if (ids.join(",") !== _rackIds) buildPowerRack(ids);
+    if (_powerCls !== "on") { powerEl.className = "on"; _powerCls = "on"; }
     const p = state.power;
-    let cls = "on";
-    if (p.kind && p.t > 0) {                        // running
-      cls = "on dim";
-      powerBar.style.width = Math.max(0, Math.min(1, p.t / (p.ms || 1)))*100 + "%";
-    } else if (p.kind === "finger" && p.armed) {    // waiting to be aimed at a tile
-      cls = "on armed";
-      powerBar.style.width = "0";
-    } else if (p.spent) {
-      cls = "on dim";
-      powerBar.style.width = "0";
-    } else {
-      powerBar.style.width = "0";
-    }
-    if (cls !== _powerCls) { powerEl.className = cls; _powerCls = cls; }
+    // One is spent per level, so once any has fired they ALL go dim — except the one that is
+    // running, which keeps its drain bar, and the Hammer while it waits to be aimed.
+    [...powerEl.children].forEach((b, i) => {
+      const id = ids[i], mine = p.kind === id;
+      const bar = b.lastChild;
+      let cls = "pw";
+      if (mine && p.t > 0) { cls = "pw live";
+        bar.style.width = Math.max(0, Math.min(1, p.t / (p.ms || 1)))*100 + "%"; }
+      else if (mine && p.armed && p.t <= 0) { cls = "pw armed"; bar.style.width = "0"; }
+      else { if (p.spent) cls = "pw dim"; bar.style.width = "0"; }
+      if (b.className !== cls) b.className = cls;
+    });
   }
   function updatePauseBtn() {
     const pf = document.getElementById("pauseFloat"); if (!pf) return;
@@ -6313,9 +6564,23 @@
         if (K.move === "wander") {
           // A fresh route every run: at each cell it picks a random open neighbour, avoiding
           // the one it came from unless that is the only way on. No path is ever the same.
-          h.segT += dt / Math.max(1, h.speed);
-          if (h.segT >= 1) {
-            h.segT = 0; h.from = h.to.slice();
+          //
+          // One hop is a whole number of thrusts, and the position across it is DERIVED from
+          // the stroke clock exactly as a rail monster's leg is — so it surges into each cell
+          // and arrives coasting, instead of sliding across at a constant rate.
+          const hopN = Math.max(1, Math.round(Math.max(1, h.speed) / MONSTER.railStrokeMs));
+          const hopSd = Math.max(1, h.speed) / hopN;
+          h.rowT = (h.rowT || 0) + dt;
+          const hk = h.rowT / hopSd, hdone = Math.floor(hk);
+          h.rowP = hk - hdone;
+          h.segT = (hdone + railProgress(h.rowP)) / hopN;
+          // It is built with from === to and no destination yet. segT used to be seeded at 1
+          // to force the first pick on the opening tick; now that segT is DERIVED from the
+          // stroke clock that seed is overwritten, so ask the question directly instead —
+          // otherwise it treads water for a whole hop before it ever sets off.
+          const adrift = h.from[0] === h.to[0] && h.from[1] === h.to[1];
+          if (h.segT >= 1 || adrift) {
+            h.segT = 0; h.rowT = 0; h.rowP = 0; h.from = h.to.slice();
             const opts = [], back = [];
             for (const [dc, dr] of [[1,0],[-1,0],[0,1],[0,-1]]) {
               const c = h.from[0] + dc, r = h.from[1] + dr;
@@ -6328,12 +6593,21 @@
           const fx = h.from[0] + (h.to[0]-h.from[0])*h.segT, fy = h.from[1] + (h.to[1]-h.from[1])*h.segT;
           h.wx = (fx+0.5)*cell; h.wy = (fy+0.5)*cell;
           h.cc = Math.round(fx); h.cr = Math.round(fy);
-          if (h.to[0] !== h.from[0]) h.faceX = h.to[0] < h.from[0] ? -1 : 1;
+          // Which way it is swimming decides where the banks sit and which end the eyes lead
+          // toward. Held from the last real move, so it does not flip about while stationary.
+          const hdx = h.to[0] - h.from[0], hdy = h.to[1] - h.from[1];
+          if (hdy !== 0)      { h.headSplit = "v"; h.headDir = hdy < 0 ? -1 : 1; }
+          else if (hdx !== 0) { h.headSplit = "h"; h.headDir = hdx < 0 ? -1 : 1; }
+          if (hdx !== 0) h.faceX = hdx < 0 ? -1 : 1;
           monsterNoise(h, dt);
           continue;
         }
       }
       if (h.path) {                                 // monster — move along its waypoint path
+        // `K` above is scoped to the monster block, which has already closed by here — this
+        // branch is shared with the plain saws. Look the kind up again rather than reaching
+        // for it.
+        const PK = h.kind === "monster" ? monKind(h) : null;
         const at = h.seg;
         const nextIdx = h.loop ? (at + 1) % h.path.length
                                : Math.max(0, Math.min(h.path.length - 1, at + h.mdir));
@@ -6341,9 +6615,22 @@
         else if (nextIdx !== at) {
           const A0 = h.path[at], B0 = h.path[nextIdx];
           const segCells = (Math.abs(B0[0]-A0[0]) + Math.abs(B0[1]-A0[1])) || 1;
-          h.segT += dt / (h.speed * segCells);
+          // A rower crosses a leg in a whole number of thrusts, positioned from its stroke
+          // clock; anything else slides along at a constant rate as it always did.
+          if (PK && PK.look === "rail") {
+            const legMs = Math.max(1, h.speed * segCells);
+            const segN = Math.max(1, Math.round(legMs / MONSTER.railStrokeMs));
+            const segSd = legMs / segN;
+            h.rowT = (h.rowT || 0) + dt;
+            const sk = h.rowT / segSd, sdone = Math.floor(sk);
+            h.rowP = sk - sdone;
+            h.segT = (sdone + railProgress(h.rowP)) / segN;
+          } else {
+            h.segT += dt / (h.speed * segCells);
+          }
           if (h.segT >= 1) {
-            h.segT = 0; h.seg = nextIdx; h.pause = MON_DWELL;   // pause at the waypoint
+            h.segT = 0; h.rowT = 0; h.rowP = 0;
+            h.seg = nextIdx; h.pause = MON_DWELL;               // pause at the waypoint
             if (!h.loop) {                          // ping-pong: flip at the ends
               if (h.seg >= h.path.length - 1) h.mdir = -1;
               else if (h.seg <= 0) h.mdir = 1;
@@ -6358,7 +6645,12 @@
         const fx = A[0] + (B[0]-A[0]) * h.segT, fy = A[1] + (B[1]-A[1]) * h.segT;
         h.wx = (fx + 0.5) * cell; h.wy = (fy + 0.5) * cell;
         h.cc = Math.round(fx); h.cr = Math.round(fy);
-        if (B[0] !== A[0]) h.faceX = B[0] < A[0] ? -1 : 1;
+        // Which way it is swimming: sets where the rowing banks sit and which end the eyes
+        // lead toward. Held from the last real move so it does not flip while it dwells.
+        const pdx = B[0] - A[0], pdy = B[1] - A[1];
+        if (pdy !== 0)      { h.headSplit = "v"; h.headDir = pdy < 0 ? -1 : 1; }
+        else if (pdx !== 0) { h.headSplit = "h"; h.headDir = pdx < 0 ? -1 : 1; }
+        if (pdx !== 0) h.faceX = pdx < 0 ? -1 : 1;
         // The bite runs on the hazard's own clock so the crunch lands exactly as the jaws
         // meet. Volume falls off with distance and is silent past MONSTER.hear tiles — near
         // one of these you should hear it working before you can see it.
@@ -6565,7 +6857,7 @@
   function openMenu(screen, ret) { paused = true; menuReturn = ret || null;
                                    buildMenu(screen || "main"); menuEl.classList.add("show");
                                    Sound.ambient("pause"); }
-  function closeMenu() { stopShopFig(); paused = false; menuReturn = null; menuEl.classList.remove("show");
+  function closeMenu() { stopShopFig(); stopRelics(); paused = false; menuReturn = null; menuEl.classList.remove("show");
                          Sound.ambient(cineActive ? "intro" : titleActive ? "title" : null); }
 
   // Every generated button clicks when pressed. Wired here rather than at each call site so
@@ -6585,6 +6877,16 @@
   // One shop animation at a time. Every rebuild — a new tab, a new item worn — replaces the
   // painter, and closing the menu stops it: an orphaned rAF would go on drawing into a canvas
   // that is no longer in the document, forever.
+  // The talisman shelf animates the same way the shop figure does: one loop for the screen,
+  // replaced on every rebuild and stopped when the menu closes. An orphaned rAF would go on
+  // painting canvases that have left the document.
+  let relicPainters = [], _relicRaf = 0;
+  function stopRelics() { if (_relicRaf) { cancelAnimationFrame(_relicRaf); _relicRaf = 0; } relicPainters = []; }
+  function startRelics() {
+    if (_relicRaf) cancelAnimationFrame(_relicRaf);
+    const step = (ts) => { for (const p of relicPainters) p(ts); _relicRaf = requestAnimationFrame(step); };
+    _relicRaf = requestAnimationFrame(step);
+  }
   let _shopFigRaf = 0;
   function stopShopFig() { if (_shopFigRaf) { cancelAnimationFrame(_shopFigRaf); _shopFigRaf = 0; } }
   function startShopFig(paint) {
@@ -6592,9 +6894,10 @@
     const step = (ts) => { paint(ts); _shopFigRaf = requestAnimationFrame(step); };
     _shopFigRaf = requestAnimationFrame(step);
   }
-  let shopTab = "colour";                 // the shop remembers which rack you were looking at
+  let shopTab = "drip";                   // the shop remembers which rack you were looking at
   function buildMenu(screen) {
-    stopShopFig();                        // whatever was animating is about to leave the DOM
+    stopShopFig(); stopRelics();          // whatever was animating is about to leave the DOM
+    relicPainters = [];
     menuBody.innerHTML = "";
     menuEl.classList.toggle("top", screen === "shop" || screen.indexOf("shop:") === 0);
     const title = document.getElementById("menu-title");
@@ -6602,7 +6905,7 @@
     // ---- the shop: him at the top, a tab per category, then that tab's rack ----
     if (screen === "shop" || screen.indexOf("shop:") === 0) {
       if (screen.indexOf("shop:") === 0) shopTab = screen.slice(5);
-      if (!LOOK.some(l => l.key === shopTab) && shopTab !== "talisman") shopTab = LOOK[0].key;
+      if (!LOOK.some(l => l.key === shopTab)) shopTab = LOOK[0].key;
       title.textContent = "Shop"; title.className = "shop";
       saveWallet();                                   // banks whatever the last run earned
 
@@ -6672,10 +6975,10 @@
 
       // Six tabs across, so each gets a picture rather than a word — at this width the
       // labels alone were unreadable, and the icon is what you actually scan for.
-      // Seven tabs: the six worn categories, then the talismans. They are not BOUGHT — you
-      // find them on the board — but they are still "what you take into a level", which is
-      // what this screen is for, so they belong beside the rest of the kit.
-      const TABS = LOOK.concat([{ key:"talisman", label:"Charm", icon:(g,S)=>TALISMANS[2].draw(g,S/2,S/2,S*0.34) }]);
+      // Six tabs: only what is BOUGHT. The talismans used to sit here as a seventh, but they
+      // are not merchandise — you find them on the board — and a rack of them behind a shop
+      // tab said otherwise. They have their own screen now.
+      const TABS = LOOK;
       const tabs = document.createElement("div"); tabs.className = "shop-tabs";
       TABS.forEach(catg => {
         const t = document.createElement("button");
@@ -6691,38 +6994,6 @@
 
       const rack = document.createElement("div"); rack.className = "shop-rack";
       const grid = document.createElement("div"); grid.className = "tal-grid";
-      if (shopTab === "talisman") {                    // the charms: found, not bought
-        const worn = settings.talisman;
-        TALISMANS.forEach(t => {
-          const got = talUnlocked.has(t.id), on = got && worn === t.id;
-          const el = document.createElement("button");
-          el.className = "tal" + (on ? " on" : "") + (got ? "" : " locked");
-          const tc = document.createElement("canvas"); tc.width = 96; tc.height = 96;
-          const tg = tc.getContext("2d");
-          tg.save(); t.draw(tg, 48, 48, 30);
-          if (!got) {                                  // not found yet: a flat silhouette
-            tg.globalCompositeOperation = "source-atop";
-            tg.fillStyle = "rgba(120,124,150,0.85)"; tg.fillRect(0, 0, 96, 96);
-          }
-          tg.restore();
-          const nm = document.createElement("span"); nm.textContent = got ? t.name : "???";
-          const bl = document.createElement("i"); bl.className = "tal-blurb";
-          bl.textContent = got ? t.blurb : "";
-          el.appendChild(tc); el.appendChild(nm); el.appendChild(bl);
-          if (got) el.onclick = () => { Sound.unlock(); Sound.tap();
-            settings.talisman = (worn === t.id) ? null : t.id; saveSettings(); buildMenu("shop:talisman"); };
-          grid.appendChild(el);
-        });
-        rack.appendChild(grid); menuBody.appendChild(rack);
-        const n = talUnlocked.size;
-        menuBody.appendChild(sub(n + " of " + TALISMANS.length + " found" +
-          (n === TALISMANS.length ? " — the whole set" : "")));
-        const go2 = btn("Carry on",
-                        () => (menuReturn === "overlay" ? closeMenu() : buildMenu("main")), true);
-        go2.className = "shop-go";
-        menuBody.appendChild(go2);
-        return;
-      }
       const cat = LOOK.find(l => l.key === shopTab);
       const wornId = lookWorn(cat.key);
       cat.items.forEach(it => {
@@ -6760,6 +7031,58 @@
       menuBody.appendChild(go);
       return;
     }
+    // ---- Holy Talismans: found, never bought, and shown as objects rather than as stock ----
+    if (screen === "talismans") {
+      title.textContent = "Holy Talismans"; title.className = "shop";
+      const worn = settings.talisman;
+      const grid = document.createElement("div"); grid.className = "relic-grid";
+      TALISMANS.forEach((t, i) => {
+        const got = talUnlocked.has(t.id), on = got && worn === t.id;
+        const el = document.createElement("div");
+        el.className = "relic" + (on ? " on" : "") + (got ? "" : " locked");
+        const c = document.createElement("canvas"); c.width = 150; c.height = 150;
+        const g = c.getContext("2d");
+        // Each hangs on its own bob, offset so the five drift out of step with one another —
+        // a row of them rising and falling together reads as one object, not five.
+        // TAL's loop numbers are fractions of a CELL, and the badge is drawn at 0.26 of one —
+        // so the cell this canvas stands in is R/0.26, not the canvas width. Scaling the loop
+        // by the canvas instead put it inside the badge, hidden.
+        const R = 40, CELL_EQ = R / 0.26;
+        const paint = (ts) => {
+          g.clearRect(0, 0, 150, 150);
+          const y = 82 + Math.sin(ts/900 + i*1.3) * 5;
+          g.save();
+          g.strokeStyle = t.edge; g.lineWidth = Math.max(1.5, CELL_EQ*TAL.loopW);
+          g.lineCap = "round";
+          g.beginPath(); g.arc(75, y - CELL_EQ*TAL.loopY, CELL_EQ*TAL.loopR, Math.PI*0.15, Math.PI*0.85, true);
+          g.stroke();
+          t.draw(g, 75, y, R);
+          if (!got) {                                  // not found yet: a flat silhouette
+            g.globalCompositeOperation = "source-atop";
+            g.fillStyle = "rgba(120,124,150,0.88)"; g.fillRect(0, 0, 150, 150);
+          }
+          g.restore();
+        };
+        el.appendChild(c);
+        const nm = document.createElement("span"); nm.textContent = got ? t.name : "???";
+        const bl = document.createElement("i"); bl.textContent = got ? t.blurb : "";
+        el.appendChild(nm); el.appendChild(bl);
+        if (got) el.onclick = () => { Sound.unlock(); Sound.tap();
+          settings.talisman = (worn === t.id) ? null : t.id; saveSettings(); buildMenu("talismans"); };
+        grid.appendChild(el);
+        relicPainters.push(paint);
+      });
+      menuBody.appendChild(grid);
+      const n = talUnlocked.size;
+      menuBody.appendChild(sub(n + " of " + TALISMANS.length + " found" +
+        (n === TALISMANS.length ? " — the whole set" : "")));
+      const back = btn("Carry on",
+                       () => (menuReturn === "overlay" ? closeMenu() : buildMenu("main")), true);
+      back.className = "shop-go";
+      menuBody.appendChild(back);
+      startRelics();
+      return;
+    }
     if (screen === "levels") {
       title.textContent = "Levels";
       menuBody.appendChild(btn("Intro", () => { closeMenu(); startCine("menu"); }));   // first item
@@ -6785,6 +7108,7 @@
     menuBody.appendChild(btn("Restart Level", () => { loadLevel(levelIdx); closeMenu(); }));
     menuBody.appendChild(btn("Levels", () => buildMenu("levels")));
     menuBody.appendChild(btn("Shop", () => buildMenu("shop")));
+    menuBody.appendChild(btn("Holy Talismans", () => buildMenu("talismans")));
     menuBody.appendChild(toggle("Sound", !Sound.isMuted(), () => { Sound.unlock(); Sound.setMuted(!Sound.isMuted()); buildMenu(screen); }));
     menuBody.appendChild(toggle("Colorblind", colorblind, () => { colorblind = !colorblind; settings.colorblind = colorblind; saveSettings(); applyColorblind(); buildMenu(screen); }));
     // Wipes EVERYTHING the player has: levels cleared, coins, everything bought and worn,
@@ -6833,7 +7157,7 @@
     stones: () => [...state.stones],
     smash: (c, r) => breakStone(c, r),
     sound: Sound,
-    power: { fire: () => firePower(), state: () => state.power,
+    power: { fire: (id) => firePower(id), state: () => state.power,
              lift: (c, r) => !!fingerLift(c, r) },
     load: (i) => { titleActive = false; const pf = document.getElementById("pauseFloat"); if (pf) pf.style.display = "";
                    levelIdx = clamp(i, 0, LEVELS.length - 1); loadLevel(levelIdx); },
@@ -6854,6 +7178,7 @@
     ui: {
       undo: () => undoLast(),
       relink: () => linkParkedTiles(),      // the pass update() runs every frame
+      stone: (c, r, ts, st) => drawStone(c, r, ts, st),   // one stone repaint, for timing it
       tally: (c, r) => showTally(c || 0, r || 0),   // fire the pickup tally without finding a coin
       monster: (x, y, ts, face, phase, cfg) => drawMonster(x, y, ts, face, phase, cfg),
       monsterKinds: () => Object.keys(MONSTER_KINDS),

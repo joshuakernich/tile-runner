@@ -1,0 +1,271 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Tile Runner — Talisman Lab</title>
+<style>
+  :root{ --bg:#12102a; --panel:#1b1838; --line:#2b2850; --ink:#cfe9ff; --accent:#7dd0ff; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:16px 20px;border-bottom:1px solid var(--line);}
+  h1{margin:0 0 6px;font-size:15px;letter-spacing:2px;color:#ffd24a;text-transform:uppercase;}
+  p{margin:0;font-size:12px;line-height:1.55;color:#9aa3c7;max-width:74ch;}
+  code{color:#ffd24a;}
+  .wrap{display:flex;gap:20px;padding:20px;flex-wrap:wrap;align-items:flex-start;}
+  canvas#cv{background:#0d0b22;border:1px solid var(--line);border-radius:10px;}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:300px;}
+  .grp{margin-bottom:12px} .grp h2{margin:0 0 6px;font-size:10px;letter-spacing:2px;color:var(--accent);text-transform:uppercase;}
+  .row{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:11px;}
+  .row label{width:92px;color:#9aa3c7;} .row input[type=range]{flex:1;}
+  .row output{width:56px;text-align:right;color:#ffd24a;}
+  .row input[type=color]{width:38px;height:24px;background:none;border:1px solid var(--line);border-radius:5px;padding:0;}
+  textarea{width:100%;height:150px;background:#0d0b22;color:#bfe;border:1px solid var(--line);
+    border-radius:8px;padding:8px;font:inherit;font-size:11px;}
+  button{background:#233;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+    padding:7px 11px;cursor:pointer;font:inherit;font-size:11px;}
+  button.prim{background:#1f6f4a;border-color:#2f9a68;}
+</style></head>
+<body>
+<header>
+  <h1>Tile Runner · Talisman Lab</h1>
+  <p>The five charms, drawn by the game's own <code>talBadge</code>. Three flat tones each — the
+     edge it stands on, the face, and the inscribed panel — with the icon raised in the face's
+     own colour, so it sits lighter than the panel behind it.
+     Tune, then <b>Copy TAL block</b> and paste it over <code>const TAL = { … }</code>
+     in <code>index.html</code>. Per-charm colours are shown live but are not part of the block;
+     edit those in the <code>TALISMANS</code> array.</p>
+</header>
+<div class="wrap">
+  <canvas id="cv" width="560" height="470"></canvas>
+  <div class="panel">
+    <div class="grp"><h2>Loop</h2>
+      <div class="row"><label>radius</label><input type="range" id="loopR" min="0" max="0.16" step="0.002"><output></output></div>
+      <div class="row"><label>height</label><input type="range" id="loopY" min="0.1" max="0.45" step="0.005"><output></output></div>
+      <div class="row"><label>thickness</label><input type="range" id="loopW" min="0" max="0.08" step="0.001"><output></output></div>
+    </div>
+    <div class="grp"><h2>Panel</h2>
+      <div class="row"><label>inset</label><input type="range" id="panelPad" min="0" max="0.30" step="0.005"><output></output></div>
+      <div class="row"><label>darkness</label><input type="range" id="panelA" min="0" max="0.6" step="0.01"><output></output></div>
+    </div>
+    <div class="grp"><h2>Paper</h2>
+      <div class="row"><label>grain</label><input type="range" id="grain" min="0" max="1" step="0.01"><output></output></div>
+    </div>
+    <div class="grp"><h2>Icon</h2>
+      <div class="row"><label>raise</label><input type="range" id="lift" min="0" max="0.16" step="0.002"><output></output></div>
+    </div>
+    <div class="grp"><h2>View</h2>
+      <div class="row"><label>cell px</label><input type="range" id="cellPx" min="60" max="180" step="2"><output></output></div>
+      <div class="row"><label><input type="checkbox" id="anim" checked> animate</label></div>
+    </div>
+    <textarea id="out" spellcheck="false"></textarea>
+    <div class="row" style="margin-top:8px">
+      <button class="prim" id="copy">Copy TAL block</button>
+      <button id="reset">Reset</button>
+    </div>
+  </div>
+</div>
+<script>
+// Mirrors const TAL in index.html — tools/check.mjs diffs the two.
+const SHIPPED = {
+  loopR: 0.050,
+  loopY: 0.255,
+  loopW: 0.046,
+  panelPad: 0.100,
+  panelA: 0.250,
+  lift: 0.000,
+  grain: 0.85,
+};
+const TAL = Object.assign({}, SHIPPED);
+const TILE = { radius: 0.075 };          // only the corner radius matters here
+
+const TALISMANS = [
+  // Each is the golden tile in its own metal, with the motif cut into the face — see
+  // talBadge. `etch` draws GEOMETRY ONLY: the badge painter sets the colour before each of
+  // its two passes, so an etch that picks its own would come out flat.
+  { id:"clock", name:"Hands of Time", col:"#8fd8ff", ms:5000,
+    face:"#7cc9f0", edge:"#2b6f96",
+    blurb:"Slows time down",
+    etch:(g,x,y,r)=>{
+      g.lineCap="round"; g.lineWidth=r*0.11;
+      g.beginPath(); g.arc(x,y,r*0.70,0,7); g.stroke();       // the case
+      g.lineWidth=r*0.09;
+      for(let k=0;k<4;k++){ const a=k/4*Math.PI*2;            // quarter ticks only: twelve of
+        g.beginPath();                                        // them silt up at this size
+        g.moveTo(x+Math.cos(a)*r*0.46, y+Math.sin(a)*r*0.46);
+        g.lineTo(x+Math.cos(a)*r*0.58, y+Math.sin(a)*r*0.58); g.stroke(); }
+      g.lineWidth=r*0.13;                                     // ten past ten, as clocks always are
+      g.beginPath(); g.moveTo(x,y); g.lineTo(x-r*0.32, y-r*0.24); g.stroke();
+      g.lineWidth=r*0.10;
+      g.beginPath(); g.moveTo(x,y); g.lineTo(x+r*0.22, y-r*0.42); g.stroke(); } },
+
+  { id:"magnet", name:"Cosmic Magnetite", col:"#ff6d6d", ms:5000,
+    face:"#f2685f", edge:"#8f2820",
+    blurb:"Pulls coins in",
+    etch:(g,x,y,r)=>{
+      g.lineCap="butt"; g.lineWidth=r*0.28;                    // a horseshoe: half-ring, two legs
+      g.beginPath(); g.arc(x, y-r*0.08, r*0.46, Math.PI, 0); g.stroke();
+      g.beginPath();
+      g.moveTo(x-r*0.46, y-r*0.08); g.lineTo(x-r*0.46, y+r*0.52);
+      g.moveTo(x+r*0.46, y-r*0.08); g.lineTo(x+r*0.46, y+r*0.52);
+      g.stroke(); } },
+
+  // amber rather than gold: gold is what a coin is, and a talisman that reads as currency
+  // on the board is a talisman nobody picks up
+  { id:"star", name:"Cloak of Light", col:"#ffd24a", ms:6000,
+    face:"#ffab2e", edge:"#a55600",
+    blurb:"Shrug off hazards",
+    etch:(g,x,y,r)=>{
+      g.beginPath();
+      for(let k=0;k<10;k++){ const a=-Math.PI/2 + k*Math.PI/5, rad = k%2 ? r*0.32 : r*0.74;
+        const X=x+Math.cos(a)*rad, Y=y+Math.sin(a)*rad; k?g.lineTo(X,Y):g.moveTo(X,Y); }
+      g.closePath(); g.fill(); } },
+
+  { id:"finger", name:"Hammer of God", col:"#ffe9a8", ms:0,
+  face:"#e8dcc0", edge:"#8d7c58",
+  blurb:"Move any laid tile",
+  etch:(g,x,y,r)=>{
+    const rr=(X,Y,W,H,R)=>{ g.beginPath(); g.moveTo(X+R,Y);
+      g.arcTo(X+W,Y,X+W,Y+H,R); g.arcTo(X+W,Y+H,X,Y+H,R);
+      g.arcTo(X,Y+H,X,Y,R); g.arcTo(X,Y,X+W,Y,R); g.closePath(); g.fill(); };
+    g.beginPath();
+    g.moveTo(x-r*0.68, y-r*0.74); g.lineTo(x+r*0.62, y-r*0.60);
+    g.lineTo(x+r*0.62, y-r*0.14); g.lineTo(x-r*0.68, y-r*0.00);
+    g.closePath(); g.fill();
+    rr(x-r*0.13, y-r*0.30, r*0.26, r*1.00, r*0.10); } },     // ...and the haft     // ...and the finger, pointing down
+
+  { id:"mush", name:"Mushroom", col:"#ff8fc8", ms:6000,
+    face:"#ff7fb8", edge:"#9e2a60",
+    blurb:"Everything goes wobbly",
+    etch:(g,x,y,r)=>{
+      g.beginPath();                                           // stem
+      g.moveTo(x-r*0.22, y-r*0.04); g.lineTo(x+r*0.22, y-r*0.04);
+      g.lineTo(x+r*0.17, y+r*0.62); g.lineTo(x-r*0.17, y+r*0.62);
+      g.closePath(); g.fill();
+      g.beginPath();                                           // cap
+      g.ellipse(x, y-r*0.02, r*0.76, r*0.56, 0, Math.PI, 0); g.fill();
+      g.fillRect(x-r*0.76, y-r*0.04, r*1.52, r*0.08); } },
+];
+// One painter for all five. Each keeps its own metal; the shape, the shading and the
+// engraving are shared, so a talisman can never drift into looking like a different class
+// of object from the coin it sits next to on the board.
+
+TALISMANS.forEach(t => { t.draw = (g, x, y, r) => talBadge(g, x, y, r, t); });
+
+// Lifted from index.html's buildPaper — the fine speckle plus criss-crossing fibres that
+// everything in the game is printed on.
+let paperTile = null;
+function buildPaper() {
+  const S = 220, off = document.createElement("canvas"); off.width = S; off.height = S;
+  const o = off.getContext("2d");
+  for (let i = 0; i < 4600; i++) {
+    o.fillStyle = Math.random() < 0.64 ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.07)";
+    const z = Math.random() < 0.14 ? 2 : 1;
+    o.fillRect(Math.random()*S, Math.random()*S, z, z);
+  }
+  o.lineWidth = 1;
+  for (let i = 0; i < 220; i++) {
+    const x = Math.random()*S, y = Math.random()*S, a = Math.random()*Math.PI, len = 5 + Math.random()*16;
+    o.strokeStyle = Math.random() < 0.6 ? "rgba(255,255,255,0.045)" : "rgba(0,0,0,0.05)";
+    o.beginPath(); o.moveTo(x, y); o.lineTo(x + Math.cos(a)*len, y + Math.sin(a)*len); o.stroke();
+  }
+  paperTile = off;
+}
+buildPaper();
+const _talGrain = new WeakMap();
+function talGrain(g) {
+  let p = _talGrain.get(g);
+  if (!p) { p = g.createPattern(paperTile, "repeat"); _talGrain.set(g, p); }
+  return p;
+}
+
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+let CELL = 118, ANIM = true;
+const BIG = 1.6;                          // the magnified row's scale
+
+// ---- lifted wholesale from index.html; do not hand-patch, paste it back ----
+function talBadge(g, x, y, r, def) {
+  const s2 = r*1.9, h = s2/2, rad = s2*TILE.radius;
+  const rr = (X, Y, W, H, R) => { g.beginPath(); g.moveTo(X+R,Y);
+    g.arcTo(X+W,Y,X+W,Y+H,R); g.arcTo(X+W,Y+H,X,Y+H,R);
+    g.arcTo(X,Y+H,X,Y,R); g.arcTo(X,Y,X+W,Y,R); g.closePath(); };
+  g.save();
+  rr(x-h+s2*0.06, y-h+s2*0.10, s2, s2, rad); g.fillStyle = def.edge || "#8d7c58"; g.fill();
+  rr(x-h, y-h, s2, s2, rad); g.fillStyle = def.face || "#e8dcc0"; g.fill();
+  g.save(); rr(x-h, y-h, s2, s2, rad); g.clip();
+  if (TAL.grain > 0 && paperTile) {
+    g.globalAlpha = TAL.grain;
+    g.fillStyle = talGrain(g);
+    g.fillRect(x-h, y-h, s2, s2);
+    g.globalAlpha = 1;
+  }
+  const ip = s2*TAL.panelPad;
+  g.fillStyle = "rgba(9,6,20," + TAL.panelA + ")";
+  rr(x-h+ip, y-h+ip, s2-2*ip, s2-2*ip, Math.max(0, rad - ip*0.6)); g.fill();
+  if (def.etch) {
+    const d = TAL.lift > 0 ? Math.max(0.6, r*TAL.lift) : 0;
+    g.lineJoin = "round";
+    if (d > 0) { g.fillStyle = g.strokeStyle = "rgba(9,6,20,0.38)"; def.etch(g, x + d, y + d, r*0.80); }
+    g.fillStyle = g.strokeStyle = def.face || "#e8dcc0";    def.etch(g, x,     y,     r*0.80);
+  }
+  g.restore();
+  g.restore();
+}
+// the floor pickup: the loop, then the badge over its ends
+//
+// NOTE: the loop is the FACE colour here and the EDGE colour in index.html — a deliberate
+// split while it is being looked at, not drift. Say the word and drawTalismanCell follows.
+function drawPickup(x, y, cell, def, ts) {
+  const bob = Math.sin(ts/320) * cell * 0.05;
+  ctx.save();
+  ctx.strokeStyle = def.face || "#e8dcc0";
+  ctx.lineWidth = Math.max(0.5, cell*TAL.loopW); ctx.lineCap = "round";
+  ctx.beginPath(); ctx.arc(x, y + bob - cell*TAL.loopY, cell*TAL.loopR, Math.PI*0.15, Math.PI*0.85, true);
+  ctx.stroke();
+  def.draw(ctx, x, y + bob, cell * 0.26);
+  ctx.restore();
+}
+
+function frame(now){
+  const ts = ANIM ? now : 1200;
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.fillStyle = "#0d0b22"; ctx.fillRect(0,0,cv.width,cv.height);
+  // a board-sized row, exactly as they sit on the floor
+  TALISMANS.forEach((t,i)=>{
+    const x = 70 + i*105, y = 120;
+    drawPickup(x, y, CELL, t, ts);
+    ctx.fillStyle="#8f88c8"; ctx.font="10px ui-monospace,monospace"; ctx.textAlign="center";
+    ctx.fillText(t.name.toUpperCase(), x, 195);
+  });
+  // ...and one big, for the detail
+  ctx.fillStyle="#8f88c8"; ctx.font="10px ui-monospace,monospace"; ctx.textAlign="left";
+  ctx.fillText("above: on the floor, at size. below: the same badge at " + BIG + "x", 22, 232);
+  TALISMANS.forEach((t,i)=>{
+    const x = 92 + i*100, y = 340;
+    t.draw(ctx, x, y, CELL*0.26*BIG);
+  });
+  requestAnimationFrame(frame);
+}
+
+const KEYS = ["loopR","loopY","loopW","panelPad","panelA","lift","grain"];
+function sync(){
+  for (const k of KEYS){
+    const el = document.getElementById(k); if(!el) continue;
+    el.value = TAL[k];
+    el.nextElementSibling.value = (+TAL[k]).toFixed(3);
+  }
+  document.getElementById("cellPx").value = CELL;
+  document.getElementById("cellPx").nextElementSibling.value = CELL;
+  document.getElementById("out").value =
+    "  const TAL = {\n" + KEYS.map(k => "    " + (k+":").padEnd(10) + " " + (+TAL[k]).toFixed(3) + ",").join("\n") + "\n  };";
+}
+for (const k of KEYS) document.getElementById(k).addEventListener("input", e => { TAL[k]=+e.target.value; sync(); });
+document.getElementById("cellPx").addEventListener("input", e => { CELL=+e.target.value; sync(); });
+document.getElementById("anim").addEventListener("change", e => { ANIM = e.target.checked; });
+document.getElementById("reset").addEventListener("click", () => { Object.assign(TAL, SHIPPED); sync(); });
+document.getElementById("copy").addEventListener("click", async () => {
+  const t = document.getElementById("out");
+  try { await navigator.clipboard.writeText(t.value); } catch(_) { t.select(); document.execCommand("copy"); }
+  const b = document.getElementById("copy"), was = b.textContent;
+  b.textContent = "Copied"; setTimeout(()=>b.textContent=was, 900);
+});
+sync();
+requestAnimationFrame(frame);
+</script>
+</body></html>

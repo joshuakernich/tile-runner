@@ -116,6 +116,20 @@ head("EYES block parity");
   }
 }
 
+head("TAL block parity");
+{
+  const game = runnerBlock("index.html", "TAL");
+  const lab  = runnerBlock("talisman-lab.html", "SHIPPED");
+  if (!game || !lab) bad("could not extract the TAL block from index.html or talisman-lab.html");
+  else {
+    const diff = [...new Set([...Object.keys(game), ...Object.keys(lab)])]
+      .filter((k) => game[k] !== lab[k])
+      .map((k) => `${k}: game=${game[k]} lab=${lab[k]}`);
+    if (diff.length) bad(`talisman-lab differs from the game — ${diff.join("; ")}`);
+    else ok(`talisman-lab matches the game (${Object.keys(game).length} keys)`);
+  }
+}
+
 head("COIN block parity");
 {
   const game = runnerBlock("index.html", "COIN");
