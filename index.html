@@ -1206,7 +1206,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v7.2";                    // shown on the title & pause screens
+  const VERSION = "v7.3";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -1693,7 +1693,13 @@
     const rnd=mulberry32((seed^0x9e3779b9)>>>0 || 7);
     const baseH=rnd()*360, N=4+Math.floor(rnd()*4);
     const sat=(28+rnd()*34)|0, lig=(24+rnd()*18)|0;            // muted (lifted from the old 15–30% range)
-    const spread=50+rnd()*280, colors=[];
+    // How far round the hue wheel the whole set walks. It used to run 50..330 degrees, which
+    // at the top end put reds next to greens next to blues in one quilt — a patchwork, not a
+    // gradient. Level 25 was the one everybody liked: about 110 degrees across six patches,
+    // so each square is a clear step from its neighbour without the set ever leaving its own
+    // family of colour. This range is built around that. Every backdrop in the game comes
+    // through here — levels, the title, the cinematic — so they all soften together.
+    const spread=45+rnd()*85, colors=[];
     for(let i=0;i<N;i++){ const h=((baseH+spread*i/N)%360)|0; colors.push("hsl("+h+","+sat+"%,"+lig+"%)"); }
     // A quilt wants to sit square-on or on-point, not at an arbitrary tilt — an angle
     // between the two reads as a mistake rather than a choice. Pick one, then add a
@@ -1823,6 +1829,7 @@
             const t = u <= 1 ? u : 2 - u, dir = u <= 1 ? 1 : -1;
             const p0 = h.lo + (h.hi - h.lo) * t, cell0 = Math.round(p0);
             return { ...base, axis:ax, lo:h.lo, hi:h.hi, c:h.c, r:h.r, t, dir, pos:p0,
+                     rowT:0, rowP:0, legN:null,   // the leg is laid out on the first tick
                      cc: ax==="h"?cell0:h.c, cr: ax==="h"?h.r:cell0,
                      wx: (ax==="h"?p0:h.c)*CW + CW/2, wy: (ax==="h"?h.r:p0)*CW + CW/2 };
           }
@@ -3793,6 +3800,7 @@
         // A trap runs its own slow cycle instead of the family's quick bite.
         const phase = K.move === "trap"
           ? 0.5 * trapPhase(h.trapT || 0).open        // 0.5 of the sine is full gape
+          : K.move === "rail" ? (h.rowP || 0)          // a rower's stroke, not a bite
           : (h.chompT || 0) / MONSTER.chompMs;
         drawMonster(h.wx, h.wy, ts, h.faceX, phase, K);
         continue;
@@ -3945,12 +3953,40 @@
     // The rail monsters are a different animal: they do not split. They are a smaller, whole
     // tile with a ring of teeth running round the outside of it, like a chain on a sprocket.
     railSize:   0.62,   // body, fraction of a cell — noticeably smaller than the biters
-    railTeeth:  12,     // teeth around the rim
+    railMidSpike:1.55,  // the middle tooth of a bank is this many times the size of its
+                        // neighbours, in both length and width. Only an ODD bank has a middle
+                        // one to enlarge; an even count is left uniform.
+    railBank:   3,      // teeth per bank. Every rail monster has two banks of oars: a vertical
+                        // mover's are down its left and right sides, a horizontal mover's along
+                        // its top and bottom. Nothing has teeth right round it any more.
     railToothH: 0.13,   // how far each stands off the edge, fraction of the body
     railToothW: 0.60,   // how much of its share of the rim each one occupies
-    railSpinMs: 1900,   // ms for the teeth to travel once around
+    // The teeth do not march round at a constant rate any more — they ROW. One cycle is a
+    // quick power stroke with the teeth out and driving backwards, then a longer recovery
+    // where they feather in and slide forward to catch again. Same idea as an oar, and the
+    // asymmetry is the whole thing: equal halves read as a wobble, not as propulsion.
+    railStrokeMs: 780,  // TARGET length of one stroke. The actual length is stretched or
+                        // squeezed a little per leg so a whole number of strokes spans the
+                        // rail exactly — see railLegSetup. A rail is not a multiple of 780ms,
+                        // and a monster that reached the end halfway through a thrust stopped
+                        // dead mid-heave and reversed, which read as a stumble.
+    railDrive:  0.34,   // fraction of that spent driving; the rest is the recovery
+    railSweep:  0.085,  // how far round the rim a tooth travels in a stroke, in TURNS
+    railFeather:0.34,   // how far the teeth pull in on the recovery (1 = not at all)
+    railSurge:  0.030,  // body lurch along its line of travel per stroke, fraction of a cell
+    railSlide:  0.34,   // peak-to-peak travel of a bank, as a fraction of its own length. The
+                        // teeth are spaced across whatever is left over after that travel is
+                        // set aside, so however far they stroke they stay on the straight run
+                        // and none ever pops in or out at a rounded corner.
+    railEyeLead:0.16,   // how far the eyes sit toward the end he is travelling, fraction of
+                        // the body. Held short of the inscribed panel's edge, since the panel
+                        // is the only thing they read against.
+    railCoast:  0.55,   // travel rate through the recovery, relative to its average. The drive
+                        // makes up whatever this gives away, so the AVERAGE speed over a
+                        // stroke is exactly what it always was — the tuned rail levels keep
+                        // their timing, and only the moment-to-moment pace changes.
     panelPad:   0.11,   // the inscribed square's inset, fraction of the body
-    panelA:     0.13,   // ...and how far it darkens what is under it
+    panelA:     0.18,   // ...and how far it darkens what is under it
   };
   // The family. One tile-shaped body, five ways of behaving — told apart by colour and by
   // which way the tile splits, so you can read what a monster does before it does it.
@@ -3985,52 +4021,121 @@
   // `phase` is 0..1 through one bite, kept on the hazard so the sound and the picture cannot
   // drift apart. Without one it falls back to the wall clock, which is what the mechanic
   // card's static icon wants.
-  // A point on the outline of a rounded square, by distance around it. Returns the point and
-  // the outward normal there, so a tooth can stand on the rim wherever it happens to be.
-  function rimPoint(h, R, u) {
-    const side = 2*h - 2*R, arc = Math.PI/2*R, total = 4*side + 4*arc;
-    let d = ((u % 1) + 1) % 1 * total;
-    // top edge, then round clockwise: corner, side, corner, side...
-    const legs = [
-      { kind:"s", x0:-h+R, y0:-h, dx: 1, dy: 0, len: side, nx: 0, ny:-1 },
-      { kind:"a", cx: h-R, cy:-h+R, a0:-Math.PI/2, len: arc },
-      { kind:"s", x0: h,   y0:-h+R, dx: 0, dy: 1, len: side, nx: 1, ny: 0 },
-      { kind:"a", cx: h-R, cy: h-R, a0: 0,         len: arc },
-      { kind:"s", x0: h-R, y0: h,   dx:-1, dy: 0, len: side, nx: 0, ny: 1 },
-      { kind:"a", cx:-h+R, cy: h-R, a0: Math.PI/2, len: arc },
-      { kind:"s", x0:-h,   y0: h-R, dx: 0, dy:-1, len: side, nx:-1, ny: 0 },
-      { kind:"a", cx:-h+R, cy:-h+R, a0: Math.PI,   len: arc },
-    ];
-    for (const L of legs) {
-      if (d > L.len) { d -= L.len; continue; }
-      if (L.kind === "s") {
-        return { x: L.x0 + L.dx*d, y: L.y0 + L.dy*d, nx: L.nx, ny: L.ny };
-      }
-      const a = L.a0 + (d/arc)*(Math.PI/2);
-      return { x: L.cx + Math.cos(a)*R, y: L.cy + Math.sin(a)*R, nx: Math.cos(a), ny: Math.sin(a) };
+  // The rail monster: one whole tile with two banks of oars. It never opens — the menace is
+  // that it rows straight at you, not that it bites — which is what tells it apart at a
+  // glance from the ones that split.
+  // How fast a rower travels at stroke-phase P, relative to its own average. Coasts through
+  // the recovery at `railCoast`, and drives through the power stroke at whatever rate makes
+  // the mean come back to exactly 1 — `2sin²` averages 1 over its half-cycle, which is what
+  // makes that solvable in closed form instead of by fudging. It also meets the coast rate at
+  // both ends of the drive, so the pace never steps.
+  // Distance covered by stroke-phase P, as a fraction of one whole stroke — the integral of
+  // railRate, in closed form. Having it exactly means a leg can be positioned from its stroke
+  // clock rather than accumulated frame by frame, so the last stroke of a leg finishes on the
+  // end of the rail to the pixel instead of drifting there.
+  function railProgress(P) {
+    const d = MONSTER.railDrive, B = MONSTER.railCoast;
+    const driveMean = (1 - (1 - d)*B) / d;
+    if (P <= d) {
+      return B*P + (driveMean - B) * (P - (d/(2*Math.PI))*Math.sin(2*Math.PI*P/d));
     }
-    return { x:-h+R, y:-h, nx:0, ny:-1 };
+    return driveMean*d + B*(P - d);
   }
-  // The rail monster: one whole tile, teeth marching round the outside of it. It never opens —
-  // the menace is the ring, not a mouth — which is also what tells it apart at a glance from
-  // the ones that split.
-  function drawRailMonster(x, y, ts, dir, K) {
+  // Lay out the leg the monster is about to swim: how far it has to go, and how many whole
+  // strokes to do it in. The stroke is then stretched to fit, never truncated.
+  function railLegSetup(h) {
+    for (let guard = 0; guard < 2; guard++) {
+      h.legFrom = h.t;
+      h.legSpan = Math.abs((h.dir > 0 ? 1 : 0) - h.t);
+      if (h.legSpan > 1e-6) break;
+      h.dir = -h.dir;                          // already at that end — turn and try the other way
+    }
+    const full = Math.max(1, Math.round(h.speed / MONSTER.railStrokeMs));   // strokes per whole rail
+    h.legN  = Math.max(1, Math.round(full * h.legSpan));
+    h.legSd = (h.speed * h.legSpan) / h.legN;  // this leg's stroke, ms
+    h.rowT  = 0;
+  }
+  function railRate(P) {
+    const d = MONSTER.railDrive, B = MONSTER.railCoast;
+    if (P >= d) return B;
+    const driveMean = (1 - (1 - d)*B) / d;
+    const t = P/d, sn = Math.sin(t*Math.PI);
+    return B + (driveMean - B) * 2*sn*sn;
+  }
+  function drawRailMonster(x, y, ts, dir, K, off) {
     const s = cell, S = s*MONSTER.railSize, h = S/2, R = tileR(S);
     // His eyes are his own colour, not the family's ink — they read against the inscribed
     // panel they sit on, which is the only thing darker than he is.
     const body = K.body || "#b24dff";
-    const spin = (ts / MONSTER.railSpinMs) * (dir < 0 ? -1 : 1);
+    // ---- the stroke -------------------------------------------------------------------
+    // P runs 0..1 through one row. During the DRIVE the teeth are fully out and sweep
+    // backwards along the rim; during the RECOVERY they pull in and slide forward again.
+    // Easing differs between the two on purpose: the drive snaps away and settles, the
+    // recovery is a smooth glide, which is what separates rowing from spinning.
+    // Handed in by updateHazards, which is what keeps the teeth and the travel in step —
+    // reading the shared clock here instead let the two drift apart, and made every monster
+    // on screen row in unison besides.
+    const P = off || 0;
+    const dv = MONSTER.railDrive;
+    let ang, reach, push;
+    if (P < dv) {
+      const t = P/dv, e = 1 - Math.pow(1 - t, 3);          // fast off the catch
+      ang = (0.5 - e) * MONSTER.railSweep;
+      reach = 1;
+      push = e;                                            // the body gains on the stroke...
+    } else {
+      const t = (P - dv)/(1 - dv), e = t*t*(3 - 2*t);      // smooth glide back
+      ang = (e - 0.5) * MONSTER.railSweep;
+      reach = 1 - (1 - MONSTER.railFeather) * Math.sin(t*Math.PI);
+      push = 1 - e;                                        // ...and coasts while he resets
+    }
+    const sgn = dir < 0 ? -1 : 1;
     ctx.save();
-    ctx.translate(x, y + Math.sin(ts/260)*s*MONSTER.bob);
-    const n = MONSTER.railTeeth, tl = S*MONSTER.railToothH, w = MONSTER.railToothW/n;
-    ctx.fillStyle = body;                  // teeth in his own colour: one solid cog, not a jaw
-    for (let k = 0; k < n; k++) {
-      const u = k/n + spin;
-      const a = rimPoint(h, R, u - w/2), b = rimPoint(h, R, u + w/2), m = rimPoint(h, R, u);
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
-      ctx.lineTo(m.x + m.nx*tl, m.y + m.ny*tl);
-      ctx.closePath(); ctx.fill();
+    // The lurch is VISUAL only — the hitbox stays on cc/cr — so a monster never eats you on
+    // the strength of a wobble. Along his own line of travel: a vertical mover surges in y.
+    const surge = (push - 0.5) * s * MONSTER.railSurge * 2 * sgn;
+    const sx = K.split === "v" ? 0 : surge, sy = K.split === "v" ? surge : 0;
+    ctx.translate(x + sx, y + sy + Math.sin(ts/260)*s*MONSTER.bob);
+    const tl = S*MONSTER.railToothH * reach;
+    ctx.fillStyle = body;                  // teeth in his own colour: oars, not a cog
+    // Two banks of oars, stroking together. Only the AXIS differs between the two kinds: a
+    // vertical mover carries its banks down the left and right sides and strokes them up and
+    // down, a horizontal one carries them along the top and bottom and strokes them side to
+    // side. Both banks always share one offset, which is what reads as a single animal rowing
+    // rather than as a wheel that happens to be turning.
+    //
+    // Travel is set aside FIRST and the teeth are spaced across what is left, so the whole
+    // bank stays on the straight run of its edge no matter how far it strokes — no tooth ever
+    // climbs into a rounded corner or pops in and out at an end.
+    const vert = K.split === "v";
+    const base = -h + R, run = 2*(h - R);
+    const per = Math.max(1, MONSTER.railBank|0);
+    const amp = run * MONSTER.railSlide;
+    const step = (run - amp) / per;
+    const slide = (ang / MONSTER.railSweep) * amp * sgn;
+    const tw = step * MONSTER.railToothW;
+    // The middle of each bank is the big one — the stroke reads as coming FROM somewhere
+    // rather than from three identical prongs. Grown in both directions at once; the width
+    // stays inside its own spacing (railToothW is 0.6 of a step, so even at 1.55 it does not
+    // reach a neighbour) so the teeth never merge at the extremes of the stroke.
+    const midK = (per % 2) ? (per - 1)/2 : -1;
+    for (const side of [-1, 1]) {
+      for (let k = 0; k < per; k++) {
+        const big = (k === midK) ? MONSTER.railMidSpike : 1;
+        const c = base + amp/2 + (k + 0.5)*step + slide;
+        const hw = tw*big/2, len = tl*big;
+        ctx.beginPath();
+        if (vert) {
+          ctx.moveTo(side*h, c - hw);
+          ctx.lineTo(side*h, c + hw);
+          ctx.lineTo(side*(h + len), c);
+        } else {
+          ctx.moveTo(c - hw, side*h);
+          ctx.lineTo(c + hw, side*h);
+          ctx.lineTo(c, side*(h + len));
+        }
+        ctx.closePath(); ctx.fill();
+      }
     }
     ctx.fillStyle = body; rrect(-h, -h, S, S, R); ctx.fill();     // the tile, over the tooth roots
     ctx.save(); rrect(-h, -h, S, S, R); ctx.clip();
@@ -4041,13 +4146,24 @@
     const ip = S*MONSTER.panelPad;
     ctx.fillStyle = "rgba(9,6,20," + MONSTER.panelA + ")";
     rrect(-h + ip, -h + ip, S - 2*ip, S - 2*ip, Math.max(0, R - ip*0.6)); ctx.fill();
-    // the family's eyes, upright — the body does not turn, only the ring around it
-    drawEyes(ctx, 0, 0, s, body, 1, ts, 0);
+    // The eyes LEAD: they sit toward whichever end he is heading for, so his direction reads
+    // off the face alone rather than off watching him move. `dir` is +1 down the rail, which
+    // is rightward for a horizontal mover and downward for a vertical one — the same sign
+    // works for both, it just applies to a different axis.
+    //
+    // Only the horizontal one also leans the pair that way: the shared painter's own bias
+    // runs along x, which is his line of travel but not the vertical mover's, so a vertical
+    // one is given no bias and simply carries its eyes up or down the panel.
+    const lead = S * MONSTER.railEyeLead * sgn;
+    drawEyes(ctx, vert ? 0 : lead, vert ? lead : 0, s, body, vert ? 0 : sgn, ts, 0);
     ctx.restore();
   }
   function drawMonster(x, y, ts, faceX, phase, cfg) {
     const K = cfg || MONSTER_KINDS.patrol;
-    if (K.move === "rail") return drawRailMonster(x, y, ts, faceX, K);
+    // `phase` for a rail monster is its position along its own rail. Feeding it in as a
+    // stroke offset is enough to break the lockstep: with only the shared clock, a rank of
+    // six rowed in perfect unison, which reads as clockwork rather than as six animals.
+    if (K.move === "rail") return drawRailMonster(x, y, ts, faceX, K, phase);
     const s = cell, S = s*MONSTER.size, h = S/2, R = tileR(S);
     const face = faceX < 0 ? -1 : 1;
     // Shut, then a fast snap open, then shut again. Held near zero for most of the cycle,
@@ -4062,8 +4178,11 @@
     const shut = h*MONSTER.toothH*(1 - MONSTER.overbite);         // tips past the far face
     const wide = Math.max(shut, h*(K.gap != null ? K.gap : MONSTER.gap));
     const lift = shut + (wide - shut)*open, tilt = MONSTER.tilt*open;
-    const body = K.body || "#b24dff", tooth = "#fdf3ff";
-    const ink = "#17263f";                                        // the runner's own eye colour
+    // One colour for the whole animal — body, teeth and eyes alike, exactly as the rail
+    // monsters wear it. The teeth read because they stand out into the gap against the board
+    // behind, and the eyes read because they sit on the inscribed panel, which is the only
+    // thing on him darker than he is.
+    const body = K.body || "#b24dff";
 
     ctx.save();
     ctx.translate(x, y);
@@ -4089,8 +4208,14 @@
       ctx.fillStyle = body; rrect(-h, -h, S, S, R); ctx.fill();
       rrect(-h, -h, S, S, R); ctx.clip();                         // grain stays on the tile
       grainFill(-h, -h, S, S, MONSTER.grain);                     // the same paper as everything
+      // The inscribed panel the walls and the rail monsters carry. Drawn INSIDE the half's
+      // clip, so it is cut by the same straight edge the body is and splits with the jaws
+      // rather than bridging the gap between them.
+      const ip = S*MONSTER.panelPad;
+      ctx.fillStyle = "rgba(9,6,20," + MONSTER.panelA + ")";
+      rrect(-h + ip, -h + ip, S - 2*ip, S - 2*ip, Math.max(0, R - ip*0.6)); ctx.fill();
       ctx.restore();                                              // the teeth stand PAST the cut,
-      ctx.fillStyle = tooth;                                      // so they must not be clipped to it
+      ctx.fillStyle = body;                                       // so they must not be clipped to it
       // The two rows MESH: the lower jaw is offset half a tooth and carries one fewer, so its
       // teeth sit in the gaps between the upper ones instead of meeting them point to point.
       const n = MONSTER.teeth, span = S*0.86, x0 = -span/2, tw = span/n, tl = S*MONSTER.toothH;
@@ -4103,7 +4228,7 @@
         ctx.closePath(); ctx.fill();
       }
       // the same eyes as everything else, on the upper half
-      if (j < 0) drawEyes(ctx, 0, -h + S*0.30, s, ink, 1, ts, 0);
+      if (j < 0) drawEyes(ctx, 0, -h + S*0.30, s, body, 1, ts, 0);
       ctx.restore();
     }
     ctx.restore();
@@ -5347,7 +5472,7 @@
     return gd;
   }
   const PLATE_PAD   = 0.055;        // inset, fraction of the tile
-  const PLATE_SHADE = 0.16;         // how far it darkens the plate under it
+  const PLATE_SHADE = 0.22;         // how far it darkens the plate under it
   function platePanel(g, x, y, s, rad) {
     const p = s*PLATE_PAD, r2 = Math.max(0, rad - p*0.6), w = s - 2*p;
     g.save();
@@ -6153,10 +6278,23 @@
     for (const h of s.hazards) {
       if (h.kind === "monster") {
         const K = monKind(h);
-        if (K.move === "rail") {                    // exactly the saw motion it replaces
-          h.t += dt / h.speed * h.dir;
-          if (h.t > 1) { h.t = 1; h.dir = -1; }
-          if (h.t < 0) { h.t = 0; h.dir = 1; }
+        if (K.move === "rail") {                    // the saw motion it replaces, now rowed
+          // The leg is POSITIONED from its own stroke clock rather than accumulated: whole
+          // strokes plus the closed-form progress through the part-stroke. That is what makes
+          // the last thrust of a leg finish exactly on the end of the rail — it arrives at its
+          // slowest, coasting out of a recovery, and only then turns.
+          if (h.legN == null) railLegSetup(h);
+          h.rowT += dt;
+          const k = h.rowT / h.legSd, done = Math.floor(k);
+          h.rowP = k - done;
+          const prog = (done + railProgress(h.rowP)) / h.legN;
+          if (prog >= 1) {                          // that was the last stroke of the leg
+            h.t = h.dir > 0 ? 1 : 0;
+            h.dir = -h.dir;
+            railLegSetup(h);
+          } else {
+            h.t = h.legFrom + (h.dir > 0 ? 1 : -1) * h.legSpan * prog;
+          }
           const p = h.lo + (h.hi - h.lo) * h.t;
           h.pos = p;
           if (h.axis === "h") { h.cc = Math.round(p); h.cr = h.r; h.faceX = h.dir; }
