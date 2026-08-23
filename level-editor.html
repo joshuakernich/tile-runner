@@ -33,6 +33,7 @@
   .lv.over{border-top:2px solid var(--accent);}
   .lv .num{font-weight:700;min-width:22px;}
   .lv .dim{opacity:.5;}
+  .lv .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .lv .star{color:#ffb454;}
   .lv .grip{margin-left:auto;opacity:.35;letter-spacing:-1px;}
 
@@ -74,6 +75,7 @@
 <header>
   <h1>TILE RUNNER · LEVEL EDITOR</h1>
   <label>n <input type="number" id="nIn" min="1" value="1"></label>
+  <label>name <input type="text" id="nameIn" placeholder="untitled" maxlength="40" style="width:170px"></label>
   <label>cols <input type="number" id="colsIn" min="3" max="40" value="5"></label>
   <label>rows <input type="number" id="rowsIn" min="3" max="40" value="8"></label>
   <label>intro <input type="text" id="introBox" placeholder="wall,block …"></label>
@@ -279,6 +281,11 @@ function toWorking(o){
   w.coins = (o.coins||[]).map(c=>c.slice());           // [c,r] floating golden tiles
   w.intro = (o.intro||[]).slice();
   w.cps = o.cps || 0.8;          // starting pace, tiles/sec
+  w.name = o.name || "";         // what the level is called; optional, and omitted when blank
+  // The music lab writes `music: {...}` onto a level. The editor does not edit it, but it
+  // has to carry it: this is the only thing that rewrites levels.js, so anything it does not
+  // know about is quietly deleted the next time you save.
+  if (o.music) w.music = JSON.parse(JSON.stringify(o.music));
   return w;
 }
 // the six legal platform shapes: two connectors each, in the order the surface is drawn
@@ -298,6 +305,8 @@ function toStored(w){
   const o = { n:w.n, start:w.start.slice(), init:w.init.map(p=>p.slice()),
               cols:w.cols, rows:w.rows, intro:(w.intro||[]).slice(),
               cps:w.cps || 0.8 };
+  if((w.name||"").trim()) o.name = w.name.trim();   // only levels that HAVE a name carry one
+  if(w.music && Object.keys(w.music).length) o.music = w.music;   // passed through untouched
   if(w.goal) o.goal = w.goal.slice();          // omitted entirely on a level with no exit
   o.walls = [...w.walls].map(s=>s.split(",").map(Number)).sort((a,b)=>a[1]-b[1]||a[0]-b[0]);
   if(w.blocks.length)  o.blocks  = w.blocks.map(b=>({...b}));
@@ -324,6 +333,7 @@ function loadLevel(n){
   undoStack = [];
   $("nIn").value = L.n; $("colsIn").value = L.cols; $("rowsIn").value = L.rows;
   $("introBox").value = (L.intro||[]).join(",");
+  $("nameIn").value = L.name || "";
   $("cpsIn").value = L.cps || 0.8;
   rebuildLevelList();
   syncSize(); draw();
@@ -1272,6 +1282,7 @@ const swab=$("swab"); COLORS.forEach((c,i)=>{ const d=document.createElement("di
 $("colsIn").addEventListener("change",resizeGrid); $("rowsIn").addEventListener("change",resizeGrid);
 $("nIn").addEventListener("change",()=>{ refreshOut(); });
 $("introBox").addEventListener("input",()=>{ refreshOut(); });
+$("nameIn").addEventListener("input",()=>{ L.name = $("nameIn").value; commit(); rebuildLevelList(); refreshOut(); });
 $("cpsIn").addEventListener("input",()=>{ refreshOut(); });
 $("undo").onclick=doUndo; $("clearBtn").onclick=()=>{ pushUndo(); L.walls.clear(); L.blocks=[]; L.hazards=[]; L.doors=[]; L.keys=[]; L.stone=[]; L.platforms=[]; commit(); draw(); refreshOut(); };
 function doUndo(){ if(!undoStack.length)return; const prev=undoStack.pop(); L=toWorking(prev); syncSize(); commit(); draw(); refreshOut(); setStatus("undo"); }
@@ -1305,8 +1316,13 @@ function rebuildLevelList(){
     const el=document.createElement("div");
     el.className="lv"+(L && l.n===L.n ? " sel":"");
     el.draggable=true; el.dataset.idx=i; el.dataset.n=l.n;
-    el.innerHTML="<span class='num'>"+l.n+"</span><span class='dim'>"+l.cols+"×"+l.rows+"</span>"+
+    // A named level is easier to find than a numbered one, and the number is still the thing
+    // that matters for ordering — so both, with the size dropping out when a name takes its place.
+    const label = l.name ? "<span class='nm'>"+l.name.replace(/[<&]/g,"")+"</span>"
+                         : "<span class='dim'>"+l.cols+"×"+l.rows+"</span>";
+    el.innerHTML="<span class='num'>"+l.n+"</span>"+label+
                  (isDirty(l.n)?"<span class='star'>*</span>":"")+"<span class='grip'>≡</span>";
+    el.title = (l.name ? l.name+" — " : "") + l.cols+"×"+l.rows;
     el.onclick=()=>{ if(L && +el.dataset.n===L.n) return; loadLevel(+el.dataset.n); };
     el.addEventListener("dragstart",ev=>{ dragFrom=i; el.classList.add("drag");
       ev.dataTransfer.effectAllowed="move"; try{ev.dataTransfer.setData("text/plain",String(i));}catch(e){} });

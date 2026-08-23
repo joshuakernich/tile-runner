@@ -148,52 +148,67 @@ head("COIN block parity");
 // music-lab.html reimplements setSong so it can extend it. At its shipped
 // defaults it must still produce the exact tune the game plays, or the lab is
 // auditioning music that will never ship.
-head("Song generator parity (music lab vs game)");
+head("Music engine parity (music lab vs game)");
 {
-  const mul = `function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;
-    let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;
-    return ((t^t>>>14)>>>0)/4294967296;};}
-    function hashSeed(s){let h=2166136261;s=String(s);
-    for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}`;
-
-  const gm = read("index.html").match(/function setSong\(seed\) \{([\s\S]*?)\n    \}/);
-  const lab = read("music-lab.html");
-  const grab = (start, end) => { const i = lab.indexOf(start); if (i < 0) return null;
-    const j = lab.indexOf(end, i); return j < 0 ? null : lab.slice(i, j + end.length); };
-  const labBits = [
-    grab("const SHIPPED = {", "\n};"),
-    grab("const SCALES = {", "\n};"),
-    grab("const PROGS = [", "\n];"),
-    grab("const CHORDS_T = {", "\n};"),
-    grab("const MINORISH =", "\n"),
-    grab("function chordIvls()", "\n}"),
-    grab("function buildSong(seed)", "\n}"),
+  // The game no longer has its own arrangement of the song generator — index.html carries the
+  // lab's blocks verbatim, with two mechanical renames applied on the way in (the live config
+  // is MU there because ambTick() already has a local M, and hz() is mhz() for the same kind
+  // of reason). So the honest check is that the SOURCE still matches, not that two separate
+  // implementations happen to agree today.
+  // Indentation is the one thing that legitimately differs — the game's copy sits four levels
+  // deep inside the Sound module — so both files are flattened before anything is looked for.
+  const flat = (t) => t.replace(/^[ \t]+/gm, "");
+  const lab  = flat(read("music-lab.html"));
+  const game = flat(read("index.html"));
+  const pull = (src, start, end) => { const i = src.indexOf(start); if (i < 0) return null;
+    const j = src.indexOf(end, i); return j < 0 ? null : src.slice(i, j + end.length); };
+  // MU. and MU[ both have to come back, or a bracket access would read as a difference
+  const norm = (t) => t.replace(/\bMU(?=[.[])/g, "M").replace(/\bmhz\(/g, "hz(")
+                       .replace(/function setSong\(/, "function buildSong(").trim();
+  const PAIRS = [
+    ["const SCALES = {",   "\n};"],
+    ["const PROGS = [",    "\n];"],
+    ["const CHORDS_T = {", "\n};"],
+    ["const MINORISH =",   "\n"],
+    ["function chordIvls()", "\n}"],
+    ["const ENV = pre =>", "\n}"],
+    ["const VOWELS = {",   "\n};"],
+    ["const VOX_STYLES = {", "\n};"],
+    ["function voxVoice(t, semi, dur, vel){", "\n}"],
+    ["function bassHeavy(t, semi, dur, vel){", "\n}"],
+    ["function bgNotes(s, chord){", "\n}"],
   ];
-  if (!gm || labBits.some((b) => !b)) bad("could not extract both generators — update tools/check.mjs");
+  let drift = [], missing = [];
+  for (const [a, b] of PAIRS) {
+    const L = pull(lab, a, b), G = pull(game, a, b);
+    if (!L || !G) { missing.push(a.slice(0, 28)); continue; }
+    if (norm(L) !== norm(G)) drift.push(a.slice(0, 28));
+  }
+  // the song generator itself is named differently in each
+  const Lsong = pull(lab, "function buildSong(seed)", "\n}");
+  const Gsong = pull(game, "function setSong(seed)", "\n}");
+  if (!Lsong || !Gsong) missing.push("buildSong/setSong");
+  else if (norm(Lsong) !== norm(Gsong)) drift.push("buildSong/setSong");
+
+  if (missing.length) bad(`could not find in one of the two files: ${missing.join(", ")}`);
+  if (drift.length)   bad(`music lab and game have drifted: ${drift.join(", ")}`);
+  if (!missing.length && !drift.length) ok(`${PAIRS.length + 1} music blocks identical in both`);
+
+  // and every key the lab can emit must exist in the game's defaults, or a level block that
+  // sets it would land on nothing
+  const shipped = pull(lab, "const SHIPPED = {", "\n};");
+  const defs    = pull(game, "const MUSIC_DEFAULTS = {", "\n};");
+  if (!shipped || !defs) bad("could not read SHIPPED / MUSIC_DEFAULTS");
   else {
-    const ctxGame = { };
-    vm.createContext(ctxGame);
-    vm.runInContext(`${mul}\nlet MELODY,CHORDS;\nfunction setSong(seed){${gm[1]}}\n`, ctxGame);
-    const ctxLab = { };
-    vm.createContext(ctxLab);
-    vm.runInContext(`${mul}\n${labBits.join("\n")}\nlet M={...SHIPPED};\nlet MELODY=[],CHORDS=[],KEY=0,PROGUSED=0;\n`, ctxLab);
-    let mismatch = [];
-    for (let i = 1; i <= 24; i++) {
-      const seed = vm.runInContext(`hashSeed("${i}")`, ctxGame);
-      vm.runInContext(`setSong(${seed})`, ctxGame);
-      const a = vm.runInContext(`JSON.stringify([MELODY, CHORDS.map(c=>c.tones)])`, ctxGame);
-      vm.runInContext(`M={...SHIPPED}; buildSong(${seed})`, ctxLab);
-      const b = vm.runInContext(`JSON.stringify([MELODY, CHORDS.map(c=>c.tones)])`, ctxLab);
-      if (a !== b) mismatch.push(i);
-    }
-    if (mismatch.length) bad(`levels differ: ${mismatch.join(", ")}`);
-    else ok("all 24 levels generate an identical melody and progression");
+    // several settings share a line, so this has to find every key, not the first per line
+    const keys = (t) => new Set([...t.matchAll(/[{,]\s*"?([A-Za-z_][A-Za-z0-9_]*)"?\s*:/g)].map(m => m[1]));
+    const L = keys(shipped), G = keys(defs);
+    const gone = [...L].filter((k) => !G.has(k));
+    if (gone.length) bad(`MUSIC_DEFAULTS is missing ${gone.length} lab key(s): ${gone.slice(0,6).join(", ")}`);
+    else ok(`MUSIC_DEFAULTS covers all ${L.size} lab settings`);
   }
 }
 
-// ------------------------------------------------------ 4. level data x3
-// levels.js is the source of truth. index.html strips `n` (it indexes by array
-// position); level-editor.html keeps it. All three must agree.
 head("Level data parity");
 // Pull the array literal that follows `marker` by balancing brackets, so it works
 // whether the array is one line (the editor) or many (levels.js and the game).

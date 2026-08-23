@@ -110,6 +110,17 @@
     pointer-events:none;                 /* the strip is a layout box; only the charms take taps */
   }
   #power.on { display:flex; }
+  /* The charms sit over the board, which is whatever colour that level happens to be — and a
+     gold talisman on a gold track is a talisman you cannot find. This grounds the strip: a tall
+     soft shadow rising out of the bottom edge, dark enough to separate them from the ground
+     behind and diffuse enough never to read as a bar. It is behind the buttons and takes no
+     taps, so nothing about reaching them changes. */
+  #power::before {
+    content:""; position:fixed; left:0; right:0; bottom:0; height:210px;
+    background:linear-gradient(to top,
+      rgba(5,4,13,0.72) 0%, rgba(5,4,13,0.52) 26%, rgba(5,4,13,0.24) 58%, rgba(5,4,13,0) 100%);
+    pointer-events:none; z-index:-1;
+  }
   #power .pw {
     /* box-shadow has to be cleared explicitly: the global `button` rule paints a 3px offset
        plate shadow, and killing only the background and border left that behind — which is
@@ -189,14 +200,20 @@
   /* death screen: tighten heading↔byline, bigger/brighter byline, larger retry button */
   #overlay.lose #ov-stars { min-height:0; margin-bottom:0; }
   #overlay.lose p { font-size:var(--body); line-height:1.5; color:#fff1ea; margin-bottom:26px; }
-  /* NEXT LEVEL button matches the death-screen RETRY button */
+  /* Both end screens carry the same two buttons, and they are sized like the menu's — same
+     330px column, same full width — so the end of a level lands on the same shape as every
+     other decision in the game rather than on a pair of one-off pills. */
   #overlay.lose #ov-btn, #overlay.win #ov-btn { font-size:var(--btn); padding:16px 40px; }
-  /* the between-levels way into the shop: present but plainly secondary to Next Level.
-     Only on the clear screen — after a fall the one thing you want is to go again. */
-  #ov-shop { display:none; margin:14px auto 0; font-size:12px; letter-spacing:2px;
-    padding:9px 22px; background:transparent; color:var(--dim); border-color:var(--grid-line);
-    box-shadow:2px 2px 0 var(--shadow); }
-  #overlay.win #ov-shop { display:block; }
+  #overlay.lose #ov-btn, #overlay.win #ov-btn {
+    display:block; width:100%; max-width:330px; margin-left:auto; margin-right:auto; }
+  /* flex, not block: this one carries a label, the tile and the count as three children */
+  #overlay.lose #ov-shop, #overlay.win #ov-shop {
+    display:flex; width:100%; max-width:330px; margin-left:auto; margin-right:auto; }
+  /* The way into the shop, on BOTH end screens — a fall is exactly when you have just banked
+     a handful of tiles and might want to spend them. Same gold, same size, same weight as the
+     one in the menu: it is the same button and has no business looking like a different one. */
+  #ov-shop { display:none; margin:10px auto 0; font-size:var(--btn); letter-spacing:2px;
+    padding:14px 22px; }
 
   /* "Add to Home Screen" prompt (mobile browsers only) */
   #a2hs {
@@ -250,6 +267,16 @@
   }
   #menu-body { display:flex; flex-direction:column; gap:9px; }
   #menu-body button { width:100%; }
+  /* The one button in the menu that is about money, in the colour of the money. A deeper
+     gold than the loot tile itself, so the tile sitting on it still reads as an object rather
+     than dissolving into its own background. */
+  #menu-body button.gold, #ov-shop { background:#e0aa1e; border-color:#8f6a10; color:#38270a;
+    box-shadow:3px 3px 0 rgba(5,4,13,0.55); }
+  #menu-body button.gold:active, #ov-shop:active { transform:translate(3px,3px); box-shadow:none; }
+  /* label · coin · count, on one line and centred as a group */
+  #menu-body button:has(canvas.wallet), #ov-shop {
+    display:flex; align-items:center; justify-content:center; gap:9px; }
+  canvas.wallet { width:17px; height:17px; display:block; }
   /* armed, and about to throw everything away */
   #menu-body button.danger { border-color:#ff6d6d; color:#ff9d9d; box-shadow:0 0 0 2px #ff6d6d inset; }
   .menu-sub { font-size:var(--btn); font-weight:900; letter-spacing:2px; text-transform:uppercase; color:var(--dim);
@@ -280,7 +307,11 @@
   /* what the talisman actually does — the reason to pick one over another */
   .tal-grid .tal .tal-blurb { font-size:9px; letter-spacing:0.2px; line-height:1.1; font-style:normal;
     text-transform:none; font-weight:700; color:var(--track); text-align:center; }
-  .tal-grid .tal.on { border-color:var(--goal); box-shadow:0 0 0 2px var(--goal) inset; }
+  /* What is worn reads as a lit plate rather than a ringed one — an outline on a square that
+     already has a border competes with it, where a brighter ground just says "this one". */
+  .tal-grid .tal.on { background:rgba(125,255,107,0.16); border-color:transparent;
+                      box-shadow:none; color:#eaffe6; }
+  .tal-grid .tal.on span { color:#dcffd4; }
   /* The talisman shelf. Deliberately NOT buttons: no border, no plate, no shadow — a talisman
      is a thing you found, and dressing it in the same chrome as RESUME made it stock. What
      marks the worn one is a soft halo of its own colour, not a pressed-in frame. */
@@ -390,7 +421,7 @@
     <div id="ov-score"></div>
     <p id="ov-msg"></p>
     <button id="ov-btn">Continue</button>
-    <button id="ov-shop" class="ghost">Shop</button>
+    <button id="ov-shop" class="ghost">Tile Shop</button>
   </div>
 </div>
 
@@ -493,6 +524,87 @@
   // anchored to a real tile event and the between-beat hat is scheduled on the
   // audio clock, the whole arrangement stays in sync with the tiles with no
   // drift, and its tempo tracks each level's speed. Resets each level.
+  // ---------- Music -------------------------------------------------------
+  // Tuned in music-lab.html and pasted here whole. A level may carry `music: {...}` in
+  // levels.js to override any of these for itself; everything else falls through.
+  const MUSIC_DEFAULTS = {
+    seed: 0,
+    scale: "pentaMajor",
+    keyLock: 0,
+    key: 0,
+    prog: -1,
+    chordType: "auto",
+    melodyLeap: 0.15,
+    melodyStart: -1,
+    swing: 0,
+    beatsPerTile: 4,
+    midVel: 0.42,
+    barLen: 4,
+    bgEvery: 4,
+    bgFollow: "chord",
+    leadOn: 1,
+    padOn: 1,
+    kickOn: 1,
+    hatOn: 1,
+    subOn: 1,
+    offBassOn: 1,
+    leadVel: 0.8,
+    padVel: 0.14,
+    kickVel: 0.7,
+    hatVel: 0.12,
+    subVel: 0.85,
+    offBassVel: 0.42,
+    leadOct: 0,
+    padOct: -12,
+    master: 0.16,
+    baseHz: 220,
+    waveA: "sine",
+    waveB: "sine",
+    delayTime: 0.24,
+    feedback: 0.34,
+    damp: 2400,
+    wet: 0.3,
+    bassLpf: 340,
+    kickHz: 130,
+    kickDrop: 46,
+    hatHz: 7000,
+    voxOn: 0,
+    voxStyle: "choir",
+    voxVel: 0.2,
+    voxOct: -12,
+    voxVowel: 0.25,
+    voxVib: 5.2,
+    voxVibDepth: 8,
+    voxSpread: 12,
+    voxShimmer: 0.25,
+    leadA: 0.008,
+    leadD: 0.9,
+    leadS: 0,
+    leadR: 0.01,
+    bgA: 0.3,
+    bgD: 4.6,
+    bgS: 0,
+    bgR: 0.02,
+    basA: 0.012,
+    basD: 1.1,
+    basS: 0,
+    basR: 0.02,
+    kickA: 0.005,
+    kickD: 0.15,
+    kickS: 0,
+    kickR: 0.01,
+    hatA: 0.003,
+    hatD: 0.045,
+    hatS: 0,
+    hatR: 0.005,
+    voxWet: 0.55,
+    bassStyle: "classic",
+    bassDrive: 0.3,
+    bassSubVel: 1,
+    bassFM: 1.5,
+    bassGlide: 0.05
+  };
+
   const Sound = (() => {
     const BASE = 220;                          // A3, in Hz
     const WAVES  = ["sine", "sine"];           // lead timbre alternates per step
@@ -504,22 +616,195 @@
     // Lead melody + chord loop — regenerated per level by setSong(seed).
     let MELODY = [0, 4, 7, 4,  9, 7, 4, 2,  0, 4, 7, 12,  9, 7, 4, 2];
     let CHORDS = [ {root:0,tones:[0,4,7]}, {root:5,tones:[5,9,12]}, {root:9,tones:[9,12,16]}, {root:7,tones:[7,11,14]} ];
+    let KEY = 0, PROGUSED = 0;
+    // The live music settings: the defaults with this level's `music` block laid over them.
+    // Named MU rather than M because ambTick() already has a local M, and shadowing it there
+    // would be a trap rather than a convenience.
+    let MU = { ...MUSIC_DEFAULTS };
+    const mhz = semi => MU.baseHz * Math.pow(2, semi/12);
+    let delayN = null, fbN = null, dampN = null, wetN = null;
+    // Everything the music makes leaves through here. The sound effects do not, which is what
+    // lets a level end silence the backing — including notes still ringing, and at bgEvery 8
+    // a background note can be ten seconds long — without muting the win jingle on top of it.
+    let musicBus = null;
+    const SCALES = {
+      pentaMajor:[0,2,4,7,9,12,14],       // the shipped sound: open, bright, no wrong notes
+      pentaMinor:[0,3,5,7,10,12,15],      // instantly tense — the saw-level sound
+      dorian:    [0,2,3,5,7,9,10,12],     // minor with a raised 6th: melancholy but not grim
+      aeolian:   [0,2,3,5,7,8,10,12],     // natural minor, the darkest of these
+      lydian:    [0,2,4,6,7,9,11,12],     // major with a #4: floaty, dreamlike
+      hirajoshi: [0,2,3,7,8,12,14,15],    // Japanese pentatonic, very distinctive
+      blues:     [0,3,5,6,7,10,12,15],
+      wholeTone: [0,2,4,6,8,10,12,14],    // no home note at all — unsettling, use sparingly
+    };
+    const PROGS = [
+      [0,5,7,5], [0,7,9,7], [0,5,9,7], [0,9,5,7], [0,4,5,7],   // the five the game ships
+      [0,3,8,7], [0,10,5,7], [0,8,3,5], [0,0,5,5],             // minor-leaning + a static one
+    ];
+    const CHORDS_T = {
+      triad:[0,4,7], minor:[0,3,7], sus4:[0,5,7], sus2:[0,2,7],
+      min7:[0,3,7,10], maj7:[0,4,7,11], add9:[0,4,7,14], fifth:[0,7],
+    };
+    const MINORISH = { pentaMinor:1, dorian:1, aeolian:1, blues:1, hirajoshi:1 };
+    
+    function chordIvls(){
+      if (MU.chordType !== "auto") return CHORDS_T[MU.chordType] || CHORDS_T.triad;
+      return MINORISH[MU.scale] ? CHORDS_T.minor : CHORDS_T.triad;
+    }
+    const ENV = pre => ({ a:+MU[pre+"A"], d:+MU[pre+"D"], s:+MU[pre+"S"], r:+MU[pre+"R"] });
+    function adsr(g, t, dur, vel, E){
+      const v = Math.max(0.0002, vel);
+      let a = Math.max(0.002, E.a), d = Math.max(0.002, E.d), r = Math.max(0.004, E.r);
+      // A sustain of zero is a struck voice: attack, then ONE decay that dies inside the note.
+      // The decay is capped by the note rather than fixed, which is what makes a short note snap
+      // and a long one ring — the same shape every voice in this game had before it had an
+      // envelope at all. Release has nothing left to do, so it sits this case out.
+      if (E.s <= 0.0005) {
+        const aa = Math.min(a, dur*0.5), dd = Math.min(d, Math.max(0.004, dur - aa));
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(v, t + aa);
+        g.gain.exponentialRampToValueAtTime(0.0006, t + aa + dd);
+        return aa + dd;
+      }
+      // An envelope has to fit inside its own note. Unclamped, a long decay made a SHORT note
+      // ring on well past the next one — the notes filling the gaps between tile clears are a
+      // fifth of a beat each, and a 0.9s tail on those is a smear, not a melody.
+      const need = a + d + r;
+      if (need > dur) { const k = dur / need; a *= k; d *= k; r *= k; }
+      const sv = Math.max(0.0002, v * Math.min(1, Math.max(0, E.s)));
+      const rel = Math.max(a + d, dur - r);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(v, t + a);
+      g.gain.exponentialRampToValueAtTime(sv, t + Math.min(a + d, rel));
+      g.gain.setValueAtTime(sv, t + rel);
+      g.gain.exponentialRampToValueAtTime(0.0006, t + rel + r);
+      return rel + r;                                     // how long the note actually runs for
+    }
+    const VOWELS = {
+      ah: [[800,1150,2900],[1.00,0.50,0.25]],
+      oo: [[325, 700,2530],[1.00,0.35,0.12]],
+      oh: [[500,1000,2400],[1.00,0.45,0.18]],
+      ee: [[270,2300,3000],[1.00,0.60,0.30]],
+      eh: [[530,1850,2500],[1.00,0.55,0.22]],
+    };
+    const VOX_STYLES = {
+      choir:    { vowels:["ah","oh"], wave:"sawtooth", voices:[-14,-5,5,14], oct:  0, q:7, sh:1.0 },
+      nebula:   { vowels:["oo","ah"], wave:"sawtooth", voices:[-20,-7,7,20], oct:  0, q:5, sh:1.6 },
+      monolith: { vowels:["oh","oo"], wave:"sawtooth", voices:[-9,-3,3,9],   oct:-12, q:9, sh:0.4 },
+      aurora:   { vowels:["eh","ee"], wave:"triangle", voices:[-16,-6,6,16], oct: 12, q:6, sh:2.0 },
+    };
+    const _curves = {};
+    function driveCurve(amt){
+      const k = Math.round(Math.max(0.001, amt)*80);
+      if (_curves[k]) return _curves[k];
+      const n = 1024, c = new Float32Array(n);
+      for (let i=0;i<n;i++){ const x = i*2/n - 1; c[i] = (1+k)*x/(1+k*Math.abs(x)); }
+      return (_curves[k] = c);
+    }
+    function voxVoice(t, semi, dur, vel){
+      const S = VOX_STYLES[MU.voxStyle] || VOX_STYLES.choir;
+      const A = VOWELS[S.vowels[0]], B = VOWELS[S.vowels[1]], u = MU.voxVowel;
+      const f = mhz(semi + S.oct);
+      const out = ac.createGain();
+      dur = adsr(out, t, dur, vel, ENV("bg"));
+      out.connect(musicBus);
+      if (MU.voxWet > 0){ const w = ac.createGain(); w.gain.value = MU.voxWet; out.connect(w); w.connect(sendBus); }
+    
+      // the singers, all sharing one vibrato so they breathe together rather than fight
+      const raw = ac.createGain(); raw.gain.value = 1/(S.voices.length+1);
+      const lfo = ac.createOscillator(); lfo.type="sine"; lfo.frequency.value = MU.voxVib;
+      const lfoG = ac.createGain(); lfoG.gain.value = MU.voxVibDepth;
+      lfo.connect(lfoG); lfo.start(t); lfo.stop(t+dur+0.1);
+      const spread = MU.voxSpread/14;
+      for (const c of S.voices){
+        const o = ac.createOscillator(); o.type = S.wave;
+        o.frequency.setValueAtTime(f, t); o.detune.setValueAtTime(c*spread, t);
+        lfoG.connect(o.detune);
+        o.connect(raw); o.start(t); o.stop(t+dur+0.1);
+      }
+      if (MU.voxShimmer > 0){                      // the octave-up ghost
+        const o = ac.createOscillator(); o.type="sine"; o.frequency.setValueAtTime(f*2, t);
+        const g = ac.createGain(); g.gain.value = MU.voxShimmer*S.sh*0.18;
+        lfoG.connect(o.detune);
+        o.connect(g); g.connect(raw); o.start(t); o.stop(t+dur+0.1);
+      }
+      for (let i=0;i<3;i++){                      // the formant bank — the voice itself
+        const bp = ac.createBiquadFilter(); bp.type="bandpass";
+        bp.frequency.value = A[0][i]*(1-u) + B[0][i]*u;
+        bp.Q.value = S.q;
+        const g = ac.createGain(); g.gain.value = A[1][i]*(1-u) + B[1][i]*u;
+        raw.connect(bp); bp.connect(g); g.connect(out);
+      }
+      const body = ac.createGain(); body.gain.value = 0.18;   // a little raw tone underneath, or
+      raw.connect(body); body.connect(out);                    // the formants sound hollow
+    }
+    function bassHeavy(t, semi, dur, vel){
+      const style = MU.bassStyle, f = mhz(semi);
+      const out = ac.createGain();
+      dur = adsr(out, t, dur, vel, ENV("bas"));
+      const lp = ac.createBiquadFilter(); lp.type="lowpass"; lp.Q.value = 1.1;
+      lp.frequency.setValueAtTime(MU.bassLpf*2.2, t);                       // a filter sweep down
+      lp.frequency.exponentialRampToValueAtTime(Math.max(60, MU.bassLpf), t+Math.max(0.05,dur*0.5));
+      out.connect(lp); lp.connect(musicBus);
+      const sub = ac.createOscillator(); sub.type="sine";
+      sub.frequency.setValueAtTime(f*(1 + MU.bassGlide*2), t);              // dips into pitch
+      sub.frequency.exponentialRampToValueAtTime(f, t+Math.max(0.01, MU.bassGlide));
+      const sg = ac.createGain(); sg.gain.value = MU.bassSubVel;
+      sub.connect(sg); sg.connect(out); sub.start(t); sub.stop(t+dur+0.06);
+      if (style !== "rumble"){
+        const b = ac.createOscillator(); b.type = style==="growl" ? "square" : "sawtooth";
+        b.frequency.setValueAtTime(f*2, t);
+        if (style === "growl"){                                            // FM snarl
+          const mod = ac.createOscillator(); mod.type="sine"; mod.frequency.value = f*MU.bassFM;
+          const mg = ac.createGain(); mg.gain.value = f*1.8;
+          mod.connect(mg); mg.connect(b.frequency); mod.start(t); mod.stop(t+dur+0.06);
+        }
+        const sh = ac.createWaveShaper(); sh.curve = driveCurve(MU.bassDrive); sh.oversample="2x";
+        const bg = ac.createGain(); bg.gain.value = style==="deep" ? 0.55 : 0.42;
+        b.connect(sh); sh.connect(bg); bg.connect(out); b.start(t); b.stop(t+dur+0.06);
+      }
+    }
+    function bgNotes(s, chord){
+      if (MU.bgFollow === "chord") return chord.tones;
+      // "melody" walks the tune at the background's own pace — one melody note per background
+      // note. "lead" reads the note the melody is actually on at that instant, which is the
+      // literal match but can land on the same note every time: the tune loops every
+      // MELODY.length/beatsPerTile beats (8, as shipped), so any bgEvery that is a multiple of
+      // that samples the same point of the loop forever. That is a drone, which may well be what
+      // you want under a melody — but it is worth knowing which one you have chosen.
+      const idx = MU.bgFollow === "melody"
+        ? Math.floor(s / Math.max(1, MU.bgEvery|0))
+        : s * MU.beatsPerTile;
+      const lead = MELODY[((idx % MELODY.length) + MELODY.length) % MELODY.length];
+      if (MU.bgFollow === "lead" || MU.bgFollow === "melody") return [lead];
+      const out = [lead];                                    // leadChord: melody on top, chord under
+      for (const tn of chord.tones) if ((((tn - lead) % 12) + 12) % 12 !== 0) out.push(tn);
+      return out;
+    }
     let ac = null, master = null, sendBus = null, noiseBuf = null;
     let warpDry = null, warpWet = null, warpLfo = null;
     let muted = false, step = 0, beatSec = 1.15;
 
-    // pick a fresh pentatonic melody + chord progression from a seed (each level differs)
-    function setSong(seed) {
-      const rnd = mulberry32((seed>>>0) || 1);
-      const SC = [0,2,4,7,9,12,14];            // major pentatonic over ~2 octaves
-      const tr = [-5,-3,0,0,2,4,5,7][Math.floor(rnd()*8)];   // transpose (key)
-      // 32 notes = 8 cleared tiles per phrase at SUBDIV 4. (At 16 the tune looped every
-      // 4 tiles, which is far too tight once the gaps are filled in.)
-      MELODY = []; let d = 2 + Math.floor(rnd()*3);
-      for (let i=0;i<32;i++){ d += Math.floor(rnd()*3)-1; if (rnd()<0.15) d += Math.floor(rnd()*3)-1;
-        d = Math.max(0, Math.min(SC.length-1, d)); MELODY.push(SC[d] + tr); }
-      const progs = [[0,5,7,5],[0,7,9,7],[0,5,9,7],[0,9,5,7],[0,4,5,7]];
-      CHORDS = progs[Math.floor(rnd()*progs.length)].map(r => ({ root:r+tr, tones:[r+tr, r+tr+4, r+tr+7] }));
+    // Pick a fresh melody + chord progression from a seed (each level differs). This is
+    // the music lab's buildSong, verbatim — tools/check.mjs holds the two to each other.
+    function setSong(seed){
+      const rnd = mulberry32((seed>>>0)||1);
+      const SC = SCALES[MU.scale] || SCALES.pentaMajor;
+      const tr0 = [-5,-3,0,0,2,4,5,7][Math.floor(rnd()*8)];
+      KEY = MU.keyLock ? MU.key : tr0;
+      let d = MU.melodyStart >= 0 ? MU.melodyStart : 2 + Math.floor(rnd()*3);
+      if (MU.melodyStart >= 0) rnd();                       // keep the call order stable
+      MELODY = [];
+      for (let i=0;i<32;i++){
+        d += Math.floor(rnd()*3)-1;
+        if (rnd() < MU.melodyLeap) d += Math.floor(rnd()*3)-1;
+        d = Math.max(0, Math.min(SC.length-1, d));
+        MELODY.push(SC[d] + KEY);
+      }
+      const pi = Math.floor(rnd()*5);
+      PROGUSED = MU.prog >= 0 ? (MU.prog % PROGS.length) : pi;
+      const iv = chordIvls();
+      CHORDS = PROGS[PROGUSED].map(r => ({ root:r+KEY, tones: iv.map(x=>r+KEY+x) }));
     }
 
     function ensure() {
@@ -528,7 +813,8 @@
       if (!AC) return false;
       ac = new AC();
       master = ac.createGain();
-      master.gain.value = 0.16;
+      master.gain.value = MU.master;
+      musicBus = ac.createGain(); musicBus.gain.value = 1; musicBus.connect(master);
       // Everything leaves through one of two legs. Dry is the normal one. Wet runs the whole
       // mix through a modulated delay (a delay whose length wobbles IS a pitch wobble, which
       // is what a warped tape sounds like), then a distortion curve, then a lowpass whose
@@ -553,10 +839,11 @@
       flt.connect(fg); fg.connect(wlp.frequency);
       warpLfo.start(); flt.start();
       // Damped feedback delay = a ringing echo tail so tones resonate.
-      const delay = ac.createDelay(1.0); delay.delayTime.value = 0.24;
-      const fb    = ac.createGain();     fb.gain.value = 0.34;      // echo regeneration
-      const damp  = ac.createBiquadFilter(); damp.type = "lowpass"; damp.frequency.value = 2400;
-      const wet   = ac.createGain();     wet.gain.value = 0.30;     // echo level into mix
+      const delay = ac.createDelay(1.0); delay.delayTime.value = MU.delayTime;
+      const fb    = ac.createGain();     fb.gain.value = MU.feedback;   // echo regeneration
+      const damp  = ac.createBiquadFilter(); damp.type = "lowpass"; damp.frequency.value = MU.damp;
+      const wet   = ac.createGain();     wet.gain.value = MU.wet;       // echo level into mix
+      delayN = delay; fbN = fb; dampN = damp; wetN = wet;           // ...so setMusic can retune them
       delay.connect(damp); damp.connect(fb); fb.connect(delay);     // feedback loop, softened
       delay.connect(wet);  wet.connect(master);
       sendBus = delay;                                              // tonal voices feed the echo
@@ -585,6 +872,60 @@
       window.addEventListener("focus", wake);
       window.addEventListener("pageshow", wake);
     }
+    // The music's voices. Deliberately separate from voice()/the SFX below: those are fixed
+    // sounds with hand-written envelopes, while these are the ones the lab drives, and they
+    // take an envelope NAME rather than an attack time.
+    function mvoice(t, semi, wave, dur, vel, pre, wet, mono){
+      const g = ac.createGain();
+      dur = adsr(g, t, dur, vel, ENV(pre || "lead"));
+      for (const cents of (mono ? [0] : [-6,6])){
+        const o = ac.createOscillator(); o.type = wave;
+        o.frequency.setValueAtTime(mhz(semi), t); o.detune.setValueAtTime(cents, t);
+        o.connect(g); o.start(t); o.stop(t+dur+0.05);
+      }
+      g.connect(musicBus); if (wet) g.connect(sendBus);
+    }
+    function mbass(t, semi, dur, vel){
+      const f = mhz(semi);
+      const lp=ac.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=MU.bassLpf; lp.Q.value=0.9;
+      const g=ac.createGain();
+      dur = adsr(g, t, dur, vel, ENV("bas"));
+      const sub=ac.createOscillator(); sub.type="sine";
+      sub.frequency.setValueAtTime(f*1.5,t); sub.frequency.exponentialRampToValueAtTime(f,t+0.06);
+      const body=ac.createOscillator(); body.type="triangle"; body.frequency.setValueAtTime(f*2,t);
+      const bg=ac.createGain(); bg.gain.value=0.45;
+      sub.connect(g); body.connect(bg); bg.connect(g); g.connect(lp); lp.connect(musicBus);
+      sub.start(t); sub.stop(t+dur+0.05); body.start(t); body.stop(t+dur+0.05);
+    }
+    function mkick(t, vel){
+      const o=ac.createOscillator(), g=ac.createGain();
+      const E=ENV("kick"), dur=E.a+E.d+E.r;
+      o.type="sine"; o.frequency.setValueAtTime(MU.kickHz,t);
+      o.frequency.exponentialRampToValueAtTime(Math.max(20,MU.kickDrop), t+Math.max(0.02,dur*0.7));
+      adsr(g, t, dur, vel, E);
+      o.connect(g); g.connect(musicBus); o.start(t); o.stop(t+dur+0.05);
+    }
+    function mhat(t, vel){
+      if (!noiseBuf) return;
+      const src=ac.createBufferSource(); src.buffer=noiseBuf;
+      const hp=ac.createBiquadFilter(); hp.type="highpass"; hp.frequency.value=MU.hatHz;
+      const g=ac.createGain();
+      const E=ENV("hat"), dur=E.a+E.d+E.r;
+      adsr(g, t, dur, vel, E);
+      src.connect(hp); hp.connect(g); g.connect(musicBus); src.start(t); src.stop(t+dur+0.03);
+    }
+    // Swap in a level's music. Everything the level does not mention falls through to the
+    // defaults, so a level block only ever names what it changes.
+    function setMusic(levelMusic){
+      MU = { ...MUSIC_DEFAULTS, ...(levelMusic || {}) };
+      if (!ac) return;
+      master.gain.value = MU.master;
+      if (delayN) delayN.delayTime.value = MU.delayTime;
+      if (fbN)    fbN.gain.value = Math.min(0.85, MU.feedback);
+      if (dampN)  dampN.frequency.value = MU.damp;
+      if (wetN)   wetN.gain.value = MU.wet;
+    }
+
     // A tonal voice: two detuned oscillators through a long-release envelope,
     // started at absolute time `t`. Optionally fed into the resonant echo tail.
     function voice(t, semi, wave, dur, vel, attack, wet, mono) {
@@ -854,27 +1195,79 @@
     // Called once per cleared tile == one beat of the backing track.
     function clearTile() {
       if (muted || !ac || ac.state !== "running") return;        // silent until unlocked
-      const now = ac.currentTime;
-      const chord = CHORDS[Math.floor(step / 4) % CHORDS.length];
-      // Lead: the cleared tile is the downbeat and gets the full two-tone voice; the
-      // notes between clears are scheduled ahead on the audio clock as single tones.
-      const wave = WAVES[step % WAVES.length];
-      for (let k = 0; k < SUBDIV; k++) {
-        const semi = MELODY[(step*SUBDIV + k) % MELODY.length];
-        if (k === 0) voice(now, semi, wave, 0.9, 0.8, 0.008, true);
-        else voice(now + beatSec*(k/SUBDIV), semi, wave,
-                   beatSec*(0.9/SUBDIV), MID_VEL, 0.006, true, true);
+      const now = ac.currentTime, s = step, bs = beatSec;
+      const sw = bs * (0.5 + MU.swing);                          // where the off-beat lands
+      const chord = CHORDS[Math.floor(s / MU.barLen) % CHORDS.length];
+      // Lead: the cleared tile is the downbeat and gets the full two-tone voice; the notes
+      // between clears are scheduled ahead on the audio clock as single tones.
+      const wave = s % 2 ? MU.waveB : MU.waveA;
+      if (MU.leadOn) for (let k = 0; k < MU.beatsPerTile; k++) {
+        const idx = (s * MU.beatsPerTile + k) % MELODY.length;
+        if (k === 0) mvoice(now, MELODY[idx] + MU.leadOct, wave, 0.9, MU.leadVel, "lead", true);
+        else mvoice(now + bs*(k/MU.beatsPerTile), MELODY[idx] + MU.leadOct, wave,
+                    bs*(0.9/MU.beatsPerTile), MU.midVel, "lead", true, true);
       }
-      // Backing, locked to the same beat.
-      voice(now, chord.root - 12, "triangle", beatSec * 0.9, 0.40, 0.010, false);  // bass body
-      bass(now, chord.root - 24, beatSec * 0.92, 0.85);          // deep sub-bass on the beat
-      bass(now + beatSec * 0.5, chord.root - 24 + 7, beatSec * 0.42, 0.42);  // driving off-beat bass (fifth)
-      kick(now, 0.7);                                             // punchier pulse on the beat
-      hat(now + beatSec * 0.5, 0.12);                             // groove on the off-beat
-      if (step % 4 === 0)                                         // new bar -> sustained pad bed
-        for (const semi of chord.tones)
-          voice(now, semi - 12, "sine", beatSec * 3.9, 0.14, beatSec * 0.25, true);
+      const lowVoice = MU.bassStyle === "classic" ? mbass : bassHeavy;
+      if (MU.subOn) {
+        if (MU.bassStyle === "classic")
+          mvoice(now, chord.root-12, "triangle", bs*0.9, MU.subVel*0.47, "bas", false);
+        lowVoice(now, chord.root-24, bs*(MU.bassStyle === "classic" ? 0.92 : 0.96), MU.subVel);
+      }
+      if (MU.offBassOn) lowVoice(now + sw, chord.root-24+7, bs*0.42, MU.offBassVel);
+      if (MU.kickOn) mkick(now, MU.kickVel);
+      if (MU.hatOn)  mhat(now + sw, MU.hatVel);
+      backingBeat(now, s);
       step++;
+    }
+    // Everything under the lead, at an arbitrary time. Split out so the backing can play on
+    // its own during the level intro — before there is a runner to clear anything.
+    function backingBeat(t, s) {
+      const bs = beatSec, chord = CHORDS[Math.floor(s / MU.barLen) % CHORDS.length];
+      const bgEvery = Math.max(1, MU.bgEvery|0);
+      if ((MU.padOn || MU.voxOn) && s % bgEvery === 0) {
+        for (const semi of bgNotes(s, chord)) {
+          if (MU.padOn) mvoice(t, semi + MU.padOct, "sine", bs*(bgEvery-0.1), MU.padVel, "bg", true);
+          if (MU.voxOn) voxVoice(t, semi + MU.voxOct, bs*(bgEvery-0.05), MU.voxVel);
+        }
+      }
+    }
+    // ---- the level's backing transport --------------------------------------
+    // The runner's tile clears ARE the beat once he is moving, so this only has to cover the
+    // intro: it lays down the backing from the moment the flag appears, keeps `step` and the
+    // audio clock's beat grid, and hands both over when he sets off. cueDelay() is what makes
+    // that handover land ON a beat rather than wherever the animation happened to finish.
+    let bgTimer = null, bgAt = 0, bgAnchor = null;
+    function levelMusicStart() {
+      if (!ensure()) return;
+      levelMusicStop(true);
+      if (musicBus) { musicBus.gain.cancelScheduledValues(ac.currentTime); musicBus.gain.value = 1; }
+      step = 0; bgAnchor = ac.currentTime + 0.08; bgAt = bgAnchor;
+      bgTimer = setInterval(bgTick, 60);
+      bgTick();
+    }
+    function bgTick() {
+      if (!ac || muted || ac.state !== "running" || !bgTimer) return;
+      const horizon = ac.currentTime + 0.4;                 // schedule a little ahead of time
+      while (bgAt < horizon) { backingBeat(bgAt, step); bgAt += beatSec; step++; }
+    }
+    // ms until the next beat lands, so the runner can be set off exactly on one
+    function cueDelay() {
+      if (!ac || bgAnchor == null) return 0;
+      const n = Math.ceil((ac.currentTime - bgAnchor) / beatSec);
+      return Math.max(0, (bgAnchor + n*beatSec - ac.currentTime) * 1000);
+    }
+    // Hand the beat to the runner: stop scheduling, but leave `step` where it is so the lead
+    // comes in on the phrase the backing has already been playing.
+    function levelMusicHandover() { if (bgTimer) clearInterval(bgTimer); bgTimer = null; }
+    // End of level: stop the transport AND duck the bus, or a ten-second background note
+    // carries on over the win card.
+    function levelMusicStop(instant) {
+      if (bgTimer) clearInterval(bgTimer); bgTimer = null; bgAnchor = null;
+      if (!ac || !musicBus) return;
+      const t = ac.currentTime;
+      musicBus.gain.cancelScheduledValues(t);
+      musicBus.gain.setValueAtTime(musicBus.gain.value, t);
+      musicBus.gain.linearRampToValueAtTime(0.0001, t + (instant ? 0.005 : 0.28));
     }
     function setTempo(msPerCell) { beatSec = Math.max(0.15, msPerCell / 1000); }
     // A latch-release: a soft mechanical clunk, then a bright two-note "unlocked!" ding.
@@ -932,15 +1325,66 @@
     // ---- UI ----------------------------------------------------------------------
     // Every button in the game makes this noise. Short, dry, no reverb send: it is a
     // control surface, not part of the world, so it must not sound like it is in the room.
+    // Two tones, not one swoop. A single oscillator sliding 620->360 reads as a chirp; a
+    // real click is a hard tick and then a lower body landing a beat later, close enough
+    // together to be heard as one event. 26ms apart is about the limit before they separate.
     function tap(){
       if (muted || !ac || ac.state !== "running") return;
-      const t = ac.currentTime;
-      const o = ac.createOscillator(), g = ac.createGain();
-      o.type = "square";
-      o.frequency.setValueAtTime(620, t); o.frequency.exponentialRampToValueAtTime(360, t + 0.035);
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.14, t + 0.003);
-      g.gain.exponentialRampToValueAtTime(0.0006, t + 0.06);
-      o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.08);
+      const t0 = ac.currentTime;
+      const TWO = [ { at:0,     hz:1180, wave:"square",   vel:0.11, dur:0.028 },   // the tick
+                    { at:0.026, hz:520,  wave:"triangle", vel:0.15, dur:0.070 } ]; // the body
+      for (const n of TWO){
+        const t = t0 + n.at;
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = n.wave;
+        o.frequency.setValueAtTime(n.hz, t);
+        o.frequency.exponentialRampToValueAtTime(n.hz*0.72, t + n.dur);   // a little fall on each
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(n.vel, t + 0.002);
+        g.gain.exponentialRampToValueAtTime(0.0006, t + n.dur);
+        o.connect(g); g.connect(master); o.start(t); o.stop(t + n.dur + 0.02);
+      }
+    }
+    // The Cloak of Light's theme: a fast arpeggio climbing and falling, scheduled in one go
+    // for the whole duration rather than driven by a timer — three seconds of sixteenths is
+    // ninety-odd notes, and the audio clock keeps them even in a way setInterval never would.
+    // The level's own backing ducks underneath for the duration so this is what you hear.
+    function starTheme(ms) {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime, dur = Math.max(0.2, ms/1000);
+      const STEP = 0.075;                                   // ~200bpm in sixteenths
+      const RUN = [0, 4, 7, 12, 16, 19, 24, 19, 16, 12, 7, 4];   // up and back down, major
+      const n = Math.floor(dur / STEP);
+      if (musicBus) {                                       // get out of the way
+        const g = musicBus.gain;
+        g.cancelScheduledValues(t0);
+        g.setValueAtTime(g.value, t0);
+        g.linearRampToValueAtTime(0.22, t0 + 0.06);
+        g.setValueAtTime(0.22, t0 + dur - 0.12);
+        g.linearRampToValueAtTime(1, t0 + dur + 0.10);
+      }
+      for (let i = 0; i < n; i++) {
+        const t = t0 + i*STEP;
+        const semi = RUN[i % RUN.length] + 12;
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "square";
+        o.frequency.setValueAtTime(BASE * Math.pow(2, semi/12), t);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.13, t + 0.004);
+        g.gain.exponentialRampToValueAtTime(0.0006, t + STEP*0.92);
+        o.connect(g); g.connect(master); g.connect(sendBus);
+        o.start(t); o.stop(t + STEP);
+        if (i % 3 === 0) {                                  // a sparkle riding two octaves up
+          const p = ac.createOscillator(), pg = ac.createGain();
+          p.type = "triangle";
+          p.frequency.setValueAtTime(BASE * Math.pow(2, (semi + 24)/12), t);
+          pg.gain.setValueAtTime(0.0001, t);
+          pg.gain.exponentialRampToValueAtTime(0.05, t + 0.003);
+          pg.gain.exponentialRampToValueAtTime(0.0006, t + STEP*1.6);
+          p.connect(pg); pg.connect(master); pg.connect(sendBus);
+          p.start(t); p.stop(t + STEP*1.8);
+        }
+      }
     }
     // the heavier version, for a button that commits to something (buy, start, continue)
     function tapBig(){
@@ -1218,7 +1662,9 @@
     return { unlock, clearTile, smash, win, lose, fall, death, boost, slow, coin, key, doorOpen,
              slide, clack, tap, tapBig, power, warp, vortex, crunch, growl,
              sawProximity, coinProximity, ambient,
-             introGather, introFlash, setSong, setTempo, resetMelody, setMuted, isMuted };
+             introGather, introFlash, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
+             levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme,
+             musicNow: () => ({ ...MU }) };
   })();
 
   // ---------- State -------------------------------------------------------
@@ -1242,7 +1688,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v7.7";                    // shown on the title & pause screens
+  const VERSION = "v7.8";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -1279,9 +1725,9 @@
     // Each is the golden tile in its own metal, with the motif cut into the face — see
     // talBadge. `etch` draws GEOMETRY ONLY: the badge painter sets the colour before each of
     // its two passes, so an etch that picks its own would come out flat.
-    { id:"clock", name:"Hands of Time", col:"#8fd8ff", ms:5000,
+    { id:"clock", name:"Hands of Time", col:"#8fd8ff", ms:1000,
       face:"#7cc9f0", edge:"#2b6f96",
-      blurb:"Slows time down",
+      blurb:"Stops you dead for a second",
       etch:(g,x,y,r)=>{
         g.lineCap="round"; g.lineWidth=r*0.11;
         g.beginPath(); g.arc(x,y,r*0.70,0,7); g.stroke();       // the case
@@ -1308,7 +1754,7 @@
 
     // amber rather than gold: gold is what a coin is, and a talisman that reads as currency
     // on the board is a talisman nobody picks up
-    { id:"star", name:"Cloak of Light", col:"#ffd24a", ms:6000,
+    { id:"star", name:"Cloak of Light", col:"#ffd24a", ms:3000,
       face:"#ffab2e", edge:"#a55600",
       blurb:"Shrug off hazards",
       etch:(g,x,y,r)=>{
@@ -1350,6 +1796,22 @@
         g.beginPath();                                           // cap
         g.ellipse(x, y-r*0.02, r*0.76, r*0.56, 0, Math.PI, 0); g.fill();
         g.fillRect(x-r*0.76, y-r*0.04, r*1.52, r*0.08); } },
+
+    // Instant, like the Hammer: ms 0, so it does its work the moment it is pressed rather
+    // than running on a clock. Two back-pointing triangles, which is what "rewind" has meant
+    // on every tape deck and remote ever made.
+    { id:"rewind", name:"Tape of Regret", col:"#9ad9b0", ms:0,
+      face:"#7fc79b", edge:"#2f6f4c",
+      blurb:"Back up two tiles",
+      etch:(g,x,y,r)=>{
+        for (const dx of [0.10, -0.52]){
+          g.beginPath();
+          g.moveTo(x + r*(dx + 0.46), y - r*0.44);
+          g.lineTo(x + r*(dx + 0.46), y + r*0.44);
+          g.lineTo(x + r*dx,          y);
+          g.closePath(); g.fill();
+        }
+        g.fillRect(x - r*0.72, y - r*0.44, r*0.12, r*0.88); } },
   ];
   // One painter for all five. Each keeps its own metal; the shape, the shading and the
   // engraving are shared, so a talisman can never drift into looking like a different class
@@ -1437,31 +1899,31 @@
   // eyes on a pale body, pale eyes on a dark one, or the reading falls apart.
   const SKIN_COLOURS = [
     { id:"classic",  name:"Classic",  cost:0,   body:"#bfe6ff", ink:"#17263f" },
-    { id:"ember",    name:"Ember",    cost:60,  body:"#ffb693", ink:"#3d1a10" },
-    { id:"moss",     name:"Moss",     cost:60,  body:"#b6e3a8", ink:"#17331a" },
-    { id:"butter",   name:"Butter",   cost:60,  body:"#ffeaa0", ink:"#3f3308" },
-    { id:"blush",    name:"Blush",    cost:60,  body:"#ffc9d6", ink:"#41152a" },
-    { id:"sky",      name:"Sky",      cost:60,  body:"#a9d4ff", ink:"#122744" },
-    { id:"mint",     name:"Mint",     cost:80,  body:"#a9edd2", ink:"#0e3a2c" },
-    { id:"apricot",  name:"Apricot",  cost:80,  body:"#ffd0a1", ink:"#452408" },
-    { id:"lilac",    name:"Lilac",    cost:80,  body:"#d6c8ff", ink:"#241548" },
-    { id:"sand",     name:"Sand",     cost:80,  body:"#e6d8bb", ink:"#3b3018" },
-    { id:"orchid",   name:"Orchid",   cost:120, body:"#e4b6ff", ink:"#2c1140" },
-    { id:"coral",    name:"Coral",    cost:120, body:"#ff9d8a", ink:"#4a1410" },
-    { id:"lagoon",   name:"Lagoon",   cost:120, body:"#7fd8d0", ink:"#0b3330" },
-    { id:"limeade",  name:"Limeade",  cost:120, body:"#d6f07a", ink:"#2b3a06" },
-    { id:"cherry",   name:"Cherry",   cost:180, body:"#e8506b", ink:"#ffe6ea" },
-    { id:"cobalt",   name:"Cobalt",   cost:180, body:"#4a72e0", ink:"#e6ecff" },
-    { id:"jade",     name:"Jade",     cost:180, body:"#2fa06e", ink:"#e6fff2" },
-    { id:"plum",     name:"Plum",     cost:180, body:"#7a3f9d", ink:"#f4e6ff" },
-    { id:"rust",     name:"Rust",     cost:200, body:"#b5551f", ink:"#ffe9d6" },
-    { id:"ink",      name:"Ink",      cost:200, body:"#5b6480", ink:"#e9eeff" },
-    { id:"charcoal", name:"Charcoal", cost:250, body:"#31343f", ink:"#dfe4f5" },
-    { id:"bone",     name:"Bone",     cost:250, body:"#f4f1e6", ink:"#2a2a2f" },
-    { id:"copper",   name:"Copper",   cost:300, body:"#d98b4a", ink:"#3d1f06" },
-    { id:"gold",     name:"Gold",     cost:400, body:"#ffd77a", ink:"#3b2a05" },
-    { id:"silver",   name:"Silver",   cost:400, body:"#d9dfe8", ink:"#22262e" },
-    { id:"neon",     name:"Neon",     cost:500, body:"#c6ff2e", ink:"#1b2600" },
+    { id:"ember",    name:"Ember",    cost:1,  body:"#ffb693", ink:"#3d1a10" },
+    { id:"moss",     name:"Moss",     cost:1,  body:"#b6e3a8", ink:"#17331a" },
+    { id:"butter",   name:"Butter",   cost:1,  body:"#ffeaa0", ink:"#3f3308" },
+    { id:"blush",    name:"Blush",    cost:1,  body:"#ffc9d6", ink:"#41152a" },
+    { id:"sky",      name:"Sky",      cost:1,  body:"#a9d4ff", ink:"#122744" },
+    { id:"mint",     name:"Mint",     cost:1,  body:"#a9edd2", ink:"#0e3a2c" },
+    { id:"apricot",  name:"Apricot",  cost:1,  body:"#ffd0a1", ink:"#452408" },
+    { id:"lilac",    name:"Lilac",    cost:1,  body:"#d6c8ff", ink:"#241548" },
+    { id:"sand",     name:"Sand",     cost:1,  body:"#e6d8bb", ink:"#3b3018" },
+    { id:"orchid",   name:"Orchid",   cost:2, body:"#e4b6ff", ink:"#2c1140" },
+    { id:"coral",    name:"Coral",    cost:2, body:"#ff9d8a", ink:"#4a1410" },
+    { id:"lagoon",   name:"Lagoon",   cost:2, body:"#7fd8d0", ink:"#0b3330" },
+    { id:"limeade",  name:"Limeade",  cost:2, body:"#d6f07a", ink:"#2b3a06" },
+    { id:"cherry",   name:"Cherry",   cost:3, body:"#e8506b", ink:"#ffe6ea" },
+    { id:"cobalt",   name:"Cobalt",   cost:3, body:"#4a72e0", ink:"#e6ecff" },
+    { id:"jade",     name:"Jade",     cost:3, body:"#2fa06e", ink:"#e6fff2" },
+    { id:"plum",     name:"Plum",     cost:3, body:"#7a3f9d", ink:"#f4e6ff" },
+    { id:"rust",     name:"Rust",     cost:3, body:"#b5551f", ink:"#ffe9d6" },
+    { id:"ink",      name:"Ink",      cost:3, body:"#5b6480", ink:"#e9eeff" },
+    { id:"charcoal", name:"Charcoal", cost:4, body:"#31343f", ink:"#dfe4f5" },
+    { id:"bone",     name:"Bone",     cost:4, body:"#f4f1e6", ink:"#2a2a2f" },
+    { id:"copper",   name:"Copper",   cost:5, body:"#d98b4a", ink:"#3d1f06" },
+    { id:"gold",     name:"Gold",     cost:6, body:"#ffd77a", ink:"#3b2a05" },
+    { id:"silver",   name:"Silver",   cost:6, body:"#d9dfe8", ink:"#22262e" },
+    { id:"neon",     name:"Neon",     cost:8, body:"#c6ff2e", ink:"#1b2600" },
   ];
 
   // ---- finishes -------------------------------------------------------------------
@@ -1488,15 +1950,15 @@
     return gd;
   };
   SKIN_COLOURS.push(
-    { id:"sterling", name:"Sterling", cost:450, body:"#c3ccdb", ink:"#22262e",
+    { id:"sterling", name:"Sterling", cost:7, body:"#c3ccdb", ink:"#22262e",
       paint: metal("#6f7887", "#aeb8c8", "#dfe6f2", "#ffffff") },
-    { id:"bullion",  name:"Bullion",  cost:450, body:"#f0c25c", ink:"#3b2a05",
+    { id:"bullion",  name:"Bullion",  cost:7, body:"#f0c25c", ink:"#3b2a05",
       paint: metal("#8a5f10", "#d9a531", "#ffdd82", "#fff6d0") },
-    { id:"forge",    name:"Forge",    cost:500, body:"#d98b4a", ink:"#3d1f06",
+    { id:"forge",    name:"Forge",    cost:8, body:"#d98b4a", ink:"#3d1f06",
       paint: metal("#6b3410", "#c9743a", "#f0a86c", "#ffd9b4") },
-    { id:"obsidian", name:"Obsidian", cost:550, body:"#26262f", ink:"#dfe4f5",
+    { id:"obsidian", name:"Obsidian", cost:8, body:"#26262f", ink:"#dfe4f5",
       paint: metal("#07070c", "#1d1d28", "#3a3a50", "#9c9cc4") },
-    { id:"diamond",  name:"Diamond",  cost:750, body:"#dff2ff", ink:"#123a4d",
+    { id:"diamond",  name:"Diamond",  cost:12, body:"#dff2ff", ink:"#123a4d",
       paint(g, x, y, w, h){
         const gd = g.createLinearGradient(x, y, x + w*0.5, y + h);
         gd.addColorStop(0.00, "#eafaff"); gd.addColorStop(0.34, "#a9d9f2");
@@ -1512,9 +1974,9 @@
         g.stroke();
         g.strokeStyle = "rgba(30,90,130,0.30)"; g.lineWidth = Math.max(1, w*0.028);
         g.beginPath(); g.moveTo(x, y + h*0.30); g.lineTo(x + w, y + h*0.74); g.stroke(); } },
-    { id:"polychrome", name:"Polychrome", cost:800, body:"#ffc2e6", ink:"#2a1240",
+    { id:"polychrome", name:"Polychrome", cost:12, body:"#ffc2e6", ink:"#2a1240",
       paint: spectrum(9000, 90, 72, 60) },
-    { id:"opal",     name:"Opal",     cost:700, body:"#f2e6ff", ink:"#3a2f4a",
+    { id:"opal",     name:"Opal",     cost:11, body:"#f2e6ff", ink:"#3a2f4a",
       paint: spectrum(22000, 62, 87, 34) }
   );
   SKIN_COLOURS.forEach(c => c.swatch = (g,S) => swatchBust(g, S, c.body, c.ink, c, 0));
@@ -1522,36 +1984,36 @@
   // Hats draw in the runner's local frame: +x is travel, the body spans byTop..byTop+bodyH.
   const HATS = [
     { id:"none", name:"Bare", cost:0, draw:null, swatch:(g,S)=>swatchBust(g,S,"#bfe6ff","#17263f") },
-    { id:"cap", name:"Cap", cost:80, col:"#e05b4b",
+    { id:"cap", name:"Cap", cost:1, col:"#e05b4b",
       draw(g,s,bw,byTop,col){ g.fillStyle=col;
         g.beginPath(); g.ellipse(0, byTop, bw*0.52, s*0.05, 0, Math.PI, 0); g.fill();
         g.fillRect(0, byTop - s*0.012, bw*0.62, s*0.024); } },
-    { id:"top", name:"Top Hat", cost:180, col:"#2b2740",
+    { id:"top", name:"Top Hat", cost:3, col:"#2b2740",
       draw(g,s,bw,byTop,col){ g.fillStyle=col;
         g.fillRect(-bw*0.60, byTop - s*0.018, bw*1.20, s*0.026);
         g.fillRect(-bw*0.30, byTop - s*0.115, bw*0.60, s*0.10); } },
-    { id:"band", name:"Headband", cost:80, col:"#ffd24a",
+    { id:"band", name:"Headband", cost:1, col:"#ffd24a",
       draw(g,s,bw,byTop,col){ g.fillStyle=col;
         g.fillRect(-bw*0.52, byTop + s*0.012, bw*1.04, s*0.028); } },
-    { id:"crown", name:"Crown", cost:350, col:"#ffd24a",
+    { id:"crown", name:"Crown", cost:5, col:"#ffd24a",
       draw(g,s,bw,byTop,col){ g.fillStyle=col; g.beginPath();
         const w=bw*0.52, t=byTop - s*0.075, b=byTop + s*0.012;
         g.moveTo(-w,b); g.lineTo(-w,t); g.lineTo(-w*0.5,b*0.55+t*0.45); g.lineTo(0,t);
         g.lineTo(w*0.5,b*0.55+t*0.45); g.lineTo(w,t); g.lineTo(w,b); g.closePath(); g.fill(); } },
-    { id:"beanie", name:"Beanie", cost:80, col:"#5ac8e0",
+    { id:"beanie", name:"Beanie", cost:1, col:"#5ac8e0",
       draw(g,s,bw,byTop,col){ g.fillStyle=col;
         g.beginPath(); g.ellipse(0, byTop + s*0.004, bw*0.54, s*0.062, 0, Math.PI, 0); g.fill();
         g.fillRect(-bw*0.56, byTop, bw*1.12, s*0.022);
         g.beginPath(); g.arc(0, byTop - s*0.062, s*0.022, 0, 7); g.fill(); } },
-    { id:"cowboy", name:"Stetson", cost:200, col:"#a5713c",
+    { id:"cowboy", name:"Stetson", cost:3, col:"#a5713c",
       draw(g,s,bw,byTop,col){ g.fillStyle=col;
         g.beginPath(); g.ellipse(0, byTop, bw*0.86, s*0.030, 0, 0, Math.PI*2); g.fill();
         g.beginPath(); g.ellipse(0, byTop - s*0.030, bw*0.40, s*0.048, 0, Math.PI, 0); g.fill();
         g.fillStyle="rgba(40,24,10,0.5)"; g.fillRect(-bw*0.40, byTop - s*0.026, bw*0.80, s*0.014); } },
-    { id:"halo", name:"Halo", cost:300, col:"#fff3a8",
+    { id:"halo", name:"Halo", cost:5, col:"#fff3a8",
       draw(g,s,bw,byTop,col){ g.strokeStyle=col; g.lineWidth=Math.max(1.5, s*0.020);
         g.beginPath(); g.ellipse(0, byTop - s*0.062, bw*0.46, s*0.020, 0, 0, Math.PI*2); g.stroke(); } },
-    { id:"horns", name:"Horns", cost:260, col:"#f2ead6",
+    { id:"horns", name:"Horns", cost:4, col:"#f2ead6",
       draw(g,s,bw,byTop,col){ g.fillStyle=col;
         for (const side of [-1, 1]) {
           g.beginPath();
@@ -1572,10 +2034,10 @@
   // along the path's normal, so they stay parallel round corners instead of nesting.
   const TRAILS = [
     { id:"none", name:"None", cost:0, cols:null, swatch:(g,S)=>swatchBust(g,S,"#bfe6ff","#17263f") },
-    { id:"rainbow", name:"Rainbow", cost:250, cols:["#ff595e","#ff924c","#ffca3a","#8ac926","#1982c4"] },
-    { id:"spark",   name:"Sparks",  cost:100, cols:["#ffe9a8","#ffd24a","#ff9e4d"] },
-    { id:"cyan",    name:"Coolant", cost:100, cols:["#dffaff","#8ff0ff","#3fb8d6"] },
-    { id:"rose",    name:"Rose",    cost:150, cols:["#ffd6e8","#ff9ec7","#e0559a"] },
+    { id:"rainbow", name:"Rainbow", cost:4, cols:["#ff595e","#ff924c","#ffca3a","#8ac926","#1982c4"] },
+    { id:"spark",   name:"Sparks",  cost:2, cols:["#ffe9a8","#ffd24a","#ff9e4d"] },
+    { id:"cyan",    name:"Coolant", cost:2, cols:["#dffaff","#8ff0ff","#3fb8d6"] },
+    { id:"rose",    name:"Rose",    cost:2, cols:["#ffd6e8","#ff9ec7","#e0559a"] },
   ];
   TRAILS.forEach(t => { if (!t.cols) return;
     t.swatch = (g,S) => { const b = swatchBust(g,S,"#bfe6ff","#17263f");
@@ -1594,12 +2056,12 @@
   //   pose  a named leg fold that replaces the stock stride: lotus, fetal, onefoot
   const SWAGGERS = [
     { id:"classic", name:"Classic",   cost:0 },
-    { id:"lean",    name:"Lean Back", cost:120, lean:-0.30, bob:0.70, swing:1.20, lift:1.15 },
-    { id:"hop",     name:"Hopping",   cost:120, pose:"onefoot", hop:0.15, bob:0.15, swing:0, lift:0 },
-    { id:"float",   name:"Floating",  cost:220, pose:"lotus",   hover:0.085, bob:0.35, swing:0, lift:0 },
+    { id:"lean",    name:"Lean Back", cost:2, lean:-0.30, bob:0.70, swing:1.20, lift:1.15 },
+    { id:"hop",     name:"Hopping",   cost:2, pose:"onefoot", hop:0.15, bob:0.15, swing:0, lift:0 },
+    { id:"float",   name:"Floating",  cost:3, pose:"lotus",   hover:0.085, bob:0.35, swing:0, lift:0 },
     // a NEGATIVE hover: the ball sinks until it is all but touching the track, because a
     // roll that happens in mid-air is just a spin
-    { id:"roll",    name:"Rolling",   cost:220, pose:"fetal",   spin:0.0055, hover:-0.068, bob:0 },
+    { id:"roll",    name:"Rolling",   cost:3, pose:"fetal",   spin:0.0055, hover:-0.068, bob:0 },
   ];
   // Each swatch is the same bust in the pose that style would hold it in — a still frame
   // reads the difference far better than a name does.
@@ -1636,26 +2098,26 @@
   // itself is the anchor, so they follow the stride and the lift for free.
   const KICKS = [
     { id:"none", name:"Barefoot", cost:0, draw:null, swatch:(g,S)=>swatchBust(g,S,"#bfe6ff","#17263f") },
-    { id:"sneaker", name:"Sneakers", cost:90, col:"#f2f4ff",
+    { id:"sneaker", name:"Sneakers", cost:1, col:"#f2f4ff",
       draw(g,s,col){ g.fillStyle = col;
         rr2(g, -s*0.030, -s*0.026, s*0.085, s*0.045, s*0.018); g.fill();
         g.fillStyle = "rgba(23,38,63,0.35)"; g.fillRect(-s*0.030, s*0.007, s*0.085, s*0.012); } },
-    { id:"boot", name:"Boots", cost:140, col:"#7a4a22",
+    { id:"boot", name:"Boots", cost:2, col:"#7a4a22",
       draw(g,s,col){ g.fillStyle = col;
         rr2(g, -s*0.032, -s*0.055, s*0.070, s*0.075, s*0.014); g.fill();
         g.fillStyle = "#2c1a0b"; g.fillRect(-s*0.036, s*0.010, s*0.090, s*0.014); } },
-    { id:"skate", name:"Skates", cost:200, col:"#e8506b",
+    { id:"skate", name:"Skates", cost:3, col:"#e8506b",
       draw(g,s,col){ g.fillStyle = col;
         rr2(g, -s*0.030, -s*0.048, s*0.078, s*0.058, s*0.016); g.fill();
         g.fillStyle = "#d9dfe8"; g.fillRect(-s*0.034, s*0.012, s*0.088, s*0.008);
         g.beginPath(); g.arc(-s*0.014, s*0.028, s*0.016, 0, 7);
         g.arc( s*0.032, s*0.028, s*0.016, 0, 7); g.fill(); } },
-    { id:"glow", name:"Glowsteps", cost:320, col:"#c6ff2e",
+    { id:"glow", name:"Glowsteps", cost:5, col:"#c6ff2e",
       draw(g,s,col){ g.fillStyle = "#2b2740";
         rr2(g, -s*0.030, -s*0.030, s*0.082, s*0.050, s*0.016); g.fill();
         g.fillStyle = col; g.fillRect(-s*0.034, s*0.012, s*0.090, s*0.016);
         g.globalAlpha = 0.35; g.fillRect(-s*0.048, s*0.024, s*0.118, s*0.020); g.globalAlpha = 1; } },
-    { id:"gilded", name:"Gilded", cost:420, col:"#ffd24a",
+    { id:"gilded", name:"Gilded", cost:6, col:"#ffd24a",
       draw(g,s,col){ g.fillStyle = col;
         rr2(g, -s*0.032, -s*0.034, s*0.086, s*0.056, s*0.018); g.fill();
         g.fillStyle = "rgba(255,255,255,0.65)"; g.fillRect(-s*0.026, -s*0.026, s*0.070, s*0.010); } },
@@ -1678,14 +2140,14 @@
       swatch:(g,S)=>{ rr2(g,S*0.18,S*0.30,S*0.64,S*0.40,S*0.05); g.fillStyle="#8d86c9"; g.fill();
         g.fillStyle="#ffcf4d"; g.fillRect(S*0.18,S*0.52,S*0.64,S*0.18);
         g.fillStyle="#fff2c4"; g.fillRect(S*0.18,S*0.50,S*0.64,S*0.035); } },
-    { id:"sun",   name:"Sunbeam", cost:150, track:"#ffcf4d", rail:"#fff2c4" },
-    { id:"mint",  name:"Mint",    cost:150, track:"#54d6a4", rail:"#c8ffe8" },
-    { id:"berry", name:"Berry",   cost:250, track:"#e0559a", rail:"#ffd0e6" },
-    { id:"steel", name:"Steel",   cost:400, track:"#9aa7bd", rail:"#e6edf9" },
+    { id:"sun",   name:"Sunbeam", cost:2, track:"#ffcf4d", rail:"#fff2c4" },
+    { id:"mint",  name:"Mint",    cost:2, track:"#54d6a4", rail:"#c8ffe8" },
+    { id:"berry", name:"Berry",   cost:4, track:"#e0559a", rail:"#ffd0e6" },
+    { id:"steel", name:"Steel",   cost:6, track:"#9aa7bd", rail:"#e6edf9" },
     // ...and three that bring a ground pattern with them, not just a colour
-    { id:"bold",   name:"Bold",       cost:300, track:"#ff8a5c", rail:"#ffd9c4", pattern:"stripe" },
-    { id:"cobble", name:"Cobbles",    cost:350, track:"#9fb3c9", rail:"#e8f1ff", pattern:"cobble" },
-    { id:"timber", name:"Timber",     cost:350, track:"#d9a45c", rail:"#f6dfb4", pattern:"grain"  },
+    { id:"bold",   name:"Bold",       cost:5, track:"#ff8a5c", rail:"#ffd9c4", pattern:"stripe" },
+    { id:"cobble", name:"Cobbles",    cost:5, track:"#9fb3c9", rail:"#e8f1ff", pattern:"cobble" },
+    { id:"timber", name:"Timber",     cost:5, track:"#d9a45c", rail:"#f6dfb4", pattern:"grain"  },
   ];
   TRACKS.forEach(t => { if (!t.track) return;
     t.swatch = (g,S) => { rr2(g,S*0.18,S*0.30,S*0.64,S*0.40,S*0.05); g.fillStyle="#8d86c9"; g.fill();
@@ -1730,10 +2192,11 @@
   const lookWorn = k => (settings.look && settings.look[k]) || LOOK.find(l=>l.key===k).items[0].id;
   const lookItem = k => { const cat = LOOK.find(l=>l.key===k);
                           return cat.items.find(i => i.id === lookWorn(k)) || cat.items[0]; };
-  // Everything unlocked while the shop is being built out — set to false to put the prices
-  // back and make the tile wallet mean something again. Costs and the wallet are untouched,
-  // so flipping it restores the economy exactly as it was.
-  const UNLOCK_ALL = true;
+  // Prices are live. The six zero-cost items are the kit you start in — they have to stay
+  // owned or the runner would have nothing to wear on level 1 — and everything else is locked
+  // until it is bought. The whole shop totals 222 tiles against 111 coins in the campaign, so
+  // it is two full clears, every coin collected, to own the lot.
+  const UNLOCK_ALL = false;
   const owns = it => UNLOCK_ALL || it.cost === 0 || wallet.owned.has(it.id);
   function wearLook(k, id){ settings.look = settings.look || {}; settings.look[k] = id; saveSettings(); }
 
@@ -1942,6 +2405,7 @@
     const seed = hashSeed(label);
     state.bgTheme = genTheme(seed);          // per-level background theme
     state.trackPal = genTrackPal(seed);      // per-level platform colour
+    Sound.setMusic(L.music);                 // this level's music block, over the defaults
     Sound.setSong(seed);                     // per-level melody
     Sound.resetMelody();
     Sound.setTempo(effSpeed);     // backing-track tempo tracks this level's (ramped) runner speed
@@ -1957,45 +2421,100 @@
     // Hold on the start until any pop-ups are cleared; only THEN run the opening pan +
     // character intro, so neither plays out behind the tutorial / speed-up cards.
     state.introPlan = { goalOnScreen, startCam, gx, gy };
+    // The opening, in order: the flag with the music under it, a pan back to where he starts,
+    // then anything the level has to explain, then the character assembling, and only then
+    // does he move — on a beat. Each step hands to the next rather than running on a timer,
+    // so a pop-up can take as long as it likes without the rest playing out behind it.
+    if (!goalOnScreen && g) { const fc = camForPoint(gx, gy); camX = fc.x; camY = fc.y; }
+    else { camX = startCam.x; camY = startCam.y; }
+    Sound.levelMusicStart();      // 1. the backing starts here, not when he does
     state.status = "hold";
-    // A tutorial card explains a level the player has not seen yet. Hold on the board for a
-    // beat first so they have something to attach the explanation to; levels with nothing to
-    // teach skip the wait entirely and open as they always did.
-    const pending = levelMechs(L).filter(m => !loadSeen().has(m));
-    if (pending.length) state.peekT = LEVEL_PEEK_MS;
-    else beginLevelIntro();       // nothing to show → start the intro right away
+    state.peekT = FLAG_HOLD_MS;   // 2. hold on the flag, then pan
   }
-  const LEVEL_PEEK_MS = 700;      // how long the board is shown before a tutorial card lands
-  // Counts out the peek. Runs on "hold", where update() is already inert, so the board sits
-  // still and unobstructed for the duration.
+  const FLAG_HOLD_MS = 900;       // how long the flag is held before the camera pulls back
+  // Counts out the hold on the flag. Runs on "hold", where update() is already inert, so the
+  // board sits still and unobstructed for the duration.
   function tickHold(dt) {
     const s = state;
     if (s.peekT == null) return;
     s.peekT -= dt;
     if (s.peekT > 0) return;
     s.peekT = null;
-    maybeShowMechIntro(s.L);      // queue any never-seen mechanic pop-up for this level
-    if (!mechQueue.length) beginLevelIntro();
+    beginLevelPan();
   }
-  // start the opening camera pan (if the flag begins off-screen) and then the character intro
-  function beginLevelIntro() {
-    const pl = state.introPlan; if (!pl) return;
-    state.introPlan = null;
+  // 2. pull back from the flag to where he starts
+  function beginLevelPan() {
+    const pl = state.introPlan; if (!pl) { afterLevelPan(); return; }
     if (!pl.goalOnScreen) {
-      const flagCam = camForPoint(pl.gx, pl.gy);
-      camX = flagCam.x; camY = flagCam.y;                 // open on the flag
       state.status = "campan";
-      state.pan = { t: 0, hold: 900, dur: 840, from: { x: camX, y: camY }, to: pl.startCam };
+      state.pan = { t: 0, hold: 0, dur: 840, from: { x: camX, y: camY }, to: pl.startCam };
     } else {
-      camX = pl.startCam.x; camY = pl.startCam.y;         // flag already visible
-      startIntro();               // go straight to forming the runner
+      afterLevelPan();            // the flag was already in shot; nothing to pan
     }
+  }
+  // 3. anything this level has to teach, now that the board has been seen
+  function afterLevelPan() {
+    state.introPlan = null;
+    state.status = "hold"; state.peekT = null;
+    maybeShowMechIntro(state.L);
+    if (!mechQueue.length) startIntro();     // 4. nothing to explain → form him now
   }
 
   function updateReadyHud() {
     if (elReady) elReady.textContent = String(state.tiles.filter(t => t.status === "free" || t.status === "parked").length);
   }
   function updateScoreHud() { if (elScore) elScore.textContent = String(state.score); }
+  // ---------- the Cloak of Light's golden dust -----------------------------
+  // Shed from him while the Cloak is up and left behind to fade, so the trail is something the
+  // board keeps for a moment rather than a shape stuck to his back. Kept ticking after the
+  // power ends so the last of it settles instead of vanishing mid-air.
+  const STAR_DUST_MS = 620;
+  function tickStarDust(dt) {
+    const s = state;
+    if (!s.starDust) s.starDust = [];
+    if (powerActive("star") && s.status === "play") {
+      const ri = runnerInfo();
+      // His local +x is the way he is travelling, so everything is shed along -x: dropped
+      // behind him and drifting further back, which is what makes it read as a trail rather
+      // than sparks coming off a firework. The old version threw them upward, so they hung
+      // over him instead of falling away.
+      // Both offsets are taken in HIS frame — back along the reverse of travel, up along the
+      // surface normal. Using world "up" for the body offset put the dust in front of him
+      // whenever he ran vertically: up-screen and behind-him are the same axis there, and the
+      // taller of the two offsets won.
+      const tx = ri.tx, ty = ri.ty, nx = ri.nx, ny = ri.ny;
+      for (let k = 0; k < 3; k++) {
+        const back  = cell * (0.10 + Math.random()*0.26);        // how far behind it starts
+        const up    = cell * (0.06 + Math.random()*0.34);        // up his body, not off it
+        const drift = cell * (0.00030 + Math.random()*0.00032);  // it keeps falling further back
+        s.starDust.push({
+          x: ri.sx - tx*back + nx*up + (Math.random()*2 - 1) * cell*0.05,
+          y: ri.sy - ty*back + ny*up + (Math.random()*2 - 1) * cell*0.05,
+          vx: -tx*drift + (Math.random()*2 - 1) * cell*0.00010,
+          vy: -ty*drift + (Math.random()*2 - 1) * cell*0.00010,
+          sz: cell*(0.03 + Math.random()*0.045),
+          life: 0, max: STAR_DUST_MS * (0.6 + Math.random()*0.8),
+        });
+      }
+    }
+    if (!s.starDust.length) return;
+    for (const d of s.starDust) { d.life += dt; d.x += d.vx*dt; d.y += d.vy*dt; }
+    s.starDust = s.starDust.filter(d => d.life < d.max);
+  }
+  function drawStarDust() {
+    const s = state;
+    if (!s.starDust || !s.starDust.length) return;
+    ctx.save();
+    for (const d of s.starDust) {
+      const u = d.life / d.max;
+      ctx.globalAlpha = (1 - u) * 0.9;
+      ctx.fillStyle = u < 0.45 ? "#fff6d0" : "#ffd24a";   // white-hot, cooling to gold
+      const r = d.sz * (1 - u*0.55);
+      ctx.fillRect(d.x - r/2, d.y - r/2, r, r);
+    }
+    ctx.restore();
+  }
+
   // spawn an expanding ring "pop" at a cell centre (tile placed, coin, etc.)
   function spawnPop(c, r, color) {
     state.pops.push({ x:(c+0.5)*cell, y:(r+0.5)*cell, life:0, max:340, color: color || getVar("--free") });
@@ -2033,7 +2552,19 @@
     if (!s.introSnd.gather) { s.introSnd.gather = true; Sound.introGather(); }  // plays once the intro runs (audio unlocked)
     const before = s.introT; s.introT += dt;
     if (before < INTRO_CONVERGE && s.introT >= INTRO_CONVERGE && !s.introSnd.flash) { s.introSnd.flash = true; Sound.introFlash(); }
-    if (s.introT >= INTRO_CONVERGE + INTRO_FLASH) { s.status = "play"; s.introParticles = null; }
+    if (s.introT >= INTRO_CONVERGE + INTRO_FLASH && s.status === "intro") {
+      s.introParticles = null;
+      // He is assembled but not moving yet: wait out the rest of the current beat so his first
+      // stride lands with the backing rather than a fraction of a beat off it.
+      s.status = "cue"; s.cueT = Sound.cueDelay ? Sound.cueDelay() : 0;
+    }
+  }
+  function tickCue(dt) {
+    const s = state;
+    s.cueT -= dt;
+    if (s.cueT > 0) return;
+    Sound.levelMusicHandover();   // from here his tile clears ARE the beat
+    s.status = "play";
   }
   function drawIntro(ts) {
     const s = state, t = s.introT, tgt = s.introTarget;
@@ -2084,7 +2615,7 @@
     flag:   { name:"The Exit", desc:"Lay a tile on the flag to finish the level." },
     wall:   { name:"Metal Wall", desc:"Solid — you can't build on it. Route around." },
     stone:  { name:"Stone Block", desc:"Tap to smash it, then build through the gap." },
-    coin:   { name:"Coins", desc:"Collect coins along the way for bonus points." },
+    coin:   { name:"Loot Tile", desc:"Run over one and its tile is yours to spend in the shop." },
     boost:  { name:"Boost", desc:"Grab it for a short burst of speed. Keep those tiles flowing!" },
     crumble:{ name:"Spacetime Rift", desc:"A vortex in the floor. Crossing it swallows that tile for good — spend wisely." },
     slow:   { name:"Slow", desc:"Grab it and the runner drags for a few seconds — plan around it." },
@@ -2137,7 +2668,7 @@
   function showNextMech() {
     const pop = document.getElementById("mechpop");
     if (!mechQueue.length) { pop.classList.remove("show"); paused = false;
-      if (state.status === "hold") beginLevelIntro();   // pop-ups cleared → run the delayed intro
+      if (state.status === "hold") startIntro();        // pop-ups cleared → form the character
       return; }
     const type = mechQueue[0], M = MECHS[type];
     document.getElementById("mech-name").textContent = M.name;
@@ -2190,6 +2721,9 @@
                    drawPlatformTile(N0, { c:-1, r:0 }, { c:0, r:1 }); });
       return;
     }
+    // The loot tile is a TILE, not a coin — so the card shows the thing that is on the board
+    // rather than a token that appears nowhere in the game.
+    if (type==="coin")     { real(() => coinGlyph(cell*0.5, cell*0.5, cell*0.74)); return; }
     if (type==="wall")     { real(() => drawWall(0, 0)); return; }
     if (type==="stone")    { real(() => drawStone(0, 0, 0, { hp:2, vi:0 })); return; }
     if (type==="platform") { real(() => drawPlatform({ c:0, r:0, dirs:["n","e"], lit:0.55 }, 0)); return; }
@@ -2226,10 +2760,7 @@
       for(let k=0;k<3;k++){const y=S*0.66-k*S*0.15; g.beginPath();g.moveTo(cx-S*0.15,y);g.lineTo(cx,y-S*0.1);g.lineTo(cx+S*0.15,y);g.stroke();} }
     else if (type==="slow") { tile("rgba(180,174,235,0.5)"); g.strokeStyle="#ff9e4d"; g.lineWidth=S*0.05; g.lineCap="round";
       for(let k=0;k<3;k++){const y=S*0.34+k*S*0.15; g.beginPath();g.moveTo(cx-S*0.15,y);g.lineTo(cx,y+S*0.1);g.lineTo(cx+S*0.15,y);g.stroke();} }
-    else if (type==="coin") {
-      const r=S*0.2, dep=S*0.13;
-      g.fillStyle="#e08a1e"; for(let d=dep; d>0.5; d-=1.6){ g.beginPath(); g.arc(cx,cy+d,r,0,7); g.fill(); }
-      g.fillStyle="#ffd24a"; g.beginPath(); g.arc(cx,cy,r,0,7); g.fill(); }
+    else if (type==="coin") {}                    // drawn as a real tile below, not a disc
     else if (type==="key") { g.fillStyle="#ffd24a";
       g.beginPath(); g.arc(cx-S*0.12,cy,S*0.11,0,7); g.arc(cx-S*0.12,cy,S*0.05,0,7,true); g.fill("evenodd"); // transparent hole
       g.fillStyle="#ffd24a"; g.fillRect(cx-S*0.02,cy-S*0.03,S*0.3,S*0.055);
@@ -2478,9 +3009,20 @@
     return worldW <= viewW ? (worldW - viewW) / 2
                            : clamp(px - viewW/2, -pad, worldW - viewW + pad);
   }
+  // How far past the runner, toward the front of the laid track, the camera sits — in cells.
+  // The decision being made is where the NEXT tile goes, and that happens at the head of the
+  // path, so the space worth showing is ahead of him rather than behind.
+  const CAM_LEAD = 0.75;
   function camTarget() {
     const p = visualAt(state.runIdx + state.runT);
-    return { tx: camClampX(p.x), ty: camClampY(p.y) };
+    const head = visualAt(state.path.length - 0.5);      // the far edge of the leading tile
+    let tx = p.x, ty = p.y;
+    const dx = head.x - p.x, dy = head.y - p.y, d = Math.hypot(dx, dy);
+    if (d > 1) {                                          // never lead further than the head is
+      const lead = Math.min(d, CAM_LEAD * cell);
+      tx += dx/d * lead; ty += dy/d * lead;
+    }
+    return { tx: camClampX(tx), ty: camClampY(ty) };
   }
   function snapCamera() { const t = camTarget(); camX = t.tx; camY = t.ty; }
   // camera top-left that centres a given world point (respecting the top padding)
@@ -2494,14 +3036,14 @@
   }
   // opening fly-in: hold on the off-screen flag, glide to the runner's start, then form the runner
   function tickCamPan(dt) {
-    const p = state.pan; if (!p) { startIntro(); return; }
+    const p = state.pan; if (!p) { afterLevelPan(); return; }
     p.t += dt;
     if (p.t < p.hold) { camX = p.from.x; camY = p.from.y; return; }   // beat on the flag
     const u = Math.min(1, (p.t - p.hold) / p.dur);
     const e = u < 0.5 ? 2*u*u : 1 - Math.pow(-2*u+2, 2)/2;            // ease in-out
     camX = p.from.x + (p.to.x - p.from.x)*e;
     camY = p.from.y + (p.to.y - p.from.y)*e;
-    if (u >= 1) { camX = p.to.x; camY = p.to.y; state.pan = null; startIntro(); }
+    if (u >= 1) { camX = p.to.x; camY = p.to.y; state.pan = null; afterLevelPan(); }
   }
 
   const cx = c => c * cell, cy = r => r * cell;
@@ -2815,7 +3357,9 @@
       else if (s.speedFx.kind === "slow") factor *= SLOW_MULT;
       if (s.speedFx.t <= 0) { s.speedFx.kind = null; s.speedFx.t = 0; }
     }
-    if (powerActive("clock")) factor *= CLOCK_MULT;   // Hands of Time, dragging on everything
+    // Hands of Time stops HIM, not the level: the saws keep sweeping and the monsters keep
+    // rowing, so a second of standing still is a second of everything else catching up.
+    if (powerActive("clock")) factor = 0;
     // fixed pace for now — no within-level combo speed-up (was: 1 + min(combo*0.01, 0.5))
     const comboSpeed = 1;
     factor *= comboSpeed;
@@ -2982,12 +3526,12 @@
   }
 
   // ---------- Talisman powers ---------------------------------------------
-  const CLOCK_MULT = 0.42;     // how far the Clock drags time down
+  const REWIND_TILES = 2;      // how far back the Tape of Regret puts you
   const MAGNET_CELLS = 2.5;    // the Magnet's reach, in tiles
   // The reach is drawn as rings falling inward rather than as one ring sitting still: a
   // static circle says "this is the area", where a collapsing one says "and it is pulling".
-  const MAGNET_RINGS = 4;      // how many are on their way in at any moment
-  const MAGNET_RING_MS = 820;  // one ring's trip from the rim to him
+  const MAGNET_RINGS = 2;      // how many are on their way in at any moment
+  const MAGNET_RING_MS = 820;  // one disc's trip from the rim to him
   const COIN_FLY_MS = 240;     // how long a pulled coin takes to reach him
   // Press the button: the worn talisman gives up its one power for this level.
   // A level still allows ONE power — that has always been the balance — but which one is now
@@ -3005,9 +3549,77 @@
     Sound.power(def.id);
     haptic([10, 30, 14]);
     if (def.id === "mush") Sound.warp(true);
+    if (def.id === "star") Sound.starTheme(def.ms);
+    // Instant powers do their work here and then let go, rather than sitting armed.
+    if (def.id === "rewind") {
+      rewindRunner(REWIND_TILES);
+      s.power.kind = null; s.power.t = 0; s.power.armed = false;
+    }
     return true;
   }
   const powerActive = id => state && state.power.kind === id && state.power.t > 0;
+  // Step him back up to `n` tiles and put the board back the way it was when he was there.
+  //
+  // Moving runIdx alone is not enough. Once he passes a tile it frees, and the player has very
+  // likely dragged it round to the front — where it is now holding up track. Winding him back
+  // onto that node means taking the tile off the front and returning it, which in turn means
+  // the track it was carrying has to come up too, along with everything laid beyond it.
+  // Nothing is destroyed: whatever is orphaned goes back into his hand.
+  function rewindRunner(n) {
+    const s = state;
+    // A tile eaten by a crumbling floor is gone for good, so the rewind stops short of it
+    // rather than standing him on a hole.
+    let target = s.runIdx;
+    for (let k = 0; k < n; k++) {
+      const nd = s.path[target - 1];
+      if (!nd) break;
+      if (nd.kind === "tile" && nd.tileId != null) {
+        const t = s.tiles[nd.tileId];
+        if (!t || t.status === "spent") break;
+      }
+      target--;
+    }
+    if (target === s.runIdx && s.runT < 0.02) return false;   // already as far back as it goes
+
+    // Which tiles the rewound stretch needs, and the node each one has to return to.
+    const want = new Map();
+    for (let i = target; i <= s.runIdx && i < s.path.length; i++) {
+      const nd = s.path[i];
+      if (nd.kind === "tile" && nd.tileId != null && s.tiles[nd.tileId]) want.set(nd.tileId, nd);
+    }
+    // If one of them is laid ahead of him, the path is cut at the earliest such placement:
+    // everything past that point was reached over ground that is about to move.
+    let cut = s.path.length;
+    for (let k = s.runIdx + 1; k < s.path.length; k++) {
+      const nd = s.path[k];
+      if (nd.kind === "tile" && nd.tileId != null && want.has(nd.tileId)) { cut = k; break; }
+    }
+    // Everything past the cut goes back into his hand where it lies — except the tiles being
+    // reclaimed, which are about to be put back where they came from instead.
+    for (let k = cut; k < s.path.length; k++) {
+      const nd = s.path[k];
+      if (nd.kind !== "tile" || nd.tileId == null) continue;
+      const t = s.tiles[nd.tileId];
+      if (t && !want.has(nd.tileId)) t.status = "free";
+    }
+    if (cut < s.path.length) s.path.length = cut;
+
+    // Put the reclaimed tiles back under him, live track again. Clearing `exited` is what lets
+    // each one free up a second time as he runs it — without that the tile would be stranded
+    // on the board for the rest of the level.
+    for (const [id, nd] of want) {
+      const t = s.tiles[id];
+      t.c = nd.c; t.r = nd.r; t.status = "active";
+      nd.exited = false;
+      spawnPop(nd.c, nd.r, "#9ad9b0");
+    }
+
+    s.runIdx = target; s.runT = 0;
+    s.shake = Math.max(s.shake || 0, cell * 0.08);
+    markOccDirty(); updateReadyHud(); linkParkedTiles();
+    snapCamera();
+    return true;
+  }
   function runnerCell() {
     const n = state.path[Math.min(state.runIdx, state.path.length-1)] || state.path[0];
     return { c: n.c, r: n.r };
@@ -3018,7 +3630,7 @@
     const s = state;
     if (s.coinFly.length) {                       // coins already in flight, wherever from
       for (const f of s.coinFly) f.t += dt;
-      for (const f of s.coinFly) if (f.t >= COIN_FLY_MS && !f.done) { f.done = true; grabCoin(f.c, f.r); }
+      for (const f of s.coinFly) if (f.t >= COIN_FLY_MS && !f.done) { f.done = true; grabCoin(f.c, f.r, true); }
       s.coinFly = s.coinFly.filter(f => !f.done);
     }
     if (!s.power.kind || s.power.t <= 0) return;
@@ -3041,11 +3653,16 @@
     }
   }
   // one coin, collected — shared by passing over it and by the Magnet reeling it in
-  function grabCoin(c, r) {
+  // `flew` marks a coin the Magnet reeled in. Running over one is a single event and earns
+  // the full pop; a magnet pulls a fistful at once, and five or six rings expanding out of
+  // five or six different cells reads as a fault rather than a reward. The tally and the
+  // sound still fire, so nothing is lost — only the ripples.
+  function grabCoin(c, r, flew) {
     const s = state;
     s.coinsGot++; s.score = computeScore(); updateScoreHud();
     wallet.tiles += COIN_TILES; saveWallet(); showTally(c, r);
-    spawnPop(c, r, "#ffd24a"); spawnLight(c, r); Sound.coin(); haptic(6);
+    if (!flew) { spawnPop(c, r, "#ffd24a"); spawnLight(c, r); }
+    Sound.coin(); haptic(6);
   }
   // The Hammer of God: lift a tile that has already been laid, along with everything laid
   // after it, and put it back in your hand. Only ahead of the runner — pulling the ground
@@ -3317,6 +3934,7 @@
 
   function endWin(relic) {
     state.status = "win";
+    Sound.levelMusicStop();        // the level's backing ends with the level
     const att = state.attempts || 1;
     saveWallet();                               // bank the tiles this run collected
     {                                           // remember it's cleared — nothing else to track
@@ -3348,6 +3966,7 @@
       ovScore.firstChild.textContent = relic.blurb;
       setByline(ovMsg, "A new talisman. Use it from the foot of any level — one power per run.");
       ovBtn.textContent = last ? "Level Select" : "Continue";
+      updateOvShop();
       return;
     }
     relicShow = null;
@@ -3357,6 +3976,7 @@
       ? "All " + LEVELS.length + " levels. You've run out of track — and excuses."
       : pickQuip(att > 1 ? WIN_QUIPS_RETRY : WIN_QUIPS));
     ovBtn.textContent = last ? "Level Select" : "Next Level";
+    updateOvShop();
   }
   // The charm on the win card: it rises into place, then hangs there turning gently.
   let relicShow = null, relicShowT = 0;
@@ -3401,6 +4021,7 @@
   let _lastQuip = -1;
   function showLose() {
     state.status = "lose";
+    Sound.levelMusicStop();        // ...and with a fall, too
     saveWallet();                             // a failed run still keeps the tiles it cleared
     winAnimToken++; ovScore.innerHTML = "";   // cancel any pending win-score reveal
     ovStars.textContent = "";
@@ -3411,6 +4032,7 @@
     ovTitle.textContent = LOSE_TITLES[(Math.random() * LOSE_TITLES.length) | 0];
     setByline(ovMsg, LOSE_QUIPS[i]);
     ovBtn.textContent = "Retry";
+    updateOvShop();
     Sound.death();                  // a short sad jingle on the death screen
   }
 
@@ -3462,9 +4084,10 @@
     drawPops();
     drawLights();
     drawTrail();                                  // worn light trail, under the runner
+    drawStarDust();                               // ...and the Cloak's dust, behind him too
     if (state.status === "intro") drawIntro(ts);
-    else if (state.status === "campan") { /* runner not formed yet — flag fly-in */ }
-    else drawRunner(ts);
+    else if (state.status === "campan" || state.status === "hold") { /* not formed yet */ }
+    else drawRunner(ts);                          // "cue" included: standing, about to go
     drawHazards(ts);
     // Coins last of everything on the board. They hover off the surface, so a saw or a
     // block passing over one used to swallow it and the player would never know it was there.
@@ -3604,12 +4227,9 @@
     const cym = (tallyR + 0.5)*cell - cell*(TALLY.above + TALLY.rise*u);
     ctx.translate(cxm, cym); ctx.scale(k, k); ctx.translate(-cxm, -cym);
     coinGlyph(cxm - w/2 + ic/2, cym, ic);
-    // Outlined rather than sitting on a plate: a plate popping in and out over the board is
-    // far noisier than the number it carries, and the stroke is what lets it read over track,
-    // wall or backdrop alike — it lands wherever the coin happened to be.
+    // No plate and no outline: a plate popping in and out over the board is noisier than the
+    // number it carries, and the black stroke around it was doing the same job twice as hard.
     const tx = cxm - w/2 + ic + gap;
-    ctx.lineJoin = "round"; ctx.lineWidth = Math.max(2, f2*0.18);
-    ctx.strokeStyle = "rgba(5,4,13,0.6)"; ctx.strokeText(txt, tx, cym);
     ctx.fillStyle = "#ffd24a"; ctx.fillText(txt, tx, cym);
     ctx.restore();
   }
@@ -3624,16 +4244,22 @@
     // the faintest wash, purely so the reach still reads as an AREA between rings
     ctx.globalAlpha = 0.07; ctx.fillStyle = "#ff6d6d";
     ctx.beginPath(); ctx.arc(cxm, cym, R, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = "#ff9d9d";
+    // Shaded discs rather than drawn rings. An outline is a hard edge travelling across the
+    // board, which reads as a boundary; a disc that is brightest at its rim and clear in the
+    // middle reads as something closing IN, which is the whole idea.
     for (let i = 0; i < MAGNET_RINGS; i++) {
       // u runs 0 at the rim to 1 at him. Evenly spread, so one leaves as another arrives.
       const u = ((ts / MAGNET_RING_MS) + i / MAGNET_RINGS) % 1;
       const rad = R * (1 - u);
       if (rad < cell*0.05) continue;
-      // in as it leaves the rim, out as it lands, so no ring ever pops into or out of being
-      ctx.globalAlpha = 0.55 * Math.pow(Math.sin(Math.PI*u), 0.6);
-      ctx.lineWidth = Math.max(1.5, cell*0.028*(0.6 + u));   // tightening as it closes on him
-      ctx.beginPath(); ctx.arc(cxm, cym, rad, 0, Math.PI*2); ctx.stroke();
+      // in as it leaves the rim, out as it lands, so nothing ever pops into or out of being
+      const a = 0.30 * Math.pow(Math.sin(Math.PI*u), 0.6);
+      const g = ctx.createRadialGradient(cxm, cym, rad*0.55, cxm, cym, rad);
+      g.addColorStop(0,    "rgba(255,157,157,0)");
+      g.addColorStop(0.72, "rgba(255,157,157," + (a*0.45).toFixed(4) + ")");
+      g.addColorStop(1,    "rgba(255,157,157," + a.toFixed(4) + ")");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(cxm, cym, rad, 0, Math.PI*2); ctx.fill();
     }
     ctx.restore();
   }
@@ -5392,20 +6018,9 @@
     const s = cell;
     const phase = state.runPhase;
 
-    // The Star: a spinning halo of sparks, so "nothing can touch me" is legible at a glance.
-    if (powerActive("star")) {
-      const puls = 0.62 + 0.38*Math.sin(ts/90);
-      ctx.save();
-      ctx.globalAlpha = 0.30 + 0.18*puls; ctx.fillStyle = "#ffd24a";
-      ctx.beginPath(); ctx.arc(sx, sy - s*0.22, s*0.46*puls, 0, Math.PI*2); ctx.fill();
-      ctx.globalAlpha = 0.9; ctx.fillStyle = "#fff3c4";
-      for (let k = 0; k < 6; k++) {
-        const a = ts/260 + k*Math.PI/3, rr = s*0.44;
-        const px = sx + Math.cos(a)*rr, py = sy - s*0.22 + Math.sin(a)*rr*0.7;
-        ctx.beginPath(); ctx.arc(px, py, s*0.035*(0.6 + 0.4*Math.sin(ts/110 + k)), 0, Math.PI*2); ctx.fill();
-      }
-      ctx.restore();
-    }
+    // The Star draws nothing here any more. It had a pulsing disc AND a ring of orbiting
+    // sparks stacked on top of a runner who already turns solid gold and sheds a trail of it —
+    // four ways of saying "nothing can touch me", three of them in the way of watching him run.
     // aura while a timed boost/slow effect is active
     if (state.speedFx && state.speedFx.t > 0) {
       const col = state.speedFx.kind === "boost" ? pal("boost") : pal("slow");
@@ -5460,7 +6075,11 @@
     // A worn colour replaces RUNNER's two rather than editing the block the labs paste
     // between themselves — the tuning stays the tuning, the skin is just what's on today.
     const skin = lookItem("drip");
-    const pale = skin.body || RUNNER.body, inkCol = skin.ink || RUNNER.ink;
+    // The Cloak of Light overrides the drip entirely — a finish is a paint job, and this is
+    // supposed to read as him being made of the stuff for three seconds.
+    const golden = powerActive("star");
+    const pale = golden ? "#ffdf78" : (skin.body || RUNNER.body);
+    const inkCol = golden ? "#6b3f04" : (skin.ink || RUNNER.ink);
     const legL = s*RUNNER.legLen, bodyH = s*RUNNER.bodyH, bodyW = s*RUNNER.bodyW;
     // soft ground shadow (not an outline). shadowBob ties it to the body's rise, so a
     // high bob can read as him actually leaving the ground rather than sliding along it.
@@ -5491,7 +6110,7 @@
     // colour. The legs take the SAME one: a gradient lives in user space at paint time, so
     // one object covers both and the leg is lit to match the body it hangs off rather than
     // being a flat stripe stuck to a polished ball.
-    const finish = skin.paint ? skin.paint(ctx, -bodyW/2, byTop, bodyW, bodyH, ts) : pale;
+    const finish = (!golden && skin.paint) ? skin.paint(ctx, -bodyW/2, byTop, bodyW, bodyH, ts) : pale;
     // legs — same colour as body, no outline
     ctx.strokeStyle = finish; ctx.lineWidth = Math.max(3, s*RUNNER.legWidth); ctx.lineCap = "round"; ctx.lineJoin = "round";
     const hipY = -legL - bob - bodyH*(RUNNER.hipRise||0), kneeLead = s*RUNNER.kneeLead;
@@ -6623,11 +7242,13 @@
       if (state.status === "hold") tickHold(dt);
       else if (state.status === "campan") tickCamPan(dt);
       else if (state.status === "intro") tickIntro(dt);
+      else if (state.status === "cue") tickCue(dt);      // assembled, waiting for the downbeat
       else if (state.status === "squash") tickSquash(dt);
       update(dt);
       updateHazards(dt);
       if (state.status === "falling") tickFall(dt);
       updateShards(dt);
+      tickStarDust(dt);
       tickFx(dt);
       tickVortex(dt);
       tickPower(dt);
@@ -7039,6 +7660,8 @@
   // overlay up underneath, so closing the shop drops you back on Next Level rather than
   // into a level you have already finished.
   ovShop.addEventListener("click", () => { Sound.unlock(); Sound.tap(); openMenu("shop", "overlay"); });
+  // Refreshed whenever an end screen goes up, so the number is the one you just earned.
+  function updateOvShop(){ walletInto(ovShop, "Tile Shop"); }
   document.getElementById("pauseFloat").addEventListener("click", () => { Sound.unlock(); Sound.tap(); openMenu("main"); });
   document.getElementById("mech-ok").addEventListener("click", () => { Sound.unlock(); Sound.tapBig(); mechQueue.shift(); showNextMech(); });
 
@@ -7066,6 +7689,23 @@
     d.onclick = (e) => { Sound.unlock(); Sound.tap(); fn(e); }; return d;
   }
   function sub(t){ const d = document.createElement("div"); d.className = "menu-sub"; d.textContent = t; return d; }
+  // The wallet, as it appears everywhere it appears: the tile itself, then the count. A "·"
+  // and a number was a label for the currency; this IS the currency.
+  function coinChip(px){
+    const c = document.createElement("canvas");
+    c.className = "wallet";
+    c.width = c.height = Math.round(px * 1.32);
+    withCanvas(c.getContext("2d"), c.width, 0, 0, () => coinGlyph(c.width/2, c.width/2, px));
+    return c;
+  }
+  function walletInto(el, label, px){
+    el.textContent = "";
+    const t = document.createElement("span"); t.textContent = label;
+    el.appendChild(t);
+    el.appendChild(coinChip(px || 17));
+    const n = document.createElement("span"); n.textContent = wallet.tiles;
+    el.appendChild(n);
+  }
 
   // One shop animation at a time. Every rebuild — a new tab, a new item worn — replaces the
   // painter, and closing the menu stops it: an orphaned rAF would go on drawing into a canvas
@@ -7100,7 +7740,7 @@
     if (screen === "shop" || screen.indexOf("shop:") === 0) {
       if (screen.indexOf("shop:") === 0) shopTab = screen.slice(5);
       if (!LOOK.some(l => l.key === shopTab)) shopTab = LOOK[0].key;
-      title.textContent = "Shop"; title.className = "shop";
+      title.textContent = "Tile Shop"; title.className = "shop";
       saveWallet();                                   // banks whatever the last run earned
 
       // A picture of him wearing everything currently on, standing on a real tile. It sits
@@ -7271,6 +7911,51 @@
       startRelics();
       return;
     }
+    // ---- Debug: the levers you want while building the thing, kept off the main menu ----
+    if (screen === "debug") {
+      title.textContent = "Debug"; title.className = "shop";
+      menuBody.appendChild(sub("Wallet"));
+      const purse = document.createElement("div"); purse.className = "shop-worn";
+      const showPurse = () => purse.textContent = wallet.tiles + " tiles · "
+        + wallet.owned.size + " of " + LOOK.reduce((n,l)=>n+l.items.length,0) + " items owned";
+      showPurse(); menuBody.appendChild(purse);
+      menuBody.appendChild(btn("Give 100 tiles", () => {
+        Sound.unlock(); Sound.coin();
+        wallet.tiles += 100; saveWallet(); showPurse();
+      }));
+      menuBody.appendChild(sub("Holy Talismans"));
+      menuBody.appendChild(btn("Unlock all talismans", (e) => {
+        Sound.unlock(); Sound.tapBig();
+        for (const t of TALISMANS) unlockTalisman(t.id);   // the real unlock path, so it persists
+        e && e.target && (e.target.textContent = "All " + TALISMANS.length + " unlocked");
+      }));
+      menuBody.appendChild(sub("Danger"));
+      // Wipes EVERYTHING the player has: levels cleared, coins, everything bought and worn,
+      // talismans found, settings, and the record of which tutorials have been seen. The old
+      // tutorials-only reset needed no confirmation because it was harmless and instantly
+      // repeatable. This is neither, so the button arms itself first and you have to mean it.
+      let armed = false, armT = null;
+      const rb = btn("Reset All Data", () => {
+        Sound.unlock();
+        if (!armed) {
+          armed = true; rb.textContent = "Tap again to erase it all"; rb.classList.add("danger");
+          armT = setTimeout(() => { armed = false;
+            if (rb.isConnected) { rb.textContent = "Reset All Data"; rb.classList.remove("danger"); } }, 3200);
+          return;
+        }
+        clearTimeout(armT);
+        for (const k of [SEEN_KEY, BEST_KEY, WALLET_KEY, TAL_KEY, SET_KEY])
+          { try { localStorage.removeItem(k); } catch(_) {} }
+        rb.textContent = "Erased — starting over";
+        // A reload is the honest way back to a fresh player: every default is read at boot.
+        setTimeout(() => { try { location.reload(); } catch(_) {} }, 480);
+      });
+      menuBody.appendChild(rb);
+      const back = btn("Back", () => buildMenu("main"));
+      back.className = "shop-go";
+      menuBody.appendChild(back);
+      return;
+    }
     if (screen === "levels") {
       // Laid out like the shop: the header stays under the notch at the top, the grid scrolls
       // on its own, and BACK is pinned to the viewport instead of trailing 33 cells down.
@@ -7301,31 +7986,16 @@
     menuBody.appendChild(btn("Resume", closeMenu));
     menuBody.appendChild(btn("Restart Level", () => { loadLevel(levelIdx); closeMenu(); }));
     menuBody.appendChild(btn("Tileverse", () => buildMenu("levels")));
-    menuBody.appendChild(btn("Shop", () => buildMenu("shop")));
+    // The balance belongs on the way in, not two taps deep: the question "can I afford
+    // anything yet" is the only reason to open the shop at all.
+    const shopBtn = btn("Tile Shop", () => buildMenu("shop"));
+    shopBtn.classList.add("gold");
+    walletInto(shopBtn, "Tile Shop");
+    menuBody.appendChild(shopBtn);
     menuBody.appendChild(btn("Holy Talismans", () => buildMenu("talismans")));
     menuBody.appendChild(toggle("Sound", !Sound.isMuted(), () => { Sound.unlock(); Sound.setMuted(!Sound.isMuted()); buildMenu(screen); }));
     menuBody.appendChild(toggle("Colorblind", colorblind, () => { colorblind = !colorblind; settings.colorblind = colorblind; saveSettings(); applyColorblind(); buildMenu(screen); }));
-    // Wipes EVERYTHING the player has: levels cleared, coins, everything bought and worn,
-    // talismans found, settings, and the record of which tutorials have been seen. The old
-    // tutorials-only reset needed no confirmation because it was harmless and instantly
-    // repeatable. This is neither, so the button arms itself first and you have to mean it.
-    let armed = false, armT = null;
-    const rb = btn("Reset All Data", () => {
-      Sound.unlock();
-      if (!armed) {
-        armed = true; rb.textContent = "Tap again to erase it all"; rb.classList.add("danger");
-        armT = setTimeout(() => { armed = false;
-          if (rb.isConnected) { rb.textContent = "Reset All Data"; rb.classList.remove("danger"); } }, 3200);
-        return;
-      }
-      clearTimeout(armT);
-      for (const k of [SEEN_KEY, BEST_KEY, WALLET_KEY, TAL_KEY, SET_KEY])
-        { try { localStorage.removeItem(k); } catch(_) {} }
-      rb.textContent = "Erased — starting over";
-      // A reload is the honest way back to a fresh player: every default is read at boot.
-      setTimeout(() => { try { location.reload(); } catch(_) {} }, 480);
-    });
-    menuBody.appendChild(rb);
+    menuBody.appendChild(btn("Debug", () => buildMenu("debug")));
     const ver = document.createElement("div"); ver.className = "menu-ver"; ver.textContent = VERSION;
     menuBody.appendChild(ver);
   }
@@ -7340,6 +8010,7 @@
   // ---------- Debug hook --------------------------------------------------
   window.__TR = {
     state: () => state, head, endWin, levelCount: () => LEVELS.length,
+    music: { get: () => Sound.musicNow(), set: (m) => Sound.setMusic(m) },
     targets: () => validTargets(state.drag ? state.drag.tile : null),
     freeTiles: () => state.tiles.filter(t => t.status === "free"),
     drop: (id, c, r) => dropTileOn(state.tiles[id], c, r),

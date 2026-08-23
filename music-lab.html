@@ -24,6 +24,14 @@
   .rowline{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px;margin:3px 0;}
   .rowline label{opacity:.85;}
   .togs{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0;}
+  .env{margin:4px 0 8px;}
+  .env canvas{display:block;width:100%;height:52px;background:#0d0b22;border:1px solid var(--line);
+              border-radius:6px;}
+  .env .adsr{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px;}
+  .env .adsr div{display:flex;flex-direction:column;gap:1px;}
+  .env .adsr label{font-size:9px;opacity:.55;letter-spacing:.5px;text-transform:uppercase;}
+  .env .adsr input{width:100%;accent-color:var(--accent);}
+  .env .adsr .v{font-size:9px;opacity:.6;font-variant-numeric:tabular-nums;}
   button.act{background:#233;color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:6px 10px;cursor:pointer;font:inherit;font-size:11px;}
   button.act:hover{border-color:var(--accent);}
   button.act.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
@@ -62,19 +70,27 @@
       <span class="pill" id="seedinfo">—</span>
     </div>
     <div class="rowline">
+      <button class="act prim" id="savedef">Save as defaults</button>
+      <button class="act" id="revertdef">Revert to shipped</button>
+    </div>
+    <div class="rowline">
       <button class="act prim" id="savelv">Save for this level</button>
       <button class="act" id="clearlv">Clear this level</button>
       <button class="act warn" id="clearall">Clear all overrides</button>
     </div>
     <table class="lv" id="lvtab"></table>
+    <div class="panel" id="panelSong" style="width:100%"></div>
   </div>
 
-  <div class="panel" id="panel"></div>
+  <div class="panel" id="panelFg"></div>
+  <div class="panel" id="panelBg"></div>
 
   <div class="panel" style="width:360px">
     <div class="group">Export</div>
     <textarea id="out" spellcheck="false"></textarea>
     <div class="rowline">
+      <button class="act prim" id="tofile">Save to game</button>
+      <button class="act" id="pickfile">Choose index.html…</button>
       <button class="act" id="copy">Copy</button>
       <button class="act" id="paste">Load from box</button>
       <button class="act" id="reset">Reset to shipped</button>
@@ -102,6 +118,18 @@ const SHIPPED = {
   beatsPerTile: 4,       // melody notes per cleared tile; only the 1st is the two-tone voice
   midVel: 0.42,          // level of the single-tone notes filling the gaps
   barLen: 4,             // beats per chord
+  // How long ONE background note is held, in beats — independent of how fast the chords
+  // move. Set it longer than barLen and the pad drones across a chord change, which is most
+  // of what makes a backing sound vast rather than busy.
+  bgEvery: 8,
+  // What fraction of a background note is spent letting go of it. Everything before that is
+  // held dead flat: the note arrives, sits there, and only moves when the next one is due.
+  // A pad that decays across its own length is a struck sound pretending to be a held one.
+  // Where the background gets its pitch. "chord" is the old behaviour — the triad, moving on
+  // its own. "lead" takes whatever note the melody is on at the moment the background note
+  // starts and holds THAT, so the two are singing the same thing. "leadChord" keeps the
+  // melody note on top and fills the chord in underneath it.
+  bgFollow: "lead",
   // --- layers ---
   leadOn: 1, padOn: 1, kickOn: 1, hatOn: 1, subOn: 1, offBassOn: 1,
   leadVel: 0.80, padVel: 0.14, kickVel: 0.70, hatVel: 0.12, subVel: 0.85, offBassVel: 0.42,
@@ -111,7 +139,40 @@ const SHIPPED = {
   waveA: "sine", waveB: "sine",
   delayTime: 0.24, feedback: 0.34, damp: 2400, wet: 0.30,
   bassLpf: 340, kickHz: 130, kickDrop: 46, hatHz: 7000,
+  // --- cosmic vox: a formant choir standing in for the sine pad ---
+  // A pad made of sine tones is a pad. What makes something read as a VOICE is formants —
+  // two or three fixed resonances that stay put while the pitch moves under them. So the
+  // source here is a clutch of detuned saws, and the character comes from the bandpass bank
+  // they run through, morphing between two vowels.
+  voxOn: 0,                 // off in the shipped setting; the presets below switch it on
+  voxStyle: "choir",        // choir | nebula | monolith | aurora
+  voxVel: 0.20, voxOct: -12,
+  voxVowel: 0.25,           // morph between the style's two vowels, 0..1
+  voxVib: 5.2, voxVibDepth: 8,   // the wobble that stops it sounding like an organ
+  voxSpread: 12,            // how far apart the singers are, cents
+  voxShimmer: 0.25,         // an octave-up ghost — most of the "cosmic"
+  // --- envelopes, one per instrument: attack / decay / sustain / release ---
+  // A, D and R are SECONDS; S is the fraction of the peak the note settles back to and holds.
+  // S at 1 means it never decays at all — which is what a background drone wants and what a
+  // plucked lead very much does not.
+  leadA: 0.008, leadD: 0.12, leadS: 0.35, leadR: 0.30,
+  bgA:   0.006, bgD:   0.20, bgS:   1.00, bgR:   0.60,
+  basA:  0.012, basD:  0.10, basS:  0.60, basR:  0.20,
+  kickA: 0.005, kickD: 0.09, kickS: 0.02, kickR: 0.06,
+  hatA:  0.003, hatD:  0.03, hatS:  0.01, hatR:  0.03,
+  voxWet: 0.55,             // how much of it goes to the echo
+  // --- heavy bass ---
+  bassStyle: "classic",     // classic | deep | growl | rumble
+  bassDrive: 0.30,          // waveshaper on the body, not the sub — the sub stays clean
+  bassSubVel: 1.00,         // the pure sine you feel rather than hear
+  bassFM: 1.50,             // growl only: modulator ratio
+  bassGlide: 0.05,          // pitch dip into the note, seconds
 };
+// SHIPPED is what the game has today and never moves. BASE is the baseline you are working
+// towards: "Save as defaults" pins the current settings there, level overrides are measured
+// against it, and it is what the export prints as MUSIC_DEFAULTS. Kept apart so "reset to
+// shipped" still has something true to go back to.
+let BASE = {...SHIPPED};
 let M = {...SHIPPED};
 
 // Scales as semitone offsets. The game currently only knows the first one.
@@ -169,12 +230,17 @@ function buildSong(seed){
 // ============================================================================
 // Audio — the same voices as the game, with the knobs above patched in
 // ============================================================================
+// The music's own output. In the lab it IS the master — there is nothing else playing. The
+// game puts a gain here instead, so it can cut the backing (and its long sustains) dead at
+// the end of a level without touching the sound effects.
+let musicBus=null;
 let ac=null, master=null, sendBus=null, noiseBuf=null, delayN=null, fbN=null, dampN=null, wetN=null;
 function ensure(){
   if (ac) return true;
   const AC = window.AudioContext || window.webkitAudioContext; if(!AC) return false;
   ac = new AC();
   master = ac.createGain(); master.gain.value = M.master; master.connect(ac.destination);
+  musicBus = master;
   delayN = ac.createDelay(1.0); delayN.delayTime.value = M.delayTime;
   fbN = ac.createGain(); fbN.gain.value = M.feedback;
   dampN = ac.createBiquadFilter(); dampN.type="lowpass"; dampN.frequency.value = M.damp;
@@ -197,11 +263,42 @@ function applyTone(){
 }
 const hz = semi => M.baseHz * Math.pow(2, semi/12);
 
-function voice(t, semi, wave, dur, vel, attack, wet, mono){
-  const g = ac.createGain();
+// One envelope shape for every instrument. Attack to the peak, decay to the sustain level,
+// hold flat there for the length of the note, then release. Exponential ramps throughout,
+// which is why nothing is ever allowed to reach zero — hence the 0.0001 floors.
+const ENV = pre => ({ a:+M[pre+"A"], d:+M[pre+"D"], s:+M[pre+"S"], r:+M[pre+"R"] });
+function adsr(g, t, dur, vel, E){
+  const v = Math.max(0.0002, vel);
+  let a = Math.max(0.002, E.a), d = Math.max(0.002, E.d), r = Math.max(0.004, E.r);
+  // A sustain of zero is a struck voice: attack, then ONE decay that dies inside the note.
+  // The decay is capped by the note rather than fixed, which is what makes a short note snap
+  // and a long one ring — the same shape every voice in this game had before it had an
+  // envelope at all. Release has nothing left to do, so it sits this case out.
+  if (E.s <= 0.0005) {
+    const aa = Math.min(a, dur*0.5), dd = Math.min(d, Math.max(0.004, dur - aa));
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(v, t + aa);
+    g.gain.exponentialRampToValueAtTime(0.0006, t + aa + dd);
+    return aa + dd;
+  }
+  // An envelope has to fit inside its own note. Unclamped, a long decay made a SHORT note
+  // ring on well past the next one — the notes filling the gaps between tile clears are a
+  // fifth of a beat each, and a 0.9s tail on those is a smear, not a melody.
+  const need = a + d + r;
+  if (need > dur) { const k = dur / need; a *= k; d *= k; r *= k; }
+  const sv = Math.max(0.0002, v * Math.min(1, Math.max(0, E.s)));
+  const rel = Math.max(a + d, dur - r);
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(Math.max(0.0002,vel), t+attack);
-  g.gain.exponentialRampToValueAtTime(0.0006, t+dur);
+  g.gain.exponentialRampToValueAtTime(v, t + a);
+  g.gain.exponentialRampToValueAtTime(sv, t + Math.min(a + d, rel));
+  g.gain.setValueAtTime(sv, t + rel);
+  g.gain.exponentialRampToValueAtTime(0.0006, t + rel + r);
+  return rel + r;                                     // how long the note actually runs for
+}
+
+function voice(t, semi, wave, dur, vel, pre, wet, mono){
+  const g = ac.createGain();
+  dur = adsr(g, t, dur, vel, ENV(pre || "lead"));
   // two detuned oscillators beat against each other and read as "thicker"; mono is one
   for (const cents of (mono ? [0] : [-6,6])){
     const o = ac.createOscillator(); o.type = wave;
@@ -212,18 +309,17 @@ function voice(t, semi, wave, dur, vel, attack, wet, mono){
 }
 function kick(t, vel){
   const o=ac.createOscillator(), g=ac.createGain();
+  const E=ENV("kick"), dur=E.a+E.d+E.r;
   o.type="sine"; o.frequency.setValueAtTime(M.kickHz,t);
-  o.frequency.exponentialRampToValueAtTime(Math.max(20,M.kickDrop), t+0.11);
-  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002,vel),t+0.005);
-  g.gain.exponentialRampToValueAtTime(0.0006,t+0.16);
-  o.connect(g); g.connect(master); o.start(t); o.stop(t+0.2);
+  o.frequency.exponentialRampToValueAtTime(Math.max(20,M.kickDrop), t+Math.max(0.02,dur*0.7));
+  adsr(g, t, dur, vel, E);
+  o.connect(g); g.connect(master); o.start(t); o.stop(t+dur+0.05);
 }
 function bass(t, semi, dur, vel){
   const f = hz(semi);
   const lp=ac.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=M.bassLpf; lp.Q.value=0.9;
   const g=ac.createGain();
-  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002,vel),t+0.014);
-  g.gain.exponentialRampToValueAtTime(0.0008,t+dur);
+  dur = adsr(g, t, dur, vel, ENV("bas"));
   const sub=ac.createOscillator(); sub.type="sine";
   sub.frequency.setValueAtTime(f*1.5,t); sub.frequency.exponentialRampToValueAtTime(f,t+0.06);
   const body=ac.createOscillator(); body.type="triangle"; body.frequency.setValueAtTime(f*2,t);
@@ -231,13 +327,122 @@ function bass(t, semi, dur, vel){
   sub.connect(g); body.connect(bg); bg.connect(g); g.connect(lp); lp.connect(master);
   sub.start(t); sub.stop(t+dur+0.05); body.start(t); body.stop(t+dur+0.05);
 }
+// Vowel formants: the first three resonances of the human vocal tract, and how loud each
+// sits. These numbers are what the ear reads as "someone is singing".
+const VOWELS = {
+  ah: [[800,1150,2900],[1.00,0.50,0.25]],
+  oo: [[325, 700,2530],[1.00,0.35,0.12]],
+  oh: [[500,1000,2400],[1.00,0.45,0.18]],
+  ee: [[270,2300,3000],[1.00,0.60,0.30]],
+  eh: [[530,1850,2500],[1.00,0.55,0.22]],
+};
+const VOX_STYLES = {
+  choir:    { vowels:["ah","oh"], wave:"sawtooth", voices:[-14,-5,5,14], oct:  0, q:7, sh:1.0 },
+  nebula:   { vowels:["oo","ah"], wave:"sawtooth", voices:[-20,-7,7,20], oct:  0, q:5, sh:1.6 },
+  monolith: { vowels:["oh","oo"], wave:"sawtooth", voices:[-9,-3,3,9],   oct:-12, q:9, sh:0.4 },
+  aurora:   { vowels:["eh","ee"], wave:"triangle", voices:[-16,-6,6,16], oct: 12, q:6, sh:2.0 },
+};
+function voxVoice(t, semi, dur, vel){
+  const S = VOX_STYLES[M.voxStyle] || VOX_STYLES.choir;
+  const A = VOWELS[S.vowels[0]], B = VOWELS[S.vowels[1]], u = M.voxVowel;
+  const f = hz(semi + S.oct);
+  const out = ac.createGain();
+  dur = adsr(out, t, dur, vel, ENV("bg"));
+  out.connect(musicBus);
+  if (M.voxWet > 0){ const w = ac.createGain(); w.gain.value = M.voxWet; out.connect(w); w.connect(sendBus); }
+
+  // the singers, all sharing one vibrato so they breathe together rather than fight
+  const raw = ac.createGain(); raw.gain.value = 1/(S.voices.length+1);
+  const lfo = ac.createOscillator(); lfo.type="sine"; lfo.frequency.value = M.voxVib;
+  const lfoG = ac.createGain(); lfoG.gain.value = M.voxVibDepth;
+  lfo.connect(lfoG); lfo.start(t); lfo.stop(t+dur+0.1);
+  const spread = M.voxSpread/14;
+  for (const c of S.voices){
+    const o = ac.createOscillator(); o.type = S.wave;
+    o.frequency.setValueAtTime(f, t); o.detune.setValueAtTime(c*spread, t);
+    lfoG.connect(o.detune);
+    o.connect(raw); o.start(t); o.stop(t+dur+0.1);
+  }
+  if (M.voxShimmer > 0){                      // the octave-up ghost
+    const o = ac.createOscillator(); o.type="sine"; o.frequency.setValueAtTime(f*2, t);
+    const g = ac.createGain(); g.gain.value = M.voxShimmer*S.sh*0.18;
+    lfoG.connect(o.detune);
+    o.connect(g); g.connect(raw); o.start(t); o.stop(t+dur+0.1);
+  }
+  for (let i=0;i<3;i++){                      // the formant bank — the voice itself
+    const bp = ac.createBiquadFilter(); bp.type="bandpass";
+    bp.frequency.value = A[0][i]*(1-u) + B[0][i]*u;
+    bp.Q.value = S.q;
+    const g = ac.createGain(); g.gain.value = A[1][i]*(1-u) + B[1][i]*u;
+    raw.connect(bp); bp.connect(g); g.connect(out);
+  }
+  const body = ac.createGain(); body.gain.value = 0.18;   // a little raw tone underneath, or
+  raw.connect(body); body.connect(out);                    // the formants sound hollow
+}
+// Soft clipping. Only the body goes through it — a driven sub turns to mud, and the sub is
+// the part you are supposed to feel.
+const _curves = {};
+function driveCurve(amt){
+  const k = Math.round(Math.max(0.001, amt)*80);
+  if (_curves[k]) return _curves[k];
+  const n = 1024, c = new Float32Array(n);
+  for (let i=0;i<n;i++){ const x = i*2/n - 1; c[i] = (1+k)*x/(1+k*Math.abs(x)); }
+  return (_curves[k] = c);
+}
+function bassHeavy(t, semi, dur, vel){
+  const style = M.bassStyle, f = hz(semi);
+  const out = ac.createGain();
+  dur = adsr(out, t, dur, vel, ENV("bas"));
+  const lp = ac.createBiquadFilter(); lp.type="lowpass"; lp.Q.value = 1.1;
+  lp.frequency.setValueAtTime(M.bassLpf*2.2, t);                       // a filter sweep down
+  lp.frequency.exponentialRampToValueAtTime(Math.max(60, M.bassLpf), t+Math.max(0.05,dur*0.5));
+  out.connect(lp); lp.connect(musicBus);
+  const sub = ac.createOscillator(); sub.type="sine";
+  sub.frequency.setValueAtTime(f*(1 + M.bassGlide*2), t);              // dips into pitch
+  sub.frequency.exponentialRampToValueAtTime(f, t+Math.max(0.01, M.bassGlide));
+  const sg = ac.createGain(); sg.gain.value = M.bassSubVel;
+  sub.connect(sg); sg.connect(out); sub.start(t); sub.stop(t+dur+0.06);
+  if (style !== "rumble"){
+    const b = ac.createOscillator(); b.type = style==="growl" ? "square" : "sawtooth";
+    b.frequency.setValueAtTime(f*2, t);
+    if (style === "growl"){                                            // FM snarl
+      const mod = ac.createOscillator(); mod.type="sine"; mod.frequency.value = f*M.bassFM;
+      const mg = ac.createGain(); mg.gain.value = f*1.8;
+      mod.connect(mg); mg.connect(b.frequency); mod.start(t); mod.stop(t+dur+0.06);
+    }
+    const sh = ac.createWaveShaper(); sh.curve = driveCurve(M.bassDrive); sh.oversample="2x";
+    const bg = ac.createGain(); bg.gain.value = style==="deep" ? 0.55 : 0.42;
+    b.connect(sh); sh.connect(bg); bg.connect(out); b.start(t); b.stop(t+dur+0.06);
+  }
+}
 function hat(t, vel){
   const src=ac.createBufferSource(); src.buffer=noiseBuf;
   const hp=ac.createBiquadFilter(); hp.type="highpass"; hp.frequency.value=M.hatHz;
   const g=ac.createGain();
-  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002,vel),t+0.003);
-  g.gain.exponentialRampToValueAtTime(0.0006,t+0.05);
-  src.connect(hp); hp.connect(g); g.connect(master); src.start(t); src.stop(t+0.08);
+  const E=ENV("hat"), dur=E.a+E.d+E.r;
+  adsr(g, t, dur, vel, E);
+  src.connect(hp); hp.connect(g); g.connect(master); src.start(t); src.stop(t+dur+0.03);
+}
+
+// The pitches the background sings. The lead's own note for beat `s` is the k=0 note of
+// that beat, so following it is a matter of reading the same index out of the same melody —
+// not of guessing at something that merely fits the chord.
+function bgNotes(s, chord){
+  if (M.bgFollow === "chord") return chord.tones;
+  // "melody" walks the tune at the background's own pace — one melody note per background
+  // note. "lead" reads the note the melody is actually on at that instant, which is the
+  // literal match but can land on the same note every time: the tune loops every
+  // MELODY.length/beatsPerTile beats (8, as shipped), so any bgEvery that is a multiple of
+  // that samples the same point of the loop forever. That is a drone, which may well be what
+  // you want under a melody — but it is worth knowing which one you have chosen.
+  const idx = M.bgFollow === "melody"
+    ? Math.floor(s / Math.max(1, M.bgEvery|0))
+    : s * M.beatsPerTile;
+  const lead = MELODY[((idx % MELODY.length) + MELODY.length) % MELODY.length];
+  if (M.bgFollow === "lead" || M.bgFollow === "melody") return [lead];
+  const out = [lead];                                    // leadChord: melody on top, chord under
+  for (const tn of chord.tones) if ((((tn - lead) % 12) + 12) % 12 !== 0) out.push(tn);
+  return out;
 }
 
 // One beat == one cleared tile in the game. Everything here mirrors clearTile().
@@ -252,20 +457,27 @@ function beatAt(t, s){
   for (let k = 0; k < M.beatsPerTile; k++){
     if (!M.leadOn) break;
     const idx = (s * M.beatsPerTile + k) % MELODY.length;
-    if (k === 0) voice(t, MELODY[idx] + M.leadOct, wave, 0.9, M.leadVel, 0.008, true);
+    if (k === 0) voice(t, MELODY[idx] + M.leadOct, wave, 0.9, M.leadVel, "lead", true);
     else voice(t + beatSec*(k/M.beatsPerTile), MELODY[idx] + M.leadOct, wave,
-               beatSec*(0.9/M.beatsPerTile), M.midVel, 0.006, true, true);
+               beatSec*(0.9/M.beatsPerTile), M.midVel, "lead", true, true);
   }
+  const lowVoice = M.bassStyle === "classic" ? bass : bassHeavy;
   if (M.subOn){
-    voice(t, chord.root-12, "triangle", beatSec*0.9, M.subVel*0.47, 0.010, false);
-    bass(t, chord.root-24, beatSec*0.92, M.subVel);
+    if (M.bassStyle === "classic")
+      voice(t, chord.root-12, "triangle", beatSec*0.9, M.subVel*0.47, "bas", false);
+    lowVoice(t, chord.root-24, beatSec*(M.bassStyle==="classic"?0.92:0.96), M.subVel);
   }
-  if (M.offBassOn) bass(t + sw, chord.root-24+7, beatSec*0.42, M.offBassVel);
+  if (M.offBassOn) lowVoice(t + sw, chord.root-24+7, beatSec*0.42, M.offBassVel);
   if (M.kickOn) kick(t, M.kickVel);
   if (M.hatOn)  hat(t + sw, M.hatVel);
-  if (M.padOn && s % M.barLen === 0)
-    for (const semi of chord.tones)
-      voice(t, semi + M.padOct, "sine", beatSec*(M.barLen-0.1), M.padVel, beatSec*0.25, true);
+  const bgEvery = Math.max(1, M.bgEvery|0);
+  if ((M.padOn || M.voxOn) && s % bgEvery === 0){
+    const notes = bgNotes(s, chord);
+    for (const semi of notes){
+      if (M.padOn) voice(t, semi + M.padOct, "sine", beatSec*(bgEvery-0.1), M.padVel, "bg", true);
+      if (M.voxOn) voxVoice(t, semi + M.voxOct, beatSec*(bgEvery-0.05), M.voxVel);
+    }
+  }
 }
 
 // ---- transport: a lookahead scheduler on the audio clock ----
@@ -358,48 +570,172 @@ function frame(){
 // ============================================================================
 // Controls
 // ============================================================================
-const SPEC=[
+// Five whole backings to flick between, rather than twenty sliders to guess at. Each one
+// sets the vox, the bass and the drums together, because they only make sense as a set — a
+// choir over a clicky kick is not the same idea as a choir over a sub.
+const BACKINGS = {
+  "Shipped":  { voxOn:0, padOn:1, padVel:0.14, bassStyle:"classic", bgEvery:4,
+                subVel:0.85, offBassVel:0.42, bassLpf:340, kickVel:0.70, hatVel:0.12, wet:0.30 },
+  // wide, bright, close: a room full of singers a few feet away
+  "Choir":    { bgEvery:8, voxOn:1, voxStyle:"choir", voxVel:0.20, voxOct:-12, voxVowel:0.25,
+                voxVib:5.2, voxVibDepth:8, voxSpread:12, voxShimmer:0.25, voxWet:0.55,
+                padOn:0, bassStyle:"deep", bassDrive:0.30, bassSubVel:1.00, bassGlide:0.05,
+                subVel:1.00, offBassVel:0.34, bassLpf:300, kickVel:0.55, hatVel:0.07, wet:0.38 },
+  // far away and enormous: slow "ooh", long echo, sub with no edge on it at all
+  "Nebula":   { bgEvery:8, voxOn:1, voxStyle:"nebula", voxVel:0.24, voxOct:-12, voxVowel:0.55,
+                voxVib:4.2, voxVibDepth:12, voxSpread:20, voxShimmer:0.55, voxWet:0.70,
+                padOn:0, bassStyle:"rumble", bassDrive:0.20, bassSubVel:1.25, bassGlide:0.10,
+                subVel:1.15, offBassVel:0.22, bassLpf:220, kickVel:0.45, hatVel:0.04, wet:0.52 },
+  // the heavy one: basses an octave down, a growl under them, drums that hit
+  "Monolith": { bgEvery:8, voxOn:1, voxStyle:"monolith", voxVel:0.26, voxOct:-24, voxVowel:0.15,
+                voxVib:3.4, voxVibDepth:6, voxSpread:8, voxShimmer:0.12, voxWet:0.45,
+                padOn:0, bassStyle:"growl", bassDrive:0.55, bassSubVel:1.10, bassFM:1.50, bassGlide:0.04,
+                subVel:1.20, offBassVel:0.40, bassLpf:260, kickVel:0.75, hatVel:0.05, wet:0.34 },
+  // high and glassy, sitting above the melody rather than under it
+  "Aurora":   { bgEvery:8, voxOn:1, voxStyle:"aurora", voxVel:0.18, voxOct:0, voxVowel:0.70,
+                voxVib:6.0, voxVibDepth:14, voxSpread:16, voxShimmer:0.80, voxWet:0.62,
+                padOn:1, padVel:0.08, bassStyle:"deep", bassDrive:0.25, bassSubVel:0.90, bassGlide:0.07,
+                subVel:0.95, offBassVel:0.30, bassLpf:380, kickVel:0.50, hatVel:0.12, wet:0.44 },
+};
+let backingUsed = "";
+function applyBacking(name){
+  const B = BACKINGS[name]; if(!B) return;
+  Object.assign(M, B); backingUsed = name;
+  document.querySelectorAll("[data-backing]").forEach(b=>b.classList.toggle("on", b.dataset.backing===name));
+  syncUI(); refresh();
+}
+
+// The panel is split the way the music is: what the melody does on the left, what sits
+// behind it on the right, and the things that belong to neither (the key, the room) under
+// the roll where the seed already lives.
+const SPEC_SONG=[
   ["group","Song"],
   ["pick","scale","scale",Object.keys(SCALES)],
   ["pick","chordType","chords",["auto"].concat(Object.keys(CHORDS_T))],
   ["pick","prog","progression",[-1,0,1,2,3,4,5,6,7,8],v=>v==-1?"seeded":("#"+v+" ["+PROGS[v]+"]")],
   ["tog","keyLock","lock key"],
   ["num","key","key",-12,12,1],
-  ["num","melodyLeap","leap chance",0,0.6,0.01],
-  ["num","melodyStart","start degree",-1,6,1],
-  ["group","Groove"],
-  ["num","swing","swing",0,0.35,0.01],
-  ["num","beatsPerTile","notes / tile",1,4,1],
   ["num","barLen","beats / chord",1,8,1],
-  ["group","Layers"],
-  ["togrow","leadOn","lead","padOn","pad","kickOn","kick","hatOn","hat","subOn","bass","offBassOn","off-bass"],
-  ["num","leadVel","lead vol",0,1.2,0.02],
-  ["num","midVel","in-between vol",0,1.0,0.02],
-  ["num","padVel","pad vol",0,0.5,0.01],
-  ["num","kickVel","kick vol",0,1.2,0.02],
-  ["num","hatVel","hat vol",0,0.5,0.01],
-  ["num","subVel","bass vol",0,1.4,0.02],
-  ["num","offBassVel","off-bass vol",0,1.0,0.02],
-  ["num","leadOct","lead octave",-24,24,12],
-  ["num","padOct","pad octave",-24,12,12],
-  ["group","Tone"],
+  ["group","Room"],
   ["num","master","master",0,0.4,0.005],
   ["num","baseHz","base A",110,440,1],
-  ["pick","waveA","wave A",["triangle","square","sawtooth","sine"]],
-  ["pick","waveB","wave B",["triangle","square","sawtooth","sine"]],
   ["num","delayTime","echo time",0.05,0.6,0.005],
   ["num","feedback","echo feed",0,0.8,0.01],
   ["num","wet","echo level",0,0.7,0.01],
   ["num","damp","echo damp",400,8000,50],
+];
+const SPEC_FG=[
+  ["group","Foreground melody"],
+  ["tog","leadOn","lead on"],
+  ["num","leadVel","lead vol",0,1.2,0.02],
+  ["num","midVel","in-between vol",0,1.0,0.02],
+  ["num","beatsPerTile","notes / tile",1,4,1],
+  ["num","leadOct","lead octave",-24,24,12],
+  ["pick","waveA","wave A",["triangle","square","sawtooth","sine"]],
+  ["pick","waveB","wave B",["triangle","square","sawtooth","sine"]],
+  ["num","melodyLeap","leap chance",0,0.6,0.01],
+  ["num","melodyStart","start degree",-1,6,1],
+  ["num","swing","swing",0,0.35,0.01],
+  ["env","lead","Lead envelope"],
+];
+const SPEC_BG=[
+  ["group","Background"],
+  ["presets","backing", Object.keys(BACKINGS)],
+  ["num","bgEvery","note change",1,16,1],
+  ["pick","bgFollow","follows",["lead","melody","leadChord","chord"]],
+  ["togrow","padOn","pad","voxOn","vox","subOn","bass","offBassOn","off-bass","kickOn","kick","hatOn","hat"],
+  ["num","padVel","pad vol",0,0.5,0.01],
+  ["num","padOct","pad octave",-24,12,12],
+  ["env","bg","Background envelope"],
+  ["group","Cosmic vox"],
+  ["pick","voxStyle","voice",["choir","nebula","monolith","aurora"]],
+  ["num","voxVel","vox vol",0,0.6,0.01],
+  ["num","voxOct","vox octave",-24,12,12],
+  ["num","voxVowel","vowel morph",0,1,0.01],
+  ["num","voxVib","vibrato rate",0,9,0.1],
+  ["num","voxVibDepth","vibrato depth",0,40,1],
+  ["num","voxSpread","choir spread",0,40,1],
+  ["num","voxShimmer","shimmer",0,1.5,0.01],
+
+  ["num","voxWet","vox echo",0,1,0.01],
+  ["group","Heavy bass"],
+  ["pick","bassStyle","bass",["classic","deep","growl","rumble"]],
+  ["num","subVel","bass vol",0,1.4,0.02],
+  ["num","offBassVel","off-bass vol",0,1.0,0.02],
+  ["num","bassDrive","drive",0,1,0.01],
+  ["num","bassSubVel","sub level",0,1.6,0.02],
+  ["num","bassFM","growl ratio",0.5,4,0.05],
+  ["num","bassGlide","pitch dip",0,0.3,0.005],
   ["num","bassLpf","bass filter",80,1200,10],
+  ["env","bas","Bass envelope"],
+  ["group","Drums"],
+  ["num","kickVel","kick vol",0,1.2,0.02],
+  ["num","hatVel","hat vol",0,0.5,0.01],
   ["num","kickHz","kick pitch",60,300,1],
   ["num","kickDrop","kick drop",20,120,1],
   ["num","hatHz","hat filter",2000,12000,100],
+  ["env","kick","Kick envelope"],
+  ["env","hat","Hat envelope"],
 ];
-const panel=$("panel");
+const PANELS=[[SPEC_SONG,"panelSong"],[SPEC_FG,"panelFg"],[SPEC_BG,"panelBg"]];
+// One envelope editor: the shape drawn above four sliders, so the numbers mean something
+// before you have heard them. A/D/R are seconds on a fixed 1.2s window; S is a level.
+const envRedraw = [];
+function buildEnv(panel, pre, label){
+  const wrap=document.createElement("div"); wrap.className="env";
+  const cap=document.createElement("div"); cap.className="group"; cap.textContent=label;
+  panel.appendChild(cap); panel.appendChild(wrap);
+  const cvs=document.createElement("canvas"); cvs.width=600; cvs.height=104; wrap.appendChild(cvs);
+  const grid=document.createElement("div"); grid.className="adsr"; wrap.appendChild(grid);
+  const FIELDS=[["A","A",0.002,0.60,0.002],["D","D",0.002,1.20,0.002],
+                ["S","S",0,1,0.01],["R","R",0.004,1.50,0.004]];
+  const vals={};
+  for(const [suf,lab,mn,mx,st] of FIELDS){
+    const key=pre+suf;
+    const d=document.createElement("div");
+    d.innerHTML='<label>'+lab+'</label><input type="range" id="i_'+key+'" min="'+mn+'" max="'+mx+
+                '" step="'+st+'" value="'+M[key]+'"><span class="v" id="v_'+key+'"></span>';
+    grid.appendChild(d);
+    const inp=d.querySelector("input");
+    inp.oninput=()=>{ M[key]=+inp.value; draw(); refresh(); };
+    vals[suf]=d.querySelector(".v");
+  }
+  const g=cvs.getContext("2d");
+  function draw(){
+    const W=cvs.width, H=cvs.height, PADX=8, PADY=10;
+    const E=ENV(pre);
+    for(const [suf] of FIELDS) vals[suf].textContent = (+M[pre+suf]).toFixed(suf==="S"?2:3);
+    g.clearRect(0,0,W,H);
+    g.strokeStyle="#2b2850"; g.lineWidth=1;
+    g.beginPath(); g.moveTo(PADX,H-PADY); g.lineTo(W-PADX,H-PADY); g.stroke();
+    const SPAN=1.2, sus=0.30;                       // seconds of A+D shown, then a fixed sustain
+    const x=sec=>PADX+(W-PADX*2)*Math.min(1,sec/(SPAN+sus+1.5));
+    const y=lvl=>H-PADY-(H-PADY*2)*Math.max(0,Math.min(1,lvl));
+    const tA=E.a, tD=tA+E.d, tS=tD+sus, tR=tS+E.r;
+    g.strokeStyle="#7dd0ff"; g.lineWidth=2; g.beginPath();
+    g.moveTo(x(0),y(0)); g.lineTo(x(tA),y(1)); g.lineTo(x(tD),y(E.s));
+    g.lineTo(x(tS),y(E.s)); g.lineTo(x(tR),y(0)); g.stroke();
+    g.fillStyle="rgba(125,208,255,0.12)"; g.lineTo(x(tR),y(0)); g.lineTo(x(0),y(0)); g.fill();
+    g.fillStyle="#6f68a8"; g.font="10px ui-monospace,monospace";
+    g.fillText("sustain", x(tD)+4, y(E.s)-4);
+  }
+  envRedraw.push(draw); draw();
+}
+
+function buildPanel(SPEC, panel){
 for(const row of SPEC){
   const kind=row[0];
   if(kind==="group"){ const d=document.createElement("div"); d.className="group"; d.textContent=row[1]; panel.appendChild(d); continue; }
+  if(kind==="env"){ buildEnv(panel, row[1], row[2]); continue; }
+  if(kind==="presets"){
+    const d=document.createElement("div"); d.className="togs";
+    for(const name of row[2]){
+      const b=document.createElement("button"); b.className="act"; b.dataset.backing=name; b.textContent=name;
+      b.onclick=()=>applyBacking(name);
+      d.appendChild(b);
+    }
+    panel.appendChild(d); continue;
+  }
   if(kind==="togrow"){
     const d=document.createElement("div"); d.className="togs";
     for(let i=1;i<row.length;i+=2){
@@ -435,9 +771,16 @@ for(const row of SPEC){
     b.onclick=()=>{ M[key]=M[key]?0:1; b.classList.toggle("on",!!M[key]); refresh(); };
   }
 }
+}
+for(const [spec,id] of PANELS) buildPanel(spec, $(id));
 function syncUI(){
+  for(const [SPEC] of PANELS)
   for(const row of SPEC){
-    if(row[0]==="group") continue;
+    if(row[0]==="group" || row[0]==="presets") continue;
+    if(row[0]==="env"){
+      for(const suf of ["A","D","S","R"]){ const el=$("i_"+row[1]+suf); if(el) el.value=M[row[1]+suf]; }
+      continue;
+    }
     if(row[0]==="togrow"){ for(let i=1;i<row.length;i+=2){ const el=$("i_"+row[i]); if(el) el.classList.toggle("on",!!M[row[i]]); } continue; }
     const key=row[1], el=$("i_"+key); if(!el) continue;
     if(row[0]==="tog") el.classList.toggle("on",!!M[key]);
@@ -445,6 +788,7 @@ function syncUI(){
     if(row[0]==="num") $("v_"+key).textContent = row[5]>=1 ? M[key] : (+M[key]).toFixed(3);
   }
   $("seed").value = M.seed || curSeed();
+  for(const fn of envRedraw) fn();
 }
 
 // ============================================================================
@@ -453,12 +797,14 @@ function syncUI(){
 const LSKEY="tilerunner:music";
 let overrides = {}, curLevel = 1;
 try{ const raw=localStorage.getItem(LSKEY);
-     if(raw){ const d=JSON.parse(raw); overrides=d.overrides||{}; if(d.M) M={...SHIPPED,...d.M}; if(d.level) curLevel=d.level; } }catch(e){}
+     if(raw){ const d=JSON.parse(raw); overrides=d.overrides||{};
+              if(d.BASE) BASE={...SHIPPED,...d.BASE};
+              if(d.M) M={...BASE,...d.M}; if(d.level) curLevel=d.level; } }catch(e){}
 let saveT=0, savedT=0;
 function persist(){
   clearTimeout(saveT);
   saveT=setTimeout(()=>{ try{
-    localStorage.setItem(LSKEY, JSON.stringify({overrides, M, level:curLevel}));
+    localStorage.setItem(LSKEY, JSON.stringify({overrides, M, BASE, level:curLevel}));
     const p=$("saved"); p.style.opacity="1"; clearTimeout(savedT);
     savedT=setTimeout(()=>p.style.opacity="0.35",900);
   }catch(e){} },200);
@@ -475,13 +821,13 @@ const lvSel=$("lv");
 LEVEL_CPS.forEach((c,i)=>{ const o=document.createElement("option"); o.value=i+1; o.textContent="L"+(i+1)+"  ("+c+")"; lvSel.appendChild(o); });
 function loadLevel(n){
   curLevel=+n; lvSel.value=n; $("cps").value=LEVEL_CPS[n-1];
-  M = {...SHIPPED, ...(overrides[n]||{})};
+  M = {...BASE, ...(overrides[n]||{})};
   syncUI(); refresh();
 }
 lvSel.onchange=e=>loadLevel(e.target.value);
 $("cps").oninput=()=>refresh();
 $("savelv").onclick=()=>{
-  const diff={}; for(const k in M) if(M[k]!==SHIPPED[k]) diff[k]=M[k];
+  const diff={}; for(const k in M) if(M[k]!==BASE[k]) diff[k]=M[k];
   if(Object.keys(diff).length) overrides[curLevel]=diff; else delete overrides[curLevel];
   drawTable(); refresh();
 };
@@ -498,9 +844,9 @@ function drawTable(){
 }
 
 function exportText(){
-  const defs={}; for(const k in M) if(M[k]!==SHIPPED[k]) defs[k]=M[k];
+  const defs={}; for(const k in M) if(M[k]!==BASE[k]) defs[k]=M[k];
   return "// paste over MUSIC_DEFAULTS in index.html\nconst MUSIC_DEFAULTS = "
-    + JSON.stringify(SHIPPED,null,2).replace(/"(\w+)":/g,'$1:') + ";\n\n"
+    + JSON.stringify(BASE,null,2).replace(/"(\w+)":/g,'$1:') + ";\n\n"
     + "// per-level: add `music: {...}` to the level object in levels.js\n"
     + (Object.keys(overrides).length
         ? Object.keys(overrides).sort((a,b)=>a-b).map(n=>"L"+n+"  music: "+JSON.stringify(overrides[n])).join("\n")
@@ -514,11 +860,101 @@ function refresh(){
   $("out").value = exportText();
   persist();
 }
+// ---------------------------------------------------------------------------
+// Writing straight into the game
+// ---------------------------------------------------------------------------
+// The same File System Access route the level editor uses: pick index.html once, and every
+// save after that rewrites its MUSIC_DEFAULTS block in place. This SPLICES — it reads the
+// file, replaces one block and writes the rest back byte for byte — because regenerating
+// index.html from a browser page is not a thing anyone should be doing.
+const FS_OK = typeof window.showOpenFilePicker === "function";
+let gameHandle = null;
+function idb(){ return new Promise((res,rej)=>{ const q=indexedDB.open("tilerunner_music",1);
+  q.onupgradeneeded=()=>q.result.createObjectStore("kv"); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }
+function idbGet(k){ return idb().then(db=>new Promise((res,rej)=>{ const t=db.transaction("kv","readonly").objectStore("kv").get(k);
+  t.onsuccess=()=>res(t.result); t.onerror=()=>rej(t.error); })).catch(()=>null); }
+function idbSet(k,v){ return idb().then(db=>new Promise((res,rej)=>{ const t=db.transaction("kv","readwrite").objectStore("kv").put(v,k);
+  t.onsuccess=()=>res(); t.onerror=()=>rej(t.error); })).catch(()=>{}); }
+async function grant(h){
+  if(!h) return false;
+  let p = await h.queryPermission({mode:"readwrite"});
+  if(p !== "granted") p = await h.requestPermission({mode:"readwrite"});
+  return p === "granted";
+}
+// Find the block by counting braces rather than by matching to the first "};" — a nested
+// object in there would end the match early and the splice would eat the rest of the file.
+function spliceDefaults(src, text){
+  const marker = "const MUSIC_DEFAULTS = {";
+  const hits = src.split(marker).length - 1;
+  if (hits !== 1) return { err: "expected exactly one MUSIC_DEFAULTS in index.html, found " + hits };
+  const i = src.indexOf(marker);
+  const lineStart = src.lastIndexOf("\n", i) + 1;
+  const indent = src.slice(lineStart, i);
+  let k = src.indexOf("{", i), depth = 0, end = -1, inStr = false, q = "";
+  for (; k < src.length; k++){
+    const ch = src[k];
+    if (inStr){ if (ch === "\\") k++; else if (ch === q) inStr = false; continue; }
+    if (ch === '"' || ch === "'"){ inStr = true; q = ch; continue; }
+    if (ch === "{") depth++;
+    else if (ch === "}"){ if (--depth === 0){ end = k; break; } }
+  }
+  if (end < 0) return { err: "MUSIC_DEFAULTS block is not closed — refusing to write" };
+  const semi = src.indexOf(";", end);
+  if (semi < 0 || semi > end + 3) return { err: "no ; after MUSIC_DEFAULTS — refusing to write" };
+  const body = text.replace(/\n/g, "\n" + indent);
+  return { out: src.slice(0, lineStart) + indent + "const MUSIC_DEFAULTS = " + body + ";" + src.slice(semi+1) };
+}
+async function pickGame(){
+  if(!FS_OK){ setSaveMsg("this browser can't write files directly — use Copy"); return null; }
+  try{
+    [gameHandle] = await window.showOpenFilePicker({
+      types:[{description:"HTML", accept:{"text/html":[".html"]}}] });
+    await idbSet("gameHandle", gameHandle);
+    setSaveMsg("target set — " + gameHandle.name);
+    return gameHandle;
+  }catch(e){ if(e && e.name==="AbortError") return null; setSaveMsg("couldn't set target: "+e.message); return null; }
+}
+function setSaveMsg(t){ const b=$("tofile"); b.textContent=t; setTimeout(()=>b.textContent="Save to game", 2200); }
+async function saveToGame(){
+  if(!FS_OK){ setSaveMsg("this browser can't write files — use Copy"); return; }
+  try{
+    if(!gameHandle) gameHandle = await pickGame();
+    if(!gameHandle) return;
+    if(!await grant(gameHandle)){ setSaveMsg("permission denied — press again"); return; }
+    const src = await (await gameHandle.getFile()).text();
+    if(!/MUSIC_DEFAULTS/.test(src)){ setSaveMsg("that file has no MUSIC_DEFAULTS"); return; }
+    const body = JSON.stringify(BASE,null,2).replace(/"(\w+)":/g,'$1:');
+    const r = spliceDefaults(src, body);
+    if(r.err){ setSaveMsg(r.err); return; }
+    const ws = await gameHandle.createWritable();
+    await ws.write(r.out); await ws.close();
+    setSaveMsg("wrote " + Object.keys(BASE).length + " settings to " + gameHandle.name);
+  }catch(e){ if(e && e.name==="AbortError") return; setSaveMsg("save failed: "+e.message); }
+}
+$("tofile").onclick=saveToGame;
+$("pickfile").onclick=async()=>{ await pickGame(); };
+if(!FS_OK){ $("tofile").disabled=true; $("pickfile").disabled=true; $("pickfile").title="needs a Chromium browser"; }
+idbGet("gameHandle").then(h=>{ if(h){ gameHandle=h; $("tofile").title="writes into "+h.name; } });
+
 $("copy").onclick=()=>{ $("out").select(); document.execCommand("copy");
   $("copy").textContent="Copied!"; setTimeout(()=>$("copy").textContent="Copy",1000); };
-$("paste").onclick=()=>{ try{ M={...SHIPPED, ...JSON.parse($("out").value)}; syncUI(); refresh(); }
+$("paste").onclick=()=>{ try{ M={...BASE, ...JSON.parse($("out").value)}; syncUI(); refresh(); }
   catch(_){ $("paste").textContent="Bad JSON"; setTimeout(()=>$("paste").textContent="Load from box",1200); } };
-$("reset").onclick=()=>{ M={...SHIPPED}; syncUI(); refresh(); };
+$("reset").onclick=()=>{ M={...BASE}; syncUI(); refresh(); };
+// Pin everything on screen as the new baseline. Any level override that only said what the
+// baseline now says stops being an override at all — otherwise the table fills up with rows
+// that change nothing.
+$("savedef").onclick=()=>{
+  BASE={...M};
+  for(const n of Object.keys(overrides)){
+    const d={}; for(const k in overrides[n]) if(overrides[n][k]!==BASE[k]) d[k]=overrides[n][k];
+    if(Object.keys(d).length) overrides[n]=d; else delete overrides[n];
+  }
+  drawTable(); refresh();
+  const b=$("savedef"); b.textContent="Saved as defaults";
+  setTimeout(()=>b.textContent="Save as defaults",1200);
+};
+$("revertdef").onclick=()=>{ BASE={...SHIPPED}; M={...SHIPPED}; syncUI(); drawTable(); refresh(); };
 
 $("notes").innerHTML = [
   "<b>One cleared tile is one beat.</b> The game never runs a music clock — every note is fired by a real tile event, ",
