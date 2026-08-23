@@ -1242,7 +1242,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v7.6";                    // shown on the title & pause screens
+  const VERSION = "v7.7";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -1295,7 +1295,7 @@
         g.lineWidth=r*0.10;
         g.beginPath(); g.moveTo(x,y); g.lineTo(x+r*0.22, y-r*0.42); g.stroke(); } },
 
-    { id:"magnet", name:"Cosmic Magnetite", col:"#ff6d6d", ms:5000,
+    { id:"magnet", name:"Cosmic Magnetite", col:"#ff6d6d", ms:3000,
       face:"#f2685f", edge:"#8f2820",
       blurb:"Pulls coins in",
       etch:(g,x,y,r)=>{
@@ -3427,7 +3427,19 @@
 
     drawEdgeWalls();                              // the board's own boundary, before anything on it
     if (wallLayerDirty) buildWallLayer();
-    if (wallLayer) ctx.drawImage(wallLayer, 0, 0, worldW, worldH);   // whole static wall layer, one blit
+    if (wallLayer) {
+      // Only the part of it that is on screen. The layer holds the WHOLE world at device
+      // resolution — on the 13x19 maze at dpr 3 that is a ~29-megapixel texture — and this
+      // used to hand the compositor all of it, every frame, to show a phone screen's worth.
+      // The padding covers the screen shake, which moves the visible window a few px.
+      const pad = 8 + (state.shake || 0);
+      const vx0 = Math.max(0, Math.floor(camX - pad)), vy0 = Math.max(0, Math.floor(camY - pad));
+      const vx1 = Math.min(worldW, Math.ceil(camX + viewW + pad));
+      const vy1 = Math.min(worldH, Math.ceil(camY + viewH + pad));
+      if (vx1 > vx0 && vy1 > vy0)
+        ctx.drawImage(wallLayer, vx0*dpr, vy0*dpr, (vx1-vx0)*dpr, (vy1-vy0)*dpr,
+                      vx0, vy0, vx1-vx0, vy1-vy0);
+    }
     drawWallEyes(ts);                             // ...and the eyes, which cannot be baked in
     for (const [sk, st] of state.stones) {
       const [c, r] = sk.split(",").map(Number);
@@ -5773,19 +5785,34 @@
     g.fill(bars);
     g.restore();
   }
-  // How close the nearest tile gets to the board's rim, in tiles. Cheap, and it lets the whole
-  // pass be skipped outright while the run is nowhere near an edge — which is most of the time.
-  function nearestTileToRim() {
-    let best = Infinity;
-    for (const t of state.tiles) {
-      const d = Math.min(t.c + 0.5, t.r + 0.5, COLS - t.c - 0.5, ROWS - t.r - 0.5);
-      if (d < best) best = d;
-    }
-    return best;
-  }
   function drawEdgeWalls() {
     if (worldW < 1 || worldH < 1 || !state.tiles || !state.tiles.length) return;
-    if (nearestTileToRim() > EDGE_FAR) return;          // nothing near an edge: draw nothing
+    const B = EDGE_FADE * cell, R = EDGE_FAR * cell;
+
+    // Only tiles that are actually near the rim can light any of it. A tile in the middle of
+    // the board would otherwise still cost a full radial-gradient disc every frame, for a
+    // mask that lands nowhere near a band.
+    const near = [];
+    let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+    for (const t of state.tiles) {
+      if (Math.min(t.c + 0.5, t.r + 0.5, COLS - t.c - 0.5, ROWS - t.r - 0.5) > EDGE_FAR) continue;
+      const sx = cx(t.c) + cell/2 - camX, sy = cy(t.r) + cell/2 - camY;
+      if (sx < -R || sy < -R || sx > viewW + R || sy > viewH + R) continue;
+      near.push({ sx, sy });
+      if (sx-R < bx0) bx0 = sx-R;  if (sy-R < by0) by0 = sy-R;
+      if (sx+R > bx1) bx1 = sx+R;  if (sy+R > by1) by1 = sy+R;
+    }
+    if (!near.length) return;
+
+    // Everything below is confined to the box those discs occupy, clipped to the screen. The
+    // revealed patch is a few hundred pixels across; clearing, compositing and blitting the
+    // whole viewport for it — twice a frame, at whatever the device pixel ratio is — was
+    // paying full-screen fill rate for a corner of the screen.
+    bx0 = Math.max(0, Math.floor(bx0));  by0 = Math.max(0, Math.floor(by0));
+    bx1 = Math.min(viewW, Math.ceil(bx1)); by1 = Math.min(viewH, Math.ceil(by1));
+    const bw = bx1 - bx0, bh = by1 - by0;
+    if (bw <= 0 || bh <= 0) return;
+
     const key = Math.round(viewW) + "x" + Math.round(viewH) + "@" + dpr;
     if (!edgeLayer || key !== edgeLayerKey) {
       edgeLayer = document.createElement("canvas");
@@ -5798,44 +5825,48 @@
       edgeMask.height = Math.max(1, Math.round(viewH*dpr*0.5));
       edgeLayerKey = key;
     }
-    const B = EDGE_FADE * cell, W = worldW, H = worldH, bars = edgeBarPath(B);
+    const W = worldW, H = worldH, bars = edgeBarPath(B);
 
-    // 1. the mask: one soft disc per tile the player has, in screen space
+    // 1. the mask: one soft disc per contributing tile, in screen space
     const m = edgeMask.getContext("2d");
     m.setTransform(dpr*0.5, 0, 0, dpr*0.5, 0, 0);
-    m.clearRect(0, 0, viewW, viewH);
-    let any = false;
-    for (const t of state.tiles) {
-      const sx = cx(t.c) + cell/2 - camX, sy = cy(t.r) + cell/2 - camY, R = EDGE_FAR*cell;
-      if (sx < -R || sy < -R || sx > viewW + R || sy > viewH + R) continue;
-      const rg = m.createRadialGradient(sx, sy, EDGE_NEAR*cell, sx, sy, R);
+    m.clearRect(bx0, by0, bw, bh);
+    for (const t of near) {
+      const rg = m.createRadialGradient(t.sx, t.sy, EDGE_NEAR*cell, t.sx, t.sy, R);
       rg.addColorStop(0, "rgba(255,255,255,1)");
       rg.addColorStop(1, "rgba(255,255,255,0)");
       m.fillStyle = rg;
-      m.beginPath(); m.arc(sx, sy, R, 0, Math.PI*2); m.fill();
-      any = true;
+      m.beginPath(); m.arc(t.sx, t.sy, R, 0, Math.PI*2); m.fill();
     }
-    if (!any) return;
 
     // 2. the bands, in world space, then multiplied by the mask in ONE operation — applied
-    //    disc by disc a mask would INTERSECT rather than union, and erase itself.
+    //    disc by disc a mask would INTERSECT rather than union, and erase itself. The clip
+    //    holds destination-in to the box too, so the rest of the layer is never touched.
     const g = edgeLayer.getContext("2d");
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.clearRect(0, 0, viewW, viewH);
+    g.clearRect(bx0, by0, bw, bh);
     g.save();
+    g.beginPath(); g.rect(bx0, by0, bw, bh); g.clip();
     g.translate(-camX, -camY);
     edgeBand(g, 0, 0,  W, 0,   0, -1, B, bars);  // clockwise, so every mitre meets its neighbour
     edgeBand(g, W, 0,  W, H,   1,  0, B, bars);
     edgeBand(g, W, H,  0, H,   0,  1, B, bars);
     edgeBand(g, 0, H,  0, 0,  -1,  0, B, bars);
-    g.restore();
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.globalCompositeOperation = "destination-in";
-    g.drawImage(edgeMask, 0, 0, viewW, viewH);
+    // The source rect is in the MASK's own device pixels, and the mask is half-resolution:
+    // that is dpr*0.5 per CSS pixel, not 0.5. At dpr 2 the two happen to differ by exactly
+    // the factor that leaves the box misaligned vertically but not horizontally, which is
+    // the kind of wrong that looks right in the one screenshot you happen to take.
+    const ms = dpr*0.5;
+    g.drawImage(edgeMask, bx0*ms, by0*ms, bw*ms, bh*ms, bx0, by0, bw, bh);
     g.globalCompositeOperation = "source-over";
+    g.restore();
 
-    // 3. one blit. The main context is translated by the camera, so it goes back at (camX,camY)
-    //    — which also keeps it riding the screen shake along with everything else.
-    ctx.drawImage(edgeLayer, camX, camY, viewW, viewH);
+    // 3. one blit of that box. The main context is translated by the camera, so it goes back
+    //    at (camX,camY) — which also keeps it riding the screen shake with everything else.
+    ctx.drawImage(edgeLayer, bx0*dpr, by0*dpr, bw*dpr, bh*dpr,
+                  camX + bx0, camY + by0, bw, bh);
   }
 
   function buildWallLayer() {
@@ -6252,7 +6283,13 @@
     ctx.save();
     ctx.translate(-off.x, -off.y);
     ctx.fillStyle = patchPat;
-    ctx.fillRect(0, 0, viewW + patchPeriodPx, viewH + patchPeriodPx);
+    // Exactly the screen, and not a pixel more. After the translate, screen (0,0) sits at
+    // (off.x, off.y) in this space — so that is where the fill starts. It used to begin at the
+    // origin and run a whole pattern period past the far corner, on the reasoning that the
+    // scroll offset had to be covered. The offset moves the fill, it does not enlarge it, and
+    // the period is not a small number: on a 1024x1300 board it painted 11.5 megapixels a frame
+    // to show 1.3 — nearly nine times over, and worse the bigger the screen.
+    ctx.fillRect(off.x, off.y, viewW, viewH);
     ctx.restore();
     drawGlints(ts, off, patchStepPx || w);   // the quilt's real step, so a glint fills a patch
   }
