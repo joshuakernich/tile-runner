@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta http-equiv="Cache-Control" content="no-store"/>
 <title>Tile Runner — Level Editor</title>
 <style>
   :root{ --bg:#12102a; --panel:#1b1838; --line:#2b2850; --ink:#cfe9ff; --accent:#7dd0ff; }
@@ -13,16 +14,46 @@
   label{font-size:12px;opacity:.85;}
   select,input[type=number],input[type=text]{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font:inherit;font-size:12px;}
   input[type=number]{width:54px;} #introBox{width:150px;} #cpsIn{width:62px;}
-  /* map on top, palette underneath it */
-  .wrap{display:flex;flex-direction:column;gap:12px;padding:14px;align-items:center;}
-  .stage{display:flex;flex-direction:column;gap:8px;align-items:center;max-width:100%;}
-  .tools{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;max-width:560px;}
-  .tool{display:inline-flex;align-items:center;gap:5px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:11px;line-height:1.2;user-select:none;white-space:nowrap;}
+
+  /* Three rails: the running order down the left, the map in the middle, the palette on the
+     right. The map is the only thing that should ever be the reason to scroll, so the two
+     rails stick and scroll inside themselves. */
+  .app{display:grid;grid-template-columns:196px minmax(0,1fr) 244px;gap:14px;padding:14px;align-items:start;}
+  .rail{position:sticky;top:14px;max-height:calc(100vh - 28px);overflow:auto;display:flex;flex-direction:column;gap:8px;}
+  .rail h2{font-size:11px;letter-spacing:1px;opacity:.55;margin:0 0 2px;font-weight:700;text-transform:uppercase;}
+  .stage{display:flex;flex-direction:column;gap:10px;align-items:center;min-width:0;}
+
+  /* ---- level list (left) ---- */
+  .lvlist{display:flex;flex-direction:column;gap:3px;}
+  .lv{display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);
+      border-radius:6px;padding:5px 7px;cursor:grab;font-size:11px;line-height:1.2;user-select:none;}
+  .lv:hover{border-color:#4a4780;}
+  .lv.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+  .lv.drag{opacity:.35;}
+  .lv.over{border-top:2px solid var(--accent);}
+  .lv .num{font-weight:700;min-width:22px;}
+  .lv .dim{opacity:.5;}
+  .lv .star{color:#ffb454;}
+  .lv .grip{margin-left:auto;opacity:.35;letter-spacing:-1px;}
+
+  /* ---- tool matrix (right) ---- */
+  .tools{display:grid;grid-template-columns:repeat(2,1fr);gap:5px;}
+  .tool{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+        background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px 4px;
+        cursor:pointer;font-size:11px;line-height:1.15;user-select:none;text-align:center;aspect-ratio:1.35;}
   .tool.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
-  .tool .k{opacity:.45;font-size:10px;}
-  .opts{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:center;max-width:560px;}
-  #toolhint{min-height:15px;text-align:center;}
-  .swab{display:flex;gap:6px;margin:4px 0 2px;}
+  .tool .k{opacity:.4;font-size:10px;}
+  .tool .ic{display:block;width:26px;height:26px;}
+
+  /* ---- per-tool options + help: hidden until their tool is the one in hand ---- */
+  .opts{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:center;max-width:620px;min-height:1px;}
+  .opt{display:inline-flex;align-items:center;gap:6px;}
+  .opt[hidden],.tip[hidden]{display:none;}
+  .tip{max-width:620px;font-size:11px;opacity:.78;line-height:1.55;background:#0d0b22;
+       border:1px solid var(--line);border-radius:8px;padding:9px 11px;}
+  .toolbar{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;}
+
+  .swab{display:flex;gap:6px;}
   .sw{width:22px;height:22px;border-radius:5px;border:2px solid #0006;cursor:pointer;}
   .sw.sel{border-color:#fff;}
   canvas{background:var(--panel);border:1px solid var(--line);border-radius:8px;touch-action:none;cursor:crosshair;}
@@ -31,30 +62,163 @@
   button.act{background:#233; color:var(--ink); border:1px solid var(--line); border-radius:7px; padding:8px 12px; cursor:pointer; font:inherit; font-size:12px;}
   button.act:hover{border-color:var(--accent);}
   button.prim{background:#1c6; color:#04120a; font-weight:700; border:none;}
-  textarea{width:100%;height:220px;background:#0d0b22;color:#bfe;border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit;font-size:11px;line-height:1.45;white-space:pre;}
+  button.act:disabled{opacity:.4;cursor:default;}
+  textarea{width:100%;height:200px;background:#0d0b22;color:#bfe;border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit;font-size:11px;line-height:1.45;white-space:pre;}
   .hint{font-size:11px;opacity:.7;line-height:1.5;}
   .pill{font-size:11px;background:#0d0b22;border:1px solid var(--line);border-radius:20px;padding:3px 9px;}
   .warn{color:#ffb454;}
+  @media (max-width:1100px){ .app{grid-template-columns:1fr;} .rail{position:static;max-height:none;} }
 </style>
 </head>
 <body>
 <header>
   <h1>TILE RUNNER · LEVEL EDITOR</h1>
-  <label>Load <select id="loadSel"></select></label>
   <label>n <input type="number" id="nIn" min="1" value="1"></label>
   <label>cols <input type="number" id="colsIn" min="3" max="40" value="5"></label>
   <label>rows <input type="number" id="rowsIn" min="3" max="40" value="8"></label>
   <label>intro <input type="text" id="introBox" placeholder="wall,block …"></label>
   <label>speed <input type="number" id="cpsIn" value="0.8" step="0.01" min="0.3" max="3"> tiles/s</label>
+  <span class="pill" id="shipped">levels.js: …</span>
   <span class="pill" id="auto">autosave: on</span>
   <span class="pill" id="status">ready</span>
 </header>
 
-<div class="wrap">
-  <!-- map first, then a compact palette under it -->
-  <div class="stage">
+<div class="app">
+
+  <!-- ---------- left rail: the running order ---------- -->
+  <aside class="rail">
+    <h2>Tileverse order</h2>
+    <div class="lvlist" id="lvlist"></div>
+    <button class="act" id="newLvl">+ New blank</button>
+    <div class="hint">Click to open. Drag a level up or down to change where it falls in the
+      game — everything renumbers to match, because the running order <i>is</i> the order in
+      <code>levels.js</code>.</div>
+  </aside>
+
+  <!-- ---------- middle: the map ---------- -->
+  <main class="stage">
     <canvas id="cv" width="400" height="640"></canvas>
 
+    <div class="opts" id="opts">
+      <span class="opt" data-for="key door"><span class="swab" id="swab"></span></span>
+      <label class="opt" data-for="saw">saw speed <input type="number" id="sawSpeed" value="4000" step="200" min="800"></label>
+      <label class="opt" data-for="saw">saw phase <input type="number" id="sawPhase" value="0" step="0.05" min="0" max="0.95"></label>
+      <label class="opt" data-for="monster">monster speed <input type="number" id="monSpeed" value="2200" step="100" min="400"></label>
+      <label class="opt" data-for="monster">monster <select id="monPick">
+        <option value="hrail">Horizontal rail</option>
+        <option value="vrail">Vertical rail</option>
+        <option value="patrol">Patrol (waypoints)</option>
+        <option value="square">Square loop</option>
+        <option value="wander">Wanderer</option>
+        <option value="trap">Trap</option>
+      </select></label>
+      <label class="opt" data-for="stone">stone hp <input type="number" id="stoneHp" value="2" step="1" min="1" max="5"></label>
+      <label class="opt" data-for="talisman">talisman <select id="talPick">
+        <option value="clock">Hands of Time</option>
+        <option value="magnet">Cosmic Magnetite</option>
+        <option value="star">Cloak of Light</option>
+        <option value="finger">Hammer of God</option>
+        <option value="mush">Mushroom</option>
+      </select></label>
+      <label class="opt" data-for="platform">platform shape <select id="pfShape">
+        <option value="ns">│ straight N–S</option>
+        <option value="ew">─ straight E–W</option>
+        <option value="ne">└ elbow N–E</option>
+        <option value="es">┌ elbow E–S</option>
+        <option value="sw">┐ elbow S–W</option>
+        <option value="wn">┘ elbow W–N</option>
+      </select></label>
+    </div>
+
+    <div id="tips">
+      <div class="tip" data-for="wall">Drag to paint <b>walls</b>. Right-drag erases.</div>
+      <div class="tip" data-for="erase">Drag over anything to take it off the board.</div>
+      <div class="tip" data-for="start"><b>Start</b> is the one cell that begins as laid track —
+        every level has exactly one.</div>
+      <div class="tip" data-for="tile"><b>Tile</b> drops another of the runner's tiles on the board —
+        click one again to take it away, and drag any of them freely. A level does <i>not</i> carry a
+        starting route: tiles lined up out of the start <b>chain themselves into track</b> when it
+        loads (drawn solid, with the front ringed), and any tile left elsewhere stays <b>loose</b>
+        (drawn hollow) until the player drags it into place. Scatter them around the level if you
+        want them found rather than given. Four tiles including the start is the norm.</div>
+      <div class="tip" data-for="goal"><b>Goal</b>: click the flag's own cell to <i>remove</i> it — a
+        level with no flag never ends, so the run only stops when the runner falls. A talisman maze
+        uses the charm as its exit and carries no flag at all.</div>
+      <div class="tip" data-for="block"><b>Slider block</b>: one click drops the block on a 3-cell rail,
+        with a nook each side. Drag the <i>block</i> to slide it along its rail (that's its starting
+        cell); drag it past an end or sideways off the rail and the whole structure moves. Then drag
+        either <b>end handle</b> (the ringed dots) to lengthen, shorten or swing the rail round — pull
+        an end sideways and the rail rotates. The rail is where the block slides to; it needs a
+        dead-end nook on the far side.</div>
+      <div class="tip" data-for="saw"><b>Saw</b>: one click drops a saw on a 3-cell rail (uses the speed
+        + phase boxes); clicking an existing saw re-applies those boxes to it. Drag either <b>end
+        handle</b> to lengthen, shorten or swing the rail round — it pivots on the opposite end. Drag
+        the <b>blade</b> along the rail to set its starting <i>phase</i> (0 = parked at the low end,
+        0.5 = at the high end) — stagger a row of saws this way so they don't sweep as one line. Drag
+        the blade past an end or off the line, or drag any other rail cell, to move the whole saw.</div>
+      <div class="tip" data-for="monster"><b>Monster</b>: pick the kind first. <i>Horizontal</i> and
+        <i>vertical rail</i> monsters slide along a rail exactly as the saws they replaced — drop one
+        and drag its ends. A <i>square loop</i> circles a ring; a <i>wanderer</i> picks a fresh route
+        through the level every single run; a <i>trap</i> sits still, yawns open wide enough to run
+        through, then snaps shut on whatever is in it. Clicking an existing monster re-applies the kind
+        and speed boxes. Only <i>patrol</i> is drawn by hand: click each cell of its route in turn — the
+        first click starts the path, every click after adds a waypoint. <b>Enter</b> finishes it as a
+        there-and-back patrol; <b>L</b> closes it into a loop; <b>Esc</b> throws the draft away. It moves
+        at the speed box's ms per cell and pauses briefly at each waypoint, and touching it is fatal.</div>
+      <div class="tip" data-for="stone"><b>Stone</b>: drag to paint breakable stone blocks (the <i>hp</i>
+        box sets how many taps to smash). Right-drag or drag over a stone to remove.</div>
+      <div class="tip" data-for="platform"><b>Platform</b>: fixed free track cast into a wall. Click an
+        empty cell to place it in the selected <i>shape</i>; click it again to cycle through the six
+        shapes; right-click to remove. The runner rides it for free but can only enter/leave through the
+        two drawn ends — the reachability check knows this. Platforms <i>override</i> the player's route,
+        so a level built on them needs the forced-chain check, not plain reachability.</div>
+      <div class="tip" data-for="talisman"><b>Talisman</b>: a one-off collectible. Click to place the one
+        chosen in the dropdown, click again to cycle, right-click to remove. It does <i>not</i> block
+        track — put it somewhere the runner can flow <i>through</i>, never at the end of a spur, or it
+        can't be collected.</div>
+      <div class="tip" data-for="coin"><b>Coin</b>: a golden tile worth one tile of shop money. Click to
+        drop one, click again to remove.</div>
+      <div class="tip" data-for="key"><b>Key</b>: pick a colour swatch first — a key opens the door of the
+        same colour.</div>
+      <div class="tip" data-for="door"><b>Door</b>: pick a colour swatch first — it opens for the key of
+        the same colour.</div>
+    </div>
+
+    <div class="toolbar">
+      <button class="act" id="undo">Undo (Z)</button>
+      <button class="act" id="clearBtn">Clear</button>
+      <button class="act" id="reloadBtn">Reload levels.js</button>
+      <button class="act" id="resetBtn">Reset to shipped</button>
+    </div>
+
+    <div class="side">
+      <div class="row">
+        <button class="act prim" id="saveFs">Save to levels.js</button>
+        <button class="act" id="pickFs">Choose file…</button>
+        <button class="act" id="copyOne">Copy this level</button>
+        <button class="act" id="copyAll">Copy full levels.js</button>
+        <button class="act" id="dlAll">Download</button>
+        <span class="pill" id="solve">—</span>
+      </div>
+      <textarea id="out" spellcheck="false"></textarea>
+      <div class="hint">
+        <b>Drag the map's edges</b> to resize it. The right and bottom edges just add or remove
+        columns and rows; the left and top edges push everything across as they grow, so the map
+        expands in that direction instead of the far one. Shrinking drops whatever falls outside.<br>
+        <b>Save to levels.js</b> writes straight over the file — you pick it once and it remembers.
+        That file is the source of truth, but <code>index.html</code> and this editor's own
+        <code>EMBEDDED</code> copy still need syncing afterwards, and
+        <code>node tools/check.mjs</code> is what tells you they are out of step.<br>
+        <b>Autosave</b> keeps every edit in your browser, so you can close/refresh and pick up where
+        you left off (levels you've changed show a <b>*</b>). “Reset to shipped” wipes the draft back
+        to the current game levels.
+      </div>
+    </div>
+  </main>
+
+  <!-- ---------- right rail: the palette ---------- -->
+  <aside class="rail">
+    <h2>Tile types</h2>
     <div class="tools" id="tools">
       <div class="tool sel" data-tool="wall">Wall <span class="k">1</span></div>
       <div class="tool" data-tool="erase">Erase <span class="k">0</span></div>
@@ -68,93 +232,24 @@
       <div class="tool" data-tool="platform">Platform <span class="k">P</span></div>
       <div class="tool" data-tool="talisman">Talisman <span class="k">T</span></div>
       <div class="tool" data-tool="coin">Coin <span class="k">C</span></div>
-    <div class="tool" data-tool="key">Key <span class="k">8</span></div>
+      <div class="tool" data-tool="key">Key <span class="k">8</span></div>
       <div class="tool" data-tool="door">Door <span class="k">9</span></div>
     </div>
+  </aside>
 
-    <div class="hint" id="toolhint"></div>
-
-    <div class="opts">
-      <div class="swab" id="swab"></div>
-      <label>saw speed <input type="number" id="sawSpeed" value="4000" step="200" min="800"></label>
-      <label>saw phase <input type="number" id="sawPhase" value="0" step="0.05" min="0" max="0.95"></label>
-      <label>monster speed <input type="number" id="monSpeed" value="2200" step="100" min="400"></label>
-      <label>monster <select id="monPick">
-        <option value="hrail">Horizontal rail</option>
-        <option value="vrail">Vertical rail</option>
-        <option value="patrol">Patrol (waypoints)</option>
-        <option value="square">Square loop</option>
-        <option value="wander">Wanderer</option>
-        <option value="trap">Trap</option>
-      </select></label>
-      <label>stone hp <input type="number" id="stoneHp" value="2" step="1" min="1" max="5"></label>
-      <label>talisman <select id="talPick">
-        <option value="clock">Hands of Time</option>
-        <option value="magnet">Cosmic Magnetite</option>
-        <option value="star">Cloak of Light</option>
-        <option value="finger">Hammer of God</option>
-        <option value="mush">Mushroom</option>
-      </select></label>
-      <label>platform shape <select id="pfShape">
-        <option value="ns">│ straight N–S</option>
-        <option value="ew">─ straight E–W</option>
-        <option value="ne">└ elbow N–E</option>
-        <option value="es">┌ elbow E–S</option>
-        <option value="sw">┐ elbow S–W</option>
-        <option value="wn">┘ elbow W–N</option>
-      </select></label>
-      <button class="act" id="undo">Undo (Z)</button>
-      <button class="act" id="clearBtn">Clear</button>
-      <button class="act" id="resetBtn">Reset to shipped</button>
-    </div>
-  </div>
-
-  <div class="side">
-    <div class="row">
-      <button class="act prim" id="copyOne">Copy this level</button>
-      <button class="act" id="copyAll">Copy full levels.js</button>
-      <button class="act" id="dlAll">Download levels.js</button>
-      <span class="pill" id="solve">—</span>
-    </div>
-    <textarea id="out" spellcheck="false"></textarea>
-    <div class="hint">
-      Paint <b>walls</b> by dragging. <b>Start</b> is the one cell that begins as laid track.
-      <b>Tile</b> drops another of the runner's tiles on the board — click one again to take it
-      away, and drag any of them freely. A level does <i>not</i> carry a starting route: tiles
-      lined up out of the start <b>chain themselves into track</b> when it loads (drawn solid,
-      with the front ringed), and any tile left elsewhere stays <b>loose</b> (drawn hollow)
-      until the player drags it into place. Scatter them around the level if you want them
-      found rather than given. Four tiles including the start is the norm.<br>
-      <b>Slider block</b>: one click drops the block on a 3-cell rail, with a nook each side. Drag the <i>block</i> to slide it along its rail (that's its starting cell); drag it past an end or sideways off the rail and the whole structure moves. Then drag either <b>end handle</b> (the ringed dots) to lengthen, shorten or swing the rail round — pull an end sideways and the rail rotates. Dragging the block itself slides it along the rail; pull it past an end or off the line and the whole structure moves. The rail is where the block slides to; it needs a dead-end nook on the far side.<br>
-      <b>Monster</b>: pick the kind first. <i>Horizontal</i> and <i>vertical rail</i> monsters
-      slide along a rail exactly as the saws they replaced — drop one and drag its ends. A
-      <i>square loop</i> circles a ring; a <i>wanderer</i> picks a fresh route through the level
-      every single run; a <i>trap</i> sits still, yawns open wide enough to run through, then
-      snaps shut on whatever is in it. Clicking an existing monster re-applies the kind and
-      speed boxes. Only <i>patrol</i> is drawn by hand: click each cell of its route in turn — the first click starts the path, every
-      click after adds a waypoint. <b>Enter</b> finishes it as a there-and-back patrol; <b>L</b> closes
-      it into a loop; <b>Esc</b> throws the draft away. Clicking a finished monster re-applies the speed
-      box and flips it between loop and ping-pong. It moves at the speed box's ms per cell and pauses
-      briefly at each waypoint, and touching it is fatal.<br>
-      <b>Goal</b>: click the flag's own cell to <i>remove</i> it — a level with no flag never ends, so
-      the run only stops when the runner falls.<br>
-      <b>Saw</b>: one click drops a saw on a 3-cell rail (uses the speed + phase boxes); clicking an existing saw re-applies those boxes to it. Drag either <b>end handle</b> to lengthen, shorten or swing the rail round — it pivots on the opposite end. Drag the <b>blade</b> along the rail to set its starting <i>phase</i> (0 = parked at the low end, 0.5 = at the high end) — stagger a row of saws this way so they don't sweep as one line. Drag the blade past an end or off the line, or drag any other rail cell, to move the whole saw.<br>
-      <b>Stone</b>: drag to paint breakable stone blocks (the <i>hp</i> box sets how many taps to smash). Right-drag or drag over a stone to remove.<br>
-      <b>Platform</b>: fixed free track cast into a wall. Click an empty cell to place it in the selected <i>shape</i>; click it again to cycle through the six shapes; right-click to remove. The runner rides it for free but can only enter/leave through the two drawn ends — the reachability check knows this.<br>
-      <b>Speed</b>: the level’s starting pace in tiles/sec (<code>cps</code>). Every shipped level starts at 0.80.<br>
-      <b>Talisman</b>: a one-off collectible. Click to place the one chosen in the dropdown, click again to cycle, right-click to remove. It does <i>not</i> block track — put it somewhere the runner can flow <i>through</i>, never at the end of a spur, or it can't be collected.<br>
-      <b>Key / Door</b>: pick a colour swatch first — a key opens the door of the same colour.<br>
-      <b>Autosave</b> keeps every edit in your browser, so you can close/refresh and pick up where you left off (levels you’ve changed show a <b>*</b> in the Load list). It does <i>not</i> touch the game — when a batch is ready, tell me “take the autosave” and hit <b>Copy full levels.js</b> (or Download) so I can convert it into the real game data. “Reset to shipped” wipes the draft back to the current game levels.
-    </div>
-  </div>
 </div>
 
+<script src="levels.js"></script>
 <script>
 const LSKEY = "tilerunner_editor_v2";
 let autoAvail = true, autoTimer = null;
-const EMBEDDED = [{"n":1,"start":[2,6],"init":[[2,5],[2,4]],"cols":5,"rows":7,"intro":["recycle","flag","coin"],"cps":0.8,"goal":[2,0],"walls":[],"coins":[[2,2]]},{"n":2,"start":[0,7],"init":[[0,6],[0,5]],"cols":5,"rows":8,"intro":["turn"],"cps":0.8,"goal":[4,3],"walls":[],"coins":[[1,3],[2,3],[3,3]]},{"n":3,"start":[0,0],"init":[[0,1],[0,2]],"cols":6,"rows":8,"intro":["offscreen"],"cps":0.8,"goal":[5,7],"walls":[],"coins":[[2,4],[3,5],[4,6]]},{"n":4,"start":[1,7],"init":[[1,6],[1,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["wall"],"cps":0.8,"walls":[[0,3],[1,3],[2,3],[4,3]],"coins":[[1,1],[1,4],[2,6]]},{"n":5,"start":[1,12],"init":[[1,11],[1,10]],"goal":[1,0],"cols":5,"rows":13,"intro":[],"cps":0.8,"walls":[[0,2],[1,2],[2,2],[4,2],[0,5],[2,5],[3,5],[4,5],[0,8],[1,8],[2,8],[4,8]],"coins":[[4,1],[0,6],[0,9],[2,11]]},{"n":6,"start":[1,13],"init":[[1,12],[1,11]],"cols":9,"rows":15,"intro":[],"cps":0.8,"walls":[[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[8,0],[0,1],[2,1],[8,1],[0,2],[2,2],[4,2],[5,2],[6,2],[8,2],[0,3],[4,3],[8,3],[0,4],[2,4],[3,4],[4,4],[6,4],[8,4],[0,5],[2,5],[6,5],[8,5],[0,6],[2,6],[4,6],[5,6],[6,6],[7,6],[8,6],[0,7],[2,7],[8,7],[0,8],[2,8],[3,8],[4,8],[5,8],[6,8],[8,8],[0,9],[2,9],[6,9],[8,9],[0,10],[2,10],[4,10],[5,10],[6,10],[8,10],[0,11],[4,11],[8,11],[0,12],[2,12],[3,12],[4,12],[6,12],[8,12],[0,13],[6,13],[8,13],[0,14],[1,14],[2,14],[3,14],[4,14],[5,14],[6,14],[7,14],[8,14]],"talismans":[[7,1,"clock"]]},{"n":7,"start":[0,3],"init":[[1,3],[2,3]],"goal":[1,6],"cols":9,"rows":9,"intro":[],"cps":0.8,"walls":[[4,0],[4,2],[4,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[8,4],[4,5],[4,6],[4,8]],"coins":[[0,1],[8,2],[0,6],[7,7]]},{"n":8,"start":[4,7],"init":[[4,6],[4,5]],"goal":[1,7],"cols":8,"rows":8,"intro":[],"cps":0.8,"walls":[[5,0],[2,1],[0,2],[2,2],[3,2],[4,2],[5,2],[7,2],[2,3],[5,3],[2,4],[5,4],[1,5],[2,5],[5,5],[6,5],[2,6],[2,7]],"coins":[[7,0],[4,3],[3,4],[0,7]]},{"n":9,"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["block"],"cps":0.8,"walls":[[0,2],[1,2],[3,2],[4,2]],"blocks":[{"axis":"h","r":3,"pos0":3,"lo":2,"hi":3}],"coins":[[2,2],[2,4]]},{"n":10,"start":[3,15],"init":[[3,14],[3,13]],"goal":[1,0],"cols":5,"rows":16,"intro":[],"cps":0.8,"walls":[[0,2],[1,2],[2,2],[4,2],[0,7],[2,7],[3,7],[4,7],[0,10],[1,10],[3,10],[4,10]],"blocks":[{"axis":"h","r":11,"lo":2,"hi":3,"pos0":2},{"axis":"h","r":6,"lo":0,"hi":1,"pos0":1},{"axis":"h","r":3,"lo":3,"hi":4,"pos0":3}],"coins":[[2,3],[4,5],[0,11],[1,13]]},{"n":11,"start":[0,9],"init":[[1,9],[2,9]],"goal":[6,9],"cols":9,"rows":11,"intro":[],"cps":0.8,"walls":[[4,0],[4,1],[4,3],[4,4],[0,5],[1,5],[3,5],[4,5],[5,5],[7,5],[8,5],[4,6],[4,7],[4,8],[4,9],[4,10]],"blocks":[{"axis":"h","r":6,"lo":5,"hi":6,"pos0":6},{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"h","r":6,"lo":2,"hi":3,"pos0":2},{"axis":"v","c":3,"lo":1,"hi":2,"pos0":2}],"coins":[[5,1],[2,5],[1,6],[3,4]]},{"n":12,"start":[1,15],"init":[[1,14],[1,13]],"cols":9,"rows":17,"intro":[],"cps":0.8,"walls":[[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[8,0],[0,1],[6,1],[8,1],[0,2],[2,2],[3,2],[4,2],[6,2],[8,2],[0,3],[2,3],[6,3],[8,3],[0,4],[2,4],[4,4],[5,4],[6,4],[8,4],[0,5],[2,5],[4,5],[8,5],[0,6],[2,6],[4,6],[5,6],[6,6],[8,6],[0,7],[2,7],[8,7],[0,8],[2,8],[3,8],[4,8],[5,8],[6,8],[8,8],[0,9],[2,9],[6,9],[8,9],[0,10],[2,10],[3,10],[4,10],[6,10],[8,10],[0,11],[4,11],[8,11],[0,12],[1,12],[2,12],[4,12],[6,12],[7,12],[8,12],[0,13],[4,13],[8,13],[0,14],[2,14],[3,14],[4,14],[5,14],[6,14],[8,14],[0,15],[2,15],[8,15],[0,16],[1,16],[2,16],[3,16],[4,16],[5,16],[6,16],[7,16],[8,16]],"talismans":[[7,1,"magnet"]]},{"n":13,"start":[1,3],"init":[[1,2],[1,1]],"goal":[13,11],"cols":14,"rows":14,"intro":[],"cps":0.8,"walls":[[4,0],[8,0],[4,1],[8,2],[4,3],[8,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[10,4],[11,4],[13,4],[5,5],[9,5],[9,6],[5,7],[5,8],[9,8],[0,9],[1,9],[3,9],[4,9],[5,9],[6,9],[7,9],[8,9],[9,9],[10,9],[11,9],[12,9],[13,9],[4,10],[8,10],[8,11],[4,12],[4,13],[8,13]],"blocks":[{"axis":"v","c":5,"lo":1,"hi":2,"pos0":2},{"axis":"v","c":9,"lo":0,"hi":1,"pos0":1},{"axis":"h","r":5,"lo":11,"hi":12,"pos0":12},{"axis":"v","c":8,"lo":6,"hi":7,"pos0":7},{"axis":"v","c":4,"lo":5,"hi":6,"pos0":6},{"axis":"h","r":10,"lo":1,"hi":2,"pos0":2},{"axis":"v","c":5,"lo":10,"hi":11,"pos0":11},{"axis":"v","c":9,"lo":11,"hi":12,"pos0":12}],"coins":[[1,5],[3,7],[0,10],[0,12]]},{"n":14,"start":[2,7],"init":[[2,6],[2,5]],"goal":[2,0],"cols":5,"rows":8,"intro":["saw"],"cps":0.8,"walls":[],"hazards":[{"phase":0,"kind":"monster","axis":"h","r":3,"lo":0,"hi":4,"speed":4000,"variant":"hrail"}],"coins":[[4,1],[4,5],[2,3]]},{"n":15,"start":[2,12],"init":[[2,11],[2,10]],"goal":[2,0],"cols":5,"rows":13,"intro":[],"cps":0.8,"walls":[],"hazards":[{"phase":0,"kind":"monster","axis":"h","r":8,"lo":0,"hi":4,"speed":3600,"variant":"hrail"},{"phase":0,"kind":"monster","axis":"h","r":5,"lo":0,"hi":4,"speed":4400,"variant":"hrail"},{"phase":0,"kind":"monster","axis":"h","r":2,"lo":0,"hi":4,"speed":5200,"variant":"hrail"}],"coins":[[2,2],[4,8],[3,5],[1,5],[0,8]]},{"n":16,"start":[1,8],"init":[[1,7],[1,6]],"goal":[6,0],"cols":7,"rows":9,"intro":[],"cps":0.8,"walls":[[0,0],[1,1],[3,4],[5,7],[6,8]],"hazards":[{"phase":0,"kind":"monster","axis":"v","c":3,"lo":0,"hi":3,"speed":4000,"variant":"vrail"},{"phase":0,"kind":"monster","axis":"v","c":3,"lo":5,"hi":8,"speed":4000,"variant":"vrail"},{"phase":0,"kind":"monster","axis":"h","r":4,"lo":0,"hi":2,"speed":4000,"variant":"hrail"},{"phase":0,"kind":"monster","axis":"h","r":4,"lo":4,"hi":6,"speed":4000,"variant":"hrail"}],"coins":[[5,4],[3,1],[1,4],[3,7]]},{"n":17,"start":[1,7],"init":[[1,6],[1,5]],"goal":[3,0],"cols":7,"rows":8,"intro":["key","door"],"cps":0.8,"walls":[[0,3],[1,3],[2,3],[4,3],[5,3],[6,3]],"doors":[[3,3,"#ffd24a"]],"keys":[[6,7,"#ffd24a"]],"coins":[[4,1],[1,4],[0,6]]},{"n":18,"start":[1,15],"init":[[1,14],[1,13]],"cols":11,"rows":17,"intro":[],"cps":0.8,"walls":[[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[8,0],[9,0],[10,0],[0,1],[6,1],[10,1],[0,2],[1,2],[2,2],[4,2],[5,2],[6,2],[8,2],[10,2],[0,3],[4,3],[8,3],[10,3],[0,4],[2,4],[3,4],[4,4],[6,4],[7,4],[8,4],[10,4],[0,5],[6,5],[10,5],[0,6],[1,6],[2,6],[3,6],[4,6],[5,6],[6,6],[8,6],[10,6],[0,7],[8,7],[10,7],[0,8],[2,8],[3,8],[4,8],[5,8],[6,8],[7,8],[8,8],[10,8],[0,9],[2,9],[6,9],[10,9],[0,10],[2,10],[4,10],[5,10],[6,10],[8,10],[9,10],[10,10],[0,11],[2,11],[6,11],[10,11],[0,12],[2,12],[3,12],[4,12],[6,12],[7,12],[8,12],[10,12],[0,13],[4,13],[8,13],[10,13],[0,14],[2,14],[4,14],[6,14],[8,14],[10,14],[0,15],[4,15],[6,15],[10,15],[0,16],[1,16],[2,16],[3,16],[4,16],[5,16],[6,16],[7,16],[8,16],[9,16],[10,16]],"talismans":[[9,1,"star"]]},{"n":19,"start":[0,0],"init":[[1,0],[2,0]],"goal":[6,9],"cols":8,"rows":11,"intro":[],"cps":0.8,"walls":[[0,2],[2,2],[3,2],[4,2],[4,3],[5,3],[6,3],[7,3],[0,5],[1,5],[2,5],[3,5],[2,7],[3,7],[4,7],[5,7],[7,7],[4,8],[4,9],[4,10]],"doors":[[1,2,"#ffd24a"],[6,7,"#c77dff"]],"keys":[[6,1,"#ffd24a"],[2,9,"#c77dff"]],"coins":[[5,1],[7,4],[1,7],[3,9]]},{"n":20,"start":[1,7],"init":[[1,6],[1,5]],"goal":[1,0],"cols":5,"rows":8,"intro":["stone"],"cps":0.8,"walls":[[0,3],[1,3],[2,3],[4,3]],"stone":[[3,3,2]],"coins":[[2,1],[1,4],[2,6]]},{"n":21,"start":[1,0],"init":[[1,1],[1,2]],"goal":[3,10],"cols":7,"rows":12,"intro":[],"cps":0.8,"walls":[[3,0],[3,1],[3,3],[0,4],[1,4],[2,4],[3,4],[5,4],[6,4],[3,5],[6,5],[1,6],[3,6],[4,6],[6,6],[1,7],[6,7],[1,8],[2,8],[3,8],[4,8],[5,8],[6,8]],"stone":[[3,2,2],[4,4,2],[5,6,2],[2,6,2],[0,8,2]],"coins":[[2,1],[0,3],[5,9],[6,10]]},{"n":22,"start":[4,9],"init":[[4,8],[4,7]],"goal":[1,0],"cols":6,"rows":10,"intro":["platform"],"cps":0.8,"walls":[[0,2],[1,2],[2,2],[3,2],[3,4],[0,5],[2,5],[3,5],[4,5],[5,5]],"platforms":[[1,5,"ns"],[3,3,"ew"]],"coins":[[0,1],[0,4],[5,6],[3,8]]},{"n":23,"start":[2,1],"init":[[3,1],[4,1]],"goal":[5,8],"cols":7,"rows":10,"intro":[],"cps":0.8,"walls":[[0,3],[1,3],[3,3],[4,3],[5,3],[6,3],[4,4],[1,5],[4,5],[1,6],[4,7],[0,8],[4,8],[4,9]],"platforms":[[2,3,"ns"],[1,4,"ew"],[1,7,"sw"],[4,6,"ew"]],"coins":[[1,1],[6,2],[6,5],[1,8]]},{"n":24,"start":[1,17],"init":[[1,16],[1,15]],"cols":11,"rows":19,"intro":[],"cps":0.8,"walls":[[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[8,0],[9,0],[10,0],[0,1],[10,1],[0,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[10,2],[0,3],[2,3],[8,3],[10,3],[0,4],[2,4],[4,4],[5,4],[6,4],[8,4],[10,4],[0,5],[2,5],[4,5],[10,5],[0,6],[2,6],[4,6],[5,6],[6,6],[7,6],[8,6],[9,6],[10,6],[0,7],[2,7],[10,7],[0,8],[2,8],[3,8],[4,8],[5,8],[6,8],[7,8],[8,8],[10,8],[0,9],[2,9],[8,9],[10,9],[0,10],[2,10],[4,10],[5,10],[6,10],[8,10],[10,10],[0,11],[4,11],[8,11],[10,11],[0,12],[1,12],[2,12],[3,12],[4,12],[6,12],[7,12],[8,12],[10,12],[0,13],[6,13],[10,13],[0,14],[1,14],[2,14],[3,14],[4,14],[5,14],[6,14],[8,14],[9,14],[10,14],[0,15],[6,15],[10,15],[0,16],[2,16],[3,16],[4,16],[6,16],[7,16],[8,16],[10,16],[0,17],[2,17],[10,17],[0,18],[1,18],[2,18],[3,18],[4,18],[5,18],[6,18],[7,18],[8,18],[9,18],[10,18]],"talismans":[[9,1,"finger"]]},{"n":25,"start":[0,8],"init":[[1,8],[2,8]],"goal":[1,2],"cols":14,"rows":10,"intro":[],"cps":0.8,"walls":[[11,0],[8,1],[9,1],[11,2],[3,3],[11,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[11,4],[13,4],[11,5],[4,6],[8,6],[11,6],[4,7],[5,7],[7,7],[8,7],[11,7],[4,8],[8,8],[4,9],[8,9]],"platforms":[[6,7,"ns"],[10,1,"ne"],[4,5,"ew"],[8,5,"ew"],[10,4,"ns"],[12,4,"ns"],[11,1,"ew"],[7,0,"es"],[7,1,"ns"],[7,2,"ns"],[7,3,"wn"],[3,0,"es"],[3,1,"ns"],[3,2,"wn"]],"coins":[[0,1],[9,2],[13,5],[1,7],[13,8]]},{"n":26,"start":[1,8],"init":[[1,7],[1,6]],"goal":[7,8],"cols":10,"rows":10,"intro":[],"cps":0.8,"walls":[[5,1],[6,1],[8,1],[9,1],[5,2],[9,2],[5,3],[9,3],[0,4],[1,4],[2,4],[5,4],[9,4],[5,5],[9,5],[5,6],[9,6],[5,7],[9,7],[5,8],[9,8],[5,9],[9,9]],"blocks":[{"axis":"v","c":4,"pos0":4,"lo":3,"hi":5},{"axis":"v","c":3,"pos0":4,"lo":3,"hi":5},{"axis":"h","r":3,"pos0":8,"lo":6,"hi":8},{"axis":"h","r":2,"pos0":7,"lo":6,"hi":8},{"axis":"h","r":4,"pos0":7,"lo":6,"hi":8},{"axis":"h","r":5,"pos0":6,"lo":6,"hi":8}],"stone":[[7,1,2]],"coins":[[6,4],[3,5],[4,5],[0,0],[1,1]]},{"n":27,"start":[2,9],"init":[[2,8],[2,7]],"goal":[2,0],"cols":5,"rows":10,"intro":[],"cps":0.8,"walls":[],"stone":[[0,4,2],[4,4,2],[4,3,2],[0,3,2],[0,2,2],[2,2,2],[3,2,2],[0,5,2],[4,5,2],[4,2,2],[3,5,1],[3,4,1],[2,4,1],[1,4,1],[1,3,1],[1,2,1],[1,5,3],[2,5,3],[2,3,3],[3,3,3]]},{"n":28,"start":[1,3],"init":[[1,2],[1,1]],"goal":[12,6],"cols":14,"rows":8,"intro":[],"cps":0.8,"walls":[],"hazards":[{"phase":0.07,"kind":"monster","axis":"v","c":3,"lo":0,"hi":7,"speed":4000,"variant":"vrail"},{"phase":0.14,"kind":"monster","axis":"v","c":4,"lo":0,"hi":7,"speed":4000,"variant":"vrail"},{"phase":0.21,"kind":"monster","axis":"v","c":5,"lo":0,"hi":7,"speed":4000,"variant":"vrail"},{"phase":0.43,"kind":"monster","axis":"v","c":8,"lo":0,"hi":7,"speed":4000,"variant":"vrail"},{"phase":0.36,"kind":"monster","axis":"v","c":9,"lo":0,"hi":7,"speed":4000,"variant":"vrail"},{"kind":"monster","axis":"v","c":10,"lo":0,"hi":7,"speed":4000,"phase":0.29,"variant":"vrail"}],"coins":[[13,1],[3,3],[6,4],[8,5],[11,6]]},{"n":29,"start":[2,8],"init":[[2,7],[2,6]],"cols":5,"rows":9,"intro":["monster"],"cps":0.8,"goal":[2,0],"walls":[],"hazards":[{"kind":"monster","variant":"wander","c":2,"r":3,"speed":2200}],"coins":[[0,1],[4,2],[0,7]]},{"n":30,"start":[1,17],"init":[[1,16],[1,15]],"cols":13,"rows":19,"intro":[],"cps":0.8,"walls":[[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[8,0],[9,0],[10,0],[11,0],[12,0],[0,1],[4,1],[10,1],[12,1],[0,2],[2,2],[4,2],[6,2],[8,2],[10,2],[12,2],[0,3],[2,3],[4,3],[6,3],[8,3],[12,3],[0,4],[1,4],[2,4],[4,4],[6,4],[8,4],[9,4],[10,4],[11,4],[12,4],[0,5],[4,5],[6,5],[12,5],[0,6],[2,6],[3,6],[4,6],[6,6],[7,6],[8,6],[9,6],[10,6],[12,6],[0,7],[2,7],[6,7],[8,7],[12,7],[0,8],[2,8],[4,8],[5,8],[6,8],[8,8],[10,8],[11,8],[12,8],[0,9],[2,9],[8,9],[12,9],[0,10],[2,10],[4,10],[5,10],[6,10],[7,10],[8,10],[9,10],[10,10],[12,10],[0,11],[4,11],[8,11],[12,11],[0,12],[2,12],[3,12],[4,12],[6,12],[8,12],[10,12],[12,12],[0,13],[2,13],[6,13],[10,13],[12,13],[0,14],[2,14],[4,14],[5,14],[6,14],[7,14],[8,14],[9,14],[10,14],[12,14],[0,15],[2,15],[6,15],[8,15],[12,15],[0,16],[2,16],[3,16],[4,16],[6,16],[8,16],[10,16],[11,16],[12,16],[0,17],[6,17],[12,17],[0,18],[1,18],[2,18],[3,18],[4,18],[5,18],[6,18],[7,18],[8,18],[9,18],[10,18],[11,18],[12,18]],"talismans":[[11,1,"mush"]]},{"n":31,"start":[3,9],"init":[[3,8],[3,7]],"cols":7,"rows":10,"intro":[],"cps":0.8,"goal":[3,0],"walls":[[0,3],[1,3],[2,3],[4,5],[5,5],[6,5]],"hazards":[{"kind":"monster","variant":"trap","c":3,"r":4,"speed":2200}],"coins":[[2,4],[1,4],[0,4],[4,4],[5,4],[6,4]]},{"n":32,"start":[3,11],"init":[[3,10],[3,9]],"cols":7,"rows":12,"intro":[],"cps":0.8,"goal":[3,0],"walls":[[0,4],[1,4],[5,4],[6,4],[1,5],[5,5],[0,6],[1,6],[5,6],[6,6]],"hazards":[{"kind":"monster","variant":"square","c":2,"r":4,"w":2,"h":2,"speed":2200}]},{"n":33,"start":[1,10],"init":[[2,10],[4,4],[3,10]],"cols":9,"rows":12,"intro":[],"cps":0.8,"walls":[]}];
+// The shipped campaign, straight out of levels.js — the <script src> above hands it over
+// as a global, and loadShipped() re-reads the same file uncached so a save made a moment
+// ago is what comes back. There is no copy of the levels in this file to fall behind.
+let EMBEDDED = (typeof LEVELS_DATA !== "undefined" ? LEVELS_DATA : []);
 const COLORS = ["#ffd24a","#c77dff","#7dff6b","#ff9e4d","#ff6d6d"];
-const CELL = 40, PAD = 8;
+const CELL = 40, PAD = 18;      // the pad is the grab strip for the map's edges
+const EDGE = 12;                // how far into the pad an edge drag registers
 
 // ---- working state ----
 let edited = {};                     // n -> level object (JSON) with user edits
@@ -230,7 +325,7 @@ function loadLevel(n){
   $("nIn").value = L.n; $("colsIn").value = L.cols; $("rowsIn").value = L.rows;
   $("introBox").value = (L.intro||[]).join(",");
   $("cpsIn").value = L.cps || 0.8;
-  const ls=$("loadSel"); if(ls && [...ls.options].some(o=>o.value===String(n))) ls.value=String(n);
+  rebuildLevelList();
   syncSize(); draw();
   setStatus("loaded L"+n);
   _lastOob = "\u0000";            // force refreshOut to re-announce for the level just loaded
@@ -242,9 +337,43 @@ function syncSize(){
 }
 function resizeGrid(){
   L.cols = clamp(+$("colsIn").value,3,40); L.rows = clamp(+$("rowsIn").value,3,40);
-  // drop anything out of bounds
-  L.walls = new Set([...L.walls].filter(s=>{const [c,r]=s.split(",").map(Number);return c<L.cols&&r<L.rows;}));
-  syncSize(); commit(); draw(); refreshOut();
+  cropToBoard(); syncSize(); commit(); draw(); refreshOut();
+}
+// Move every coordinate in the level. Growing from the left or the top means the map gains
+// space on that side, which is the same thing as pushing all its contents the other way.
+function shiftAll(dc, dr){
+  if(!dc && !dr) return;
+  const mv = p => { p[0]+=dc; p[1]+=dr; };
+  mv(L.start); (L.init||[]).forEach(mv); if(L.goal) mv(L.goal);
+  L.walls = new Set([...L.walls].map(s=>{ const [c,r]=s.split(",").map(Number); return keyOf(c+dc, r+dr); }));
+  [L.coins, L.stone, L.platforms, L.talismans, L.doors, L.keys].forEach(a=>(a||[]).forEach(mv));
+  // a block or a rail names ONE fixed axis and a lo..hi span on the other, so which delta
+  // applies to which field depends on the axis
+  (L.blocks||[]).forEach(b=>{ if((b.axis||"h")==="h"){ b.r+=dr; b.lo+=dc; b.hi+=dc; b.pos0+=dc; }
+                              else { b.c+=dc; b.lo+=dr; b.hi+=dr; b.pos0+=dr; } });
+  (L.hazards||[]).forEach(h=>{
+    if(h.path) h.path.forEach(mv);
+    if(h.c!=null) h.c+=dc;
+    if(h.r!=null) h.r+=dr;
+    if(h.lo!=null){ if((h.axis||"h")==="h"){ h.lo+=dc; h.hi+=dc; } else { h.lo+=dr; h.hi+=dr; } }
+  });
+}
+// Anything the board no longer covers. Shrinking used to drop walls and leave every other
+// marker sitting at a coordinate off the edge, where it stayed in the exported JSON.
+function cropToBoard(){
+  const inB=(c,r)=>c>=0&&r>=0&&c<L.cols&&r<L.rows;
+  const keep=a=>(a||[]).filter(p=>inB(p[0],p[1]));
+  L.walls = new Set([...L.walls].filter(s=>{ const [c,r]=s.split(",").map(Number); return inB(c,r); }));
+  L.coins=keep(L.coins); L.stone=keep(L.stone); L.platforms=keep(L.platforms);
+  L.talismans=keep(L.talismans); L.doors=keep(L.doors); L.keys=keep(L.keys);
+  L.init = keep(L.init);
+  L.start = [clamp(L.start[0],0,L.cols-1), clamp(L.start[1],0,L.rows-1)];
+  if(L.goal && !inB(L.goal[0],L.goal[1])) L.goal=[clamp(L.goal[0],0,L.cols-1), clamp(L.goal[1],0,L.rows-1)];
+  const spanOk=o=>(o.axis||"h")==="h" ? (o.r>=0&&o.r<L.rows&&o.lo>=0&&o.hi<L.cols)
+                                      : (o.c>=0&&o.c<L.cols&&o.lo>=0&&o.hi<L.rows);
+  L.blocks  = (L.blocks||[]).filter(spanOk);
+  L.hazards = (L.hazards||[]).filter(h => h.path ? h.path.every(p=>inB(p[0],p[1]))
+                                       : (h.lo!=null ? spanOk(h) : inB(h.c,h.r)));
 }
 function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
 
@@ -497,7 +626,8 @@ function showAuto(kind){ const el=$("auto"); if(!el) return;
   if(!autoAvail){ el.textContent="autosave: unavailable"; el.className="pill warn"; return; }
   const t=new Date().toTimeString().slice(0,8);
   el.textContent = (kind==="restored"?"restored · ":"autosaved ")+t; el.className="pill"; }
-function resetShipped(){ edited={}; try{ localStorage.removeItem(LSKEY); }catch(e){} rebuildLoadSel(); loadLevel(EMBEDDED[0].n); setStatus("reset to shipped"); }
+function resetShipped(){ edited={}; try{ localStorage.removeItem(LSKEY); }catch(e){}
+  reloadShipped().then(()=>setStatus("reset to shipped — " + EMBEDDED.length + " levels")); }
 // Anything in the autosave shadows the shipped level of the same number, forever. That is
 // right for work in progress and wrong for everything else: a level pasted back into
 // levels.js stays hidden behind a local copy that is now identical to it, or worse, behind
@@ -518,6 +648,45 @@ function pruneAutosave(){
   for(const n of Object.keys(edited)) if(samePayload(edited[n], shipped[n])){ delete edited[n]; dropped++; }
   return dropped;
 }
+// ---------- the shipped baseline comes from levels.js itself ----------
+// EMBEDDED below is only a fallback for opening this file straight off the filesystem, where
+// fetch can't reach a sibling. Served over http the real file wins every time, read past both
+// the HTTP cache and the service worker so a save made a second ago is the one you get back.
+// (tools/check.mjs still holds EMBEDDED to levels.js, so the fallback can't quietly rot.)
+let shippedFrom = "built-in copy";
+async function loadShipped(){
+  try{
+    const res = await fetch("levels.js?ts=" + Date.now(), {cache:"no-store"});
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    const txt = await res.text();
+    const mod = {}; new Function("module","exports", txt)(mod, mod.exports = {});
+    const arr = mod.exports;
+    if(!Array.isArray(arr) || !arr.length || typeof arr[0].n !== "number")
+      throw new Error("no level array exported");
+    EMBEDDED = arr;
+    shippedFrom = "levels.js · " + arr.length;
+    return true;
+  }catch(e){
+    shippedFrom = "from <script> · " + EMBEDDED.length + " (re-read failed: " + e.message + ")";
+    return false;
+  }
+}
+function showShipped(){ const el=$("shipped"); if(!el) return;
+  el.textContent = shippedFrom;
+  el.className = shippedFrom.indexOf("levels.js")===0 ? "pill" : "pill warn"; }
+// Re-read the file without losing the draft. Anything in the autosave that now says exactly
+// what the file says stops being a draft — which is what you want the moment a batch lands.
+async function reloadShipped(){
+  const ok = await loadShipped();
+  const dropped = pruneAutosave(); if(dropped) saveAuto();
+  showShipped(); rebuildLevelList();
+  const known = n => !!(edited[n] || EMBEDDED.find(x=>x.n===n));
+  loadLevel(L && known(L.n) ? L.n : (EMBEDDED[0] ? EMBEDDED[0].n : 1));
+  setStatus(ok ? "reloaded levels.js — " + EMBEDDED.length + " levels"
+               + (dropped ? ", " + dropped + " draft" + (dropped===1?"":"s") + " now match" : "")
+               : "couldn't read levels.js — still on the built-in copy");
+}
+
 function boot(){
   try{ const raw=localStorage.getItem(LSKEY); if(raw){ const d=JSON.parse(raw); if(d&&d.edited){
     edited=d.edited;
@@ -926,8 +1095,59 @@ function cellsBetween(a,b){                       // DDA so fast drags don't ski
   const out=[]; let x0=a.c,y0=a.r,x1=b.c,y1=b.r; const dx=Math.abs(x1-x0),dy=Math.abs(y1-y0), n=Math.max(dx,dy);
   for(let i=0;i<=n;i++){ const t=n?i/n:0; out.push({c:Math.round(x0+(x1-x0)*t), r:Math.round(y0+(y1-y0)*t)}); } return out;
 }
+// ---------- the map's own extents, dragged from the margin ----------
+let edgeDrag=null;
+function edgeAt(e){
+  const rect=cv.getBoundingClientRect();
+  const x=e.clientX-rect.left, y=e.clientY-rect.top;
+  const x0=PAD, x1=PAD+L.cols*CELL, y0=PAD, y1=PAD+L.rows*CELL;
+  const onY = y>=y0-EDGE && y<=y1+EDGE, onX = x>=x0-EDGE && x<=x1+EDGE;
+  if(onY && Math.abs(x-x1)<=EDGE) return "r";     // far edges win, so a 3-wide map still has both
+  if(onX && Math.abs(y-y1)<=EDGE) return "b";
+  if(onY && Math.abs(x-x0)<=EDGE) return "l";
+  if(onX && Math.abs(y-y0)<=EDGE) return "t";
+  return null;
+}
+const EDGE_CURSOR={l:"ew-resize",r:"ew-resize",t:"ns-resize",b:"ns-resize"};
+// Anchored to where the drag STARTED, in page coordinates, and re-derived from that anchor
+// every move. The canvas is centred and resizes under the pointer, so measuring against the
+// canvas instead would feed its own movement back in and run away.
+function dragExtent(e){
+  const d=edgeDrag;
+  const kx=Math.round((e.clientX-d.x0)/CELL), ky=Math.round((e.clientY-d.y0)/CELL);
+  const cols = d.side==="r" ? clamp(d.cols0+kx,3,40) : d.side==="l" ? clamp(d.cols0-kx,3,40) : L.cols;
+  const rows = d.side==="b" ? clamp(d.rows0+ky,3,40) : d.side==="t" ? clamp(d.rows0-ky,3,40) : L.rows;
+  const wantDc = d.side==="l" ? cols-d.cols0 : 0, wantDr = d.side==="t" ? rows-d.rows0 : 0;
+  if(cols===L.cols && rows===L.rows && wantDc===d.dc && wantDr===d.dr) return;
+  L.cols=cols; L.rows=rows;
+  shiftAll(wantDc-d.dc, wantDr-d.dr);          // only the part not already applied this drag
+  d.dc=wantDc; d.dr=wantDr;
+  $("colsIn").value=L.cols; $("rowsIn").value=L.rows;
+  syncSize(); commit(); draw(); refreshOut();
+  setStatus(L.cols+"×"+L.rows);
+}
+// grab bars in the margin, so the edges look draggable rather than merely being so
+function drawEdgeHandles(){
+  const x0=PAD, x1=PAD+L.cols*CELL, y0=PAD, y1=PAD+L.rows*CELL;
+  const mx=(x0+x1)/2, my=(y0+y1)/2, half=Math.min(26, (x1-x0)/3), halfV=Math.min(26,(y1-y0)/3);
+  ctx.strokeStyle = edgeDrag ? "#7dd0ff" : "#4a4780";
+  ctx.lineWidth=4; ctx.lineCap="round";
+  ctx.beginPath();
+  ctx.moveTo(mx-half, y0-7); ctx.lineTo(mx+half, y0-7);
+  ctx.moveTo(mx-half, y1+7); ctx.lineTo(mx+half, y1+7);
+  ctx.moveTo(x0-7, my-halfV); ctx.lineTo(x0-7, my+halfV);
+  ctx.moveTo(x1+7, my-halfV); ctx.lineTo(x1+7, my+halfV);
+  ctx.stroke();
+}
+const _drawBase = draw;
+draw = function(){ _drawBase(); drawEdgeHandles(); };
+
 cv.addEventListener("contextmenu", e=>e.preventDefault());   // allow right-drag erase
 cv.addEventListener("mousedown", e=>{
+  const side=edgeAt(e);
+  if(side && e.button!==2){ pushUndo(); mouseDown=true;
+    edgeDrag={side, x0:e.clientX, y0:e.clientY, cols0:L.cols, rows0:L.rows, dc:0, dr:0};
+    cv.style.cursor=EDGE_CURSOR[side]; return; }
   mouseDown=true; const c=cellFromEvent(e); if(!c) return;
   // grab an existing element and drag it (any tool except erase / right-click)
   if(tool!=="erase" && e.button!==2){ const hit=draggableAt(c.c,c.r); if(hit){ pushUndo(); dragEl={...hit, grab:{c:c.c,r:c.r}}; lastCell=c; cv.style.cursor="grabbing"; return; } }
@@ -944,8 +1164,11 @@ cv.addEventListener("mousedown", e=>{
   lastCell=c; applyTool(c.c,c.r,false);
 });
 cv.addEventListener("mousemove", e=>{
+  if(edgeDrag){ dragExtent(e); return; }
   const c=cellFromEvent(e);
-  if(!mouseDown){ cv.style.cursor = (c && tool!=="erase" && draggableAt(c.c,c.r)) ? "grab" : "crosshair"; return; }
+  if(!mouseDown){ const side=edgeAt(e);
+    cv.style.cursor = side ? EDGE_CURSOR[side]
+                     : (c && tool!=="erase" && draggableAt(c.c,c.r)) ? "grab" : "crosshair"; return; }
   if(!c) return;
   if(dragEl){ applyDrag(c.c,c.r); lastCell=c; commit(); draw(); refreshOut(); return; }
   if(tool!=="wall" && tool!=="erase" && tool!=="stone") return;
@@ -954,16 +1177,97 @@ cv.addEventListener("mousemove", e=>{
   path.forEach(p=>{ if(p.c<0||p.r<0||p.c>=L.cols||p.r>=L.rows) return; if(tool==="wall") paintWall(p.c,p.r); else if(tool==="stone") paintStone(p.c,p.r); else eraseAt(p.c,p.r); });
   lastCell=c; commit(); draw(); refreshOut();
 });
-window.addEventListener("mouseup", ()=>{ mouseDown=false; lastCell=null; paintMode=null; if(dragEl){ dragEl=null; commit(); refreshOut(); } cv.style.cursor="crosshair"; });
+window.addEventListener("mouseup", ()=>{ mouseDown=false; lastCell=null; paintMode=null;
+  if(edgeDrag){ edgeDrag=null; cropToBoard(); commit(); draw(); refreshOut(); }   // crop once, at the end
+  if(dragEl){ dragEl=null; commit(); refreshOut(); } cv.style.cursor="crosshair"; });
 function cellFromEvent(e){ const rect=cv.getBoundingClientRect(); const x=e.clientX-rect.left-PAD, y=e.clientY-rect.top-PAD; const c=Math.floor(x/CELL), r=Math.floor(y/CELL); if(c<0||r<0||c>=L.cols||r>=L.rows)return null; return {c,r}; }
 
+// ---------- palette icons ----------
+// Each swatch is a miniature of what the tool actually puts on the board, in the board's own
+// colours, so the palette reads as the thing rather than as a word for it.
+function toolIcon(g, t, S){
+  const box=(x,y,w,h,rad,fill)=>{ g.beginPath(); g.moveTo(x+rad,y);
+    g.arcTo(x+w,y,x+w,y+h,rad); g.arcTo(x+w,y+h,x,y+h,rad);
+    g.arcTo(x,y+h,x,y,rad); g.arcTo(x,y,x+w,y,rad); g.closePath(); g.fillStyle=fill; g.fill(); };
+  const pip=(x,y,r,fill)=>{ g.fillStyle=fill; g.beginPath(); g.arc(x,y,r,0,7); g.fill(); };
+  const studs=(col)=>[[.26,.26],[.74,.26],[.26,.74],[.74,.74]].forEach(([a,b])=>pip(S*a,S*b,S*.06,col));
+  const M=S*0.08, F=S-M*2;                       // the cell, inset a little
+  g.clearRect(0,0,S,S);
+  switch(t){
+    case "wall":     box(M,M,F,F,S*.14,"#6b7185"); studs("#3a3f52"); break;
+    case "erase":    g.strokeStyle="#ff8a8a"; g.lineWidth=S*.11; g.lineCap="round";
+                     g.beginPath(); g.moveTo(S*.28,S*.28); g.lineTo(S*.72,S*.72);
+                     g.moveTo(S*.72,S*.28); g.lineTo(S*.28,S*.72); g.stroke(); break;
+    case "start":    box(M,M,F,F,S*.14,"#b8ade8");
+                     g.fillStyle="#0c0a1e"; g.font="bold "+Math.round(S*.42)+"px monospace";
+                     g.textAlign="center"; g.textBaseline="middle"; g.fillText("S",S/2,S*.54); break;
+    case "tile":     g.strokeStyle="#b8ade8"; g.lineWidth=S*.10;
+                     g.strokeRect(M+S*.05,M+S*.05,F-S*.10,F-S*.10);
+                     box(S*.34,S*.34,S*.32,S*.32,S*.06,"#b8ade8"); break;
+    case "goal":     box(M,M,F,F,S*.14,"#2a6d34");
+                     g.strokeStyle="#eafff0"; g.lineWidth=S*.08; g.lineCap="round";
+                     g.beginPath(); g.moveTo(S*.36,S*.24); g.lineTo(S*.36,S*.78); g.stroke();
+                     g.beginPath(); g.moveTo(S*.36,S*.26); g.lineTo(S*.74,S*.40);
+                     g.lineTo(S*.36,S*.54); g.closePath(); g.fillStyle="#8dff78"; g.fill(); break;
+    case "block":    g.strokeStyle="#9aa0b4"; g.lineWidth=S*.08; g.lineCap="round";
+                     g.beginPath(); g.moveTo(S*.14,S/2); g.lineTo(S*.86,S/2); g.stroke();
+                     box(S*.26,S*.26,S*.48,S*.48,S*.08,"#4a4f60");
+                     [[.36,.36],[.64,.36],[.36,.64],[.64,.64]].forEach(([a,b])=>pip(S*a,S*b,S*.05,"#8b90a3"));
+                     g.strokeStyle="#eaf0fb"; g.lineWidth=S*.07; g.lineCap="round"; g.lineJoin="round";
+                     g.beginPath(); g.moveTo(S*.38,S/2); g.lineTo(S*.62,S/2);
+                     g.moveTo(S*.54,S*.42); g.lineTo(S*.62,S/2); g.lineTo(S*.54,S*.58); g.stroke(); break;
+    case "saw":      g.beginPath();
+                     for(let k=0;k<16;k++){ const a=k/16*Math.PI*2, R=(k%2?S*.42:S*.26);
+                       const X=S/2+Math.cos(a)*R, Y=S/2+Math.sin(a)*R; k?g.lineTo(X,Y):g.moveTo(X,Y); }
+                     g.closePath(); g.fillStyle="#ff4d6d"; g.fill(); pip(S/2,S/2,S*.11,"#12102a"); break;
+    case "monster":  box(S*.16,S*.20,S*.68,S*.60,S*.12,"#b24dff");
+                     pip(S*.37,S*.44,S*.07,"#12102a"); pip(S*.63,S*.44,S*.07,"#12102a");
+                     g.strokeStyle="#12102a"; g.lineWidth=S*.07; g.lineJoin="round"; g.beginPath();
+                     for(let k=0;k<=4;k++){ const X=S*.24+k*(S*.52/4); k?g.lineTo(X,k%2?S*.74:S*.64):g.moveTo(X,S*.64); }
+                     g.stroke(); break;
+    case "stone":    box(M,M,F,F,S*.14,"#9a7b53"); box(M+S*.05,M+S*.05,F-S*.10,F-S*.10,S*.10,"#b3915f");
+                     g.strokeStyle="#5f4a2e"; g.lineWidth=S*.06; g.beginPath();
+                     g.moveTo(S*.50,S*.12); g.lineTo(S*.42,S*.50); g.lineTo(S*.60,S*.88);
+                     g.moveTo(S*.42,S*.50); g.lineTo(S*.12,S*.62); g.stroke(); break;
+    case "platform": box(M,M,F,F,S*.14,"#5c6474"); studs("#3a3f52");
+                     g.strokeStyle="#ffd24a"; g.lineWidth=S*.13; g.lineCap="round";
+                     g.beginPath(); g.moveTo(S/2,M); g.lineTo(S/2,S-M); g.stroke(); break;
+    case "talisman": box(S*.22,S*.26,S*.56,S*.60,S*.10,"#ffd24a");
+                     box(S*.32,S*.38,S*.36,S*.36,S*.06,"#a8781a");
+                     g.strokeStyle="#ffd24a"; g.lineWidth=S*.07; g.lineCap="round";
+                     g.beginPath(); g.arc(S/2,S*.22,S*.10,Math.PI*0.15,Math.PI*0.85,true); g.stroke(); break;
+    case "coin":     box(S*.18,S*.18,S*.64,S*.64,S*.12,"#c78b16");
+                     box(S*.25,S*.25,S*.50,S*.50,S*.09,"#ffd24a"); break;
+    case "key":      g.strokeStyle=color; g.lineWidth=S*.10;
+                     g.beginPath(); g.arc(S*.36,S*.40,S*.16,0,7); g.stroke();
+                     g.lineCap="round"; g.beginPath(); g.moveTo(S*.47,S*.51); g.lineTo(S*.80,S*.84);
+                     g.moveTo(S*.66,S*.70); g.lineTo(S*.78,S*.58); g.stroke(); break;
+    case "door":     box(S*.22,M,S*.56,F,S*.08,color);
+                     g.fillStyle="#2a1c00"; g.fillRect(S*.40,S*.44,S*.20,S*.14);
+                     g.strokeStyle="#2a1c00"; g.lineWidth=S*.07;
+                     g.beginPath(); g.arc(S/2,S*.44,S*.07,Math.PI,0); g.stroke(); break;
+  }
+}
+function paintToolIcons(){
+  document.querySelectorAll(".tool").forEach(el=>{
+    let cvs=el.querySelector("canvas.ic");
+    if(!cvs){ cvs=document.createElement("canvas"); cvs.className="ic";
+              cvs.width=cvs.height=52; el.insertBefore(cvs, el.firstChild); }
+    toolIcon(cvs.getContext("2d"), el.dataset.tool, 52);
+  });
+}
+paintToolIcons();
+
 document.querySelectorAll(".tool").forEach(t=> t.addEventListener("click", ()=>selTool(t.dataset.tool)));
+// Only the tool in hand shows its settings and its instructions. Everything carries a
+// data-for list of the tools it belongs to; nothing else is on screen to read past.
 function selTool(t){ tool=t; document.querySelectorAll(".tool").forEach(el=>el.classList.toggle("sel",el.dataset.tool===t));
-  const hints={wall:"drag to paint walls",erase:"drag to remove anything",start:"click to place the start",tile:"click to drop one of the runner's tiles; click it again to pick it up",goal:"click to place the flag",block:"drag the block along its rail; ends reshape it",saw:"drag the blade to set its start; ends reshape",stone:"drag to paint breakable stones (uses hp box)",key:"click to drop a key (current colour)",door:"click to place a door (current colour)",talisman:"click to place; click again to cycle which one",coin:"click to drop a golden tile; click again to remove",platform:"click to place fixed track; click again to cycle shape"};
-  $("toolhint").textContent = hints[t]||""; draw(); }
+  document.querySelectorAll(".opt,.tip").forEach(el=>{
+    el.hidden = !(el.dataset.for||"").split(/\s+/).includes(t); });
+  draw(); }
 
 // swatches
-const swab=$("swab"); COLORS.forEach((c,i)=>{ const d=document.createElement("div"); d.className="sw"+(i===0?" sel":""); d.style.background=c; d.title=c; d.onclick=()=>{ color=c; document.querySelectorAll(".sw").forEach(s=>s.classList.remove("sel")); d.classList.add("sel"); }; swab.appendChild(d); });
+const swab=$("swab"); COLORS.forEach((c,i)=>{ const d=document.createElement("div"); d.className="sw"+(i===0?" sel":""); d.style.background=c; d.title=c; d.onclick=()=>{ color=c; document.querySelectorAll(".sw").forEach(s=>s.classList.remove("sel")); d.classList.add("sel"); paintToolIcons(); }; swab.appendChild(d); });
 
 $("colsIn").addEventListener("change",resizeGrid); $("rowsIn").addEventListener("change",resizeGrid);
 $("nIn").addEventListener("change",()=>{ refreshOut(); });
@@ -981,32 +1285,131 @@ window.addEventListener("keydown",e=>{ if(e.key==="z"&&(e.ctrlKey||e.metaKey||tr
              "8":"key","9":"door","s":"stone","p":"platform","t":"talisman","c":"coin","m":"monster"};
   if(map[e.key]&&document.activeElement.tagName!=="INPUT") selTool(map[e.key]); });
 
-// load selector
-const sel=$("loadSel");
-function rebuildLoadSel(){
-  const ns=Array.from(new Set([...EMBEDDED.map(l=>l.n), ...Object.keys(edited).map(Number)])).sort((a,b)=>a-b);
-  const keep=sel.value; sel.innerHTML="";
-  ns.forEach(n=>{ const l=edited[n]||EMBEDDED.find(x=>x.n===n); const emb=EMBEDDED.find(x=>x.n===n);
-    const dirty = edited[n] && (!emb || JSON.stringify(edited[n])!==JSON.stringify(emb));
-    const o=document.createElement("option"); o.value=n; o.textContent="L"+n+" ("+l.cols+"×"+l.rows+")"+(dirty?" *":""); sel.appendChild(o); });
-  const blank=document.createElement("option"); blank.value="new"; blank.textContent="+ New blank"; sel.appendChild(blank);
-  if([...sel.options].some(o=>o.value===keep)) sel.value=keep;
+// ---------- the running order, as a list you can drag ----------
+// Every level the editor knows about, in play order. `n` and array position are the same
+// thing — index.html indexes LEVELS by position and throws `n` away — so reordering the
+// list means renumbering, not just re-sorting a view.
+function allLevels(){
+  const map={}; EMBEDDED.forEach(l=>map[l.n]=l); Object.keys(edited).forEach(n=>map[n]=edited[n]);
+  return Object.keys(map).map(Number).sort((a,b)=>a-b).map(n=>map[n]);
 }
-sel.addEventListener("change",()=>{ if(sel.value==="new"){ const n=Math.max(...EMBEDDED.map(l=>l.n), ...Object.keys(edited).map(Number),0)+1; edited[n]={n,start:[2,7],init:[[2,6],[2,5]],goal:[2,0],cols:5,rows:8,intro:[],walls:[]}; rebuildLoadSel(); loadLevel(n);} else loadLevel(+sel.value); });
+function isDirty(n){
+  const emb=EMBEDDED.find(x=>x.n===n);
+  return !!(edited[n] && (!emb || JSON.stringify(edited[n])!==JSON.stringify(emb)));
+}
+let dragFrom=null;
+function rebuildLevelList(){
+  const box=$("lvlist"); if(!box) return;
+  box.innerHTML="";
+  allLevels().forEach((l,i)=>{
+    const el=document.createElement("div");
+    el.className="lv"+(L && l.n===L.n ? " sel":"");
+    el.draggable=true; el.dataset.idx=i; el.dataset.n=l.n;
+    el.innerHTML="<span class='num'>"+l.n+"</span><span class='dim'>"+l.cols+"×"+l.rows+"</span>"+
+                 (isDirty(l.n)?"<span class='star'>*</span>":"")+"<span class='grip'>≡</span>";
+    el.onclick=()=>{ if(L && +el.dataset.n===L.n) return; loadLevel(+el.dataset.n); };
+    el.addEventListener("dragstart",ev=>{ dragFrom=i; el.classList.add("drag");
+      ev.dataTransfer.effectAllowed="move"; try{ev.dataTransfer.setData("text/plain",String(i));}catch(e){} });
+    el.addEventListener("dragend",()=>{ dragFrom=null;
+      document.querySelectorAll(".lv").forEach(x=>x.classList.remove("drag","over")); });
+    el.addEventListener("dragover",ev=>{ ev.preventDefault(); ev.dataTransfer.dropEffect="move";
+      document.querySelectorAll(".lv").forEach(x=>x.classList.remove("over")); el.classList.add("over"); });
+    el.addEventListener("drop",ev=>{ ev.preventDefault(); el.classList.remove("over");
+      if(dragFrom!=null) reorder(dragFrom, i); });
+    box.appendChild(el);
+  });
+}
+const rebuildLoadSel = rebuildLevelList;      // every old call site still means "redraw the list"
+// Move one level to a new slot and renumber the whole run. The level you had open follows
+// its own payload to wherever it lands, so the map on screen never changes under you.
+function reorder(from, to){
+  if(from===to || from==null) return;
+  const arr=allLevels();
+  if(from<0||from>=arr.length||to<0||to>=arr.length) return;
+  const openPayload = L ? arr.find(l=>l.n===L.n) : null;
+  const [moved]=arr.splice(from,1); arr.splice(to,0,moved);
+  edited={};
+  arr.forEach((l,i)=>{ const c=cloneLvl(l); c.n=i+1; edited[i+1]=c; });
+  const nowN = openPayload ? (arr.indexOf(openPayload)+1) : 1;
+  saveAuto(); rebuildLevelList(); loadLevel(nowN);
+  setStatus("moved L"+(from+1)+" to slot "+(to+1)+" — renumbered 1–"+arr.length);
+}
+$("newLvl").onclick=()=>{
+  const n=Math.max(...EMBEDDED.map(l=>l.n), ...Object.keys(edited).map(Number), 0)+1;
+  edited[n]={n,start:[2,7],init:[[2,6],[2,5]],goal:[2,0],cols:5,rows:8,intro:[],walls:[],cps:0.8};
+  rebuildLevelList(); loadLevel(n);
+};
 $("resetBtn").onclick=resetShipped;
+$("reloadBtn").onclick=reloadShipped;
 
 // exports
-function fullArray(){ const map={}; EMBEDDED.forEach(l=>map[l.n]=l); Object.keys(edited).forEach(n=>map[n]=edited[n]);
-  const ns=Object.keys(map).map(Number).sort((a,b)=>a-b); const lines=ns.map(n=>"  "+JSON.stringify(map[n])).join(",\n");
-  return "// Tile Runner levels — exported from the editor. Coords [col,row], origin top-left.\nmodule.exports = [\n"+lines+",\n];\n"; }
+function fullArray(){ const lines=allLevels().map(l=>"  "+JSON.stringify(l)).join(",\n");
+  return "// Tile Runner levels — exported from the editor. Coords [col,row], origin top-left.\n"+
+         "// Loaded two ways, and it has to answer to both: `require()` from Node (tools/check.mjs,\n"+
+         "// and anything else that reasons about the campaign) and a plain <script src> from the\n"+
+         "// game and the editor, which is why this is a global and not an ES module.\n"+
+         "var LEVELS_DATA = [\n"+lines+",\n];\n"+
+         "if (typeof module !== \"undefined\") module.exports = LEVELS_DATA;\n"; }
+// ---------- writing straight over levels.js ----------
+// The File System Access API hands the page a real handle to a real file. You choose it once;
+// the handle is kept in IndexedDB (it survives a reload, unlike anything in localStorage) and
+// every Save after that overwrites in place with no dialog. Browsers without it fall back to
+// the download, which is what this editor has always done.
+const FS_OK = typeof window.showSaveFilePicker === "function";
+let fsHandle = null;
+function idb(){ return new Promise((res,rej)=>{ const q=indexedDB.open("tilerunner_editor",1);
+  q.onupgradeneeded=()=>q.result.createObjectStore("kv"); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }
+function idbGet(k){ return idb().then(db=>new Promise((res,rej)=>{ const t=db.transaction("kv","readonly").objectStore("kv").get(k);
+  t.onsuccess=()=>res(t.result); t.onerror=()=>rej(t.error); })).catch(()=>null); }
+function idbSet(k,v){ return idb().then(db=>new Promise((res,rej)=>{ const t=db.transaction("kv","readwrite").objectStore("kv").put(v,k);
+  t.onsuccess=()=>res(); t.onerror=()=>rej(t.error); })).catch(()=>{}); }
+async function grant(h){
+  if(!h) return false;
+  let p = await h.queryPermission({mode:"readwrite"});
+  if(p !== "granted") p = await h.requestPermission({mode:"readwrite"});   // needs the click we are inside
+  return p === "granted";
+}
+async function pickTarget(){
+  if(!FS_OK){ setStatus("this browser can't write files directly — use Download"); return null; }
+  try{
+    fsHandle = await window.showSaveFilePicker({ suggestedName:"levels.js",
+      types:[{description:"JavaScript", accept:{"text/javascript":[".js"]}}] });
+    await idbSet("levelsHandle", fsHandle);
+    setStatus("target set — " + fsHandle.name);
+    return fsHandle;
+  }catch(e){ if(e && e.name==="AbortError") return null; setStatus("couldn't set target: "+e.message); return null; }
+}
+async function saveToDisk(){
+  commit();
+  if(!FS_OK){ dlAll(); setStatus("this browser can't write files directly — downloaded instead"); return; }
+  try{
+    if(!fsHandle) fsHandle = await pickTarget();
+    if(!fsHandle) return;
+    if(!await grant(fsHandle)){ setStatus("permission denied — press Save again to retry"); return; }
+    const ws = await fsHandle.createWritable();
+    await ws.write(fullArray()); await ws.close();
+    const n = allLevels().length;
+    setStatus("wrote "+n+" levels to "+fsHandle.name+" · index.html + EMBEDDED still need syncing");
+  }catch(e){ if(e && e.name==="AbortError") return; setStatus("save failed: "+e.message); }
+}
+function dlAll(){ const blob=new Blob([fullArray()],{type:"text/javascript"}); const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download="levels.js"; a.click(); }
+$("saveFs").onclick=saveToDisk;
+$("pickFs").onclick=async()=>{ await pickTarget(); };
+if(!FS_OK){ $("saveFs").textContent="Download levels.js"; $("pickFs").disabled=true;
+            $("pickFs").title="needs a Chromium browser"; }
+// Recover the handle early, so the Save click never has to await IndexedDB before opening a
+// picker — some browsers only honour a picker call while the gesture is still live.
+idbGet("levelsHandle").then(h=>{ if(h){ fsHandle=h; $("saveFs").title="writes over "+h.name; } });
+
 $("copyOne").onclick=()=>{ commit(); copy($("out").value); setStatus("level JSON copied"); };
 $("copyAll").onclick=()=>{ commit(); copy(fullArray()); setStatus("full levels.js copied"); };
-$("dlAll").onclick=()=>{ commit(); const blob=new Blob([fullArray()],{type:"text/javascript"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="levels.js"; a.click(); setStatus("downloaded levels.js"); };
+$("dlAll").onclick=()=>{ commit(); dlAll(); setStatus("downloaded levels.js"); };
 function copy(t){ navigator.clipboard&&navigator.clipboard.writeText(t).catch(()=>{}); const ta=$("out"); ta.value=t; ta.select(); try{document.execCommand("copy");}catch(e){} }
 function setStatus(t){ $("status").textContent=t; }
 
-// boot
-boot();
+// boot — the file first, then whatever draft is sitting in the browser on top of it
+loadShipped().then(()=>{ showShipped(); boot(); selTool(tool); });
 </script>
 </body>
 </html>

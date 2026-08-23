@@ -214,22 +214,22 @@ function levelsFrom(file, marker) {
   try { return vm.runInNewContext(src.slice(start, end + 1)); } catch { return null; }
 }
 {
-  const truth = levelsFrom("levels.js", "module.exports =");
-  const game  = levelsFrom("index.html", "const LEVELS =");
-  const edit  = levelsFrom("level-editor.html", "const EMBEDDED =");
-  if (!truth || !game || !edit) bad("could not parse one of levels.js / LEVELS / EMBEDDED");
+  const truth = levelsFrom("levels.js", "var LEVELS_DATA =");
+  if (!truth) bad("could not parse levels.js");
   else {
-    const strip = (L) => { const { n, ...rest } = L; return JSON.stringify(rest); };
-    if (truth.length !== game.length) bad(`levels.js has ${truth.length}, index.html has ${game.length}`);
-    else if (truth.length !== edit.length) bad(`levels.js has ${truth.length}, editor has ${edit.length}`);
-    else {
-      const gDiff = truth.map((L, i) => strip(L) === strip(game[i]) ? null : i + 1).filter(Boolean);
-      const eDiff = truth.map((L, i) => JSON.stringify(L) === JSON.stringify(edit[i]) ? null : i + 1).filter(Boolean);
-      if (gDiff.length) bad(`index.html differs at level(s) ${gDiff.join(", ")}`);
-      else ok(`index.html matches levels.js (${truth.length} levels)`);
-      if (eDiff.length) bad(`level-editor.html differs at level(s) ${eDiff.join(", ")}`);
-      else ok(`level-editor.html matches levels.js`);
+    // levels.js is the ONLY copy now: the game and the editor both pull it in with a
+    // <script src>, so there is no parity left to enforce — only the wiring that replaced it.
+    for (const [file, why] of [["index.html", "the game"], ["level-editor.html", "the editor"]]) {
+      const src = read(file);
+      if (!src.includes('<script src="levels.js">'))
+        bad(`${file} no longer loads levels.js — ${why} would boot with an empty campaign`);
+      else if (/\n\s*(const|let)\s+(LEVELS|EMBEDDED)\s*=\s*\[\s*\{/.test(src))
+        bad(`${file} has grown its own inline copy of the levels again`);
+      else ok(`${file} reads levels.js directly (${truth.length} levels)`);
     }
+    if (!read("sw.js").includes('"./levels.js"'))
+      bad("sw.js does not precache levels.js — the game would be empty offline");
+    else ok("sw.js precaches levels.js");
 
     // ---- per-level sanity ----
     const VALID_INTRO = new Set(["recycle","turn","offscreen","flag","wall","block","saw","key",

@@ -45,8 +45,8 @@ bump and installed home-screen copies keep serving the old icons and manifest.
 |---|---|
 | `index.html` | The whole game. `const LEVELS = [ … ]` near the top; `const RUNNER = { … }` above `drawRunner`; the `Sound` module around line 300. |
 | `sw.js` | Service worker. Bump `CACHE` every ship. |
-| `levels.js` | The 24 levels as a CommonJS module. **Source of truth.** |
-| `level-editor.html` | Visual level editor. Paint walls/stones/platforms, drag blocks and saws, exports the `levels.js` format. Autosaves to `localStorage`. |
+| `levels.js` | The campaign, and the only copy of it. Loaded by the game and the editor as a `<script src>`, and by Node via `require()`. |
+| `level-editor.html` | Visual level editor. Level list on the left (drag to reorder — that renumbers the campaign), map in the middle (drag its edges to resize), tool matrix on the right. **Save to levels.js** writes the real file via the File System Access API. Autosaves drafts to `localStorage`. |
 | `runner-lab.html` | Live editor for the runner. A slider per `RUNNER` key, onion skin, stride scrub, guides, real-size previews standing on real track. **Copy RUNNER block** → paste wholesale. |
 | `icon-lab.html` | App-icon composer. Exports `icon-1024/512/192/180.png` named for the manifest. |
 | `music-lab.html` | Backing-track editor with per-level overrides and a piano roll. Not yet wired into the game. |
@@ -66,9 +66,13 @@ Each of these has actually bitten. They are not hypothetical.
 Drift is silent — the labs happily show you a runner the game no longer draws. `tools/check.mjs`
 diffs all three.
 
-**Level data exists in three files too.** `levels.js` is the truth; `index.html`'s `LEVELS` strips
-the `n` field (it indexes by array position); `level-editor.html`'s `EMBEDDED` keeps it. Change one,
-change all three. Also checked.
+**Level data now lives in ONE file.** `levels.js` is loaded by both `index.html` and
+`level-editor.html` with a plain `<script src>`, so there is nothing to keep in sync — the old
+`LEVELS`/`EMBEDDED` copies are gone. The file is dual-format on purpose: `var LEVELS_DATA = [...]`
+for the browser, `module.exports = LEVELS_DATA` for `require()`. Two consequences: the game must be
+**served**, never opened off the filesystem, and `levels.js` has to stay in `sw.js`'s precache or
+the campaign is empty offline. `tools/check.mjs` guards both, and fails if either page grows its
+own inline copy again.
 
 **No U-turns.** The runner can't re-enter the cell it's on or the one it just left (the `foldsBack`
 rule). A dead-end pocket therefore doesn't work — the runner must be able to *flow through*. This
