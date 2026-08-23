@@ -172,12 +172,16 @@
   #board-wrap { flex:1; width:100%; display:flex; align-items:stretch; justify-content:center; min-height:0; overflow:hidden; }
   canvas { image-rendering:pixelated; touch-action:none; display:block; }
   footer { padding:10px 0 16px; display:flex; gap:12px; }
+  /* No outline. The shadow sits DIRECTLY below rather than down-and-right: an offset to the
+     corner implies a light source the rest of the game does not have, where a shadow straight
+     underneath just says the button is standing off the page. The border is kept and made
+     transparent so the states that colour it (.danger, .on) do not shift anything by 3px. */
   button {
     font-family:inherit; font-weight:900; text-transform:uppercase; letter-spacing:2px; font-size:var(--btn);
-    color:var(--ink); background:var(--panel); border:3px solid var(--grid-line);
-    box-shadow:3px 3px 0 var(--shadow); padding:11px 16px; cursor:pointer; touch-action:manipulation;
+    color:var(--ink); background:var(--panel); border:3px solid transparent;
+    box-shadow:0 4px 0 #0b0918; padding:11px 16px; cursor:pointer; touch-action:manipulation;
   }
-  button:active { transform:translate(3px,3px); box-shadow:none; }
+  button:active { transform:translateY(4px); box-shadow:none; }
   #overlay {
     position:fixed; inset:0; display:none; align-items:center; justify-content:center;
     background:radial-gradient(ellipse 76% 56% at 50% 46%, rgba(5,4,13,0.52) 0%, rgba(5,4,13,0.42) 45%, rgba(5,4,13,0.10) 100%);
@@ -203,12 +207,58 @@
   /* Both end screens carry the same two buttons, and they are sized like the menu's — same
      330px column, same full width — so the end of a level lands on the same shape as every
      other decision in the game rather than on a pair of one-off pills. */
-  #overlay.lose #ov-btn, #overlay.win #ov-btn { font-size:var(--btn); padding:16px 40px; }
+  /* The one button you press after every single level, so it gets twice the height and a
+     chequer of its own — the finish-line flag, at an angle and faint enough to be a texture
+     rather than a pattern. Two gradients at 45 degrees make the squares; nothing is loaded. */
+  /* A shade lighter than --panel. At #17142b it sat at luminance 29 against a backdrop that
+     is often darker still, so its left and right edges simply were not visible — which is why
+     it read as narrower than the gold button beside it, despite both measuring 330px to the
+     pixel. Nothing about the box changed; it just has edges you can find now. */
+  /* Its own colour, darkened — the shared near-black slab under it read as a gap between
+     this button and the gold one below, which is what made the two look like different widths
+     even though they measure identically. A shadow the colour of the thing casting it reads as
+     depth; a black bar between two blocks reads as a divider. */
   #overlay.lose #ov-btn, #overlay.win #ov-btn {
-    display:block; width:100%; max-width:330px; margin-left:auto; margin-right:auto; }
-  /* flex, not block: this one carries a label, the tile and the count as three children */
+    font-size:var(--btn); padding:34px 40px;
+    box-shadow:0 4px 0 #171233;
+    background-color:#2b2552;
+    background-image:
+      linear-gradient(45deg, rgba(255,255,255,0.045) 25%, transparent 25%, transparent 75%,
+                             rgba(255,255,255,0.045) 75%),
+      linear-gradient(45deg, rgba(255,255,255,0.045) 25%, transparent 25%, transparent 75%,
+                             rgba(255,255,255,0.045) 75%);
+    background-size:18px 18px;
+    background-position:0 0, 9px 9px;
+  }
+  /* The same finish-line chequer on the gold, cut in a darker gold so it reads at all — white
+     over #e0aa1e is nearly invisible, where a shade of the button's own colour is not. */
+  #ov-shop, #menu-body button.gold {
+    background-image:
+      linear-gradient(45deg, rgba(90,62,4,0.16) 25%, transparent 25%, transparent 75%,
+                             rgba(90,62,4,0.16) 75%),
+      linear-gradient(45deg, rgba(90,62,4,0.16) 25%, transparent 25%, transparent 75%,
+                             rgba(90,62,4,0.16) 75%);
+    background-size:18px 18px;
+    background-position:0 0, 9px 9px;
+  }
+  /* A DEFINITE width, not 100% of a shrink-to-fit parent: the overlay card sizes itself to
+     its content, so "100%" came out as whatever the byline happened to measure — 300px on the
+     clear screen and 214 on the death screen. 330 is the menu card's width. */
+  /* Both are the same box: same width, and box-sizing so the different paddings cannot make
+     one wider than the other. NEXT LEVEL is deliberately taller — that is height, not width. */
+  #overlay.lose #ov-btn, #overlay.win #ov-btn,
   #overlay.lose #ov-shop, #overlay.win #ov-shop {
-    display:flex; width:100%; max-width:330px; margin-left:auto; margin-right:auto; }
+    box-sizing:border-box; width:330px; max-width:calc(100vw - 44px);
+    margin-left:auto; margin-right:auto; }
+  #overlay.lose #ov-btn, #overlay.win #ov-btn {
+    display:flex; align-items:center; justify-content:center; gap:10px; }
+  #ov-btn canvas.arrow { width:22px; height:22px; display:block; }
+  /* any button carrying an arrow lays out as a row, the same as the wallet ones do */
+  #menu-body button:has(canvas.arrow) {
+    display:flex; align-items:center; justify-content:center; gap:10px; }
+  #menu-body button canvas.arrow { width:18px; height:18px; display:block; }
+  /* flex, not block: this one carries a label, the tile and the count as three children */
+  #overlay.lose #ov-shop, #overlay.win #ov-shop { display:flex; }
   /* The way into the shop, on BOTH end screens — a fall is exactly when you have just banked
      a handful of tiles and might want to spend them. Same gold, same size, same weight as the
      one in the menu: it is the same button and has no business looking like a different one. */
@@ -251,6 +301,12 @@
             calc(env(safe-area-inset-bottom) + 22px) calc(env(safe-area-inset-left) + 22px);
   }
   #menu.show { display:flex; }
+  /* Nothing else is on screen while a menu is. The backdrop behind it is the level's own,
+     painted by draw(), which is exactly the "current background" a menu should sit on. */
+  body.menu-open #overlay,
+  body.menu-open #power,
+  body.menu-open #pauseFloat,
+  body.menu-open #mechpop { display:none !important; }
   #menu.top { align-items:flex-start; }
   .menu-card { width:100%; max-width:330px; text-align:center; }
   .menu-ver { font-size:var(--body); letter-spacing:2px; color:var(--dim); margin-top:14px; opacity:0.7; }
@@ -270,11 +326,17 @@
   /* The one button in the menu that is about money, in the colour of the money. A deeper
      gold than the loot tile itself, so the tile sitting on it still reads as an object rather
      than dissolving into its own background. */
-  #menu-body button.gold, #ov-shop { background:#e0aa1e; border-color:#8f6a10; color:#38270a;
-    box-shadow:3px 3px 0 rgba(5,4,13,0.55); }
-  #menu-body button.gold:active, #ov-shop:active { transform:translate(3px,3px); box-shadow:none; }
-  /* label · coin · count, on one line and centred as a group */
-  #menu-body button:has(canvas.wallet), #ov-shop {
+  /* background-COLOR, not the shorthand: `background:` resets background-image, which would
+     wipe the chequer set above it. */
+  #menu-body button.gold, #ov-shop { background-color:#e0aa1e; border-color:transparent;
+    color:#38270a; box-shadow:0 4px 0 #8a6410; }
+  #menu-body button.gold:active, #ov-shop:active { transform:translateY(4px); box-shadow:none; }
+  /* label · coin · count, on one line and centred as a group.
+     `> button` matters: a shop item also contains a canvas.wallet — the tile in its price row —
+     and without the child combinator this rule matched all 66 of them, forcing them centred
+     with a 9px gap at ID specificity that the cell's own rule could not beat. Which is why
+     every attempt to move the icon and name did nothing whatsoever. */
+  #menu-body > button:has(canvas.wallet), #ov-shop {
     display:flex; align-items:center; justify-content:center; gap:9px; }
   canvas.wallet { width:17px; height:17px; display:block; }
   /* armed, and about to throw everything away */
@@ -282,7 +344,7 @@
   .menu-sub { font-size:var(--btn); font-weight:900; letter-spacing:2px; text-transform:uppercase; color:var(--dim);
     margin:10px 0 2px; }
   .toggle { display:flex; justify-content:space-between; align-items:center;
-    border:3px solid var(--grid-line); background:var(--panel); box-shadow:3px 3px 0 var(--shadow);
+    border:3px solid transparent; background:var(--panel); box-shadow:0 4px 0 #0b0918;
     padding:10px 14px; font-family:inherit; font-weight:900; text-transform:uppercase;
     letter-spacing:2px; font-size:var(--btn); color:var(--ink); cursor:pointer; }
   .toggle .val { color:var(--track); }
@@ -294,23 +356,51 @@
      wash. A shop item is a thing on a shelf — fifteen bevelled plates read as a wall of
      controls. The border is kept and made transparent so .on and .nope can still colour it
      without shifting anything by 3px. The swatch is the item, so it gets the room. */
+  /* Stacked from the top rather than centred, so the three parts sit at fixed heights instead
+     of drifting with whatever the tallest one happens to be. The name is pulled up tight under
+     the icon — they are one object, and a gap between them read as two. */
+  /* Centred, with the price and the name given the SAME height and the same gap to the icon.
+     Equal boxes above and below are what actually centres the icon — matching the gaps alone
+     would still sit it off-centre by however much the two labels differed in height. */
   .tal-grid .tal { display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:3px; padding:7px 3px; aspect-ratio:1;
-    background:rgba(255,255,255,0.05); border-color:transparent; box-shadow:none; color:#fff; }
-  .tal-grid .tal:active { transform:none; background:rgba(255,255,255,0.14); }
-  .tal-grid .tal canvas { width:62px; height:62px; }
+    gap:0; padding:3px 3px; overflow:hidden;
+    background:rgba(255,255,255,0.05); border-color:transparent; color:#fff;
+    box-shadow:0 4px 0 rgba(5,4,13,0.45); }
+  /* ...and presses the same way the buttons do, since it is one */
+  .tal-grid .tal:active { transform:translateY(4px); box-shadow:none;
+    background:rgba(255,255,255,0.14); }
+  /* display:block is doing the real work here. An inline canvas sits on a text baseline, and
+     the descender space under it was leaving an 8px gap that no negative margin could explain
+     — the name was tucked under the LINE BOX, not under the icon. */
+  /* Each part is given an explicit height rather than being left to its own line box. Chasing
+     this with negative margins did not work: the leading above and below a 10px line is most of
+     what you are fighting, and a margin pulls the BOX, which is the thing that is too tall. */
+  .tal-grid .tal canvas { display:block; width:46%; height:auto; aspect-ratio:1; }
+  .tal-grid .tal > span:last-child { height:11px; line-height:11px; margin-top:4px; }
+  /* the price is its own line under the name: the tile, then the number */
+  .tal-grid .tal .price { display:flex; align-items:center; justify-content:center; gap:4px;
+    height:11px; margin-bottom:4px; font-size:10px; line-height:11px;
+    letter-spacing:0.2px; color:#ffd24a; }
+  .tal-grid .tal .price canvas { width:11px; height:11px; }
+  .tal-grid .tal .price.equipped { color:#8dff78; letter-spacing:0.5px; font-weight:900; }
   /* names are long ("Nightshard", "Green Sprig") and the cells are a third of a narrow
      menu — well below body size, tight leading, and allowed to wrap to two lines. */
-  .tal-grid .tal span { font-size:11px; letter-spacing:0.2px; line-height:1.15;
+  .tal-grid .tal span { font-size:10px; letter-spacing:0.2px; line-height:1.1;
                         text-align:center; hyphens:none; color:#fff; }
-  .tal-grid .tal.locked span { color:var(--dim); }
+  /* Something you can still buy is tinted with the currency that buys it — a faint gold wash,
+     enough to sort the shelf into "yours" and "for sale" at a glance without shouting. Its own
+     price is already gold, so the tile reads as one object rather than a label on a plate. */
+  .tal-grid .tal.locked { background:rgba(224,170,30,0.13);
+                          box-shadow:0 4px 0 rgba(60,42,6,0.55); }
+  .tal-grid .tal.locked:active { background:rgba(224,170,30,0.22); }
+  .tal-grid .tal.locked > span:last-child { color:#f2e2b4; }   /* its name, warmed to match */
   /* what the talisman actually does — the reason to pick one over another */
   .tal-grid .tal .tal-blurb { font-size:9px; letter-spacing:0.2px; line-height:1.1; font-style:normal;
     text-transform:none; font-weight:700; color:var(--track); text-align:center; }
   /* What is worn reads as a lit plate rather than a ringed one — an outline on a square that
      already has a border competes with it, where a brighter ground just says "this one". */
   .tal-grid .tal.on { background:rgba(125,255,107,0.16); border-color:transparent;
-                      box-shadow:none; color:#eaffe6; }
+                      box-shadow:0 4px 0 rgba(20,58,12,0.55); color:#eaffe6; }
   .tal-grid .tal.on span { color:#dcffd4; }
   /* The talisman shelf. Deliberately NOT buttons: no border, no plate, no shadow — a talisman
      is a thing you found, and dressing it in the same chrome as RESUME made it stock. What
@@ -339,16 +429,25 @@
     margin:-4px auto 10px; font-size:26px; letter-spacing:1px; color:var(--track); font-weight:900; }
   .shop-purse canvas { width:26px; height:26px; }
   /* #menu-body button sets width:100%, and an id beats a class — so these have to match it */
-  .shop-tabs { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; margin-bottom:6px; }
-  #menu-body .shop-tabs button { width:100%; padding:5px 0 4px; font-size:7px; letter-spacing:0.2px;
-    border-width:2px; box-shadow:2px 2px 0 var(--shadow);
-    display:flex; flex-direction:column; align-items:center; gap:2px; line-height:1; }
-  #menu-body .shop-tabs button canvas { width:20px; height:20px; display:block; }
-  #menu-body .shop-tabs button.on { border-color:var(--goal); color:var(--goal);
-    box-shadow:0 0 0 2px var(--goal) inset; }
-  #menu-body .shop-tabs button:active { transform:translate(2px,2px); box-shadow:none; }
+  /* Six tabs, six equal columns, square. `repeat(7,1fr)` was left over from when there were
+     seven and left a column's worth of dead space at the end; the squares came from letting the
+     content set the height, which made them shorter than they were wide. */
+  .shop-tabs { display:grid; grid-template-columns:repeat(6,1fr); gap:6px; margin-bottom:8px; }
+  #menu-body .shop-tabs button { width:100%; aspect-ratio:1; padding:4px 0; font-size:8px;
+    letter-spacing:0.2px; border-width:2px; box-shadow:0 3px 0 #0b0918;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+    line-height:1; }
+  #menu-body .shop-tabs button canvas { width:60%; height:auto; aspect-ratio:1; display:block; }
+  /* The chosen tab is lit from within. A ring on a square that already has a border was two
+     outlines arguing, and at this size the inner one ate the icon. */
+  #menu-body .shop-tabs button.on { background:rgba(125,255,107,0.20); border-color:transparent;
+    color:#dcffd4; box-shadow:none; }
+  #menu-body .shop-tabs button:active { transform:translateY(3px); box-shadow:none; }
   /* the rack scrolls on its own, so the runner and the tabs stay put while you browse */
-  .shop-rack { max-height:44vh; overflow-y:auto; overscroll-behavior:contain;
+  /* max-height is set in JS by fitScrollRack(), because the only honest answer is "however
+     far it is from here down to the button", and CSS cannot see where either of them landed.
+     44vh was a guess that left a gap on tall screens and clipped a row on short ones. */
+  .shop-rack { overflow-y:auto; overscroll-behavior:contain;
     -webkit-overflow-scrolling:touch; padding:2px; margin-bottom:10px; }
   /* the way out, and the only thing you can do wrong is not press it */
   /* The way out is pinned to the viewport, not to the end of the rack: the racks are
@@ -361,7 +460,7 @@
     width:calc(100% - 44px); max-width:330px; z-index:2;
     font-size:13px; letter-spacing:2px; padding:14px 10px; line-height:1.2;
   }
-  #menu-body .shop-go:active { transform:translateX(-50%) translate(3px,3px); box-shadow:none; }
+  #menu-body .shop-go:active { transform:translateX(-50%) translateY(4px); box-shadow:none; }
   /* ...and the rack keeps clear of it, so the last row is never stuck underneath */
   #menu.top #menu-body { padding-bottom:80px; }
   /* what the tab is showing, and what of it is on */
@@ -374,8 +473,7 @@
   /* The level rack scrolls inside itself, exactly as the shop's does, so cells never slide
      under the pinned BACK. It has no runner or tab strip above it, so it takes everything
      between the INTRO button and the button's landing strip. */
-  .lvl-rack { max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 210px);
-              min-height:180px; }
+
   .lvl-grid .st { font-size:var(--body); color:var(--goal); letter-spacing:1px; font-weight:900; }
   .lvl-grid .st.none { color:var(--dim); font-weight:400; }
 
@@ -543,7 +641,7 @@
     bgEvery: 4,
     bgFollow: "chord",
     leadOn: 1,
-    padOn: 1,
+    padOn: 0,
     kickOn: 1,
     hatOn: 1,
     subOn: 1,
@@ -815,6 +913,7 @@
       master = ac.createGain();
       master.gain.value = MU.master;
       musicBus = ac.createGain(); musicBus.gain.value = 1; musicBus.connect(master);
+      ambBus  = ac.createGain(); ambBus.gain.value  = 1; ambBus.connect(master);
       // Everything leaves through one of two legs. Dry is the normal one. Wet runs the whole
       // mix through a modulated delay (a delay whose length wobbles IS a pitch wobble, which
       // is what a warped tape sounds like), then a distortion curve, then a lowpass whose
@@ -914,6 +1013,47 @@
       adsr(g, t, dur, vel, E);
       src.connect(hp); hp.connect(g); g.connect(musicBus); src.start(t); src.stop(t+dur+0.03);
     }
+    // A snare: noise for the crack, a short falling body underneath so it lands rather than
+    // hisses. The game had a kick and a hat and nothing in between, and a count-in needs the
+    // back-beat or it is just a pulse.
+    function msnare(t, vel) {
+      if (!noiseBuf) return;
+      const src = ac.createBufferSource(); src.buffer = noiseBuf;
+      const hp = ac.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 1500;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0004, vel), t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0006, t + 0.155);
+      src.connect(hp); hp.connect(g); g.connect(musicBus);
+      src.start(t); src.stop(t + 0.20);
+      const o = ac.createOscillator(), og = ac.createGain();
+      o.type = "triangle";
+      o.frequency.setValueAtTime(215, t);
+      o.frequency.exponentialRampToValueAtTime(125, t + 0.075);
+      og.gain.setValueAtTime(0.0001, t);
+      og.gain.exponentialRampToValueAtTime(Math.max(0.0004, vel*0.55), t + 0.004);
+      og.gain.exponentialRampToValueAtTime(0.0006, t + 0.10);
+      o.connect(og); og.connect(musicBus); o.start(t); o.stop(t + 0.13);
+    }
+    // The count-in, played over the opening pan and the character assembling. It runs on the
+    // same beat grid the backing already keeps, so when he finally sets off — on a beat — he
+    // sets off in the pocket this has been marking out. Independent of the level's kickOn and
+    // hatOn: those describe the arrangement, and this is the count that precedes it.
+    function introDrums(t, s) {
+      const b = s % 4, B = beatSec;
+      if (b === 0 || b === 2) mkick(t, 0.55);
+      // Snares on the back-beat and again between every beat — a roll rather than a pulse, so
+      // the count-in has somewhere to build to instead of just marking time.
+      msnare(t + B*0.5, 0.20);
+      if (b === 1 || b === 3) msnare(t, 0.34);
+      if (b === 1) msnare(t + B*0.75, 0.18);
+      if (b === 3) {                                   // the pick-up into the bar he sets off on
+        msnare(t + B*0.25, 0.20);
+        msnare(t + B*0.625, 0.26);
+        msnare(t + B*0.75,  0.30);
+        msnare(t + B*0.875, 0.36);
+      }
+    }
     // Swap in a level's music. Everything the level does not mention falls through to the
     // defaults, so a level block only ever names what it changes.
     function setMusic(levelMusic){
@@ -945,7 +1085,7 @@
         o.connect(g);
         o.start(t); o.stop(t + dur + 0.05);
       }
-      g.connect(master); if (wet) g.connect(sendBus);
+      g.connect(ambBus || master); if (wet) g.connect(sendBus);
     }
     // Percussion: a short pitched-down sine thump on the beat.
     function kick(t, vel) {
@@ -1236,19 +1376,34 @@
     // intro: it lays down the backing from the moment the flag appears, keeps `step` and the
     // audio clock's beat grid, and hands both over when he sets off. cueDelay() is what makes
     // that handover land ON a beat rather than wherever the animation happened to finish.
-    let bgTimer = null, bgAt = 0, bgAnchor = null;
+    let bgTimer = null, bgAt = 0, bgAnchor = null, bgIntro = false;
+    // Whether the level's transport is allowed to make a sound right now. The title, the
+    // cinematic and every menu have their own tune, and the count-in was playing straight
+    // underneath all three — opening the shop during a level intro left snares running behind
+    // the pause theme. The game sets this; the clock keeps going regardless.
+    let bgGate = () => true;
+    function setMusicGate(fn) { bgGate = fn || (() => true); }
     function levelMusicStart() {
       if (!ensure()) return;
       levelMusicStop(true);
       if (musicBus) { musicBus.gain.cancelScheduledValues(ac.currentTime); musicBus.gain.value = 1; }
-      step = 0; bgAnchor = ac.currentTime + 0.08; bgAt = bgAnchor;
+      step = 0; bgAnchor = ac.currentTime + 0.08; bgAt = bgAnchor; bgIntro = true;
       bgTimer = setInterval(bgTick, 60);
       bgTick();
     }
     function bgTick() {
       if (!ac || muted || ac.state !== "running" || !bgTimer) return;
       const horizon = ac.currentTime + 0.4;                 // schedule a little ahead of time
-      while (bgAt < horizon) { backingBeat(bgAt, step); bgAt += beatSec; step++; }
+      const open = bgGate();
+      while (bgAt < horizon) {
+        // While shut, the beat still ADVANCES — it just makes no sound. Skipping the advance
+        // would bank up every silent beat and fire them all at once on the way back.
+        if (open) {
+          backingBeat(bgAt, step);
+          if (bgIntro) introDrums(bgAt, step);     // the count-in, until he takes over the beat
+        }
+        bgAt += beatSec; step++;
+      }
     }
     // ms until the next beat lands, so the runner can be set off exactly on one
     function cueDelay() {
@@ -1258,11 +1413,11 @@
     }
     // Hand the beat to the runner: stop scheduling, but leave `step` where it is so the lead
     // comes in on the phrase the backing has already been playing.
-    function levelMusicHandover() { if (bgTimer) clearInterval(bgTimer); bgTimer = null; }
+    function levelMusicHandover() { if (bgTimer) clearInterval(bgTimer); bgTimer = null; bgIntro = false; }
     // End of level: stop the transport AND duck the bus, or a ten-second background note
     // carries on over the win card.
     function levelMusicStop(instant) {
-      if (bgTimer) clearInterval(bgTimer); bgTimer = null; bgAnchor = null;
+      if (bgTimer) clearInterval(bgTimer); bgTimer = null; bgAnchor = null; bgIntro = false;
       if (!ac || !musicBus) return;
       const t = ac.currentTime;
       musicBus.gain.cancelScheduledValues(t);
@@ -1386,6 +1541,27 @@
         }
       }
     }
+    // One oar-stroke through water. Noise through a bandpass that sweeps up and falls back —
+    // a rail monster is rowing, not chewing, and a crunch on something with no jaw closing was
+    // always the wrong tooth-and-gristle noise for it.
+    function swish(vol) {
+      if (muted || !ac || ac.state !== "running" || !noiseBuf) return;
+      const t = ac.currentTime;
+      const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+      const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 1.15;
+      bp.frequency.setValueAtTime(520, t);
+      bp.frequency.exponentialRampToValueAtTime(1750, t + 0.035);  // the push — it snaps open
+      bp.frequency.exponentialRampToValueAtTime(430, t + 0.28);    // ...and the water closing
+      const g = ac.createGain();
+      // Almost instant. A 55ms fade-in on something meant to be a stroke read as a swell: the
+      // sound arrived after the thrust it belongs to instead of on it. The long part is the
+      // tail, which is where a swish lives anyway.
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0004, vol*0.15), t + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0006, t + 0.28);
+      src.connect(bp); bp.connect(g); g.connect(master);
+      src.start(t); src.stop(t + 0.34);
+    }
     // the heavier version, for a button that commits to something (buy, start, continue)
     function tapBig(){
       if (muted || !ac || ac.state !== "running") return;
@@ -1399,58 +1575,14 @@
         o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.18);
       });
     }
-    // a continuous saw whir whose volume tracks the runner's proximity (silent beyond 2 tiles → peak within 1)
-    let sawOsc = null, sawGain = null, sawLfo = null;
-    function ensureSawDrone(){
-      if (sawOsc || !ac) return;
-      sawGain = ac.createGain(); sawGain.gain.value = 0; sawGain.connect(master);
-      const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 950; bp.Q.value = 0.6; bp.connect(sawGain);
-      sawOsc = ac.createOscillator(); sawOsc.type = "sawtooth"; sawOsc.frequency.value = 150; sawOsc.connect(bp);
-      sawLfo = ac.createOscillator(); const lg = ac.createGain(); sawLfo.frequency.value = 34; lg.gain.value = 70; sawLfo.connect(lg); lg.connect(sawOsc.frequency);
-      sawOsc.start(); sawLfo.start();
-    }
-    // A choir "aah" that swells as the runner nears a coin. Two detuned saws through a pair
-    // of fixed formant peaks is the cheap, convincing way to say "voice" — the formants are
-    // what the ear reads as a vowel, and a slow vibrato is what stops it reading as an organ.
-    // Same shape as the saw drone: one voice, created once, gain follows proximity.
-    let voxOsc = null, voxGain = null, voxVib = null;
-    function ensureVoxDrone(){
-      if (voxOsc || !ac) return;
-      voxGain = ac.createGain(); voxGain.gain.value = 0;
-      voxGain.connect(master); voxGain.connect(sendBus);            // wet — it should sound distant
-      const mix = ac.createGain(); mix.gain.value = 0.5; mix.connect(voxGain);
-      for (const [f, q, amp] of [[720, 7, 1.0], [1180, 9, 0.7], [2600, 11, 0.28]]) {
-        const bp = ac.createBiquadFilter(); bp.type = "bandpass";
-        bp.frequency.value = f; bp.Q.value = q;
-        const gg = ac.createGain(); gg.gain.value = amp;
-        bp.connect(gg); gg.connect(mix); (ensureVoxDrone.taps = ensureVoxDrone.taps || []).push(bp);
-      }
-      voxOsc = [];
-      for (const det of [-4, 3]) {                                  // two, slightly apart = a section
-        const o = ac.createOscillator(); o.type = "sawtooth";
-        o.frequency.value = BASE * Math.pow(2, 24/12); o.detune.value = det*6;
-        for (const bp of ensureVoxDrone.taps) o.connect(bp);
-        o.start(); voxOsc.push(o);
-      }
-      voxVib = ac.createOscillator(); const vg = ac.createGain();   // the vibrato
-      voxVib.frequency.value = 5.2; vg.gain.value = 5.5;
-      voxVib.connect(vg); for (const o of voxOsc) vg.connect(o.detune);
-      voxVib.start();
-    }
-    function coinProximity(p){
-      if (muted || !ac || ac.state !== "running") { if (voxGain) voxGain.gain.value = 0; return; }
-      ensureVoxDrone();
-      const k = Math.max(0, Math.min(1, p));
-      voxGain.gain.setTargetAtTime(k*k * 0.075, ac.currentTime, 0.10);   // squared: only really sings up close
-      for (const o of voxOsc) o.frequency.setTargetAtTime(              // and lifts in pitch as he closes
-        BASE * Math.pow(2, (24 + 7*k)/12), ac.currentTime, 0.14);
-    }
-    function sawProximity(p){
-      if (muted || !ac || ac.state !== "running") { if (sawGain) sawGain.gain.value = 0; return; }
-      ensureSawDrone();
-      const g = Math.max(0, Math.min(1, p)) * 0.13;               // peak whir gain
-      sawGain.gain.setTargetAtTime(g, ac.currentTime, 0.06);      // smooth swell/fade
-    }
+    // The saw whir is gone. It only ever rose for a hazard of kind "saw", and the campaign has
+    // none left — every one of the seventeen is a monster now — so it was a second continuous
+    // drone sitting under the coin choir that could never actually sound. Placing a saw in the
+    // editor still works; it is simply silent.
+    // The coin choir is gone. A drone that swelled and slid in pitch as you neared a coin,
+    // it read as a stray instrument in the backing rather than as a cue — which is exactly how
+    // it kept being described. The coin still announces itself: Sound.coin() on pickup, and the
+    // tile is drawn hovering off the board.
     // ---- the theme, outside a level ----------------------------------------------
     // In a level the arrangement is driven by cleared tiles, so everything OUTSIDE one used
     // to be silent. These three screens share one tune: the same eight-note motif over the
@@ -1468,6 +1600,10 @@
       pause: { beat:0.62, pad:0.085, bass:0.075, lead:0.055, wave:"sine",     lift:12, grow:0 },
     };
     let ambTimer = null, ambAt = 0, ambBar = 0, ambMode = null, ambSince = 0;
+    // The title and cinematic tune leaves through here. Stopping the scheduler alone was never
+    // enough: ambTick schedules 1.2 SECONDS ahead, so tapping past the title left its chords
+    // ringing over the top of the level that had already started.
+    let ambBus = null;
     function ambTick(){
       if (!ac || muted || !ambMode) return;
       const M = AMBIENCE[ambMode];
@@ -1491,8 +1627,20 @@
     function ambient(mode){
       if (mode === ambMode) return;
       ambMode = mode || null;
-      if (!ambMode) { if (ambTimer) { clearInterval(ambTimer); ambTimer = null; } return; }
+      if (!ambMode) {
+        if (ambTimer) { clearInterval(ambTimer); ambTimer = null; }
+        // ...and cut what is already in the air, or the last bar plays on over the level.
+        if (ac && ambBus) {
+          const t = ac.currentTime;
+          ambBus.gain.cancelScheduledValues(t);
+          ambBus.gain.setValueAtTime(ambBus.gain.value, t);
+          ambBus.gain.linearRampToValueAtTime(0.0001, t + 0.10);
+        }
+        return;
+      }
       if (!ac || ac.state !== "running" || muted) return;      // pending — unlock() will start it
+      ambBus.gain.cancelScheduledValues(ac.currentTime);
+      ambBus.gain.setValueAtTime(1, ac.currentTime);
       ambSince = ambBar;                                       // this setting's build-in starts now
       if (!ambTimer) { ambAt = ac.currentTime + 0.08; ambTimer = setInterval(ambTick, 400); }
       ambTick();
@@ -1654,16 +1802,16 @@
     }
     function resetMelody() { step = 0; }
     function setMuted(m) { muted = !!m;
-      if (m) { if (sawGain) sawGain.gain.value = 0; if (voxGain) voxGain.gain.value = 0;
+      if (m) {
                if (ambTimer) { clearInterval(ambTimer); ambTimer = null; }
                warp(false); }
       else ambientResume(); }
     function isMuted() { return muted; }
     return { unlock, clearTile, smash, win, lose, fall, death, boost, slow, coin, key, doorOpen,
              slide, clack, tap, tapBig, power, warp, vortex, crunch, growl,
-             sawProximity, coinProximity, ambient,
-             introGather, introFlash, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
-             levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme,
+             ambient,
+             swish, introGather, introFlash, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
+             levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, setMusicGate,
              musicNow: () => ({ ...MU }) };
   })();
 
@@ -1688,7 +1836,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v7.8";                    // shown on the title & pause screens
+  const VERSION = "v7.9";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -1898,32 +2046,14 @@
   // A wide bench of them. Each is a body colour and the ink its eyes are drawn in — dark
   // eyes on a pale body, pale eyes on a dark one, or the reading falls apart.
   const SKIN_COLOURS = [
+    // Five flats and the seven finishes pushed in below — twelve in all. It was twenty-six,
+    // and the middle of that list was fifteen pastels nobody could tell apart on a swatch
+    // this size, sitting next to metals that actually do something.
     { id:"classic",  name:"Classic",  cost:0,   body:"#bfe6ff", ink:"#17263f" },
-    { id:"ember",    name:"Ember",    cost:1,  body:"#ffb693", ink:"#3d1a10" },
-    { id:"moss",     name:"Moss",     cost:1,  body:"#b6e3a8", ink:"#17331a" },
-    { id:"butter",   name:"Butter",   cost:1,  body:"#ffeaa0", ink:"#3f3308" },
-    { id:"blush",    name:"Blush",    cost:1,  body:"#ffc9d6", ink:"#41152a" },
-    { id:"sky",      name:"Sky",      cost:1,  body:"#a9d4ff", ink:"#122744" },
-    { id:"mint",     name:"Mint",     cost:1,  body:"#a9edd2", ink:"#0e3a2c" },
-    { id:"apricot",  name:"Apricot",  cost:1,  body:"#ffd0a1", ink:"#452408" },
-    { id:"lilac",    name:"Lilac",    cost:1,  body:"#d6c8ff", ink:"#241548" },
-    { id:"sand",     name:"Sand",     cost:1,  body:"#e6d8bb", ink:"#3b3018" },
-    { id:"orchid",   name:"Orchid",   cost:2, body:"#e4b6ff", ink:"#2c1140" },
-    { id:"coral",    name:"Coral",    cost:2, body:"#ff9d8a", ink:"#4a1410" },
-    { id:"lagoon",   name:"Lagoon",   cost:2, body:"#7fd8d0", ink:"#0b3330" },
-    { id:"limeade",  name:"Limeade",  cost:2, body:"#d6f07a", ink:"#2b3a06" },
-    { id:"cherry",   name:"Cherry",   cost:3, body:"#e8506b", ink:"#ffe6ea" },
-    { id:"cobalt",   name:"Cobalt",   cost:3, body:"#4a72e0", ink:"#e6ecff" },
-    { id:"jade",     name:"Jade",     cost:3, body:"#2fa06e", ink:"#e6fff2" },
-    { id:"plum",     name:"Plum",     cost:3, body:"#7a3f9d", ink:"#f4e6ff" },
-    { id:"rust",     name:"Rust",     cost:3, body:"#b5551f", ink:"#ffe9d6" },
-    { id:"ink",      name:"Ink",      cost:3, body:"#5b6480", ink:"#e9eeff" },
-    { id:"charcoal", name:"Charcoal", cost:4, body:"#31343f", ink:"#dfe4f5" },
-    { id:"bone",     name:"Bone",     cost:4, body:"#f4f1e6", ink:"#2a2a2f" },
-    { id:"copper",   name:"Copper",   cost:5, body:"#d98b4a", ink:"#3d1f06" },
-    { id:"gold",     name:"Gold",     cost:6, body:"#ffd77a", ink:"#3b2a05" },
-    { id:"silver",   name:"Silver",   cost:6, body:"#d9dfe8", ink:"#22262e" },
-    { id:"neon",     name:"Neon",     cost:8, body:"#c6ff2e", ink:"#1b2600" },
+    { id:"neon",     name:"Neon",     cost:5, body:"#c6ff2e", ink:"#1b2600" },
+    { id:"blackout", name:"Black on Black", cost:5, body:"#15151c", ink:"#22222c" },
+    { id:"whiteout", name:"White on White", cost:10, body:"#f4f4f7", ink:"#e0e0e6" },
+    { id:"succubus", name:"Succubus", cost:10, body:"#c9202f", ink:"#fff4f4" },
   ];
 
   // ---- finishes -------------------------------------------------------------------
@@ -1950,15 +2080,15 @@
     return gd;
   };
   SKIN_COLOURS.push(
-    { id:"sterling", name:"Sterling", cost:7, body:"#c3ccdb", ink:"#22262e",
+    { id:"sterling", name:"Sterling", cost:15, body:"#c3ccdb", ink:"#22262e",
       paint: metal("#6f7887", "#aeb8c8", "#dfe6f2", "#ffffff") },
-    { id:"bullion",  name:"Bullion",  cost:7, body:"#f0c25c", ink:"#3b2a05",
+    { id:"bullion",  name:"Bullion",  cost:15, body:"#f0c25c", ink:"#3b2a05",
       paint: metal("#8a5f10", "#d9a531", "#ffdd82", "#fff6d0") },
-    { id:"forge",    name:"Forge",    cost:8, body:"#d98b4a", ink:"#3d1f06",
+    { id:"forge",    name:"Forge",    cost:20, body:"#d98b4a", ink:"#3d1f06",
       paint: metal("#6b3410", "#c9743a", "#f0a86c", "#ffd9b4") },
-    { id:"obsidian", name:"Obsidian", cost:8, body:"#26262f", ink:"#dfe4f5",
+    { id:"obsidian", name:"Obsidian", cost:20, body:"#26262f", ink:"#dfe4f5",
       paint: metal("#07070c", "#1d1d28", "#3a3a50", "#9c9cc4") },
-    { id:"diamond",  name:"Diamond",  cost:12, body:"#dff2ff", ink:"#123a4d",
+    { id:"diamond",  name:"Diamond",  cost:25, body:"#dff2ff", ink:"#123a4d",
       paint(g, x, y, w, h){
         const gd = g.createLinearGradient(x, y, x + w*0.5, y + h);
         gd.addColorStop(0.00, "#eafaff"); gd.addColorStop(0.34, "#a9d9f2");
@@ -1974,9 +2104,9 @@
         g.stroke();
         g.strokeStyle = "rgba(30,90,130,0.30)"; g.lineWidth = Math.max(1, w*0.028);
         g.beginPath(); g.moveTo(x, y + h*0.30); g.lineTo(x + w, y + h*0.74); g.stroke(); } },
-    { id:"polychrome", name:"Polychrome", cost:12, body:"#ffc2e6", ink:"#2a1240",
+    { id:"polychrome", name:"Polychrome", cost:25, body:"#ffc2e6", ink:"#2a1240",
       paint: spectrum(9000, 90, 72, 60) },
-    { id:"opal",     name:"Opal",     cost:11, body:"#f2e6ff", ink:"#3a2f4a",
+    { id:"opal",     name:"Opal",     cost:30, body:"#f2e6ff", ink:"#3a2f4a",
       paint: spectrum(22000, 62, 87, 34) }
   );
   SKIN_COLOURS.forEach(c => c.swatch = (g,S) => swatchBust(g, S, c.body, c.ink, c, 0));
@@ -1984,36 +2114,53 @@
   // Hats draw in the runner's local frame: +x is travel, the body spans byTop..byTop+bodyH.
   const HATS = [
     { id:"none", name:"Bare", cost:0, draw:null, swatch:(g,S)=>swatchBust(g,S,"#bfe6ff","#17263f") },
-    { id:"cap", name:"Cap", cost:1, col:"#e05b4b",
+    { id:"cap", name:"Cap", cost:5, col:"#e05b4b",
       draw(g,s,bw,byTop,col){ g.fillStyle=col;
         g.beginPath(); g.ellipse(0, byTop, bw*0.52, s*0.05, 0, Math.PI, 0); g.fill();
         g.fillRect(0, byTop - s*0.012, bw*0.62, s*0.024); } },
-    { id:"top", name:"Top Hat", cost:3, col:"#2b2740",
+    { id:"top", name:"Top Hat", cost:5, col:"#2b2740",
       draw(g,s,bw,byTop,col){ g.fillStyle=col;
         g.fillRect(-bw*0.60, byTop - s*0.018, bw*1.20, s*0.026);
         g.fillRect(-bw*0.30, byTop - s*0.115, bw*0.60, s*0.10); } },
-    { id:"band", name:"Headband", cost:1, col:"#ffd24a",
+    { id:"band", name:"Headband", cost:10, col:"#ffd24a",
       draw(g,s,bw,byTop,col){ g.fillStyle=col;
         g.fillRect(-bw*0.52, byTop + s*0.012, bw*1.04, s*0.028); } },
-    { id:"crown", name:"Crown", cost:5, col:"#ffd24a",
+    { id:"crown", name:"Crown", cost:10, col:"#ffd24a",
       draw(g,s,bw,byTop,col){ g.fillStyle=col; g.beginPath();
         const w=bw*0.52, t=byTop - s*0.075, b=byTop + s*0.012;
         g.moveTo(-w,b); g.lineTo(-w,t); g.lineTo(-w*0.5,b*0.55+t*0.45); g.lineTo(0,t);
         g.lineTo(w*0.5,b*0.55+t*0.45); g.lineTo(w,t); g.lineTo(w,b); g.closePath(); g.fill(); } },
-    { id:"beanie", name:"Beanie", cost:1, col:"#5ac8e0",
+    { id:"beanie", name:"Beanie", cost:15, col:"#5ac8e0",
       draw(g,s,bw,byTop,col){ g.fillStyle=col;
         g.beginPath(); g.ellipse(0, byTop + s*0.004, bw*0.54, s*0.062, 0, Math.PI, 0); g.fill();
         g.fillRect(-bw*0.56, byTop, bw*1.12, s*0.022);
         g.beginPath(); g.arc(0, byTop - s*0.062, s*0.022, 0, 7); g.fill(); } },
-    { id:"cowboy", name:"Stetson", cost:3, col:"#a5713c",
+    { id:"cowboy", name:"Stetson", cost:15, col:"#a5713c",
       draw(g,s,bw,byTop,col){ g.fillStyle=col;
         g.beginPath(); g.ellipse(0, byTop, bw*0.86, s*0.030, 0, 0, Math.PI*2); g.fill();
         g.beginPath(); g.ellipse(0, byTop - s*0.030, bw*0.40, s*0.048, 0, Math.PI, 0); g.fill();
         g.fillStyle="rgba(40,24,10,0.5)"; g.fillRect(-bw*0.40, byTop - s*0.026, bw*0.80, s*0.014); } },
-    { id:"halo", name:"Halo", cost:5, col:"#fff3a8",
+    { id:"halo", name:"Halo", cost:20, col:"#fff3a8",
       draw(g,s,bw,byTop,col){ g.strokeStyle=col; g.lineWidth=Math.max(1.5, s*0.020);
         g.beginPath(); g.ellipse(0, byTop - s*0.062, bw*0.46, s*0.020, 0, 0, Math.PI*2); g.stroke(); } },
-    { id:"horns", name:"Horns", cost:4, col:"#f2ead6",
+    { id:"beret", name:"Beret", cost:20, col:"#c0392b",
+      draw(g,s,bw,byTop,col){ g.fillStyle=col;
+        g.beginPath(); g.ellipse(-bw*0.06, byTop - s*0.008, bw*0.54, s*0.052, -0.16, 0, 7); g.fill();
+        g.beginPath(); g.arc(bw*0.34, byTop - s*0.038, s*0.014, 0, 7); g.fill(); } },
+    { id:"antenna", name:"Antenna", cost:25, col:"#9ad9ff",
+      draw(g,s,bw,byTop,col){ g.strokeStyle=col; g.lineWidth=s*0.016; g.lineCap="round";
+        g.beginPath(); g.moveTo(0, byTop); g.lineTo(bw*0.12, byTop - s*0.105); g.stroke();
+        g.fillStyle="#ff6d6d";
+        g.beginPath(); g.arc(bw*0.12, byTop - s*0.118, s*0.022, 0, 7); g.fill(); } },
+    { id:"laurel", name:"Laurel", cost:25, col:"#7dd07f",
+      draw(g,s,bw,byTop,col){ g.fillStyle=col;
+        for (const side of [-1, 1]) for (let k=0;k<4;k++){
+          const a = 0.5 + k*0.30;
+          g.beginPath();
+          g.ellipse(side*bw*(0.20 + k*0.10), byTop - s*0.004 - k*s*0.016,
+                    s*0.026, s*0.013, side*a, 0, 7);
+          g.fill(); } } },
+    { id:"horns", name:"Horns", cost:30, col:"#f2ead6",
       draw(g,s,bw,byTop,col){ g.fillStyle=col;
         for (const side of [-1, 1]) {
           g.beginPath();
@@ -2034,16 +2181,73 @@
   // along the path's normal, so they stay parallel round corners instead of nesting.
   const TRAILS = [
     { id:"none", name:"None", cost:0, cols:null, swatch:(g,S)=>swatchBust(g,S,"#bfe6ff","#17263f") },
-    { id:"rainbow", name:"Rainbow", cost:4, cols:["#ff595e","#ff924c","#ffca3a","#8ac926","#1982c4"] },
-    { id:"spark",   name:"Sparks",  cost:2, cols:["#ffe9a8","#ffd24a","#ff9e4d"] },
-    { id:"cyan",    name:"Coolant", cost:2, cols:["#dffaff","#8ff0ff","#3fb8d6"] },
-    { id:"rose",    name:"Rose",    cost:2, cols:["#ffd6e8","#ff9ec7","#e0559a"] },
+    { id:"rainbow", name:"Rainbow", cost:5, cols:["#ff595e","#ff924c","#ffca3a","#8ac926","#1982c4"] },
+    { id:"spark",   name:"Sparks",  cost:5, cols:["#ffe9a8","#ffd24a","#ff9e4d"] },
+    { id:"cyan",    name:"Coolant", cost:10, cols:["#dffaff","#8ff0ff","#3fb8d6"] },
+    { id:"rose",    name:"Rose",    cost:10, cols:["#ffd6e8","#ff9ec7","#e0559a"] },
+    // ---- the same ribbon, made to move ----
+    { id:"ripple",  name:"Ripple",  cost:15, cols:["#dffaff","#7fe4ff"],
+      wobble:0.55, freq:0.42, speed:170 },
+    { id:"serpent", name:"Serpent", cost:15, cols:["#173d1d","#5ad46b","#c8ffb0"],
+      wobble:0.85, freq:0.30, speed:260 },
+    { id:"comet",   name:"Comet",   cost:20, cols:["#ffffff","#ffe9a8","#ff9e4d"], taper:true },
+    { id:"morse",   name:"Morse",   cost:20, cols:["#9ad9ff","#2f8fd6"], dash:true },
+    // ---- no ribbon at all: what he sheds, left to thin out ----
+    { id:"embers",  name:"Embers",  cost:25, style:"dots", cols:["#fff0b8","#ffb03a","#e5482a"],
+      dot:0.20, fade:1.6 },
+    { id:"bubbles", name:"Bubbles", cost:25, style:"dots", cols:["#dffaff","#a6e9ff","#ffffff"],
+      dot:0.26, fade:1.0, wobble:0.30, freq:0.6, speed:300 },
+    { id:"static",  name:"Static",  cost:30, style:"dots", cols:["#ffffff","#c9a4ff","#7a5cff"],
+      dot:0.11, fade:2.2, grow:false, wobble:0.9, freq:1.7, speed:90 },
   ];
+  // The swatch is the TRAIL and nothing else. It used to draw the runner as well, which left
+  // barely a third of the tile for the thing being sold and made every option look alike; and
+  // a trail is a shape that only reads over distance, so it needs the whole width. Each style
+  // is drawn the way it actually draws in play — wobble, taper, dash, particles — and fades
+  // out along its length, so the head end is the solid one.
   TRAILS.forEach(t => { if (!t.cols) return;
-    t.swatch = (g,S) => { const b = swatchBust(g,S,"#bfe6ff","#17263f");
-      const n = t.cols.length, band = b.h*0.62, sw = band/n, y0 = b.y + b.h*0.30;
-      for (let i=0;i<n;i++){ g.fillStyle = t.cols[i];
-        g.fillRect(S*0.06, y0 + i*sw, S/2 - b.w*0.30 - S*0.06, sw); } }; });
+    t.swatch = (g, S) => {
+      const n = t.cols.length, x0 = S*0.05, x1 = S*0.95, mid = S*0.5, band = S*0.42;
+      if (t.style === "dots") {
+        for (let k = 0; k <= 30; k++) {
+          const u = k/30, x = x0 + (x1-x0)*u;
+          const wob = t.wobble ? Math.sin(k*(t.freq||0.5)*1.6) * band*0.55*t.wobble : 0;
+          const r = band*0.30 * (t.grow === false ? 1 : 0.32 + u*0.68);
+          if (r < 0.4) continue;
+          g.globalAlpha = Math.pow(u, t.fade || 1.3);
+          g.fillStyle = t.cols[k % n];
+          g.beginPath(); g.arc(x, mid + wob, r, 0, 7); g.fill();
+        }
+        g.globalAlpha = 1; return;
+      }
+      const sw = band/n, SEG = 44;
+      const wobAt = u => t.wobble ? Math.sin(u*14*(t.freq||0.5)) * band*0.42*t.wobble : 0;
+      const tpAt  = u => t.taper  ? (0.16 + 0.84*u) : 1;
+      for (let i = 0; i < n; i++) {
+        g.fillStyle = t.cols[i];
+        for (let c = 0; c < SEG; c++) {
+          if (t.dash && (c % 2)) continue;
+          const u0 = c/SEG, u1 = (c+1)/SEG;
+          g.globalAlpha = Math.pow(u1, 1.5);
+          const xa = x0+(x1-x0)*u0, xb = x0+(x1-x0)*u1;
+          const a0 = tpAt(u0), a1 = tpAt(u1), w0 = wobAt(u0), w1 = wobAt(u1);
+          g.beginPath();
+          g.moveTo(xa, mid + (i-n/2)*sw*a0 + w0);
+          g.lineTo(xb, mid + (i-n/2)*sw*a1 + w1);
+          g.lineTo(xb, mid + (i-n/2+1)*sw*a1 + w1);
+          g.lineTo(xa, mid + (i-n/2+1)*sw*a0 + w0);
+          g.closePath(); g.fill();
+        }
+      }
+      g.globalAlpha = 1;
+    }; });
+  // "None" has no trail to show, so it shows the absence of one rather than a runner.
+  TRAILS[0].swatch = (g,S) => {
+    g.globalAlpha = 0.22; g.strokeStyle = "#bfc6e0";
+    g.lineWidth = Math.max(1, S*0.02); g.setLineDash([S*0.07, S*0.06]); g.lineCap = "round";
+    g.beginPath(); g.moveTo(S*0.10, S*0.5); g.lineTo(S*0.90, S*0.5); g.stroke();
+    g.setLineDash([]); g.globalAlpha = 1;
+  };
 
   // SWAGGER — the way he runs. Every field is a multiplier or an addition on top of the
   // RUNNER tuning rather than a replacement for it, so retuning the runner in the lab still
@@ -2056,12 +2260,23 @@
   //   pose  a named leg fold that replaces the stock stride: lotus, fetal, onefoot
   const SWAGGERS = [
     { id:"classic", name:"Classic",   cost:0 },
-    { id:"lean",    name:"Lean Back", cost:2, lean:-0.30, bob:0.70, swing:1.20, lift:1.15 },
-    { id:"hop",     name:"Hopping",   cost:2, pose:"onefoot", hop:0.15, bob:0.15, swing:0, lift:0 },
-    { id:"float",   name:"Floating",  cost:3, pose:"lotus",   hover:0.085, bob:0.35, swing:0, lift:0 },
+    { id:"lean",    name:"Lean Back", cost:5, lean:-0.30, bob:0.70, swing:1.20, lift:1.15 },
+    { id:"hop",     name:"Hopping",   cost:5, pose:"onefoot", hop:0.15, bob:0.15, swing:0, lift:0 },
+    { id:"float",   name:"Floating",  cost:10, pose:"lotus",   hover:0.085, bob:0.35, swing:0, lift:0 },
     // a NEGATIVE hover: the ball sinks until it is all but touching the track, because a
     // roll that happens in mid-air is just a spin
-    { id:"roll",    name:"Rolling",   cost:3, pose:"fetal",   spin:0.0055, hover:-0.068, bob:0 },
+    { id:"roll",    name:"Rolling",   cost:10, pose:"fetal",   spin:0.0055, hover:-0.068, bob:0 },
+    // Seven more built from the same handful of knobs — a pose, how far he leans, how hard he
+    // bobs, how wide the arms swing, how high the knees come up. No new drawing code: the
+    // difference between a strut and a scurry is entirely in these numbers.
+    { id:"strut",   name:"Strut",     cost:15, lean:0.16,  bob:1.25, swing:1.60, lift:1.30 },
+    { id:"scurry",  name:"Scurry",    cost:15, lean:0.10,  bob:0.35, swing:0.55, lift:2.10 },
+        { id:"stomp",   name:"Stomp",     cost:20, lean:0.20, bob:2.60, swing:1.35, lift:2.60,
+      hop:0.055 },   // the hop is the SLAM: one hard bounce a stride, on top of the bob
+    { id:"glide",   name:"Glide",     cost:20, hover:0.055, bob:0.10, swing:0.30, lift:0.20 },
+    { id:"tumble",  name:"Tumble",    cost:25, pose:"fetal", spin:0.0090, hover:-0.030, bob:0 },
+    { id:"meditate",name:"Meditate",  cost:25, pose:"lotus", hover:0.130, bob:0.12, swing:0, lift:0 },
+    { id:"pogo",    name:"Pogo",      cost:30, pose:"onefoot", hop:0.26, bob:0.05, swing:0.20, lift:0 },
   ];
   // Each swatch is the same bust in the pose that style would hold it in — a still frame
   // reads the difference far better than a name does.
@@ -2098,26 +2313,58 @@
   // itself is the anchor, so they follow the stride and the lift for free.
   const KICKS = [
     { id:"none", name:"Barefoot", cost:0, draw:null, swatch:(g,S)=>swatchBust(g,S,"#bfe6ff","#17263f") },
-    { id:"sneaker", name:"Sneakers", cost:1, col:"#f2f4ff",
+    { id:"sneaker", name:"Sneakers", cost:5, col:"#f2f4ff",
       draw(g,s,col){ g.fillStyle = col;
         rr2(g, -s*0.030, -s*0.026, s*0.085, s*0.045, s*0.018); g.fill();
         g.fillStyle = "rgba(23,38,63,0.35)"; g.fillRect(-s*0.030, s*0.007, s*0.085, s*0.012); } },
-    { id:"boot", name:"Boots", cost:2, col:"#7a4a22",
+    { id:"boot", name:"Boots", cost:5, col:"#7a4a22",
       draw(g,s,col){ g.fillStyle = col;
         rr2(g, -s*0.032, -s*0.055, s*0.070, s*0.075, s*0.014); g.fill();
         g.fillStyle = "#2c1a0b"; g.fillRect(-s*0.036, s*0.010, s*0.090, s*0.014); } },
-    { id:"skate", name:"Skates", cost:3, col:"#e8506b",
+    { id:"skate", name:"Skates", cost:10, col:"#e8506b",
       draw(g,s,col){ g.fillStyle = col;
         rr2(g, -s*0.030, -s*0.048, s*0.078, s*0.058, s*0.016); g.fill();
         g.fillStyle = "#d9dfe8"; g.fillRect(-s*0.034, s*0.012, s*0.088, s*0.008);
         g.beginPath(); g.arc(-s*0.014, s*0.028, s*0.016, 0, 7);
         g.arc( s*0.032, s*0.028, s*0.016, 0, 7); g.fill(); } },
-    { id:"glow", name:"Glowsteps", cost:5, col:"#c6ff2e",
+    { id:"glow", name:"Glowsteps", cost:10, col:"#c6ff2e",
       draw(g,s,col){ g.fillStyle = "#2b2740";
         rr2(g, -s*0.030, -s*0.030, s*0.082, s*0.050, s*0.016); g.fill();
         g.fillStyle = col; g.fillRect(-s*0.034, s*0.012, s*0.090, s*0.016);
         g.globalAlpha = 0.35; g.fillRect(-s*0.048, s*0.024, s*0.118, s*0.020); g.globalAlpha = 1; } },
-    { id:"gilded", name:"Gilded", cost:6, col:"#ffd24a",
+    // Six more. The foot is tiny at this size, so each is one silhouette and one detail —
+    // a sole, a strap, a cuff — rather than a shoe drawn in miniature.
+    { id:"sandal", name:"Sandals", cost:15, col:"#d9b27a",
+      draw(g,s,col){ g.fillStyle = col; g.fillRect(-s*0.032, s*0.006, s*0.086, s*0.014);
+        g.fillStyle = "#6b4a20"; g.fillRect(-s*0.010, -s*0.024, s*0.012, s*0.032);
+        g.fillRect(-s*0.026, -s*0.014, s*0.056, s*0.010); } },
+    { id:"welly", name:"Wellies", cost:15, col:"#3f8f5a",
+      draw(g,s,col){ g.fillStyle = col;
+        rr2(g, -s*0.030, -s*0.078, s*0.064, s*0.096, s*0.016); g.fill();
+        g.fillStyle = "#1e4a2e"; g.fillRect(-s*0.034, s*0.008, s*0.082, s*0.014); } },
+    { id:"hover", name:"Hoverpads", cost:20, col:"#7fd8ff",
+      draw(g,s,col){ g.fillStyle = "#2b2740";
+        rr2(g, -s*0.030, -s*0.026, s*0.082, s*0.038, s*0.014); g.fill();
+        g.fillStyle = col; g.globalAlpha = 0.55;
+        g.beginPath(); g.ellipse(s*0.010, s*0.030, s*0.056, s*0.014, 0, 0, 7); g.fill();
+        g.globalAlpha = 1; } },
+    { id:"cleat", name:"Cleats", cost:20, col:"#eef2ff",
+      draw(g,s,col){ g.fillStyle = col;
+        rr2(g, -s*0.030, -s*0.034, s*0.080, s*0.048, s*0.012); g.fill();
+        g.fillStyle = "#3a4256";
+        for (let k=0;k<3;k++) g.fillRect(-s*0.022 + k*s*0.030, s*0.014, s*0.012, s*0.016); } },
+    { id:"platform", name:"Platforms", cost:25, col:"#ff8fc8",
+      draw(g,s,col){ g.fillStyle = col;
+        rr2(g, -s*0.028, -s*0.036, s*0.074, s*0.040, s*0.012); g.fill();
+        g.fillStyle = "#f2f4ff"; rr2(g, -s*0.036, s*0.004, s*0.092, s*0.030, s*0.010); g.fill(); } },
+    { id:"talon", name:"Talons", cost:25, col:"#f0c25c",
+      draw(g,s,col){ g.fillStyle = col;
+        for (let k=-1;k<=1;k++){ g.beginPath();
+          g.moveTo(s*0.012 + k*s*0.026, -s*0.010);
+          g.lineTo(s*0.030 + k*s*0.026, s*0.034);
+          g.lineTo(s*0.000 + k*s*0.026, s*0.020);
+          g.closePath(); g.fill(); } } },
+    { id:"gilded", name:"Gilded", cost:30, col:"#ffd24a",
       draw(g,s,col){ g.fillStyle = col;
         rr2(g, -s*0.032, -s*0.034, s*0.086, s*0.056, s*0.018); g.fill();
         g.fillStyle = "rgba(255,255,255,0.65)"; g.fillRect(-s*0.026, -s*0.026, s*0.070, s*0.010); } },
@@ -2136,18 +2383,22 @@
     }; });
 
   const TRACKS = [
+    { id:"ember",  name:"Ember",   cost:5, track:"#ff7043", rail:"#ffd0b8" },
+    { id:"orchid", name:"Orchid",  cost:5, track:"#b56cff", rail:"#efdcff" },
+    { id:"ice",    name:"Ice",     cost:10, track:"#7fd8ff", rail:"#e6faff" },
+    { id:"rose",   name:"Rosewood",cost:10, track:"#c9506b", rail:"#ffd9e2" },
     { id:"level", name:"Level", cost:0, track:null, rail:null,
       swatch:(g,S)=>{ rr2(g,S*0.18,S*0.30,S*0.64,S*0.40,S*0.05); g.fillStyle="#8d86c9"; g.fill();
         g.fillStyle="#ffcf4d"; g.fillRect(S*0.18,S*0.52,S*0.64,S*0.18);
         g.fillStyle="#fff2c4"; g.fillRect(S*0.18,S*0.50,S*0.64,S*0.035); } },
-    { id:"sun",   name:"Sunbeam", cost:2, track:"#ffcf4d", rail:"#fff2c4" },
-    { id:"mint",  name:"Mint",    cost:2, track:"#54d6a4", rail:"#c8ffe8" },
-    { id:"berry", name:"Berry",   cost:4, track:"#e0559a", rail:"#ffd0e6" },
-    { id:"steel", name:"Steel",   cost:6, track:"#9aa7bd", rail:"#e6edf9" },
+    { id:"sun",   name:"Sunbeam", cost:15, track:"#ffcf4d", rail:"#fff2c4" },
+    { id:"mint",  name:"Mint",    cost:15, track:"#54d6a4", rail:"#c8ffe8" },
+    { id:"berry", name:"Berry",   cost:20, track:"#e0559a", rail:"#ffd0e6" },
+    { id:"steel", name:"Steel",   cost:20, track:"#9aa7bd", rail:"#e6edf9" },
     // ...and three that bring a ground pattern with them, not just a colour
-    { id:"bold",   name:"Bold",       cost:5, track:"#ff8a5c", rail:"#ffd9c4", pattern:"stripe" },
-    { id:"cobble", name:"Cobbles",    cost:5, track:"#9fb3c9", rail:"#e8f1ff", pattern:"cobble" },
-    { id:"timber", name:"Timber",     cost:5, track:"#d9a45c", rail:"#f6dfb4", pattern:"grain"  },
+    { id:"bold",   name:"Bold",       cost:25, track:"#ff8a5c", rail:"#ffd9c4", pattern:"stripe" },
+    { id:"cobble", name:"Cobbles",    cost:25, track:"#9fb3c9", rail:"#e8f1ff", pattern:"cobble" },
+    { id:"timber", name:"Timber",     cost:30, track:"#d9a45c", rail:"#f6dfb4", pattern:"grain"  },
   ];
   TRACKS.forEach(t => { if (!t.track) return;
     t.swatch = (g,S) => { rr2(g,S*0.18,S*0.30,S*0.64,S*0.40,S*0.05); g.fillStyle="#8d86c9"; g.fill();
@@ -3029,10 +3280,26 @@
   function camForPoint(px, py) {
     return { x: camClampX(px), y: camClampY(py) };
   }
+  // The camera is never allowed to outrun him by more than this. Laying a tile moves the
+  // target a whole cell in one frame — the lead looks up the track, and the track just got
+  // longer — and an unclamped lerp eats that in three or four frames. The board lurching
+  // forward is at its worst exactly when you are lining up the next tile, so the catch-up is
+  // held to a walk instead: a shade faster than he is, and no more.
+  const CAM_MAX_SPEED = 1.5;                  // multiples of the runner's own pace
   function updateCamera(dt) {
     if (state.status !== "play") return;      // freeze during fall / overlays / cam-pan / intro
     const t = camTarget(), k = Math.min(1, dt * CAM_LERP);
-    camX += (t.tx - camX) * k; camY += (t.ty - camY) * k;
+    let dx = (t.tx - camX) * k, dy = (t.ty - camY) * k;
+    // His actual pace, boosts and slows included — so the cap loosens when he speeds up
+    // rather than leaving the camera trailing behind a boost.
+    // A floor of a quarter pace, because liveFactor goes to ZERO under the Hands of Time —
+    // and a camera that cannot move at all while time is stopped would strand you looking at
+    // the wrong part of the board for the one second you most want to be aiming.
+    const pace = cell / Math.max(1, state.msPerCell) * Math.max(0.25, state.liveFactor || 1);
+    const maxStep = CAM_MAX_SPEED * pace * dt;
+    const d = Math.hypot(dx, dy);
+    if (d > maxStep) { const f = maxStep / d; dx *= f; dy *= f; }
+    camX += dx; camY += dy;
   }
   // opening fly-in: hold on the off-screen flag, glide to the runner's start, then form the runner
   function tickCamPan(dt) {
@@ -3975,7 +4242,7 @@
     setByline(ovMsg, last
       ? "All " + LEVELS.length + " levels. You've run out of track — and excuses."
       : pickQuip(att > 1 ? WIN_QUIPS_RETRY : WIN_QUIPS));
-    ovBtn.textContent = last ? "Level Select" : "Next Level";
+    labelWithArrow(ovBtn, last ? "Level Select" : "Next Level");
     updateOvShop();
   }
   // The charm on the win card: it rises into place, then hangs there turning gently.
@@ -4196,6 +4463,7 @@
   // competing with the board for attention. It shows up big when the number moves, holds, and
   // gets out of the way. Grand total only — the old "3/7 this level" was answering a question
   // the coins already answer by still being on the board.
+  let tallySide = 0;                // 0 = the tally drifts up, -1 = it drifts left
   const TALLY = {
     hold: 900,      // ms at full strength
     fade: 500,      // ...then this long dissolving
@@ -4205,7 +4473,25 @@
     size:  0.30,    // cap height, as a fraction of a cell
   };
   let tallyAt = -1e9, tallyC = 0, tallyR = 0;
-  function showTally(c, r) { tallyAt = performance.now(); tallyC = c; tallyR = r; }
+  // Which way it drifts is decided HERE, not at draw time: he may well have turned a corner
+  // by the time it fades, and the tally should keep going the way it set off.
+  function showTally(c, r) {
+    tallyAt = performance.now(); tallyC = c; tallyR = r;
+    // Running up the board, the space above a coin is exactly where he is headed — the tally
+    // lands in front of him and covers the track he is about to be on. Sideways instead.
+    let up = false;
+    if (state && state.status === "play" && state.path && state.path.length) {
+      const ri = runnerInfo();
+      up = ri.ty < -0.5;                    // heading north, more than diagonally
+    }
+    // How far it travels sideways, in cells, plus half its own width — that is the room it
+    // needs. Hard against the left edge of the board there isn't any, so it goes right; hard
+    // against both (a board two cells wide) it gives up and drifts up as it always did.
+    const need = TALLY.above + TALLY.rise + 0.5;
+    const roomLeft  = (c + 0.5) - need >= 0;
+    const roomRight = (c + 0.5) + need <= COLS;
+    tallySide = !up ? 0 : roomLeft ? -1 : roomRight ? 1 : 0;   // -1 left, +1 right, 0 up
+  }
   // Drawn INSIDE the board transform, so it rides with the camera and stays over the cell the
   // coin came out of. Sized in cells for the same reason: it has to sit against the board, not
   // against the screen, or it changes size relative to the coin it just replaced.
@@ -4223,8 +4509,10 @@
     ctx.font = "900 " + f2 + "px " + UI_FONT;
     const ic = Math.round(f2*0.88), gap = Math.round(f2*0.30);
     const w = ic + gap + ctx.measureText(txt).width;
-    const cxm = (tallyC + 0.5)*cell;
-    const cym = (tallyR + 0.5)*cell - cell*(TALLY.above + TALLY.rise*u);
+    // The same distance, turned through ninety degrees when he is climbing.
+    const drift = cell*(TALLY.above + TALLY.rise*u);
+    const cxm = (tallyC + 0.5)*cell + (tallySide ? drift*tallySide : 0);
+    const cym = (tallyR + 0.5)*cell - (tallySide ? 0 : drift);
     ctx.translate(cxm, cym); ctx.scale(k, k); ctx.translate(-cxm, -cym);
     coinGlyph(cxm - w/2 + ic/2, cym, ic);
     // No plate and no outline: a plate popping in and out over the board is noisier than the
@@ -4241,8 +4529,8 @@
     const rp = visualAt(state.runIdx + state.runT);
     const cxm = rp.x, cym = rp.y - cell*0.3, R = MAGNET_CELLS * cell;
     ctx.save();
-    // the faintest wash, purely so the reach still reads as an AREA between rings
-    ctx.globalAlpha = 0.07; ctx.fillStyle = "#ff6d6d";
+    // a wash under it all, so the reach still reads as an AREA between the discs
+    ctx.globalAlpha = 0.12; ctx.fillStyle = "#ff6d6d";
     ctx.beginPath(); ctx.arc(cxm, cym, R, 0, Math.PI*2); ctx.fill();
     // Shaded discs rather than drawn rings. An outline is a hard edge travelling across the
     // board, which reads as a boundary; a disc that is brightest at its rim and clear in the
@@ -4253,11 +4541,15 @@
       const rad = R * (1 - u);
       if (rad < cell*0.05) continue;
       // in as it leaves the rim, out as it lands, so nothing ever pops into or out of being
-      const a = 0.30 * Math.pow(Math.sin(Math.PI*u), 0.6);
-      const g = ctx.createRadialGradient(cxm, cym, rad*0.55, cxm, cym, rad);
+      // Brighter, and the bright part is a narrower band at the rim — spreading the same ink
+      // from 55% of the radius outward made a soft blob, where keeping it near the edge reads
+      // as a ring closing in. Nearly white at the leading edge so it holds up over gold track.
+      const a = 0.72 * Math.pow(Math.sin(Math.PI*u), 0.55);
+      const g = ctx.createRadialGradient(cxm, cym, rad*0.72, cxm, cym, rad);
       g.addColorStop(0,    "rgba(255,157,157,0)");
-      g.addColorStop(0.72, "rgba(255,157,157," + (a*0.45).toFixed(4) + ")");
-      g.addColorStop(1,    "rgba(255,157,157," + a.toFixed(4) + ")");
+      g.addColorStop(0.55, "rgba(255,140,140," + (a*0.40).toFixed(4) + ")");
+      g.addColorStop(0.88, "rgba(255,190,190," + a.toFixed(4) + ")");
+      g.addColorStop(1,    "rgba(255,236,236," + (a*0.80).toFixed(4) + ")");
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(cxm, cym, rad, 0, Math.PI*2); ctx.fill();
     }
@@ -7252,8 +7544,7 @@
       tickFx(dt);
       tickVortex(dt);
       tickPower(dt);
-      tickCoinProximity();
-    } else { Sound.sawProximity(0); Sound.coinProximity(0); }   // both drones off while paused
+    }
     updateCamera(dt);
     draw(ts);
     if (paused) drawPausedOverlay();
@@ -7339,7 +7630,7 @@
   // each corner before changing direction. Touching either is fatal.
   const MON_DWELL = 340;
   function updateHazards(dt) {
-    const s = state; if (!s || !s.hazards.length) { Sound.sawProximity(0); return; }
+    const s = state; if (!s || !s.hazards.length) return;
     for (const h of s.hazards) {
       if (h.kind === "monster") {
         const K = monKind(h);
@@ -7366,7 +7657,13 @@
           else                { h.cc = h.c; h.cr = Math.round(p); h.faceX = h.dir; }
           h.wx = (h.axis === "h" ? p : h.c)*cell + cell/2;
           h.wy = (h.axis === "h" ? h.r : p)*cell + cell/2;
-          monsterNoise(h, dt);
+          // One swish per stroke, keyed off the stroke counter the motion already keeps, so the
+          // sound lands exactly on the push rather than on a clock of its own.
+          if (h.rowDone !== done) {
+            h.rowDone = done;
+            const v = Math.max(0, 1 - monsterNear(h) / MONSTER.hear);
+            if (v > 0.02) Sound.swish(v);
+          }
           continue;
         }
         if (K.move === "trap") {                    // sits still, yawns, then snaps
@@ -7491,25 +7788,22 @@
         // Everything else on his cell is fatal on contact.
         const safe = h.kind === "monster" && monKind(h).move === "trap" && !trapPhase(h.trapT||0).lethal;
         if (h.cc === rcx && h.cr === rcy && !shielded && !safe) struck = true;
-        if ((h.kind || "saw") === "saw") {                          // saw whir swells with proximity
-          const scx = (h.axis === "h" ? h.pos : h.c) + 0.5, scy = (h.axis === "h" ? h.r : h.pos) + 0.5;
-          const d = Math.hypot(runCX - scx, runCY - scy);
-          const pp = d >= 2 ? 0 : (d <= 1 ? 1 : 2 - d);
-          if (pp > prox) prox = pp;
-        }
       }
-      Sound.sawProximity(prox);
       if (struck) startFall();                                      // struck — the runner goes down
-    } else { Sound.sawProximity(0); }
+    }
   }
   // The bite clock and the two voices, shared by every variant. `mute` holds the crunch
   // for a trap that is sitting wide open — it is not chewing, it is waiting.
-  function monsterNoise(h, dt, mute) {
+  // How far the runner is from a hazard, in cells — Infinity when he is not running, so
+  // nothing chatters away over a menu.
+  function monsterNear(h) {
     const s = state;
-    const near = s.status === "play"
-      ? (() => { const rp = visualAt(s.runIdx + s.runT);
-                 return Math.hypot(rp.x - h.wx, rp.y - h.wy) / cell; })()
-      : Infinity;
+    if (s.status !== "play") return Infinity;
+    const rp = visualAt(s.runIdx + s.runT);
+    return Math.hypot(rp.x - h.wx, rp.y - h.wy) / cell;
+  }
+  function monsterNoise(h, dt, mute) {
+    const near = monsterNear(h);
     h.chompT = (h.chompT || 0) + dt;
     if (h.chompT >= MONSTER.chompMs) {
       h.chompT -= MONSTER.chompMs;
@@ -7528,23 +7822,6 @@
   }
 
   // decay transient visual feedback (shake, beat pulse, combo flash, pops)
-  // A choir swells as the runner closes on a coin — the cue that there is something worth
-  // detouring for just out of shot. 1.5 cells is close enough that it is a reward for
-  // getting near, not a metal detector you could sweep the whole board with.
-  const COIN_HEAR = 1.5;
-  function tickCoinProximity() {
-    const s = state;
-    if (!s || s.status !== "play" || !s.coinCells.size) { Sound.coinProximity(0); return; }
-    const rp = visualAt(s.runIdx + s.runT);
-    const rx = rp.x/cell, ry = rp.y/cell;
-    let best = 0;
-    for (const ck of s.coinCells) {
-      const i = ck.indexOf(","), c = +ck.slice(0, i), r = +ck.slice(i+1);
-      const d = Math.hypot(rx - (c+0.5), ry - (r+0.5));
-      if (d < COIN_HEAR) { const pp = 1 - d/COIN_HEAR; if (pp > best) best = pp; }
-    }
-    Sound.coinProximity(best);
-  }
   function tickFx(dt) {
     const s = state; if (!s) return;
     s.shake *= Math.pow(0.86, dt/16); if (s.shake < 0.3) s.shake = 0;
@@ -7616,6 +7893,24 @@
     });
     const band = cell * RUNNER.bodyH;                 // exactly as deep as he is
     const n = tr.cols.length, sw = band / n;
+    const T = performance.now();
+
+    // ---- particles: no ribbon at all, just what he shed, thinning as it ages ----
+    if (tr.style === "dots") {
+      ctx.save();
+      for (let k = 0; k < N; k++) {
+        const u = k / (N - 1);                       // 0 at the tail, 1 at his heels
+        const wob = tr.wobble ? Math.sin(k*(tr.freq||0.5) + T/(tr.speed||200)) * band * tr.wobble : 0;
+        const x = pts[k].x + nor[k].x*wob, y = pts[k].y + nor[k].y*wob;
+        const r = band * (tr.dot || 0.16) * (tr.grow === false ? 1 : 0.30 + u*0.70);
+        if (r < 0.4) continue;
+        ctx.globalAlpha = Math.pow(u, tr.fade || 1.3) * 0.92;
+        ctx.fillStyle = tr.cols[k % n];
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.restore();
+      return;
+    }
     // The ribbon used to be STROKED: each stripe a fat polyline, cut into ten chunks at ten
     // alphas, every chunk overlapping its neighbour by a point and every stripe overlapping
     // the next by 0.75px. Two semi-transparent things laid on top of each other are darker
@@ -7624,7 +7919,14 @@
     // shared edge and never crosses one, so nothing is ever painted twice.
     const SEGS = 26;                                  // steps in the fade; nothing overlaps now
     ctx.save();
-    const at = (k, off) => ({ x: pts[k].x + nor[k].x*off, y: pts[k].y + nor[k].y*off });
+    // Both variations live here, in the one place that turns a point and an offset into a
+    // position: `wobble` slides the whole ribbon side to side along its length, and `taper`
+    // scales the offset toward the tail so the band narrows to nothing behind him.
+    const at = (k, off) => {
+      const wob = tr.wobble ? Math.sin(k*(tr.freq||0.5) + T/(tr.speed||200)) * band * tr.wobble : 0;
+      const tp  = tr.taper ? (0.18 + 0.82*(k/(N-1))) : 1;
+      return { x: pts[k].x + nor[k].x*(off*tp + wob), y: pts[k].y + nor[k].y*(off*tp + wob) };
+    };
     for (let i = 0; i < n; i++) {
       // Sides get a hair of bleed so neighbouring stripes butt rather than leaving an
       // antialiased hairline of background between them. Colours differ, so the overlap
@@ -7632,6 +7934,7 @@
       const lo = (i - n/2) * sw - 0.35, hi = (i - n/2 + 1) * sw + 0.35;
       ctx.fillStyle = tr.cols[i];
       for (let c = 0; c < SEGS; c++) {
+        if (tr.dash && (c % 2)) continue;            // every other chunk left out
         const a = Math.round((N-1) * c / SEGS), b = Math.round((N-1) * (c+1) / SEGS);
         if (b <= a) continue;
         ctx.globalAlpha = Math.pow((c + 1) / SEGS, 1.4) * 0.92;   // oldest end nearly gone
@@ -7662,6 +7965,24 @@
   ovShop.addEventListener("click", () => { Sound.unlock(); Sound.tap(); openMenu("shop", "overlay"); });
   // Refreshed whenever an end screen goes up, so the number is the one you just earned.
   function updateOvShop(){ walletInto(ovShop, "Tile Shop"); }
+  // The one button that means "onward" says so. Drawn rather than typed: a glyph would be at
+  // the mercy of whichever font the device falls back to, and this one has to match the label
+  // it sits beside.
+  function arrowChip(px, col){
+    const c = document.createElement("canvas");
+    c.className = "arrow"; c.width = c.height = Math.round(px*2);
+    const g = c.getContext("2d"), S = c.width, m = S*0.22;
+    g.strokeStyle = col; g.lineWidth = S*0.13; g.lineCap = "round"; g.lineJoin = "round";
+    g.beginPath(); g.moveTo(m, S/2); g.lineTo(S-m, S/2); g.stroke();
+    g.beginPath(); g.moveTo(S*0.56, S*0.26); g.lineTo(S-m, S/2); g.lineTo(S*0.56, S*0.74); g.stroke();
+    return c;
+  }
+  function labelWithArrow(el, text){
+    el.textContent = "";
+    const t = document.createElement("span"); t.textContent = text;
+    el.appendChild(t);
+    el.appendChild(arrowChip(11, getComputedStyle(el).color || "#e8e6ff"));
+  }
   document.getElementById("pauseFloat").addEventListener("click", () => { Sound.unlock(); Sound.tap(); openMenu("main"); });
   document.getElementById("mech-ok").addEventListener("click", () => { Sound.unlock(); Sound.tapBig(); mechQueue.shift(); showNextMech(); });
 
@@ -7670,10 +7991,46 @@
   // menuReturn: opened from somewhere that is still on screen behind us (the level-clear
   // card), so Back has to hand control straight back rather than land on the pause menu.
   let menuReturn = null;
+  // A menu takes the whole screen: the backdrop stays (draw() paints only that once a menu is
+  // up) and everything else goes. Opening the shop from the clear card used to leave LEVEL
+  // CLEAR, its byline and its buttons showing through from underneath, and the talisman rack
+  // and pause button sitting over the top of it.
   function openMenu(screen, ret) { paused = true; menuReturn = ret || null;
                                    buildMenu(screen || "main"); menuEl.classList.add("show");
+                                   document.body.classList.add("menu-open");
                                    Sound.ambient("pause"); }
+  // Any rack that scrolls stops exactly where the pinned button begins. Measured rather than
+  // guessed: both the rack's top and the button's top depend on how much sits above them,
+  // which differs per screen and changes with the notch.
+  function fitScrollRack() {
+    const rack = menuBody.querySelector(".shop-rack"), go = menuBody.querySelector(".shop-go");
+    if (!rack || !go) return;
+    const gap = 12;
+    const h = go.getBoundingClientRect().top - rack.getBoundingClientRect().top - gap;
+    const maxH = Math.max(140, Math.round(h));
+    rack.style.maxHeight = maxH + "px";
+    // Three rows of stock, whole. The cells are square, so their size is whichever of the two
+    // axes runs out first: a third of the width, or a third of the height now that the rack's
+    // height is known. Sizing on width alone is what left a fourth row sliced in half at the
+    // bottom — you cannot tell what a half-item is, and it reads as the panel being broken.
+    const grid = rack.querySelector(".tal-grid");
+    if (!grid) return;
+    const g = 9, n = 3, AIR = 0.92;                  // a little smaller than the space allows
+    const availW = rack.clientWidth - 4, availH = maxH - 4;     // the rack's 2px padding
+    const cell = Math.floor(Math.min((availW - g*(n-1)) / n, (availH - g*(n-1)) / n) * AIR);
+    grid.style.gridTemplateColumns = "repeat(" + n + ", " + cell + "px)";
+    // The ROW is pinned to the same number as the column, so a cell is square whatever its
+    // contents want. aspect-ratio alone loses that argument: an item whose three lines do not
+    // fit simply grows, and the grid quietly stops being square.
+    grid.style.gridAutoRows = cell + "px";
+    grid.style.width = (cell*n + g*(n-1)) + "px";
+    grid.style.marginLeft = "auto"; grid.style.marginRight = "auto";
+    // The panel takes every pixel between where it starts and the button, and a row landing
+    // half in and half out at the bottom is fine — it is a scroll view, and a sliced row is
+    // the honest signal that there is more below.
+  }
   function closeMenu() { stopShopFig(); stopRelics(); paused = false; menuReturn = null; menuEl.classList.remove("show");
+                         document.body.classList.remove("menu-open");
                          Sound.ambient(cineActive ? "intro" : titleActive ? "title" : null); }
 
   // Every generated button clicks when pressed. Wired here rather than at each call site so
@@ -7728,7 +8085,13 @@
     _shopFigRaf = requestAnimationFrame(step);
   }
   let shopTab = "drip";                   // the shop remembers which rack you were looking at
+  // Every menu rebuild re-measures the rack. Tab switches call buildMenu directly, so hooking
+  // this to openMenu alone would fit the first rack you saw and no other.
   function buildMenu(screen) {
+    buildMenu_(screen);
+    requestAnimationFrame(fitScrollRack);
+  }
+  function buildMenu_(screen) {
     stopShopFig(); stopRelics();          // whatever was animating is about to leave the DOM
     relicPainters = [];
     menuBody.innerHTML = "";
@@ -7834,16 +8197,25 @@
         const have = owns(it), on = wornId === it.id;
         const el = document.createElement("button");
         el.className = "tal" + (on ? " on" : "") + (have ? "" : " locked");
+        // Locked stock is shown in full — its real colours and its real name. Greying it to a
+        // silhouette and putting the price where the name goes hid the two things you need in
+        // order to want it, and the price is what tells you it is locked anyway.
+        // Price on top, the thing itself in the middle, its name underneath — the order you
+        // read a price tag in. An owned item still gets the row, hidden: buying something must
+        // not make its icon and name jump up the tile, and a cell that reflows on purchase
+        // makes the whole grid twitch as you shop.
+        const pr = document.createElement("span"); pr.className = "price";
+        pr.appendChild(coinChip(11));
+        const pn = document.createElement("span"); pn.textContent = it.cost;
+        pr.appendChild(pn);
+        // The worn item says so where its price used to be — same slot, so nothing moves.
+        if (on) { pr.textContent = "EQUIPPED"; pr.classList.add("equipped"); }
+        else if (have) pr.style.visibility = "hidden";
+        el.appendChild(pr);
         const sc = document.createElement("canvas"); sc.width = 96; sc.height = 96;
-        const sg = sc.getContext("2d");
-        if (it.swatch) it.swatch(sg, 96);
-        if (!have) {                                   // unaffordable/unowned: greyed silhouette
-          sg.globalCompositeOperation = "source-atop";
-          sg.fillStyle = "rgba(120,124,150,0.85)"; sg.fillRect(0, 0, 96, 96);
-          sg.globalCompositeOperation = "source-over";
-        }
+        if (it.swatch) it.swatch(sc.getContext("2d"), 96);
         const nm = document.createElement("span");
-        nm.textContent = have ? it.name : it.cost + " ◆";
+        nm.textContent = it.name;
         el.appendChild(sc); el.appendChild(nm);
         el.onclick = () => {
           Sound.unlock();
@@ -7862,6 +8234,7 @@
       const go = btn("Carry on",
                      () => (menuReturn === "overlay" ? closeMenu() : buildMenu("main")), true);
       go.className = "shop-go";
+      labelWithArrow(go, "Carry on");
       menuBody.appendChild(go);
       return;
     }
@@ -7907,6 +8280,7 @@
       const back = btn("Carry on",
                        () => (menuReturn === "overlay" ? closeMenu() : buildMenu("main")), true);
       back.className = "shop-go";
+      labelWithArrow(back, "Carry on");
       menuBody.appendChild(back);
       startRelics();
       return;
@@ -7983,7 +8357,9 @@
     // the menu header IS the title, small: stacked over two lines, tilted and extruded
     title.innerHTML = "Tile<br>Runner";
     title.className = "logo";
-    menuBody.appendChild(btn("Resume", closeMenu));
+    const resume = btn("Resume", closeMenu);
+    labelWithArrow(resume, "Resume");
+    menuBody.appendChild(resume);
     menuBody.appendChild(btn("Restart Level", () => { loadLevel(levelIdx); closeMenu(); }));
     menuBody.appendChild(btn("Tileverse", () => buildMenu("levels")));
     // The balance belongs on the way in, not two taps deep: the question "can I afford
@@ -7999,6 +8375,9 @@
     const ver = document.createElement("div"); ver.className = "menu-ver"; ver.textContent = VERSION;
     menuBody.appendChild(ver);
   }
+
+  // The level's backing and its count-in belong to the level. Anywhere else has its own tune.
+  Sound.setMusicGate(() => !paused && !cineActive && !titleActive);
 
   applyColorblind();   // apply saved colorblind setting on load
 
