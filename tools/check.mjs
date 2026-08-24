@@ -247,8 +247,11 @@ function levelsFrom(file, marker) {
     else ok("sw.js precaches levels.js");
 
     // ---- per-level sanity ----
-    const VALID_INTRO = new Set(["recycle","turn","offscreen","flag","wall","block","saw","key",
-      "door","stone","platform","mdoor","coin","boost","slow","crumble","switch","monster","slider"]);
+    // Read the live keys out of MECHS rather than keeping a list here. A hand-kept copy is a
+    // third place to remember, and it only ever fails the day someone adds a card.
+    const mechBlock = (read("index.html").match(/const MECHS = \{[\s\S]*?\n  \};/) || [""])[0];
+    const VALID_INTRO = new Set([...mechBlock.matchAll(/^    (\w+)\s*:/gm)].map(m => m[1]));
+    if (VALID_INTRO.size < 10) bad("could not read the MECHS keys out of index.html");
     const problems = [];
     truth.forEach((L, i) => {
       const n = i + 1;

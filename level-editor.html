@@ -38,17 +38,26 @@
   .lv .grip{margin-left:auto;opacity:.35;letter-spacing:-1px;}
 
   /* ---- tool matrix (right) ---- */
-  .tools{display:grid;grid-template-columns:repeat(2,1fr);gap:5px;}
-  .tool{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
-        background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px 4px;
-        cursor:pointer;font-size:11px;line-height:1.15;user-select:none;text-align:center;aspect-ratio:1.35;}
+  /* Three across rather than two, and square: the icon is what you aim at, and shrinking the
+     cell around it fits the whole palette on screen without scrolling. The shortcut letters are
+     gone from the face — the keys still work, they just no longer cost every button a line. */
+  .tools{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;}
+  .tool{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+        background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 2px;
+        cursor:pointer;font-size:10px;line-height:1.1;user-select:none;text-align:center;aspect-ratio:1;}
   .tool.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
-  .tool .k{opacity:.4;font-size:10px;}
-  .tool .ic{display:block;width:26px;height:26px;}
+  .tool .ic{display:block;width:22px;height:22px;}
 
   /* ---- per-tool options + help: hidden until their tool is the one in hand ---- */
-  .opts{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:center;max-width:620px;min-height:1px;}
-  .opt{display:inline-flex;align-items:center;gap:6px;}
+  /* The tool's own settings, directly under the palette that chose it — a column, because the
+     rail is 244px and a wrapped row of labelled boxes reads as rubble at that width. The whole
+     block goes when the tool in hand has nothing to set, heading and all. */
+  #toolopts{display:flex;flex-direction:column;gap:6px;background:#0d0b22;border:1px solid var(--line);
+            border-radius:8px;padding:9px 10px;}
+  #toolopts[hidden]{display:none;}
+  .opts{display:flex;flex-direction:column;gap:7px;align-items:stretch;min-height:1px;}
+  .opt{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;}
+  .opts select{flex:1;min-width:0;} .opts input[type=number]{width:60px;}
   .opt[hidden],.tip[hidden]{display:none;}
   .tip{max-width:620px;font-size:11px;opacity:.78;line-height:1.55;background:#0d0b22;
        border:1px solid var(--line);border-radius:8px;padding:9px 11px;}
@@ -92,45 +101,17 @@
     <h2>Tileverse order</h2>
     <div class="lvlist" id="lvlist"></div>
     <button class="act" id="newLvl">+ New blank</button>
+    <button class="act" id="dupLvl">+ Duplicate open level</button>
     <div class="hint">Click to open. Drag a level up or down to change where it falls in the
       game — everything renumbers to match, because the running order <i>is</i> the order in
-      <code>levels.js</code>.</div>
+      <code>levels.js</code>. <b>Duplicate</b> drops a copy of the level you have open into the
+      very next slot and opens it, so a variant starts from the thing it varies.</div>
   </aside>
 
   <!-- ---------- middle: the map ---------- -->
   <main class="stage">
     <canvas id="cv" width="400" height="640"></canvas>
 
-    <div class="opts" id="opts">
-      <span class="opt" data-for="key door"><span class="swab" id="swab"></span></span>
-      <label class="opt" data-for="saw">saw speed <input type="number" id="sawSpeed" value="4000" step="200" min="800"></label>
-      <label class="opt" data-for="saw">saw phase <input type="number" id="sawPhase" value="0" step="0.05" min="0" max="0.95"></label>
-      <label class="opt" data-for="monster">monster speed <input type="number" id="monSpeed" value="2200" step="100" min="400"></label>
-      <label class="opt" data-for="monster">monster <select id="monPick">
-        <option value="hrail">Horizontal rail</option>
-        <option value="vrail">Vertical rail</option>
-        <option value="patrol">Patrol (waypoints)</option>
-        <option value="square">Square loop</option>
-        <option value="wander">Wanderer</option>
-        <option value="trap">Trap</option>
-      </select></label>
-      <label class="opt" data-for="stone">stone hp <input type="number" id="stoneHp" value="2" step="1" min="1" max="5"></label>
-      <label class="opt" data-for="talisman">talisman <select id="talPick">
-        <option value="clock">Hands of Time</option>
-        <option value="magnet">Cosmic Magnetite</option>
-        <option value="star">Cloak of Light</option>
-        <option value="finger">Hammer of God</option>
-        <option value="mush">Mushroom</option>
-      </select></label>
-      <label class="opt" data-for="platform">platform shape <select id="pfShape">
-        <option value="ns">│ straight N–S</option>
-        <option value="ew">─ straight E–W</option>
-        <option value="ne">└ elbow N–E</option>
-        <option value="es">┌ elbow E–S</option>
-        <option value="sw">┐ elbow S–W</option>
-        <option value="wn">┘ elbow W–N</option>
-      </select></label>
-    </div>
 
     <div id="tips">
       <div class="tip" data-for="wall">Drag to paint <b>walls</b>. Right-drag erases.</div>
@@ -160,8 +141,10 @@
         the blade past an end or off the line, or drag any other rail cell, to move the whole saw.</div>
       <div class="tip" data-for="monster"><b>Monster</b>: pick the kind first. <i>Horizontal</i> and
         <i>vertical rail</i> monsters slide along a rail exactly as the saws they replaced — drop one
-        and drag its ends. A <i>square loop</i> circles a ring; a <i>wanderer</i> picks a fresh route
-        through the level every single run; a <i>trap</i> sits still, yawns open wide enough to run
+        and drag its ends. A <i>square loop</i> circles a ring; a <i>hunter</i> is a
+        malevolent tile entity that comes for the runner — it walks the shortest open route to
+        him, around walls rather than into them, and re-thinks it at every cell; a <i>trap</i>
+        sits still, yawns open wide enough to run
         through, then snaps shut on whatever is in it. Clicking an existing monster re-applies the kind
         and speed boxes. Only <i>patrol</i> is drawn by hand: click each cell of its route in turn — the
         first click starts the path, every click after adds a waypoint. <b>Enter</b> finishes it as a
@@ -222,20 +205,58 @@
   <aside class="rail">
     <h2>Tile types</h2>
     <div class="tools" id="tools">
-      <div class="tool sel" data-tool="wall">Wall <span class="k">1</span></div>
-      <div class="tool" data-tool="erase">Erase <span class="k">0</span></div>
-      <div class="tool" data-tool="start">Start <span class="k">2</span></div>
-      <div class="tool" data-tool="tile">Tile <span class="k">3</span></div>
-      <div class="tool" data-tool="goal">Goal <span class="k">5</span></div>
-      <div class="tool" data-tool="block">Block <span class="k">6</span></div>
-      <div class="tool" data-tool="saw">Saw <span class="k">7</span></div>
-      <div class="tool" data-tool="monster">Monster <span class="k">M</span></div>
-      <div class="tool" data-tool="stone">Stone <span class="k">S</span></div>
-      <div class="tool" data-tool="platform">Platform <span class="k">P</span></div>
-      <div class="tool" data-tool="talisman">Talisman <span class="k">T</span></div>
-      <div class="tool" data-tool="coin">Coin <span class="k">C</span></div>
-      <div class="tool" data-tool="key">Key <span class="k">8</span></div>
-      <div class="tool" data-tool="door">Door <span class="k">9</span></div>
+      <div class="tool sel" data-tool="wall">Wall</div>
+      <div class="tool" data-tool="erase">Erase</div>
+      <div class="tool" data-tool="start">Start</div>
+      <div class="tool" data-tool="tile">Tile</div>
+      <div class="tool" data-tool="goal">Goal</div>
+      <div class="tool" data-tool="block">Block</div>
+      <div class="tool" data-tool="saw">Saw</div>
+      <div class="tool" data-tool="monster">Monster</div>
+      <div class="tool" data-tool="stone">Stone</div>
+      <div class="tool" data-tool="platform">Platform</div>
+      <div class="tool" data-tool="talisman">Talisman</div>
+      <div class="tool" data-tool="coin">Coin</div>
+      <div class="tool" data-tool="key">Key</div>
+      <div class="tool" data-tool="door">Door</div>
+    </div>
+
+    <!-- the selected tool's own settings, popped in under the palette -->
+    <div id="toolopts" hidden>
+      <h2>Options</h2>
+      <div class="opts" id="opts">
+        <span class="opt" data-for="key door"><span class="swab" id="swab"></span></span>
+        <label class="opt" data-for="saw">saw speed <input type="number" id="sawSpeed" value="4000" step="200" min="800"></label>
+        <label class="opt" data-for="saw">saw phase <input type="number" id="sawPhase" value="0" step="0.05" min="0" max="0.95"></label>
+        <label class="opt" data-for="monster">monster speed <input type="number" id="monSpeed" value="2200" step="100" min="400"></label>
+        <label class="opt" data-for="monster">monster <select id="monPick">
+          <option value="hrail">Horizontal rail</option>
+          <option value="vrail">Vertical rail</option>
+          <option value="patrol">Patrol (waypoints)</option>
+          <option value="square">Square loop</option>
+          <option value="hunter">Hunter</option>
+          <option value="trap">Trap</option>
+        <option value="stealth">Stealth hunter</option>
+        </select></label>
+        <label class="opt" data-for="stone">stone hp <input type="number" id="stoneHp" value="2" step="1" min="1" max="5"></label>
+        <label class="opt" data-for="talisman">talisman <select id="talPick">
+          <option value="clock">Hands of Time</option>
+          <option value="magnet">Cosmic Magnetite</option>
+          <option value="star">Cloak of Light</option>
+          <option value="finger">Hammer of God</option>
+          <option value="mush">Mushroom</option>
+        <option value="rewind">Tape of Regret</option>
+        <option value="pulse">Bell of Unmaking</option>
+        </select></label>
+        <label class="opt" data-for="platform">platform shape <select id="pfShape">
+          <option value="ns">│ straight N–S</option>
+          <option value="ew">─ straight E–W</option>
+          <option value="ne">└ elbow N–E</option>
+          <option value="es">┌ elbow E–S</option>
+          <option value="sw">┐ elbow S–W</option>
+          <option value="wn">┘ elbow W–N</option>
+        </select></label>
+      </div>
     </div>
   </aside>
 
@@ -272,7 +293,12 @@ function toWorking(o){
   const w = cloneLvl(o);
   w.walls = new Set((o.walls||[]).map(a=>keyOf(a[0],a[1])));
   w.blocks = (o.blocks||[]).map(b=>({...b}));
-  w.hazards = (o.hazards||[]).map(h=>({phase:0, ...h}));   // starting phase, 0..1 of the ping-pong cycle
+  // starting phase, 0..1 of the ping-pong cycle. The hunter answered to "wander" before it had
+  // a name, and a level saved back then still says so — take the old spelling on the way in, so
+  // the kind box shows the right animal and the next save writes the current word.
+  w.hazards = (o.hazards||[]).map(h=>{ const x={phase:0, ...h};
+    if(x.variant==="wander") x.variant="hunter";
+    return x; });
   w.doors = (o.doors||[]).map(d=>d.slice());
   w.keys = (o.keys||[]).map(k=>k.slice());
   w.stone = (o.stone||[]).map(s=>s.slice());   // [c,r,hp] breakable stones
@@ -291,12 +317,13 @@ function toWorking(o){
 // the six legal platform shapes: two connectors each, in the order the surface is drawn
 // The monster family, mirrored from index.html's MONSTER_KINDS — the editor has to draw and
 // place all six, and the colours are how you tell them apart on the board.
-const MON_KINDS = ["hrail","vrail","patrol","square","wander","trap"];
+const MON_KINDS = ["hrail","vrail","patrol","square","hunter","trap","stealth"];
 const MON_COL = { hrail:"#b24dff", vrail:"#4dc9ff", patrol:"#b24dff",
-                  square:"#ff9b3d", wander:"#7dff6b", trap:"#ff5c5c" };
+                  square:"#ff9b3d", hunter:"#6b7192", trap:"#ff5c5c", stealth:"#cfd8ff" };
 const monVariant = h => h.variant || (h.path ? "patrol" : (h.axis||"h")==="v" ? "vrail" : "hrail");
-const TAL_IDS = ["clock","magnet","star","finger","mush"];
-const TAL_COL = {clock:"#8fd8ff", magnet:"#ff6d6d", star:"#ffd24a", finger:"#ffe9a8", mush:"#ff8fc8"};
+const TAL_IDS = ["clock","magnet","star","finger","mush","rewind","pulse"];
+const TAL_COL = {clock:"#8fd8ff", magnet:"#ff6d6d", star:"#ffd24a", finger:"#ffe9a8", mush:"#ff8fc8",
+                 rewind:"#9ad9b0", pulse:"#c9b6ff"};
 const PF_SHAPES = ["ns","ew","ne","es","sw","wn"];
 const PF_OPP = { n:"s", s:"n", e:"w", w:"e" };
 const PF_VEC = { n:[0,-1], s:[0,1], e:[1,0], w:[-1,0] };
@@ -426,7 +453,7 @@ function monCells(h){
     for(let i=h.lo;i<=h.hi;i++) out.push(hz?[i,h.r]:[h.c,i]);
     return out;
   }
-  if (v==="wander" || v==="trap") return [[h.c,h.r]];
+  if (v==="hunter" || v==="stealth" || v==="trap") return [[h.c,h.r]];
   const out=[], p=h.path||[];
   for(let i=0;i<p.length-1;i++){
     const [c1,r1]=p[i], [c2,r2]=p[i+1];
@@ -439,13 +466,33 @@ function monCells(h){
 // The patrol being drawn right now, if any. Kept out of L.hazards until it is finished,
 // so an abandoned draft never ends up in the level.
 let monDraft = null;
+// No two monsters may share a square, whatever route the click took to get here. The old
+// guard only asked about the cell under the pointer, which left three ways to stack them: a
+// rail dropped so that its far end crosses one, a patrol drawn through one, and a square loop
+// whose ring passes over one. This asks about EVERY cell the new monster would occupy.
+function monClash(cells, ignore){
+  const busy = new Set();
+  for (const h of L.hazards){
+    if(!isMon(h) || h === ignore) continue;
+    for (const [c,r] of monCells(h)) busy.add(c+","+r);
+  }
+  return cells.find(([c,r]) => busy.has(c+","+r)) || null;
+}
+// ...and the one line that refuses. Returns true when the caller should give up.
+function monBlocked(h){
+  const at = monClash(monCells(h));
+  if(!at) return false;
+  setStatus("there is already a monster on " + at[0] + "," + at[1] + " — one to a square");
+  return true;
+}
 function finishMonster(loop){
   if(!monDraft) return;
   if(monDraft.path.length < 2){ monDraft=null; setStatus("monster needs at least two waypoints — draft dropped"); return; }
-  pushUndo();
   const h = { kind:'monster', variant:'patrol', path: monDraft.path.map(p=>p.slice()),
               speed: +$("monSpeed").value||2200 };
   if(loop) h.loop = true;
+  if(monBlocked(h)){ monDraft = null; draw(); return; }
+  pushUndo();
   L.hazards.push(h);
   monDraft = null;
   setStatus("monster placed — " + h.path.length + " waypoints, " + (loop?"looping":"there and back"));
@@ -457,7 +504,9 @@ function placeMonster(c,r){
   if (kind !== "patrol" && !monDraft){
     const hit = L.hazards.find(h=>h.kind==="monster" && monCells(h).some(x=>x[0]===c&&x[1]===r));
     if (hit){ hit.variant = kind; hit.speed = speed; setStatus("monster -> "+kind); return; }
-    pushUndo(); L.walls.delete(keyOf(c,r));
+    // Built first, tested, and only then pushed — the refusal has to know the shape of the
+    // thing, and a rail or a ring is several cells wide.
+    let cand;
     if (kind === "hrail" || kind === "vrail"){
       const d = defaultRail(c,r); delete d.pos0;
       d.axis = kind === "vrail" ? "v" : "h";        // the picker wins over defaultRail's guess
@@ -465,16 +514,19 @@ function placeMonster(c,r){
         d.lo = Math.max(0, r-1); d.hi = Math.min(L.rows-1, d.lo+2); d.lo = Math.max(0, d.hi-2); }
       if (d.axis === "h" && d.c != null){ d.r = r; delete d.c;
         d.lo = Math.max(0, c-1); d.hi = Math.min(L.cols-1, d.lo+2); d.lo = Math.max(0, d.hi-2); }
-      L.hazards.push({kind:"monster", variant:kind, ...d, speed, phase:0});
-      setStatus(kind+" placed — drag its ends to reshape the rail");
+      cand = {kind:"monster", variant:kind, ...d, speed, phase:0};
     } else if (kind === "square"){
       const w = Math.min(2, L.cols-1-c), hh = Math.min(2, L.rows-1-r);
-      L.hazards.push({kind:"monster", variant:"square", c, r, w:Math.max(1,w), h:Math.max(1,hh), speed});
-      setStatus("square loop placed");
+      cand = {kind:"monster", variant:"square", c, r, w:Math.max(1,w), h:Math.max(1,hh), speed};
     } else {
-      L.hazards.push({kind:"monster", variant:kind, c, r, speed});
-      setStatus(kind+" placed");
+      cand = {kind:"monster", variant:kind, c, r, speed};
     }
+    if (monBlocked(cand)) return;
+    pushUndo(); L.walls.delete(keyOf(c,r));
+    L.hazards.push(cand);
+    setStatus(kind === "hrail" || kind === "vrail"
+      ? kind+" placed — drag its ends to reshape the rail"
+      : kind === "square" ? "square loop placed" : kind+" placed");
     return;
   }
   if(monDraft){
@@ -787,9 +839,9 @@ function draw(){
     } else if (v==="square"){
       const w=h.w||2, hh=h.h||2;
       drawPatrol([[h.c,h.r],[h.c+w,h.r],[h.c+w,h.r+hh],[h.c,h.r+hh]], true, col, "#12102a");
-    } else if (v==="wander" || v==="trap"){
+    } else if (v==="hunter" || v==="stealth" || v==="trap"){
       const [x,y]=centerOf(h.c,h.r);
-      if (v==="wander"){                            // its route is decided at run time
+      if (v==="hunter" || v==="stealth"){           // it goes wherever the runner is
         ctx.save(); ctx.strokeStyle=col; ctx.globalAlpha=0.5; ctx.lineWidth=2;
         ctx.setLineDash([4,4]); ctx.beginPath(); ctx.arc(x,y,CELL*0.42,0,7); ctx.stroke();
         ctx.setLineDash([]); ctx.restore();
@@ -1274,6 +1326,7 @@ document.querySelectorAll(".tool").forEach(t=> t.addEventListener("click", ()=>s
 function selTool(t){ tool=t; document.querySelectorAll(".tool").forEach(el=>el.classList.toggle("sel",el.dataset.tool===t));
   document.querySelectorAll(".opt,.tip").forEach(el=>{
     el.hidden = !(el.dataset.for||"").split(/\s+/).includes(t); });
+  $("toolopts").hidden = !document.querySelector("#opts .opt:not([hidden])");
   draw(); }
 
 // swatches
@@ -1350,6 +1403,23 @@ function reorder(from, to){
   saveAuto(); rebuildLevelList(); loadLevel(nowN);
   setStatus("moved L"+(from+1)+" to slot "+(to+1)+" — renumbered 1–"+arr.length);
 }
+// A copy of what is on screen, in the slot straight after it. The whole run renumbers, the
+// same as a drag does — a duplicate is an INSERT, not an append, or every variant would end
+// up at the far end of the campaign away from the level it came from. Unsaved edits count:
+// commit() first, so you copy the map you are looking at rather than the last one you saved.
+$("dupLvl").onclick=()=>{
+  if(!L) return;
+  commit();
+  const arr=allLevels(), at=arr.findIndex(l=>l.n===L.n);
+  if(at<0) return;
+  const copy=cloneLvl(toStored(L));
+  if((copy.name||"").trim()) copy.name = copy.name.trim() + " copy";
+  arr.splice(at+1, 0, copy);
+  edited={};
+  arr.forEach((l,i)=>{ const c=cloneLvl(l); c.n=i+1; edited[i+1]=c; });
+  saveAuto(); rebuildLevelList(); loadLevel(at+2);
+  setStatus("duplicated L"+(at+1)+" into slot "+(at+2)+" — renumbered 1–"+arr.length);
+};
 $("newLvl").onclick=()=>{
   const n=Math.max(...EMBEDDED.map(l=>l.n), ...Object.keys(edited).map(Number), 0)+1;
   edited[n]={n,start:[2,7],init:[[2,6],[2,5]],goal:[2,0],cols:5,rows:8,intro:[],walls:[],cps:0.8};

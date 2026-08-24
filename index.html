@@ -24,7 +24,9 @@
   }
   :root {
     --bg:        #0d0b1a;
+    --shop-w:    520px;      /* the widest the shop's rack ever gets — portrait, whatever the screen */
     --panel:     #17142b;
+    --panel-lo:  #0b0918;      /* its own colour darkened, for the plate it stands on */
     --grid-line: #221d40;
     --ink:       #e8e6ff;
     --dim:       #6f68a8;
@@ -50,9 +52,15 @@
     -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent;
     touch-action:none; overscroll-behavior:none;
   }
+  /* No bottom inset. The board is the backdrop of the whole screen and should run to the
+     physical edge — padding it away from the home indicator left a band of dead page across
+     the foot of every iPhone and iPad, which read as the game being letterboxed.
+     Nothing is lost by it: every control that has to clear the indicator is position:fixed
+     and carries its own env() offset, so they sit exactly where they did. The top inset stays
+     — that one is a notch cut OUT of the screen, not a strip drawn over it. */
   #app {
     position:fixed; inset:0; display:flex; flex-direction:column; align-items:center;
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
   }
   header { text-align:center; padding:10px 0 6px; width:100%; }
   header h1 {
@@ -83,12 +91,21 @@
   #overlay.lose #ov-score { display:none; }
   #pauseFloat {
     position:fixed; z-index:15; padding:0; cursor:pointer;
-    top:calc(env(safe-area-inset-top) + 12px); right:calc(env(safe-area-inset-right) + 12px);
-    /* square, like every other button in the UI — the circle was the odd one out */
-    width:44px; height:44px; border-radius:0; display:flex; align-items:center; justify-content:center; gap:5px;
-    background:rgba(23,20,43,0.72); border:2px solid var(--grid-line); box-shadow:2px 2px 0 var(--shadow);
+    top:calc(env(safe-area-inset-top) + var(--hud-m, 12px));
+    right:calc(env(safe-area-inset-right) + var(--hud-m, 12px));
+    /* Square, like every other button in the UI — the circle was the odd one out — and exactly
+       as tall as the speedo across from it. One var drives BOTH sides of the box, so it cannot
+       stop being square; box-sizing keeps the 2px border inside that measurement. */
+    width:var(--hud-h, 44px); height:var(--hud-h, 44px); aspect-ratio:1;
+    border-radius:0; display:flex; align-items:center; justify-content:center; gap:5px;
+    /* No outline, and the same shadow every other button wears — straight below rather than
+       down-and-right. The border stays, transparent, because the height is matched against the
+       speedo by measurement and box-sizing counts it: dropping it would shorten the button by
+       4px and the pair would stop lining up. */
+    background:rgba(23,20,43,0.72); border:2px solid transparent; box-shadow:0 4px 0 #0b0918;
   }
-  #pauseFloat span { width:4px; height:16px; background:var(--ink); border-radius:1px; }
+  /* the two bars scale with the button rather than sitting at a fixed 16px inside a box that moves */
+  #pauseFloat span { width:9%; height:36%; min-width:3px; background:var(--ink); border-radius:1px; }
   /* The whirlpool eats the canvas, but the two floating buttons are DOM — so they get
      pulled in too rather than simply blinking out a moment before everything else. */
   body.vortex #pauseFloat, body.vortex #power {
@@ -142,7 +159,7 @@
   #power .pw.live { opacity:1; }
   /* armed and waiting to be aimed (the Hammer) */
   #power .pw.armed canvas { filter:drop-shadow(0 0 6px var(--goal)); }
-  #pauseFloat:active { transform:translate(2px,2px); box-shadow:none; }
+  #pauseFloat:active { transform:translateY(4px); box-shadow:none; }
   /* A talisman maze's win card. Bigger title, the charm itself where the stars normally go,
      and no score furniture — this screen is about the object, not the run. */
   #overlay.relic #ov-title { font-size:26px; letter-spacing:3px; color:var(--goal); }
@@ -154,14 +171,18 @@
     color:var(--dim); text-transform:none; font-weight:700; max-width:34ch; margin:2px auto 0; }
   #mechpop {
     position:fixed; inset:0; display:none; align-items:center; justify-content:center;
-    background:rgba(5,4,13,0.86); z-index:35;
+    background:rgba(5,4,13,0.32); z-index:35;
     padding:calc(env(safe-area-inset-top) + 24px) calc(env(safe-area-inset-right) + 24px)
             calc(env(safe-area-inset-bottom) + 24px) calc(env(safe-area-inset-left) + 24px);
   }
   #mechpop.show { display:flex; }
+  /* No outline, and the shadow straight below rather than down-and-right — the same rule the
+     buttons follow. The border stays, transparent, so nothing shifts by 3px if a state ever
+     colours it. The scrim behind is light on purpose now: the card is the thing being read,
+     but the level it is telling you about should still be legible underneath it. */
   .mech-card {
     max-width:300px; text-align:center; background:var(--panel);
-    border:3px solid var(--grid-line); box-shadow:5px 5px 0 var(--shadow); padding:20px 22px 18px;
+    border:3px solid transparent; box-shadow:0 6px 0 #0b0918; padding:20px 22px 18px;
   }
   .mech-tag { font-size:var(--body); letter-spacing:3px; text-transform:uppercase; color:var(--accent); font-weight:900; }
   #mech-icon { width:112px; height:112px; margin:8px auto 4px; display:block; }
@@ -179,7 +200,8 @@
   button {
     font-family:inherit; font-weight:900; text-transform:uppercase; letter-spacing:2px; font-size:var(--btn);
     color:var(--ink); background:var(--panel); border:3px solid transparent;
-    box-shadow:0 4px 0 #0b0918; padding:11px 16px; cursor:pointer; touch-action:manipulation;
+    /* the shadow is the button's OWN colour darkened, the rule the gold and amber ones follow */
+    box-shadow:0 4px 0 var(--panel-lo); padding:11px 16px; cursor:pointer; touch-action:manipulation;
   }
   button:active { transform:translateY(4px); box-shadow:none; }
   #overlay {
@@ -210,10 +232,11 @@
   /* The one button you press after every single level, so it gets twice the height and a
      chequer of its own — the finish-line flag, at an angle and faint enough to be a texture
      rather than a pattern. Two gradients at 45 degrees make the squares; nothing is loaded. */
-  /* A shade lighter than --panel. At #17142b it sat at luminance 29 against a backdrop that
-     is often darker still, so its left and right edges simply were not visible — which is why
-     it read as narrower than the gold button beside it, despite both measuring 330px to the
-     pixel. Nothing about the box changed; it just has edges you can find now. */
+  /* A shade lighter than --panel. At the near-black it used to be it sat at luminance 29
+     against a backdrop that is often darker still, so its left and right edges simply were not
+     visible — which is why it read as narrower than the gold button beside it, despite both
+     measuring 330px to the pixel. Nothing about the box changed; it just has edges you can
+     find — and now that --panel is a colour rather than a near-black, more easily still. */
   /* Its own colour, darkened — the shared near-black slab under it read as a gap between
      this button and the gold one below, which is what made the two look like different widths
      even though they measure identically. A shadow the colour of the thing casting it reads as
@@ -223,21 +246,24 @@
     box-shadow:0 4px 0 #171233;
     background-color:#2b2552;
     background-image:
-      linear-gradient(45deg, rgba(255,255,255,0.045) 25%, transparent 25%, transparent 75%,
-                             rgba(255,255,255,0.045) 75%),
-      linear-gradient(45deg, rgba(255,255,255,0.045) 25%, transparent 25%, transparent 75%,
-                             rgba(255,255,255,0.045) 75%);
+      linear-gradient(45deg, rgba(255,255,255,0.03) 25%, transparent 25%, transparent 75%,
+                             rgba(255,255,255,0.03) 75%),
+      linear-gradient(45deg, rgba(255,255,255,0.03) 25%, transparent 25%, transparent 75%,
+                             rgba(255,255,255,0.03) 75%);
     background-size:18px 18px;
     background-position:0 0, 9px 9px;
   }
   /* The same finish-line chequer on the gold, cut in a darker gold so it reads at all — white
      over #e0aa1e is nearly invisible, where a shade of the button's own colour is not. */
-  #ov-shop, #menu-body button.gold {
+  #ov-shop, #menu-body button.gold, #menu-body button.amber,
+  .tal-grid .tal.locked.preview, .tal-grid .tal.on, #menu-body .shop-buy {
+    /* WHITE squares, not brown ones: the chequer should lift the colour it sits on rather than
+       dirty it. On the gold it reads as a sheen; on the green it reads as the same sheen. */
     background-image:
-      linear-gradient(45deg, rgba(90,62,4,0.16) 25%, transparent 25%, transparent 75%,
-                             rgba(90,62,4,0.16) 75%),
-      linear-gradient(45deg, rgba(90,62,4,0.16) 25%, transparent 25%, transparent 75%,
-                             rgba(90,62,4,0.16) 75%);
+      linear-gradient(45deg, rgba(255,255,255,0.13) 25%, transparent 25%, transparent 75%,
+                             rgba(255,255,255,0.13) 75%),
+      linear-gradient(45deg, rgba(255,255,255,0.13) 25%, transparent 25%, transparent 75%,
+                             rgba(255,255,255,0.13) 75%);
     background-size:18px 18px;
     background-position:0 0, 9px 9px;
   }
@@ -309,6 +335,13 @@
   body.menu-open #mechpop { display:none !important; }
   #menu.top { align-items:flex-start; }
   .menu-card { width:100%; max-width:330px; text-align:center; }
+  /* The shop is a RACK, not a list of options. 330px is the width a column of buttons wants;
+     the shop's content is its squares, and they should have the screen. Capped at a portrait
+     width all the same — this is a phone game, and a shop stretched across a desktop turns six
+     tabs into six dinner plates. The squares keep their aspect-ratio, so the cap is the only
+     number here: nothing sets a size, and nothing has to be kept in step with anything else. */
+  #menu.wide .menu-card { max-width:var(--shop-w); }
+  #menu.wide #menu-body .shop-go { max-width:var(--shop-w); width:calc(100% - 44px); }
   .menu-ver { font-size:var(--body); letter-spacing:2px; color:var(--dim); margin-top:14px; opacity:0.7; }
   .menu-card h2 { font-size:18px; font-weight:900; letter-spacing:2px; text-transform:uppercase; color:var(--track);
     text-shadow:2px 2px var(--shadow); margin-bottom:16px; }
@@ -330,7 +363,13 @@
      wipe the chequer set above it. */
   #menu-body button.gold, #ov-shop { background-color:#e0aa1e; border-color:transparent;
     color:#38270a; box-shadow:0 4px 0 #8a6410; }
-  #menu-body button.gold:active, #ov-shop:active { transform:translateY(4px); box-shadow:none; }
+  /* The talismans are the other thing you collect, so they get the shop's treatment in their
+     own metal: orange rather than gold, same chequer, same shadow rule — the button's own
+     colour darkened — so the pair read as a set without reading as the same button. */
+  #menu-body button.amber { background-color:#e07a1e; border-color:transparent;
+    color:#3a1d05; box-shadow:0 4px 0 #8a4610; }
+  #menu-body button.gold:active, #ov-shop:active,
+  #menu-body button.amber:active { transform:translateY(4px); box-shadow:none; }
   /* label · coin · count, on one line and centred as a group.
      `> button` matters: a shop item also contains a canvas.wallet — the tile in its price row —
      and without the child combinator this rule matched all 66 of them, forcing them centred
@@ -390,18 +429,46 @@
   /* Something you can still buy is tinted with the currency that buys it — a faint gold wash,
      enough to sort the shelf into "yours" and "for sale" at a glance without shouting. Its own
      price is already gold, so the tile reads as one object rather than a label on a plate. */
-  .tal-grid .tal.locked { background:rgba(224,170,30,0.13);
-                          box-shadow:0 4px 0 rgba(60,42,6,0.55); }
-  .tal-grid .tal.locked:active { background:rgba(224,170,30,0.22); }
-  .tal-grid .tal.locked > span:last-child { color:#f2e2b4; }   /* its name, warmed to match */
+  /* Stock you do not own is GREY. It used to wear a wash of the gold that buys it, which read
+     as "this one is special" rather than "this one is not yours yet" — and put a third gold on
+     a screen that already has the purse and the buy banner arguing over the colour. */
+  .tal-grid .tal.locked { background:rgba(150,156,172,0.15);
+                          box-shadow:0 4px 0 rgba(20,22,32,0.55); }
+  .tal-grid .tal.locked:active { background:rgba(150,156,172,0.26); }
+  /* The one you have tried on goes fully gold — the colour of the money it wants — and its
+     price row grows the word PURCHASE in front of the number. No banner, nothing added to the
+     cell: the row was already there, so nothing moves and the grid cannot twitch as you browse. */
+  /* background-COLOR, not the shorthand: the chequer above is a background-IMAGE, and
+     `background:` would wipe it. Same trap the gold buttons carry a note about. */
+  .tal-grid .tal.locked.preview { background-color:#e0aa1e; box-shadow:0 4px 0 #8a6410;
+                                  color:#000; }
+  /* EVERY span, not just the price row and the name: `.tal-grid .tal span` sets white, and the
+     word and the number inside the price row are spans of their own — so colouring their parent
+     black left the two bits of text that actually say the price still white on gold. */
+  .tal-grid .tal.locked.preview .price,
+  .tal-grid .tal.locked.preview span,
+  .tal-grid .tal.locked.preview > span:last-child { color:#000; }
+  .tal-grid .tal.locked.preview:active { background-color:#f0be3a; }
+  /* Tried on but out of reach. Gold is the colour of the money, and wearing it on something
+     you cannot buy is the offer made in a currency you do not have — grey says the same thing
+     the price already said, in the same place, without promising anything. */
+  .tal-grid .tal.locked.preview.poor, #menu-body .shop-buy.poor {
+    background-color:#9aa1b2; box-shadow:0 4px 0 #4c5163; }
+  .tal-grid .tal.locked.preview.poor:active { background-color:#aab1c2; }
+  .tal-grid .tal.locked > span:last-child { color:#d8dceb; }   /* its name, cooled to match */
   /* what the talisman actually does — the reason to pick one over another */
   .tal-grid .tal .tal-blurb { font-size:9px; letter-spacing:0.2px; line-height:1.1; font-style:normal;
     text-transform:none; font-weight:700; color:var(--track); text-align:center; }
   /* What is worn reads as a lit plate rather than a ringed one — an outline on a square that
      already has a border competes with it, where a brighter ground just says "this one". */
-  .tal-grid .tal.on { background:rgba(125,255,107,0.16); border-color:transparent;
-                      box-shadow:0 4px 0 rgba(20,58,12,0.55); color:#eaffe6; }
-  .tal-grid .tal.on span { color:#dcffd4; }
+  /* What you are WEARING is a solid green plate with the same chequer the gold ones carry, so
+     the two states of a shelf — worn, and for sale — read as the same kind of thing in two
+     colours rather than as two different treatments. background-COLOR again: the shorthand
+     would wipe the chequer. */
+  .tal-grid .tal.on { background-color:#5fd44e; border-color:transparent;
+                      box-shadow:0 4px 0 #2b7a22; color:#000; }
+  .tal-grid .tal.on span, .tal-grid .tal.on .price.equipped { color:#000; }
+  .tal-grid .tal.on:active { background-color:#78e468; }
   /* The talisman shelf. Deliberately NOT buttons: no border, no plate, no shadow — a talisman
      is a thing you found, and dressing it in the same chrome as RESUME made it stock. What
      marks the worn one is a soft halo of its own colour, not a pressed-in frame. */
@@ -419,6 +486,19 @@
   .relic.on span { color:var(--goal); }
   /* SHOP wears the big title treatment — it is a destination, not a sub-menu */
   #menu-title.shop { font-size:40px; letter-spacing:7px; margin-bottom:4px; }
+  /* The two shelves you actually own things on get the card headings' treatment: the same
+     size, the same -4 degree tilt, and the same layered extrusion rather than a flat drop —
+     built from the heading's OWN colour, which is what makes it read as carved out of the
+     word instead of a shadow behind it. Each in its own metal, matching the button that
+     opened it, so arriving on the screen confirms the button you pressed. */
+  #menu-title.big { font-size:46px; letter-spacing:2px; line-height:1.05;
+    transform:rotate(-4deg); margin-bottom:14px; }
+  #menu-title.big.gilt { color:#ffd24a;
+    text-shadow:1px 1px 0 #c79418, 2px 2px 0 #a87b18, 3px 3px 0 #8a6410, 4px 4px 0 #6b4d0c,
+                5px 6px 10px rgba(5,4,13,0.65); }
+  #menu-title.big.amber { color:#ffa24a;
+    text-shadow:1px 1px 0 #c76a18, 2px 2px 0 #a85618, 3px 3px 0 #8a4610, 4px 4px 0 #6b360c,
+                5px 6px 10px rgba(5,4,13,0.65); }
   /* the shop: him at the top, tucked right under the title, then a tab per category */
   .shop-fig { width:100%; max-width:230px; margin:-6px auto 0; }
   .shop-fig canvas { display:block; width:100%; height:auto; }
@@ -447,8 +527,52 @@
   /* max-height is set in JS by fitScrollRack(), because the only honest answer is "however
      far it is from here down to the button", and CSS cannot see where either of them landed.
      44vh was a guess that left a gap on tall screens and clipped a row on short ones. */
+  /* No padding on the SIDES. It was 2px all round, which inset the stock by two pixels from
+     the tabs above it and the button below — small enough to look like a mistake rather than a
+     margin, which is exactly what it was. Vertical padding stays: that end scrolls. */
   .shop-rack { overflow-y:auto; overscroll-behavior:contain;
-    -webkit-overflow-scrolling:touch; padding:2px; margin-bottom:10px; }
+    -webkit-overflow-scrolling:touch; padding:2px 0; margin-bottom:10px; }
+  /* The pane you drag reaches the edges of the screen even though the stock in it does not:
+     a thumb landing in the margin beside the shelf should still scroll the shelf. The card is
+     capped and centred, so the rack breaks out of it to the viewport and the grid is centred
+     back inside — which is why the grid carries its own width rather than filling its parent. */
+  #menu.wide .shop-rack { margin-left:calc(50% - 50vw); margin-right:calc(50% - 50vw); }
+  /* ...and NOTHING else scrolls. The shop is a fixed frame with one moving part in it; the page
+     itself sliding under the pinned button was the whole reason the button had to be pinned. */
+  #menu.wide { overflow:hidden; }
+  /* ...so the 80px kept clear under the rack for the pinned button is dead space now. The rack
+     already stops short of the button by its own measurement; the reserve only pushed the card
+     past the bottom of the screen and gave the page something to scroll.
+     `.wide.top` and not just `.wide`: the shop is BOTH, and the 80px rule below is written
+     against `.top`. At equal specificity the later rule wins, and it is the later rule. */
+  #menu.wide.top #menu-body { padding-bottom:0; }
+  /* ---- the Tileverse: a trail you walk UP, rather than a grid you scan ----
+     The campaign is an order, and a grid says nothing about order — every cell looks equally
+     like the next one. A single winding line does the whole job: where you have been is below
+     you, where you are going is above, and the distance between two levels is a thing you can
+     see. Level 1 sits at the bottom, so the map opens where the journey started and you climb.
+     Absolute positions on a tall relative box, because the path is a curve and no flow layout
+     draws a curve. */
+  .lvl-map { position:relative; width:100%; }
+  #menu-body .lvl-map .stop {
+    position:absolute; transform:translate(-50%,-50%);
+    width:var(--stop, 62px); height:var(--stop, 62px); padding:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+    font-size:16px; line-height:1;
+  }
+  #menu-body .lvl-map .stop:active { transform:translate(-50%,-50%) translateY(4px); box-shadow:none; }
+  .lvl-map .stop .st { font-size:10px; letter-spacing:0; }
+  .lvl-map .stop .st.none { color:var(--dim); }
+  /* cleared: the same green the shop marks what you are wearing with, so "done" means one
+     thing across the whole game */
+  #menu-body .lvl-map .stop.done { background-color:#2f7a26; color:#eaffe6; }
+  #menu-body .lvl-map .stop.done .st { color:#dcffd4; }
+  /* where you are standing */
+  #menu-body .lvl-map .stop.here { box-shadow:0 0 0 3px var(--track), 0 4px 0 #0b0918; }
+  /* the stepping stones between one level and the next — square, because everything in this
+     game is, and small enough that the levels stay the thing you are looking at */
+  .lvl-map .step { position:absolute; width:9px; height:9px; transform:translate(-50%,-50%);
+                   background:rgba(255,255,255,0.20); }
   /* the way out, and the only thing you can do wrong is not press it */
   /* The way out is pinned to the viewport, not to the end of the rack: the racks are
      different lengths and the shop is top-aligned, so otherwise it wanders down the page and
@@ -461,6 +585,19 @@
     font-size:13px; letter-spacing:2px; padding:14px 10px; line-height:1.2;
   }
   #menu-body .shop-go:active { transform:translateX(-50%) translateY(4px); box-shadow:none; }
+  /* The same offer as the cell, said again where your thumb already is. Pinned directly above
+     the way out, in the same box, so the two read as one stack rather than as a button that
+     has appeared in the middle of the shelf. */
+  #menu-body .shop-buy {
+    position:fixed; left:50%; transform:translateX(-50%);
+    bottom:calc(env(safe-area-inset-bottom) + 16px + var(--go-h, 52px) + 10px);
+    width:calc(100% - 44px); max-width:var(--shop-w); z-index:2;
+    font-size:13px; letter-spacing:2px; padding:14px 10px; line-height:1.2;
+    display:flex; align-items:center; justify-content:center; gap:9px;
+    background-color:#e0aa1e; border-color:transparent; color:#000; box-shadow:0 4px 0 #8a6410;
+  }
+  #menu-body .shop-buy:active { transform:translateX(-50%) translateY(4px); box-shadow:none; }
+  #menu-body .shop-buy canvas { width:17px; height:17px; display:block; }
   /* ...and the rack keeps clear of it, so the last row is never stuck underneath */
   #menu.top #menu-body { padding-bottom:80px; }
   /* what the tab is showing, and what of it is on */
@@ -1477,6 +1614,52 @@
         src.connect(bp); bp.connect(ng); ng.connect(master); src.start(t); src.stop(t + 0.08);
       }
     }
+    // ---- laying track ------------------------------------------------------------
+    // A tile lands twice as often as anything else in this game, so both of these are short,
+    // quiet and DRY — no echo send on the landing itself. A drop that rings would smear across
+    // the next one, and you can drop three in a second.
+    //
+    // The pair say different things. Off the path, nothing was built: a dull thud, one pitch,
+    // falling — the sound of a thing put down. On the path, the track grew: the same landing,
+    // and then a fifth up to the tonic on top of it. The landing is common to both on purpose,
+    // so what you hear added is exactly what was added on the board.
+    function tileThud(vel) {
+      const t = ac.currentTime;
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = "sine";
+      o.frequency.setValueAtTime(165, t); o.frequency.exponentialRampToValueAtTime(78, t + 0.055);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.26*vel, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0006, t + 0.11);
+      o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.13);
+      if (noiseBuf) {                                        // the dusty knock of it settling
+        const src = ac.createBufferSource(); src.buffer = noiseBuf;
+        const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 900;
+        const ng = ac.createGain();
+        ng.gain.setValueAtTime(0.0001, t); ng.gain.exponentialRampToValueAtTime(0.13*vel, t + 0.002);
+        ng.gain.exponentialRampToValueAtTime(0.0006, t + 0.05);
+        src.connect(lp); lp.connect(ng); ng.connect(master); src.start(t); src.stop(t + 0.07);
+      }
+      return t;
+    }
+    function tileDrop() {                                    // parked off the track
+      if (muted || !ac || ac.state !== "running") return;
+      tileThud(0.85);
+    }
+    function tileLaid() {                                    // ...and it became track
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = tileThud(1);
+      // Fifth, then the tonic above it: it arrives somewhere rather than merely rising. This
+      // half DOES go to the echo, so the confirmation sits out in the world the track is in.
+      [19, 24].forEach((semi, i) => {
+        const t = t0 + 0.025 + i*0.055;
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "triangle"; o.frequency.setValueAtTime(BASE * Math.pow(2, semi/12), t);
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.20, t + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.0006, t + 0.20);
+        o.connect(g); g.connect(master); g.connect(sendBus);
+        o.start(t); o.stop(t + 0.24);
+      });
+    }
     // ---- UI ----------------------------------------------------------------------
     // Every button in the game makes this noise. Short, dry, no reverb send: it is a
     // control surface, not part of the world, so it must not sound like it is in the room.
@@ -1695,6 +1878,14 @@
         [12, 16, 19, 24, 28].forEach((semi, i) => ping(semi, i*0.055, 0.5, "triangle", 0.24));
       } else if (id === "finger") {                // a choir stab from on high
         [24, 28, 31, 36].forEach(semi => ping(semi, 0, 1.1, "sine", 0.16));
+      } else if (id === "pulse") {                 // a struck bell, and the air leaving with it
+        [12, 19, 26.4, 31].forEach((semi, i) => ping(semi, i*0.004, 1.4 - i*0.22, "sine", 0.20 - i*0.03));
+        const o = ac.createOscillator(), g = ac.createGain();     // the shove that goes out with it
+        o.type = "sine";
+        o.frequency.setValueAtTime(BASE*1.6, t0); o.frequency.exponentialRampToValueAtTime(BASE*0.28, t0 + 0.42);
+        g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.30, t0 + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0006, t0 + 0.48);
+        o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + 0.52);
       } else {                                     // the Mushroom: a sour, bending chord
         [12, 18, 25].forEach((semi, i) => {
           const t = t0 + i*0.02;
@@ -1806,9 +1997,44 @@
                if (ambTimer) { clearInterval(ambTimer); ambTimer = null; }
                warp(false); }
       else ambientResume(); }
+    // ---- the hunter's heartbeat ---------------------------------------------------------
+    // Not the monster's noise — YOURS. It is the one sound in the game that says something
+    // about the player rather than about the board, which is why it works where a growl did
+    // not: a growl is information you can ignore, a pulse in your own chest is not.
+    // Two thumps, the second softer and close behind the first, low and short so it reads as
+    // felt rather than heard.
+    function heartbeat(v) {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime;
+      const thump = (at, amp) => {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "sine";
+        o.frequency.setValueAtTime(88, t0 + at);
+        o.frequency.exponentialRampToValueAtTime(34, t0 + at + 0.16);
+        g.gain.setValueAtTime(0.0001, t0 + at);
+        g.gain.exponentialRampToValueAtTime(Math.max(0.002, amp), t0 + at + 0.014);
+        g.gain.exponentialRampToValueAtTime(0.0006, t0 + at + 0.20);
+        o.connect(g); g.connect(master);            // dry: a heartbeat is not in the room
+        o.start(t0 + at); o.stop(t0 + at + 0.24);
+      };
+      thump(0, 0.55*v);
+      thump(0.17, 0.34*v);
+    }
+    // Everything the level's music runs through, pulled down while something is closing on
+    // him. Ramped rather than set: a step change in a bus gain is a click.
+    let duckNow = 1;
+    function duck(amount) {
+      if (!ac || !musicBus) return;
+      const target = Math.max(0.12, 1 - Math.max(0, Math.min(1, amount)) * 0.88);
+      if (Math.abs(target - duckNow) < 0.01) return;
+      duckNow = target;
+      musicBus.gain.cancelScheduledValues(ac.currentTime);
+      musicBus.gain.setTargetAtTime(target, ac.currentTime, 0.12);
+    }
     function isMuted() { return muted; }
     return { unlock, clearTile, smash, win, lose, fall, death, boost, slow, coin, key, doorOpen,
              slide, clack, tap, tapBig, power, warp, vortex, crunch, growl,
+             tileDrop, tileLaid, heartbeat, duck,
              ambient,
              swish, introGather, introFlash, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
              levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, setMusicGate,
@@ -1836,7 +2062,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v7.9";                    // shown on the title & pause screens
+  const VERSION = "v8.0";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -1960,6 +2186,18 @@
           g.closePath(); g.fill();
         }
         g.fillRect(x - r*0.72, y - r*0.44, r*0.12, r*0.88); } },
+
+    { id:"pulse", name:"Bell of Unmaking", col:"#c9b6ff", ms:0,
+      face:"#b49df5", edge:"#4a3080",
+      blurb:"Unmakes monsters within two tiles",
+      etch:(g,x,y,r)=>{
+        // three rings going out and a struck centre — the shape of the thing it does
+        g.lineCap="round";
+        [0.34, 0.58, 0.82].forEach((rr, i) => {
+          g.lineWidth = r*(0.13 - i*0.028);
+          g.beginPath(); g.arc(x, y, r*rr, -Math.PI*0.78, Math.PI*0.78); g.stroke();
+        });
+        g.beginPath(); g.arc(x, y, r*0.15, 0, 7); g.fill(); } },
   ];
   // One painter for all five. Each keeps its own metal; the shape, the shading and the
   // engraving are shared, so a talisman can never drift into looking like a different class
@@ -2072,6 +2310,28 @@
     gd.addColorStop(0.80, mid);  gd.addColorStop(1.00, dark);
     return gd;
   };
+  // A highlight travelling across the body on a loop — the thing that separates polished from
+  // merely shiny. A metal gradient alone is a photograph of a reflection; what tells you a
+  // surface is glossy is the reflection MOVING while the object does not.
+  //
+  // It sweeps along the body's own +x, which is the runner's direction of travel, so the glint
+  // runs front to back the way a light he is passing under would. It starts before the leading
+  // edge and finishes past the trailing one, so the band is never seen to appear or vanish
+  // mid-body. The phase is offset a third of a turn so a STILL of it — the shop swatch, drawn
+  // at ts 0 — catches the band on the body rather than parked off the end of it.
+  const glint = (col, ms, wide, alpha) => (g, x, y, w, h, ts) => {
+    const u = (((ts || 0) % ms) / ms + 0.33) % 1;
+    const cx0 = x - w*0.35 + w*1.7*u;
+    const k = Math.max(1, w*wide);
+    // slanted: the two ends of the gradient sit at opposite corners, so the band leans the way
+    // a highlight on a rounded body does rather than standing up like a bar
+    const gd = g.createLinearGradient(cx0 - k, y + h, cx0 + k, y);
+    gd.addColorStop(0, hexA(col, 0));
+    gd.addColorStop(0.5, hexA(col, alpha));
+    gd.addColorStop(1, hexA(col, 0));
+    g.fillStyle = gd; g.fillRect(x, y, w, h);
+  };
+  const gemGlint = glint("#ffffff", 2200, 0.14, 0.85);
   // A hue wheel laid across the body. `speed` is ms per full turn of the wheel.
   const spectrum = (speed, sat, lum, spread) => (g, x, y, w, h, ts) => {
     const gd = g.createLinearGradient(x, y + h, x + w, y);
@@ -2083,11 +2343,14 @@
     { id:"sterling", name:"Sterling", cost:15, body:"#c3ccdb", ink:"#22262e",
       paint: metal("#6f7887", "#aeb8c8", "#dfe6f2", "#ffffff") },
     { id:"bullion",  name:"Bullion",  cost:15, body:"#f0c25c", ink:"#3b2a05",
-      paint: metal("#8a5f10", "#d9a531", "#ffdd82", "#fff6d0") },
+      paint: metal("#8a5f10", "#d9a531", "#ffdd82", "#fff6d0"),
+      sheen: glint("#fff6d0", 2600, 0.26, 0.55) },
     { id:"forge",    name:"Forge",    cost:20, body:"#d98b4a", ink:"#3d1f06",
       paint: metal("#6b3410", "#c9743a", "#f0a86c", "#ffd9b4") },
     { id:"obsidian", name:"Obsidian", cost:20, body:"#26262f", ink:"#dfe4f5",
-      paint: metal("#07070c", "#1d1d28", "#3a3a50", "#9c9cc4") },
+      paint: metal("#07070c", "#1d1d28", "#3a3a50", "#9c9cc4"),
+      // narrow and cold: polished stone gives back a hard, thin line, not a warm spread
+      sheen: glint("#b9ccff", 3400, 0.16, 0.60) },
     { id:"diamond",  name:"Diamond",  cost:25, body:"#dff2ff", ink:"#123a4d",
       paint(g, x, y, w, h){
         const gd = g.createLinearGradient(x, y, x + w*0.5, y + h);
@@ -2096,16 +2359,22 @@
         gd.addColorStop(1.00, "#d6f0ff");
         return gd; },
       // hard-edged facet cuts: what separates a gem from a shiny pebble is straight lines
-      sheen(g, x, y, w, h){
+      sheen(g, x, y, w, h, ts){
         g.strokeStyle = "rgba(255,255,255,0.62)"; g.lineWidth = Math.max(1, w*0.05); g.lineCap = "round";
         g.beginPath();
         g.moveTo(x + w*0.06, y + h*0.66); g.lineTo(x + w*0.46, y + h*0.10);
         g.moveTo(x + w*0.54, y + h*0.96); g.lineTo(x + w*0.96, y + h*0.36);
         g.stroke();
         g.strokeStyle = "rgba(30,90,130,0.30)"; g.lineWidth = Math.max(1, w*0.028);
-        g.beginPath(); g.moveTo(x, y + h*0.30); g.lineTo(x + w, y + h*0.74); g.stroke(); } },
+        g.beginPath(); g.moveTo(x, y + h*0.30); g.lineTo(x + w, y + h*0.74); g.stroke();
+        // ...and a hard glint crossing the cuts. The facets are what make it a gem; the glint
+        // travelling over them is what makes it a gem in the light.
+        gemGlint(g, x, y, w, h, ts); } },
     { id:"polychrome", name:"Polychrome", cost:25, body:"#ffc2e6", ink:"#2a1240",
-      paint: spectrum(9000, 90, 72, 60) },
+      paint: spectrum(9000, 90, 72, 60),
+      // the hue wheel already turns underneath; the gloss on top is what makes it lacquer
+      // rather than a colour cycle
+      sheen: glint("#ffffff", 3000, 0.22, 0.42) },
     { id:"opal",     name:"Opal",     cost:30, body:"#f2e6ff", ink:"#3a2f4a",
       paint: spectrum(22000, 62, 87, 34) }
   );
@@ -2183,7 +2452,18 @@
     { id:"none", name:"None", cost:0, cols:null, swatch:(g,S)=>swatchBust(g,S,"#bfe6ff","#17263f") },
     { id:"rainbow", name:"Rainbow", cost:5, cols:["#ff595e","#ff924c","#ffca3a","#8ac926","#1982c4"] },
     { id:"spark",   name:"Sparks",  cost:5, cols:["#ffe9a8","#ffd24a","#ff9e4d"] },
-    { id:"cyan",    name:"Coolant", cost:10, cols:["#dffaff","#8ff0ff","#3fb8d6"] },
+    // A plain ribbon and nothing else — no wobble, no taper, no particles — in the one colour
+    // that reads as an absence rather than a colour. It takes Coolant's slot because Ripple
+    // already owns the ice ground and does more with it.
+    //
+    // The ID stays `cyan`. It is the key the wallet remembers a purchase by, so changing it
+    // would quietly delete Coolant from anyone who had bought it and keep their tiles. A
+    // reskin should cost the player nothing; the id is bookkeeping, the name is the product.
+    // ONE stripe, so the band is the full depth of him rather than three thinner ones with
+    // seams between. A shadow is a single solid thing; splitting it into stripes gave it an
+    // internal structure that a shadow does not have.
+    { id:"cyan",    name:"Shadow",  cost:10, cols:["#000000"] },
+    { id:"scarlet", name:"Scarlet", cost:10, cols:["#b3081a"] },
     { id:"rose",    name:"Rose",    cost:10, cols:["#ffd6e8","#ff9ec7","#e0559a"] },
     // ---- the same ribbon, made to move ----
     { id:"ripple",  name:"Ripple",  cost:15, cols:["#dffaff","#7fe4ff"],
@@ -2440,7 +2720,14 @@
     { key:"track",   label:"Track",   items:TRACKS },
   ];
   LOOK.forEach(l => { l.icon = LOOK_ICONS[l.key]; });
-  const lookWorn = k => (settings.look && settings.look[k]) || LOOK.find(l=>l.key===k).items[0].id;
+  // A tap on stock you do not own puts it ON — on the figure at the top of the shop, nowhere
+  // else — and turns its cell into its own buy button. Nothing is spent until you tap it again.
+  // It rides in FRONT of `settings.look` rather than replacing it, so the moment it is cleared
+  // the real look is back: there is nothing to restore and so nothing to get wrong.
+  let shopPreview = null;                 // { key, id }, or null
+  const shopScroll = {};                  // how far down each tab's rack was left
+  const lookOwned = k => (settings.look && settings.look[k]) || LOOK.find(l=>l.key===k).items[0].id;
+  const lookWorn = k => (shopPreview && shopPreview.key === k ? shopPreview.id : null) || lookOwned(k);
   const lookItem = k => { const cat = LOOK.find(l=>l.key===k);
                           return cat.items.find(i => i.id === lookWorn(k)) || cat.items[0]; };
   // Prices are live. The six zero-cost items are the kit you start in — they have to stay
@@ -2548,8 +2835,9 @@
       runIdx:0, runT:0, msPerCell:effSpeed, speedMult:1, cpsNow: 1000/effSpeed,
       status:"play", drag:null, fall:null, runPhase:0,
       score:0, combo:0, maxCombo:0, coins:0, elapsed:0, flowClears:0,
+      purse:0,                     // tiles found this run, unbanked until the flag is reached
       par: L.par || 24000,
-      shake:0, beatPulse:0, pops:[], lights:[], trail:[], trailT:0,
+      shake:0, beatPulse:0, pops:[], lights:[], laidFlash:[], trail:[], trailT:0,
       // --- Batch 2: optional extra cell types & hazards ---
       coinCells: new Set((L.coins||[]).map(c=>key(c[0],c[1]))),
       // [c, r, id] — a talisman sits on the floor and is grabbed by passing over it
@@ -2603,7 +2891,7 @@
             return { ...base, c:h.c, r:h.r, cc:h.c, cr:h.r, trapT: (h.phase||0)*TRAP_CYCLE,
                      wx:(h.c+0.5)*CW, wy:(h.r+0.5)*CW };
           }
-          if (K.move === "wander") {
+          if (K.move === "hunt") {
             return { ...base, cc:h.c, cr:h.r, from:[h.c,h.r], to:[h.c,h.r], segT:1, pause:0,
                      rowT:0, rowP:0, headSplit:"h", headDir:1,
                      wx:(h.c+0.5)*CW, wy:(h.r+0.5)*CW };
@@ -2770,9 +3058,31 @@
   function spawnPop(c, r, color) {
     state.pops.push({ x:(c+0.5)*cell, y:(r+0.5)*cell, life:0, max:340, color: color || getVar("--free") });
   }
-  // a burst of light that pulses out from a cell (tile cleared)
-  function spawnLight(c, r) {
-    state.lights.push({ x:(c+0.5)*cell, y:(r+0.5)*cell, life:0, max:520 });
+  // a burst of light that pulses out from a cell (tile cleared). `scale` shrinks the whole
+  // thing, for the smaller bursts that mark a change of state rather than an event.
+  function spawnLight(c, r, scale, ms) {
+    state.lights.push({ x:(c+0.5)*cell, y:(r+0.5)*cell, life:0, max: ms || 520, k: scale || 1 });
+  }
+  // The tile that has just BECOME track. A ring pulsing outward was the wrong shape for this:
+  // nothing travels anywhere, one square changed into another square. So the flash IS the tile
+  // — its own footprint, its own corner radius — laid over the graphic and fading off it.
+  const LAID_FLASH_MS = 260;
+  function spawnLaidFlash(c, r) {
+    state.laidFlash.push({ c, r, life:0, max: LAID_FLASH_MS });
+  }
+  function drawLaidFlash() {
+    const F = state.laidFlash;
+    if (!F || !F.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";     // brighten the tile, do not paint over it
+    for (const f of F) {
+      const k = f.life / f.max, fade = (1 - k) * (1 - k);
+      ctx.globalAlpha = 0.85 * fade;
+      ctx.fillStyle = "#fff7d6";
+      rrect(cx(f.c), cy(f.r), cell, cell, tileR(cell));
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   // ---------- Level-start intro (pixels assemble into the character) ------
@@ -2874,6 +3184,7 @@
     switch: { name:"Buttons & Doors", desc:"Tap the arcade buttons to slide their door open. Follow the wires — some doors need EVERY linked button pressed." },
     saw:    { name:"Saw Blade", desc:"A hazard sliding on a rail. Never let the runner touch it!" },
     monster:{ name:"Flying Menace", desc:"A little monster flitting to and fro. Time your run so the runner never touches it!" },
+    hunter: { name:"The Hunter", desc:"A malevolent tile entity. It is coming for you. Keep moving." },
     slider: { name:"Sliding Platform", desc:"The wall only opens where this platform sits. Drag it along its rail to line up the crossing, then build across it." },
     block:  { name:"Movable Block", desc:"A heavy block plugging the tunnel. Drag it aside along its rail to clear the way, then build through." },
     platform:{ name:"Fixed Platform", desc:"Track already bolted to the level. You can't build on it — but run your path into one of its open ends and the runner rides across for FREE, no tile spent. It only connects where the rails are drawn." },
@@ -2884,7 +3195,13 @@
     offscreen:{ name:"Off-screen Arrows", desc:"When the flag is off-screen, a coloured arrow at the edge points the way. Follow it to find the exit." },
   };
   function levelMechs(L) {
-    if (L.intro) return L.intro.slice();                // manual levels declare exactly which prompts to show
+    // A level whose monsters are ALL hunters gets the hunter card even if its data still asks
+    // for the generic one. The editor was writing "monster" long before this animal had a name
+    // of its own, and an old save should not cost it its introduction.
+    const mons = (L.hazards || []).filter(h => h.kind === "monster");
+    const allHunt = mons.length > 0 && mons.every(h => h.variant === "hunter" || h.variant === "wander");
+    const swap = k => (k === "monster" && allHunt) ? "hunter" : k;
+    if (L.intro) return L.intro.map(swap);              // manual levels declare exactly which prompts to show
     const m = ["tile","flag"];                          // the basics, taught on the first level
     if (L.keys || L.key) m.push("key");                 // coloured keys only appear on door levels now
     if (L.walls && L.walls.length) m.push("wall");
@@ -3044,6 +3361,11 @@
       g.save();g.translate(cx,cy);g.fillStyle="#c9ced6";g.beginPath();
       for(let k=0;k<16;k++){const a=k/16*Math.PI*2,r2=(k%2?S*0.2:S*0.13);g.lineTo(Math.cos(a)*r2,Math.sin(a)*r2);} g.closePath();g.fill();
       g.fillStyle=V("--shadow");g.beginPath();g.arc(0,0,S*0.055,0,7);g.fill(); g.restore(); }
+    else if (type==="hunter") {
+      // The real thing, drawn by the real routine — mid-stroke and facing down out of the card,
+      // which is the angle you meet it at.
+      real(() => drawMonster(cell/2, cell/2, 0, 1, 0.35, { ...MONSTER_KINDS.hunter, split:"v" }));
+    }
     else if (type==="monster") {
       const bw=S*0.32, bh=S*0.32;
       g.fillStyle="#8a3df0"; for(const side of [-1,1]){ g.save(); g.translate(cx+side*bw*0.34, cy-bh*0.05); g.rotate(side*0.6);
@@ -3133,6 +3455,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     wallLayerDirty = true;                      // cell/world size changed — rebuild wall + grain caches
     grainScreen = null;
+    syncHudChrome();                            // the pause button follows the speedo's plate
   }
 
   const nodeCenter = n => ({ x:(n.c + 0.5) * cell, y:(n.r + 0.5) * cell });
@@ -3416,7 +3739,7 @@
   function drawShards() {
     for (const p of state.shards) {
       ctx.globalAlpha = Math.max(0, 1 - p.life/p.max);
-      ctx.fillStyle = "#8a8478";
+      ctx.fillStyle = p.color || "#8a8478";      // stone grit unless the thing that broke had a colour
       ctx.fillRect(Math.round(p.x - p.sz/2), Math.round(p.y - p.sz/2), Math.ceil(p.sz), Math.ceil(p.sz));
     }
     ctx.globalAlpha = 1;
@@ -3428,7 +3751,7 @@
     ctx.globalCompositeOperation = "lighter";
     for (const p of state.lights) {
       const k = p.life / p.max;                 // 0..1
-      const rad = cell * (0.25 + k * 1.3);
+      const rad = cell * (0.25 + k * 1.3) * (p.k || 1);
       const fade = (1 - k) * (1 - k);           // ease-out fade
       // soft radial bloom
       const g = ctx.createRadialGradient(p.x, p.y, rad*0.2, p.x, p.y, rad);
@@ -3490,6 +3813,10 @@
     if (door) { door.reached = true; Sound.doorOpen(); haptic(10); }
     spawnPop(pos.c, pos.r);                  // placement pop
     linkParkedTiles();                      // connect now if it's beside the front
+    // What it sounds like is decided AFTER the link, because that is the moment the answer
+    // exists: a tile that joined the track went "active", one left lying about did not. A door
+    // latching already ends in its own rising confirmation, so it keeps the board to itself.
+    if (!door) (tile.status === "active" ? Sound.tileLaid : Sound.tileDrop)();
     updateReadyHud();
     return true;
   }
@@ -3594,6 +3921,11 @@
                                   trackConnects(h, { c:t.c, r:t.r }) && !foldsBack(t.c, t.r));
       if (!t) break;
       t.status = "active";
+      // A tile joining the track changes what it IS — a loose pane becomes laid platform — and
+      // that swap happened silently between two frames. A short flash on the cell carries the
+      // eye across it. Only mid-run: at level load a whole starting chain links at once, and
+      // half a dozen flashes on the opening frame is a fault, not a flourish.
+      if (s.status === "play") spawnLaidFlash(t.c, t.r);
       s.path.push({ c: t.c, r: t.r, kind: "tile", tileId: t.id });
       linked = true;
     }
@@ -3822,9 +4154,44 @@
       rewindRunner(REWIND_TILES);
       s.power.kind = null; s.power.t = 0; s.power.armed = false;
     }
+    if (def.id === "pulse") {
+      unmakeMonsters(PULSE_TILES, def.col);
+      s.power.kind = null; s.power.t = 0; s.power.armed = false;
+    }
     return true;
   }
   const powerActive = id => state && state.power.kind === id && state.power.t > 0;
+  const PULSE_TILES = 2;                   // how far the Bell reaches, in cells
+  // One ring out from where he stands, and every monster caught inside it comes apart.
+  //
+  // Measured from his own position rather than his cell, and against each monster's world
+  // position rather than its cell, so a thing halfway between two squares is judged on where it
+  // actually IS. Rounding both to cells first made the reach lopsided — a monster a whisker
+  // inside two tiles could round out of range while one further off rounded in.
+  function unmakeMonsters(tiles, col) {
+    const s = state, rp = visualAt(s.runIdx + s.runT), reach = tiles * cell;
+    // The ring the player sees ends exactly ON the reach: spawnLight's radius runs out to
+    // 1.55 cells at full scale, so this is the scale that puts its edge at `tiles`.
+    spawnLight(runnerCell().c, runnerCell().r, tiles / 1.55, 520);
+    const doomed = s.hazards.filter(h => h.kind === "monster" &&
+                                    Math.hypot(h.wx - rp.x, h.wy - rp.y) <= reach);
+    if (!doomed.length) { Sound.power("pulse"); return 0; }
+    for (const h of doomed) {
+      const body = (monKind(h).body) || col;
+      spawnPop(h.cc, h.cr, body);
+      for (let i = 0; i < 14; i++) {                   // it comes apart the way a stone does
+        const a = (i / 14) * Math.PI * 2 + (i % 5) * 0.31, sp = cell * 0.0016;
+        s.shards.push({ x:h.wx, y:h.wy, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - cell*0.0007,
+                        life:0, max:420, sz: cell*0.06*(0.6 + (i % 3)*0.25), color: body });
+      }
+    }
+    s.hazards = s.hazards.filter(h => !doomed.includes(h));
+    markOccDirty();                     // a blocking monster gone means the cell opens up
+    s.shake = Math.max(s.shake, cell * 0.20);
+    Sound.power("pulse");
+    Sound.smash();
+    return doomed.length;
+  }
   // Step him back up to `n` tiles and put the board back the way it was when he was there.
   //
   // Moving runIdx alone is not enough. Once he passes a tile it frees, and the player has very
@@ -3927,7 +4294,10 @@
   function grabCoin(c, r, flew) {
     const s = state;
     s.coinsGot++; s.score = computeScore(); updateScoreHud();
-    wallet.tiles += COIN_TILES; saveWallet(); showTally(c, r);
+    // Held, not banked. What you pick up is yours only if you finish — see endWin. The tally
+    // still counts up as you go, because the number it shows is what you WOULD walk away with,
+    // and a run where the figure never moved would be a run with nothing to lose.
+    s.purse += COIN_TILES; showTally(c, r);
     if (!flew) { spawnPop(c, r, "#ffd24a"); spawnLight(c, r); }
     Sound.coin(); haptic(6);
   }
@@ -3977,7 +4347,7 @@
       if (!s.goal) { endWin(def); return; }
       // A talisman you already own pays out instead of doing nothing.
       if (fresh) flashTalisman(def);
-      else { wallet.tiles += COIN_TILES*2; saveWallet(); showTally(t.c, t.r);
+      else { s.purse += COIN_TILES*2; showTally(t.c, t.r);
              s.score = computeScore(); updateScoreHud(); }
     }
     // boost / slow pickups: grabbed by passing over them → a time-limited speed effect
@@ -4203,7 +4573,12 @@
     state.status = "win";
     Sound.levelMusicStop();        // the level's backing ends with the level
     const att = state.attempts || 1;
-    saveWallet();                               // bank the tiles this run collected
+    // THE payout. Everything the run picked up has been sitting in the level's own purse; it
+    // moves into the wallet here and nowhere else, so reaching the flag is what the coins are
+    // actually for. Falling short forfeits them — see showLose, which banks nothing.
+    wallet.tiles += state.purse || 0;
+    state.purse = 0;
+    saveWallet();
     {                                           // remember it's cleared — nothing else to track
       const best = loadBest(), keyId = "L" + levelIdx;
       best[keyId] = { done: true };
@@ -4232,7 +4607,7 @@
       ovScore.innerHTML = "<span class='ov-relic-does'></span>";
       ovScore.firstChild.textContent = relic.blurb;
       setByline(ovMsg, "A new talisman. Use it from the foot of any level — one power per run.");
-      ovBtn.textContent = last ? "Level Select" : "Continue";
+      labelWithArrow(ovBtn, last ? "Level Select" : "Continue");
       updateOvShop();
       return;
     }
@@ -4289,7 +4664,9 @@
   function showLose() {
     state.status = "lose";
     Sound.levelMusicStop();        // ...and with a fall, too
-    saveWallet();                             // a failed run still keeps the tiles it cleared
+    // Nothing banked: a run you did not finish pays nothing, and the tiles it found go back on
+    // the board with it. The purse is dropped rather than saved.
+    state.purse = 0;
     winAnimToken++; ovScore.innerHTML = "";   // cancel any pending win-score reveal
     ovStars.textContent = "";
     overlay.className = "lose show";
@@ -4298,7 +4675,7 @@
     _lastQuip = i;
     ovTitle.textContent = LOSE_TITLES[(Math.random() * LOSE_TITLES.length) | 0];
     setByline(ovMsg, LOSE_QUIPS[i]);
-    ovBtn.textContent = "Retry";
+    labelWithArrow(ovBtn, "Retry");
     updateOvShop();
     Sound.death();                  // a short sad jingle on the death screen
   }
@@ -4340,11 +4717,13 @@
     drawSliders(ts);
     drawBlocks(ts);
     drawManualDoors(ts);
+    drawHazardPaths(ts);      // ground markings — under the track and the tiles standing on it
     drawTrack(ts);
     if (state.drag) drawTargets(ts);
     for (const t of state.tiles)
       if ((t.status === "free" || t.status === "parked") && (!state.drag || state.drag.tile.id !== t.id))
         drawFreeTile(cx(t.c), cy(t.r), ts, false);
+    drawLaidFlash();                              // over the tile it belongs to, nothing else
 
     drawPickups(ts);
     drawShards();
@@ -4423,14 +4802,26 @@
     ctx.restore();
   }
 
+  // The speedo's plate size, and the margin it sits at. The pause button is DOM and the speedo
+  // is canvas, so nothing makes them agree by themselves — this is the number both take, one
+  // through CSS variables and one directly, so they cannot drift apart at any viewport.
+  function hudPlate() {
+    const m  = Math.round(Math.min(viewW, viewH) * 0.028);
+    const fs = Math.max(15, Math.round(Math.min(viewW, viewH) * 0.045));
+    return { m, fs, h: Math.round(fs*1.5) };
+  }
+  function syncHudChrome() {
+    const P = hudPlate(), root = document.documentElement.style;
+    root.setProperty("--hud-h", P.h + "px");
+    root.setProperty("--hud-m", P.m + "px");
+  }
   // live runner speed, top-left (screen space). Shown as cells/second on a dark pill.
   function drawSpeedHud() {
     const s = state;
     if (!s || (s.status !== "play" && s.status !== "falling" && s.status !== "vortex")) return;
     const factor = s.liveFactor != null ? s.liveFactor : 1;
     const cps = 1000 * factor / (s.msPerCell || 1000);      // cells per second
-    const m = Math.round(Math.min(viewW, viewH) * 0.028);
-    const fs = Math.max(15, Math.round(Math.min(viewW, viewH) * 0.045));
+    const P = hudPlate(), m = P.m, fs = P.fs;
     ctx.save();
     ctx.textBaseline = "middle";
     const label = "SPEED", val = cps.toFixed(3), unit = " tiles/s";   // three decimals — the per-tile ramp is small
@@ -4440,11 +4831,13 @@
     ctx.font = bigF;   const vw = ctx.measureText(val).width;
     ctx.font = smallF; const uw = ctx.measureText(unit).width;
     const padX = Math.round(fs*0.55), gap = Math.round(fs*0.4);
-    const boxW = padX*2 + lw + gap + vw + uw, boxH = Math.round(fs*1.5);
-    // square plate, matching the DOM buttons (which carry no radius at all)
+    const boxW = padX*2 + lw + gap + vw + uw, boxH = P.h;
+    // Square plate, matching the DOM buttons (which carry no radius at all) — and matching the
+    // pause button's box exactly, since both take their height from hudPlate(). No outline:
+    // the plate is dark enough against the board to be its own edge, and the hairline it used
+    // to wear was the only thing on either of the two HUD boxes drawing a border.
     rrect(m, m, boxW, boxH, 0);
     ctx.fillStyle = "rgba(10,8,22,0.62)"; ctx.fill();
-    ctx.lineWidth = Math.max(1, fs*0.05); ctx.strokeStyle = "rgba(255,255,255,0.10)"; ctx.stroke();
     const midY = m + boxH/2;
     ctx.textAlign = "left";
     ctx.font = smallF;
@@ -4463,7 +4856,8 @@
   // competing with the board for attention. It shows up big when the number moves, holds, and
   // gets out of the way. Grand total only — the old "3/7 this level" was answering a question
   // the coins already answer by still being on the board.
-  let tallySide = 0;                // 0 = the tally drifts up, -1 = it drifts left
+  let tallyDX = 0, tallyDY = -1;    // the way it drifts, as a unit vector on the board
+  let tallySwing = 0;               // ...and which way that vector turns as it goes, +1 or -1
   const TALLY = {
     hold: 900,      // ms at full strength
     fade: 500,      // ...then this long dissolving
@@ -4471,26 +4865,45 @@
     rise: 0.85,     // how far it drifts up over its life, in CELLS
     above: 0.55,    // how far above the coin's own centre it starts, in cells
     size:  0.30,    // cap height, as a fraction of a cell
+    spin:  0.55,    // radians the CARD turns across its whole life, always away from him
   };
+  // How far the card has turned at `u` of its life. This is the pop-up rotating on the spot as
+  // it goes, not the line it travels along: it leaves on one bearing and keeps it, and the
+  // turning is the thing itself tipping over as it fades. Bending the path instead moved the
+  // number to somewhere you were not looking for it.
+  const tallySpin = u => TALLY.spin * u * tallySwing;
   let tallyAt = -1e9, tallyC = 0, tallyR = 0;
   // Which way it drifts is decided HERE, not at draw time: he may well have turned a corner
   // by the time it fades, and the tally should keep going the way it set off.
   function showTally(c, r) {
     tallyAt = performance.now(); tallyC = c; tallyR = r;
-    // Running up the board, the space above a coin is exactly where he is headed — the tally
-    // lands in front of him and covers the track he is about to be on. Sideways instead.
-    let up = false;
+    // Back over his shoulder: the bisector of straight-behind-him and straight-up-out-of-his-
+    // head. Those two are always perpendicular — the runner's own up is the track's normal, and
+    // he runs along it — so the halfway line is a clean 45 degrees whichever way he is facing,
+    // and it never degenerates the way bisecting against SCREEN up would when he runs north.
+    //
+    // Both are taken in his frame for a reason. Dead ahead is the worst place for it, sitting
+    // over the cells he is reading; straight back is safe but dull and can crowd the track he
+    // just left. Splitting the difference lifts it clear of the line entirely.
+    tallyDX = 0; tallyDY = -1;              // no run in progress: up, the way it always went
     if (state && state.status === "play" && state.path && state.path.length) {
       const ri = runnerInfo();
-      up = ri.ty < -0.5;                    // heading north, more than diagonally
+      const bx = -ri.tx + ri.nx, by = -ri.ty + ri.ny, m = Math.hypot(bx, by);
+      // Standing on a one-node path he has no tangent at all, and both halves of the bisector
+      // come out zero — which would pin the tally exactly on the coin instead of moving it.
+      // Keep the plain upward drift for that case rather than dividing by nothing.
+      if (m > 1e-6) {
+        tallyDX = bx/m; tallyDY = by/m;
+        // Which way "away" is depends on which side of him it set off — turning the same way
+        // every time would swing it back across his nose on half the corners. Rather than
+        // derive the sign from a cross product and have it come out backwards, turn it a
+        // little each way and keep whichever opens the angle to his heading. The test IS the
+        // requirement, so it cannot disagree with it.
+        const tryTurn = sgn => { const a = 0.1*sgn, cs = Math.cos(a), sn = Math.sin(a);
+          return (tallyDX*cs - tallyDY*sn)*ri.tx + (tallyDX*sn + tallyDY*cs)*ri.ty; };
+        tallySwing = tryTurn(1) < tryTurn(-1) ? 1 : -1;      // smaller dot = further from him
+      }
     }
-    // How far it travels sideways, in cells, plus half its own width — that is the room it
-    // needs. Hard against the left edge of the board there isn't any, so it goes right; hard
-    // against both (a board two cells wide) it gives up and drifts up as it always did.
-    const need = TALLY.above + TALLY.rise + 0.5;
-    const roomLeft  = (c + 0.5) - need >= 0;
-    const roomRight = (c + 0.5) + need <= COLS;
-    tallySide = !up ? 0 : roomLeft ? -1 : roomRight ? 1 : 0;   // -1 left, +1 right, 0 up
   }
   // Drawn INSIDE the board transform, so it rides with the camera and stays over the cell the
   // coin came out of. Sized in cells for the same reason: it has to sit against the board, not
@@ -4502,18 +4915,24 @@
     const a = age < TALLY.hold ? 1 : 1 - (age - TALLY.hold)/TALLY.fade;
     const k = 0.80 + 0.20*easeOutBack(Math.min(1, age/TALLY.pop));   // a short pop as it lands
     const f2 = Math.round(cell*TALLY.size);
-    const txt = String(wallet.tiles);
+    // Banked plus held: the figure has to be what you would walk away with if you finished,
+    // or picking a coin up would move a number that has not changed.
+    const txt = String(wallet.tiles + ((state && state.purse) || 0));
     ctx.save();
     ctx.globalAlpha = a;
     ctx.textBaseline = "middle"; ctx.textAlign = "left";
     ctx.font = "900 " + f2 + "px " + UI_FONT;
     const ic = Math.round(f2*0.88), gap = Math.round(f2*0.30);
     const w = ic + gap + ctx.measureText(txt).width;
-    // The same distance, turned through ninety degrees when he is climbing.
+    // The same distance every time, in a straight line on the bearing it set off on. Both that
+    // bearing and the way the card turns are fixed at pickup, not read here: he may well have
+    // gone round a corner by the time it fades, and the tally should keep to what it started.
     const drift = cell*(TALLY.above + TALLY.rise*u);
-    const cxm = (tallyC + 0.5)*cell + (tallySide ? drift*tallySide : 0);
-    const cym = (tallyR + 0.5)*cell - (tallySide ? 0 : drift);
-    ctx.translate(cxm, cym); ctx.scale(k, k); ctx.translate(-cxm, -cym);
+    const cxm = (tallyC + 0.5)*cell + tallyDX*drift;
+    const cym = (tallyR + 0.5)*cell + tallyDY*drift;
+    // Scale and spin share the one pivot — the card's own centre — so it grows and tips about
+    // the same point instead of swinging around an origin somewhere off to the side.
+    ctx.translate(cxm, cym); ctx.scale(k, k); ctx.rotate(tallySpin(u)); ctx.translate(-cxm, -cym);
     coinGlyph(cxm - w/2 + ic/2, cym, ic);
     // No plate and no outline: a plate popping in and out over the board is noisier than the
     // number it carries, and the black stroke around it was doing the same job twice as hard.
@@ -4820,33 +5239,56 @@
     if (!state.keyCollected) for (const k of state.keys) if (!k.got) drawKey((k.c+0.5)*cell,(k.r+0.5)*cell,ts,k.color);
     for (const t of state.talismans) drawTalismanCell(t, ts);
   }
+  // Rails, routes and their turnaround caps. Split out from the hazards themselves and drawn
+  // UNDER the track, because they are markings ON the ground: a dashed line painted over a
+  // tile the player has just laid makes the tile look like the lower of the two, which is the
+  // wrong way round — the tile is a solid object standing on the board.
+  //
+  // Both ends of a there-and-back route get a cap, and only those: it is the spot the thing
+  // turns round at, so it tells you the extent of its reach without watching it get there. A
+  // closed loop has no such spot and gets none.
+  function drawHazardPaths(ts) {
+    const capR = cell*0.075;
+    const cap = (pts, col) => { ctx.fillStyle = col;
+      for (const [ex,ey] of pts) { ctx.beginPath(); ctx.arc(ex,ey,capR,0,Math.PI*2); ctx.fill(); } };
+    for (const h of state.hazards) {
+      const mon = h.kind === "monster", K = mon ? monKind(h) : null;
+      if (mon && K.move !== "rail" && !(h.path && h.path.length > 1)) continue;
+      if (mon && K.move === "rail" || !mon) {                     // a straight lo..hi rail
+        if (!mon && h.lo == null) continue;
+        const x1 = h.axis==="h" ? (h.lo+0.5)*cell : (h.c+0.5)*cell;
+        const y1 = h.axis==="h" ? (h.r+0.5)*cell  : (h.lo+0.5)*cell;
+        const x2 = h.axis==="h" ? (h.hi+0.5)*cell : (h.c+0.5)*cell;
+        const y2 = h.axis==="h" ? (h.r+0.5)*cell  : (h.hi+0.5)*cell;
+        ctx.save();
+        if (mon) { ctx.strokeStyle = hexA(K.body, 0.30); ctx.lineWidth = Math.max(2, cell*0.04);
+                   ctx.lineCap = "round"; ctx.setLineDash([cell*0.14, cell*0.11]); }
+        else     { ctx.strokeStyle = "rgba(150,156,172,0.55)"; ctx.lineWidth = Math.max(2, cell*0.05);
+                   ctx.lineCap = "round"; }
+        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+        ctx.setLineDash([]);
+        cap([[x1,y1],[x2,y2]], mon ? hexA(K.body, 0.55) : "rgba(120,126,142,0.65)");
+        ctx.restore();
+      }
+      if (mon && h.path && h.path.length > 1) {                   // a drawn-by-hand patrol route
+        const P = h.path;
+        ctx.save();
+        ctx.strokeStyle = hexA(K.body, 0.28); ctx.lineWidth = Math.max(1.5, cell*0.028);
+        ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.setLineDash([cell*0.12, cell*0.1]);
+        ctx.beginPath(); ctx.moveTo((P[0][0]+0.5)*cell, (P[0][1]+0.5)*cell);
+        for (let i=1;i<P.length;i++) ctx.lineTo((P[i][0]+0.5)*cell, (P[i][1]+0.5)*cell);
+        if (h.loop) ctx.closePath();
+        ctx.stroke(); ctx.setLineDash([]);
+        if (!h.loop) cap([[(P[0][0]+0.5)*cell, (P[0][1]+0.5)*cell],
+                          [(P[P.length-1][0]+0.5)*cell, (P[P.length-1][1]+0.5)*cell]], hexA(K.body, 0.55));
+        ctx.restore();
+      }
+    }
+  }
   function drawHazards(ts) {
     for (const h of state.hazards) {
       if (h.kind === "monster") {
         const K = monKind(h);
-        if (K.move === "rail") {                       // the rail it slides along
-          const x1 = h.axis==="h" ? (h.lo+0.5)*cell : (h.c+0.5)*cell;
-          const y1 = h.axis==="h" ? (h.r+0.5)*cell  : (h.lo+0.5)*cell;
-          const x2 = h.axis==="h" ? (h.hi+0.5)*cell : (h.c+0.5)*cell;
-          const y2 = h.axis==="h" ? (h.r+0.5)*cell  : (h.hi+0.5)*cell;
-          ctx.save();
-          ctx.strokeStyle = hexA(K.body, 0.30); ctx.lineWidth = Math.max(2, cell*0.04);
-          ctx.lineCap = "round"; ctx.setLineDash([cell*0.14, cell*0.11]);
-          ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-          ctx.setLineDash([]); ctx.restore();
-        }
-        // The trap used to wear a ring winding down to its snap. Gone — the gape itself is
-        // the tell: it yawns, holds, then bites, and the jaws say all of that already.
-        // faint dashed patrol path so its route is readable
-        if (h.path && h.path.length > 1) {
-          ctx.save();
-          ctx.strokeStyle = hexA(K.body, 0.28); ctx.lineWidth = Math.max(1.5, cell*0.028);
-          ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.setLineDash([cell*0.12, cell*0.1]);
-          ctx.beginPath(); ctx.moveTo((h.path[0][0]+0.5)*cell, (h.path[0][1]+0.5)*cell);
-          for (let i=1;i<h.path.length;i++) ctx.lineTo((h.path[i][0]+0.5)*cell, (h.path[i][1]+0.5)*cell);
-          if (h.loop) ctx.closePath();
-          ctx.stroke(); ctx.setLineDash([]); ctx.restore();
-        }
         // A trap runs its own slow cycle instead of the family's quick bite.
         const phase = K.move === "trap"
           ? 0.5 * trapPhase(h.trapT || 0).open        // 0.5 of the sine is full gape
@@ -4856,24 +5298,40 @@
         // kind's fixed `split` is overridden with the heading it last actually moved on.
         const KD = (K.look === "rail" && h.headSplit) ? { ...K, split: h.headSplit } : K;
         const dirN = (K.look === "rail" && h.headDir) ? h.headDir : h.faceX;
-        drawMonster(h.wx, h.wy, ts, dirN, phase, KD);
+        // The trap's tremble. Two sines well apart in frequency and neither a factor of the
+        // other, so it never settles into a rhythm the eye can read as deliberate motion —
+        // this has to look like something straining to stay still, not like something waving.
+        // It is the only warning the snap gives, and it grows as the moment approaches.
+        // A ghost is drawn only while it is pulling. `rowP` runs 0..1 through one stroke and
+        // the drive is the first `railDrive` of it, so the body comes up with the thrust and
+        // is gone by the time the oars have finished recovering. Faded rather than switched:
+        // a hard cut reads as the game dropping frames, where a fade reads as the thing
+        // itself going. It never reaches zero — a hair of it is left, so a player who is
+        // looking straight at it is rewarded and one who is not is still caught out.
+        let ghostA = 1;
+        if (K.ghost) {
+          const P = h.rowP || 0, dv = MONSTER.railDrive;
+          ghostA = P < dv ? 1 - 0.35*(P/dv)             // the thrust: full, dimming as it ends
+                          : 0.06 + 0.59*Math.pow(1 - (P-dv)/(1-dv), 3);
+        }
+        let jx = 0, jy = 0;
+        if (K.move === "trap") {
+          const shake = trapPhase(h.trapT || 0).shake;
+          if (shake > 0) {
+            const amp = cell * 0.035 * shake * shake;   // squared: barely there, then plainly there
+            jx = Math.sin(ts/23) * amp;
+            jy = Math.sin(ts/17 + 1.7) * amp;
+          }
+        }
+        if (ghostA < 1) ctx.save(), ctx.globalAlpha = ghostA;
+        drawMonster(h.wx + jx, h.wy + jy, ts, dirN, phase, KD);
+        if (ghostA < 1) ctx.restore();
         continue;
       }
       {
         const pos = h.pos != null ? h.pos : (h.axis==="h" ? h.cc : h.cr);
         const sx = h.axis==="h" ? (pos+0.5)*cell : (h.c+0.5)*cell;
         const sy = h.axis==="h" ? (h.r+0.5)*cell : (pos+0.5)*cell;
-        // the rail the saw slides along (lo -> hi)
-        const x1 = h.axis==="h" ? (h.lo+0.5)*cell : (h.c+0.5)*cell;
-        const y1 = h.axis==="h" ? (h.r+0.5)*cell  : (h.lo+0.5)*cell;
-        const x2 = h.axis==="h" ? (h.hi+0.5)*cell : (h.c+0.5)*cell;
-        const y2 = h.axis==="h" ? (h.r+0.5)*cell  : (h.hi+0.5)*cell;
-        ctx.save();
-        ctx.strokeStyle = "rgba(150,156,172,0.55)"; ctx.lineWidth = Math.max(2, cell*0.05); ctx.lineCap = "round";
-        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-        ctx.fillStyle = "rgba(120,126,142,0.65)";
-        for (const [ex,ey] of [[x1,y1],[x2,y2]]) { ctx.beginPath(); ctx.arc(ex,ey,cell*0.09,0,Math.PI*2); ctx.fill(); }
-        ctx.restore();
         drawSaw(sx, sy, ts);
       }
     }
@@ -5059,24 +5517,48 @@
     // two half the time. `banks:"all"` puts spikes on every face: the pair perpendicular to
     // travel row, the other pair simply bristle in and out with the stroke.
     square: { move:"path", look:"rail", banks:"all", split:"h", body:"#ff9b3d", blocks:true },
-    // Wanders like nothing else, but SWIMS like the rail pair: `look:"rail"` draws it with
+    // Hunts him down, but SWIMS like the rail pair: `look:"rail"` draws it with
     // banks of oars instead of jaws, and its banks turn with it — whichever way it is heading,
     // they sit on the two sides perpendicular to that.
-    wander: { move:"wander", look:"rail", banks:"all", split:"h", body:"#7dff6b", blocks:true },
+    // The one that comes for you is the one you cannot read against the board: black, with the
+    // only colour on it in its eyes. `eye` overrides the family rule that a face is drawn in
+    // its owner's own colour — which on this one would be black eyes on a black panel.
+    hunter: { move:"hunt", look:"rail", banks:"all", split:"h",
+              body:"#100f18", eye:"#ff2d2d", blocks:true },
+    // Hunts him exactly as the Hunter does — same chase, same claim on a square — but you only
+    // see it on the DRIVE. Between thrusts it is not there, and it is just as lethal while it
+    // is gone: you cannot watch it, so you have to hold where it was in your head. `ghost` is
+    // read at draw time only; nothing about how it moves or what it touches changes.
+    // It does NOT block placement: a thing you cannot see quietly refusing your tile would
+    // read as the game being broken rather than as the monster being there.
+    stealth: { move:"hunt", look:"rail", banks:"all", split:"h",
+               body:"#cfd8ff", eye:"#6f7bd6", blocks:false, ghost:true },
     trap:   { move:"trap",   split:"h", body:"#ff5c5c", blocks:false,     // sits still and waits
               gap: 1.30 },                                               // ...yawning a tile wide
   };
+  // It was the "wanderer" until it learned to hunt. Old level data still says so.
+  MONSTER_KINDS.wander = MONSTER_KINDS.hunter;
   const monKind = h => MONSTER_KINDS[h.variant] || MONSTER_KINDS.patrol;
   // The trap's cycle, in ms: shut, yawning open, held wide (safe to run through), then the snap.
-  const TRAP = { rest: 1500, open: 620, hold: 2600, snap: 150 };
+  const TRAP = { rest: 1500, open: 620, hold: 2600, snap: 150, warn: 620 };
   function trapPhase(t) {
     const T = TRAP, a = T.rest, b = a + T.open, c = b + T.hold, d = c + T.snap;
     const u = t % d;
-    if (u < a) return { open: 0,                     lethal: true,  wide: false };
-    if (u < b) return { open: (u - a)/T.open,        lethal: true,  wide: false };
-    if (u < c) return { open: 1,                     lethal: false, wide: true  };
-    return       { open: 1 - (u - c)/T.snap,         lethal: true,  wide: false };
+    // SHUT and winding up. Lethal, and it is not open, so nothing may stand here.
+    if (u < a) return { open: 0, lethal: true, wide: false, shake: 0, u };
+    // Opening. Safe from the first frame of it: the jaws are moving apart, and a mouth that is
+    // coming open is not a mouth that is about to close on you. Waiting for it to be fully
+    // wide made the safe window narrower than it looks, which reads as the trap cheating.
+    if (u < b) return { open: (u - a)/T.open, lethal: false, wide: false, shake: 0, u };
+    // Held wide — and trembling for the last stretch of it. The tremble is the tell: it is the
+    // only warning that the hold is ending, and without one the snap is unfair rather than
+    // hard. It ramps so the shake itself says how long you have left.
+    if (u < c) { const left = c - u;
+      return { open: 1, lethal: false, wide: true,
+               shake: left < T.warn ? 1 - left/T.warn : 0, u }; }
+    return       { open: 1 - (u - c)/T.snap, lethal: true, wide: false, shake: 0, u };
   }
+  const TRAP_SNAP_AT = TRAP.rest + TRAP.open + TRAP.hold;   // the instant the jaws start closing
   const TRAP_CYCLE = TRAP.rest + TRAP.open + TRAP.hold + TRAP.snap;
   // `phase` is 0..1 through one bite, kept on the hazard so the sound and the picture cannot
   // drift apart. Without one it falls back to the wall clock, which is what the mechanic
@@ -5125,8 +5607,9 @@
   function drawRailMonster(x, y, ts, dir, K, off) {
     const s = cell, S = s*MONSTER.railSize, h = S/2, R = tileR(S);
     // His eyes are his own colour, not the family's ink — they read against the inscribed
-    // panel they sit on, which is the only thing darker than he is.
-    const body = K.body || "#b24dff";
+    // panel they sit on, which is the only thing darker than he is. Unless the kind names one:
+    // a body dark enough to BE the panel has to borrow a colour from somewhere.
+    const body = K.body || "#b24dff", eye = K.eye || body;
     // ---- the stroke -------------------------------------------------------------------
     // P runs 0..1 through one row. During the DRIVE the teeth are fully out and sweep
     // backwards along the rim; during the RECOVERY they pull in and slide forward again.
@@ -5226,7 +5709,7 @@
     // runs along x, which is his line of travel but not the vertical mover's, so a vertical
     // one is given no bias and simply carries its eyes up or down the panel.
     const lead = S * MONSTER.railEyeLead * sgn;
-    drawEyes(ctx, vert ? 0 : lead, vert ? lead : 0, s, body, vert ? 0 : sgn, ts, 0);
+    drawEyes(ctx, vert ? 0 : lead, vert ? lead : 0, s, eye, vert ? 0 : sgn, ts, 0);
     ctx.restore();
   }
   function drawMonster(x, y, ts, faceX, phase, cfg) {
@@ -5728,9 +6211,10 @@
     ctx.restore();
   }
 
+  const doorScratch = document.createElement("canvas");   // the lock body, so its hole can be cut
   // a padlock marker on a colored door; open=true shows an unlocked shackle but stays until reached
   function drawDoorLock(c, r, ts, color, open) {
-    const x = cx(c)+cell*0.5, y = cy(r)+cell*0.5, s = cell*0.5, pulse = 0.6 + 0.4*Math.sin(ts/260);
+    const x = cx(c)+cell*0.5, y = cy(r)+cell*0.5, s = cell*0.5;
     ctx.save();
     // striped, colour-matched barrier filling the tile while still locked; clears once the key is collected
     if (!open) {
@@ -5745,17 +6229,53 @@
       ctx.stroke();
       ctx.restore();
     }
-    ctx.strokeStyle = color; ctx.lineWidth = Math.max(3, cell*0.06); ctx.lineCap = "round";
-    ctx.globalAlpha = open ? 0.85 : 0.55 + 0.35*pulse;
-    ctx.beginPath();
-    if (open) ctx.arc(x + s*0.24, y - s*0.10, s*0.15, Math.PI, 0);   // same shackle arc, just slid aside = unlocked
-    else      ctx.arc(x,          y - s*0.10, s*0.15, Math.PI, 0);    // shackle closed
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-    rrect(x - s*0.26, y - s*0.02, s*0.52, s*0.38, s*0.07); ctx.fillStyle = color; ctx.fill();
-    ctx.fillStyle = "rgba(0,0,0,0.5)";
-    ctx.beginPath(); ctx.arc(x, y + s*0.14, s*0.065, 0, Math.PI*2); ctx.fill();      // keyhole
-    ctx.fillRect(x - s*0.028, y + s*0.14, s*0.056, s*0.12);
+    // ---- the lock, built whole on its own layer -----------------------------------------
+    // Shackle AND body go down together at full strength, then the keyhole is cut out of the
+    // pair, and the finished silhouette is composited ONCE. Drawing the two straight onto the
+    // board meant the leg overlapping the body double-painted: at 50% that seam is plainly two
+    // shapes stacked rather than one lock. Merged first, the whole thing fades as one object.
+    //
+    // An arc alone floats. A shackle is an arc with two LEGS running down into the body — that
+    // join is what makes it read as a padlock rather than a croquet hoop.
+    const shR = s*0.15, bodyTop = y - s*0.02, shCy = y - s*0.13, legY = bodyTop - shCy;
+    const S = Math.ceil(cell), sc = doorScratch;
+    if (sc.width !== S) { sc.width = sc.height = S; }
+    const g = sc.getContext("2d");
+    // The scratch canvas is reused, and the last pass left it in destination-out. Reset the
+    // mode as well as the pixels or the lock silently stops drawing from the second frame on.
+    g.setTransform(1,0,0,1,0,0); g.globalCompositeOperation = "source-over"; g.clearRect(0,0,S,S);
+    const ox = x - S/2, oy = y - S/2;            // the layer is centred on the lock
+    g.translate(-ox, -oy);
+    g.strokeStyle = color; g.fillStyle = color;
+    g.lineWidth = Math.max(3, cell*0.06); g.lineCap = "round";
+    g.save();
+    // Open: the shackle is MIRRORED about the leg that stays in the body, not tilted. Flipping
+    // it keeps the arc upright — still plainly the same shackle — while carrying the far leg
+    // clear of the body and out past its edge. A tilt reads as a wonky lock; this reads as one
+    // that has been let go.
+    if (open) { const px = x - shR;
+                g.translate(px, 0); g.scale(-1, 1); g.translate(-px, 0); }
+    g.translate(x, shCy);
+    g.beginPath();
+    g.arc(0, 0, shR, Math.PI, 0);
+    g.lineTo(shR, legY);                         // ...straight on down the right leg
+    g.moveTo(-shR, 0); g.lineTo(-shR, legY);     // ...and the left one
+    g.stroke();
+    g.restore();
+    const bx = x - s*0.26, by = bodyTop, bw = s*0.52, bh = s*0.38, br = s*0.07;
+    g.beginPath();
+    g.moveTo(bx+br, by); g.arcTo(bx+bw, by, bx+bw, by+bh, br); g.arcTo(bx+bw, by+bh, bx, by+bh, br);
+    g.arcTo(bx, by+bh, bx, by, br); g.arcTo(bx, by, bx+bw, by, br); g.closePath();
+    g.fill();
+    // ...and the keyhole is a HOLE: cut out of the finished lock, so what shows through it is
+    // the striped barrier behind rather than a dark shape painted on the front.
+    g.globalCompositeOperation = "destination-out";
+    g.beginPath(); g.arc(x, y + s*0.14, s*0.065, 0, Math.PI*2); g.fill();
+    g.fillRect(x - s*0.028, y + s*0.14, s*0.056, s*0.12);
+    // Once the key is in hand the lock is spent — still there, because the runner has yet to
+    // reach it, but faded off the board as one piece.
+    ctx.globalAlpha = open ? 0.5 : 1;
+    ctx.drawImage(sc, ox, oy);
     ctx.restore();
   }
 
@@ -7162,9 +7682,13 @@
   // same places in every repeat, and it could not move or breathe. This is a separate
   // additive pass keyed to quilt-space patch coordinates, so each glint sticks to its own
   // patch, travels with the scroll, and never repeats with the tile.
-  const BG_GLINT_RATE = 0.22;                // fraction of patches that ever catch the light
-  const BG_GLINT_MS   = 5200;                // one breath, per patch
-  const BG_GLINT_A    = 0.17;                // peak strength
+  // Turned down. All three knobs pull the same way, and pulling only one leaves the effect
+  // looking wrong rather than quiet: fewer of them at once, dimmer at their peak, and a longer
+  // breath so the ones that are lit are moving too slowly to catch the eye. Rate x strength is
+  // what the backdrop actually gains on average, and that is now a third of what it was.
+  const BG_GLINT_RATE = 0.12;                // fraction of patches that ever catch the light
+  const BG_GLINT_MS   = 7200;                // one breath, per patch
+  const BG_GLINT_A    = 0.10;                // peak strength
   let bgScrollX = 0, bgScrollY = 0, bgScrollK = 0, bgScrollTs = 0;
   function bgScrollOffset(ts, active) {
     const dt = bgScrollTs ? Math.min(120, ts - bgScrollTs) : 0;
@@ -7542,6 +8066,7 @@
       updateShards(dt);
       tickStarDust(dt);
       tickFx(dt);
+      tickHeartbeat(dt);
       tickVortex(dt);
       tickPower(dt);
     }
@@ -7667,14 +8192,26 @@
           continue;
         }
         if (K.move === "trap") {                    // sits still, yawns, then snaps
+          const was = (h.trapT || 0) % TRAP_CYCLE;
           h.trapT = (h.trapT || 0) + dt;
           h.wx = (h.c + 0.5)*cell; h.wy = (h.r + 0.5)*cell;
-          monsterNoise(h, dt, trapPhase(h.trapT).open < 0.2);
+          // One crunch, on the frame the jaws start closing. Detected as a CROSSING of the
+          // snap boundary rather than by "are we snapping now", because the snap lasts 150ms
+          // and at 60fps that is nine frames — nine crunches, which is a machine gun.
+          const now = h.trapT % TRAP_CYCLE;
+          if (was < TRAP_SNAP_AT && (now >= TRAP_SNAP_AT || now < was)) {
+            const v = Math.max(0, 1 - monsterNear(h) / MONSTER.hear);
+            if (v > 0.02) Sound.crunch(v);
+          }
+          monsterNoise(h, dt);
           continue;
         }
-        if (K.move === "wander") {
-          // A fresh route every run: at each cell it picks a random open neighbour, avoiding
-          // the one it came from unless that is the only way on. No path is ever the same.
+        if (K.move === "hunt") {
+          // It hunts. At every cell it steps to whichever open neighbour is nearest the runner
+          // by the board's own geometry, so a wall between them is walked around, not butted
+          // into. With nobody to chase — before the run, or if he is sealed away behind stones
+          // — it falls back to what it used to do always: a random open neighbour, avoiding the
+          // one it came from unless that is the only way on.
           //
           // One hop is a whole number of thrusts, and the position across it is DERIVED from
           // the stroke clock exactly as a rail monster's leg is — so it surges into each cell
@@ -7687,19 +8224,30 @@
           h.segT = (hdone + railProgress(h.rowP)) / hopN;
           // It is built with from === to and no destination yet. segT used to be seeded at 1
           // to force the first pick on the opening tick; now that segT is DERIVED from the
-          // stroke clock that seed is overwritten, so ask the question directly instead —
-          // otherwise it treads water for a whole hop before it ever sets off.
-          const adrift = h.from[0] === h.to[0] && h.from[1] === h.to[1];
+          // stroke clock that seed is overwritten, so ask the question directly instead. A
+          // hunter that CHOSE to stand still is also from === to, and must not be re-asked
+          // every frame — `held` tells the two apart, so a waiting one rows on the spot for a
+          // hop and then tries again rather than freezing mid-stroke.
+          const adrift = h.from[0] === h.to[0] && h.from[1] === h.to[1] && !h.held;
           if (h.segT >= 1 || adrift) {
-            h.segT = 0; h.rowT = 0; h.rowP = 0; h.from = h.to.slice();
-            const opts = [], back = [];
-            for (const [dc, dr] of [[1,0],[-1,0],[0,1],[0,-1]]) {
-              const c = h.from[0] + dc, r = h.from[1] + dr;
-              if (!inBounds(c, r) || s.walls.has(key(c, r)) || s.stones.has(key(c, r))) continue;
-              (h.came && c === h.came[0] && r === h.came[1] ? back : opts).push([c, r]);
+            h.segT = 0; h.rowT = 0; h.rowP = 0; h.from = h.to.slice(); h.held = false;
+            const taken = huntClaims(h);
+            let next = monsterHuntStep(h.from, taken);
+            if (!next) {
+              const opts = [], back = [];
+              for (const [dc, dr] of DIRS) {
+                const c = h.from[0] + dc, r = h.from[1] + dr;
+                if (!inBounds(c, r) || s.walls.has(key(c, r)) || s.stones.has(key(c, r))) continue;
+                if (taken.has(key(c, r))) continue;
+                (h.came && c === h.came[0] && r === h.came[1] ? back : opts).push([c, r]);
+              }
+              const pick = (opts.length ? opts : back);
+              if (pick.length) next = pick[Math.floor(Math.random()*pick.length)];
             }
-            const pick = (opts.length ? opts : back);
-            if (pick.length) { h.came = h.from.slice(); h.to = pick[Math.floor(Math.random()*pick.length)]; }
+            // Hemmed in by the others: hold this square for a hop rather than barge through one
+            // of them. Whichever of them moves first frees a way on.
+            if (next) { h.came = h.from.slice(); h.to = next; }
+            else      { h.to = h.from.slice(); h.held = true; }
           }
           const fx = h.from[0] + (h.to[0]-h.from[0])*h.segT, fy = h.from[1] + (h.to[1]-h.from[1])*h.segT;
           h.wx = (fx+0.5)*cell; h.wy = (fy+0.5)*cell;
@@ -7792,33 +8340,99 @@
       if (struck) startFall();                                      // struck — the runner goes down
     }
   }
-  // The bite clock and the two voices, shared by every variant. `mute` holds the crunch
-  // for a trap that is sitting wide open — it is not chewing, it is waiting.
   // How far the runner is from a hazard, in cells — Infinity when he is not running, so
   // nothing chatters away over a menu.
+  // Where a hunter should step next. A breadth-first sweep OUT from the runner gives every
+  // open cell its distance to him, and the monster takes whichever neighbour is nearest. That
+  // is a chase rather than a lunge: it walks AROUND a wall standing between them, which the
+  // obvious "shrink the straight-line gap" cannot do — that one presses into the wall and
+  // sticks there. Returns null when he is unreachable (sealed off behind stones) or not yet
+  // running, and the caller drifts at random instead.
+  // Which cells the OTHER hunters have spoken for: the one each is standing on and the one each
+  // is moving into. Both count — a hunter is halfway out of the cell it is leaving, so treating
+  // that as free puts two of them in the same square for the length of a hop. Claiming both also
+  // rules out the head-on swap, since neither can ever target where the other currently is.
+  function huntClaims(self) {
+    const taken = new Set();
+    for (const h of state.hazards) {
+      if (h === self || h.kind !== "monster" || monKind(h).move !== "hunt") continue;
+      if (h.from) taken.add(key(h.from[0], h.from[1]));
+      if (h.to)   taken.add(key(h.to[0],   h.to[1]));
+    }
+    return taken;
+  }
+  function monsterHuntStep(from, taken) {
+    const s = state;
+    if (s.status !== "play" || !s.path || !s.path.length) return null;
+    const g = runnerCell(), goal = key(g.c, g.r);
+    const open = (c, r) => inBounds(c, r) && !s.walls.has(key(c, r)) && !s.stones.has(key(c, r));
+    const dist = new Map([[goal, 0]]);
+    const q = [[g.c, g.r]];
+    for (let i = 0; i < q.length; i++) {
+      const [c, r] = q[i], d = dist.get(key(c, r)) + 1;
+      for (const [dc, dr] of DIRS) {
+        const nc = c + dc, nr = r + dr, k = key(nc, nr);
+        if (dist.has(k) || !open(nc, nr)) continue;
+        dist.set(k, d); q.push([nc, nr]);
+      }
+    }
+    // Ties are broken at random rather than by the order of DIRS, or a monster coming at him
+    // diagonally would spend its whole approach on one axis before turning.
+    let best = [], bd = Infinity;
+    for (const [dc, dr] of DIRS) {
+      const c = from[0] + dc, r = from[1] + dr;
+      if (!open(c, r)) continue;
+      if (taken && taken.has(key(c, r))) continue;      // another hunter has that square
+      const d = dist.get(key(c, r));
+      if (d == null || d > bd) continue;
+      if (d < bd) { bd = d; best = []; }
+      best.push([c, r]);
+    }
+    return best.length ? best[Math.floor(Math.random() * best.length)] : null;
+  }
   function monsterNear(h) {
     const s = state;
     if (s.status !== "play") return Infinity;
     const rp = visualAt(s.runIdx + s.runT);
     return Math.hypot(rp.x - h.wx, rp.y - h.wy) / cell;
   }
-  function monsterNoise(h, dt, mute) {
-    const near = monsterNear(h);
+  // The monsters are SILENT now, in themselves. They used to growl on a timer and chew on
+  // another one, which meant a level with four of them was a wall of noise carrying almost no
+  // information — the sounds fired whether or not anything was happening. What is left fires
+  // only on events: a trap crunches at the instant it bites, and a hunter closing on you is
+  // reported by your own pulse rather than by any noise it makes.
+  //
+  // `chompT` still advances: it is what drives the jaws, and the picture needs it whether or
+  // not anything is audible.
+  function monsterNoise(h, dt) {
     h.chompT = (h.chompT || 0) + dt;
-    if (h.chompT >= MONSTER.chompMs) {
-      h.chompT -= MONSTER.chompMs;
-      // Falls off linearly, not squared: squared put the bite near silence at any distance
-      // you would actually be at, which is why he could not be heard at all.
-      const v = Math.max(0, 1 - near / MONSTER.hear);
-      if (v > 0.02 && !mute) Sound.crunch(v);
+    if (h.chompT >= MONSTER.chompMs) h.chompT -= MONSTER.chompMs;
+  }
+  // How close the nearest hunter is, as 0..1 — 0 at HEART_TILES away, 1 on top of him. One
+  // number for the whole level, because two hearts beating out of step is a stumble, not a
+  // fright: the closest one sets the pace and the rest are already accounted for by it.
+  const HEART_TILES = 3;          // how far out he starts to feel it
+  const HEART_SLOW  = 900;        // ms between beats at the edge of that
+  const HEART_FAST  = 300;        // ...and when it is on him
+  let heartT = 0, heartLvl = 0;
+  function tickHeartbeat(dt) {
+    const s = state;
+    let close = 0;
+    if (s && s.status === "play") {
+      for (const h of s.hazards) {
+        if (h.kind !== "monster" || monKind(h).move !== "hunt") continue;
+        const d = monsterNear(h);
+        if (d < HEART_TILES) close = Math.max(close, 1 - d/HEART_TILES);
+      }
     }
-    if (h.growlT == null) h.growlT = MONSTER.growlMin*Math.random();
-    h.growlT -= dt;
-    if (h.growlT <= 0) {
-      h.growlT = MONSTER.growlMin + Math.random()*MONSTER.growlVary;
-      const v = Math.max(0, 1 - near / MONSTER.growlHear);
-      if (v > 0.02) Sound.growl(v);
-    }
+    // Eased toward, not snapped to: a hunter rounding a corner flicks in and out of range, and
+    // a pulse that stops dead and restarts reads as a bug rather than as relief.
+    heartLvl += (close - heartLvl) * Math.min(1, dt/220);
+    if (heartLvl < 0.02) { heartT = 0; Sound.duck(0); return; }
+    Sound.duck(heartLvl);                       // the music gives way to it as it rises
+    const every = HEART_SLOW + (HEART_FAST - HEART_SLOW) * heartLvl;
+    heartT -= dt;
+    if (heartT <= 0) { heartT = every; Sound.heartbeat(0.25 + 0.75*heartLvl); }
   }
 
   // decay transient visual feedback (shake, beat pulse, combo flash, pops)
@@ -7829,6 +8443,10 @@
     if (s.pops && s.pops.length) {
       for (const p of s.pops) p.life += dt;
       s.pops = s.pops.filter(p => p.life < p.max);
+    }
+    if (s.laidFlash && s.laidFlash.length) {
+      for (const f of s.laidFlash) f.life += dt;
+      s.laidFlash = s.laidFlash.filter(f => f.life < f.max);
     }
     if (s.lights && s.lights.length) {
       for (const p of s.lights) p.life += dt;
@@ -7854,9 +8472,16 @@
         // paintRunner does translate(sx,sy) then rotate(angle), so his local frame maps to the
         // world by exactly this rotation. Same maths here, or the ribbon leaves the wrong spot
         // on every corner.
-        const A = trailAnchor(performance.now()), ca = Math.cos(ri.angle), sa = Math.sin(ri.angle);
+        const A = trailAnchor(performance.now(), s.runPhase, s.status === "play");
+        const ca = Math.cos(ri.angle), sa = Math.sin(ri.angle);
+        // `w` is this point's own scatter, fixed the moment it is laid down, and `nx/ny` the
+        // direction to scatter it along — his surface normal, taken here rather than at draw
+        // time. Together they let a shed particle sit STILL in the world: the wobble used to
+        // be a function of the wall clock, so every particle swam about long after it had left
+        // him, and what should have been a wake read as a shoal.
         s.trail.push({ x: ri.sx + cell*(A.x*ca - A.y*sa),
-                       y: ri.sy + cell*(A.x*sa + A.y*ca), life: 0 });
+                       y: ri.sy + cell*(A.x*sa + A.y*ca), life: 0,
+                       w: Math.random()*2 - 1, nx: -sa, ny: ca });
       }
     } else if (s.trail && s.trail.length) s.trail.length = 0;
   }
@@ -7869,15 +8494,26 @@
   // lowers the body AND pushes it behind them — so a fixed offset detaches the ribbon from
   // the runner it is supposed to be coming out of.
   //
-  // The stride bob is deliberately NOT in here. That is a per-step bounce, and a ribbon that
-  // traced it would ripple along its whole length; what this is for is the constant the
-  // swagger holds him at.
-  function trailAnchor(ts) {
+  // The stride bob IS in here, and the ripple it puts along the ribbon is the point: the trail
+  // leaves his body, so when his body rises a step the ribbon has to rise with it or the two
+  // come apart. Every term matches paintRunner exactly — the same bob, the same hop, the same
+  // breathing hover — because the anchor is not an approximation of where he is, it is the
+  // same sum arrived at twice.
+  //
+  // `phase` and `moving` are passed in rather than read: the shop figure runs a stride of its
+  // own, off its own clock, and reading the level's would have the ribbon on the shop screen
+  // bouncing to a runner nobody can see.
+  function trailAnchor(ts, phase, moving) {
     const w = lookItem("swagger");
+    const mul = (v, d) => (v == null ? d : v);
+    if (phase == null) { phase = state ? state.runPhase : 0; moving = !!state && state.status === "play"; }
     const h0 = RUNNER.legLen + RUNNER.bodyH*0.5;         // body centre above the feet
-    const L = w.lean || 0;
-    const hover = w.hover ? w.hover * (1 + 0.14*Math.sin(ts/430)) : 0;   // matches paintRunner
-    return { x: h0*Math.sin(L), y: -(h0*Math.cos(L) + hover) };
+    let bob = moving ? Math.abs(Math.sin(phase)) * RUNNER.bob * mul(w.bob, 1) : 0;
+    if (w.hop && moving) bob += Math.max(0, Math.sin(phase)) * w.hop;    // one big bounce a stride
+    const h = h0 + bob;                                  // bob lifts him along his OWN up, so it
+    const L = w.lean || 0;                               // goes in before the lean is applied
+    const hover = w.hover ? w.hover * (1 + 0.14*Math.sin(ts/430)) : 0;
+    return { x: h*Math.sin(L), y: -(h*Math.cos(L) + hover) };
   }
   // The ribbon: one polyline per stripe, offset along the path's own normal so the stripes
   // run parallel rather than nesting inside one another, and stroked segment by segment so
@@ -7900,8 +8536,12 @@
       ctx.save();
       for (let k = 0; k < N; k++) {
         const u = k / (N - 1);                       // 0 at the tail, 1 at his heels
-        const wob = tr.wobble ? Math.sin(k*(tr.freq||0.5) + T/(tr.speed||200)) * band * tr.wobble : 0;
-        const x = pts[k].x + nor[k].x*wob, y = pts[k].y + nor[k].y*wob;
+        // Scatter taken from the POINT, not from the clock and not from its index: the index
+        // shifts as older points expire, which would crawl the pattern along the wake.
+        const p = pts[k];
+        const wob = tr.wobble ? (p.w || 0) * band * tr.wobble : 0;
+        const nx = p.nx != null ? p.nx : nor[k].x, ny = p.ny != null ? p.ny : nor[k].y;
+        const x = p.x + nx*wob, y = p.y + ny*wob;
         const r = band * (tr.dot || 0.16) * (tr.grow === false ? 1 : 0.30 + u*0.70);
         if (r < 0.4) continue;
         ctx.globalAlpha = Math.pow(u, tr.fade || 1.3) * 0.92;
@@ -8006,30 +8646,51 @@
     const rack = menuBody.querySelector(".shop-rack"), go = menuBody.querySelector(".shop-go");
     if (!rack || !go) return;
     const gap = 12;
-    const h = go.getBoundingClientRect().top - rack.getBoundingClientRect().top - gap;
+    // Whichever pinned button is highest is the floor the rack has to stop above — the buy
+    // button appears above CARRY ON when something is being tried on, and measuring against
+    // CARRY ON alone would run the last row underneath it.
+    const buy = menuBody.querySelector(".shop-buy");
+    const floorTop = Math.min(go.getBoundingClientRect().top,
+                              buy ? buy.getBoundingClientRect().top : Infinity);
+    const h = floorTop - rack.getBoundingClientRect().top - gap;
     const maxH = Math.max(140, Math.round(h));
     rack.style.maxHeight = maxH + "px";
-    // Three rows of stock, whole. The cells are square, so their size is whichever of the two
-    // axes runs out first: a third of the width, or a third of the height now that the rack's
-    // height is known. Sizing on width alone is what left a fourth row sliced in half at the
-    // bottom — you cannot tell what a half-item is, and it reads as the panel being broken.
+    // The stock fills the WIDTH: a cell is a third of it, and square, whatever that does to how
+    // many rows fit. Height used to have a vote — three whole rows had to fit above the button,
+    // and on a wide screen that vote always won and left the rack a narrow column adrift in the
+    // middle of it. A sliced row at the bottom is the honest signal that there is more below;
+    // a shop that does not use the screen it is on is not.
     const grid = rack.querySelector(".tal-grid");
     if (!grid) return;
-    const g = 9, n = 3, AIR = 0.92;                  // a little smaller than the space allows
-    const availW = rack.clientWidth - 4, availH = maxH - 4;     // the rack's 2px padding
-    const cell = Math.floor(Math.min((availW - g*(n-1)) / n, (availH - g*(n-1)) / n) * AIR);
-    grid.style.gridTemplateColumns = "repeat(" + n + ", " + cell + "px)";
-    // The ROW is pinned to the same number as the column, so a cell is square whatever its
+    const g = 9, n = 3;
+    // The stock is measured off the TAB SHELF, not off the rack. The rack now runs the full
+    // width of the screen so it can be dragged anywhere, but the stock has to line up with the
+    // tabs above it and the button below — so it takes its width from the very thing it has to
+    // match, and the three edges cannot drift apart however the card is sized.
+    const shelf = menuBody.querySelector(".shop-tabs");
+    const shelfW = shelf ? shelf.getBoundingClientRect().width : rack.clientWidth;
+    // Columns are FRACTIONS, not a rounded pixel count: rounding a third of the width down and
+    // multiplying it back left a few pixels over, and those pixels were the misalignment.
+    const cell = (shelfW - g*(n-1)) / n;
+    grid.style.gridTemplateColumns = "repeat(" + n + ", 1fr)";
+    // The ROW is pinned to what a column actually measures, so a cell is square whatever its
     // contents want. aspect-ratio alone loses that argument: an item whose three lines do not
     // fit simply grows, and the grid quietly stops being square.
     grid.style.gridAutoRows = cell + "px";
-    grid.style.width = (cell*n + g*(n-1)) + "px";
+    grid.style.width = shelfW + "px";
     grid.style.marginLeft = "auto"; grid.style.marginRight = "auto";
+    // Buying something rebuilds the whole screen, which threw the rack back to the top and
+    // lost your place on a twelve-item shelf. The scroll offset is remembered per tab and put
+    // back once the rows have been sized — before that the rack is short and the browser
+    // clamps the offset to nothing.
+    if (shopScroll[shopTab] != null) rack.scrollTop = shopScroll[shopTab];
+    rack.onscroll = () => { shopScroll[shopTab] = rack.scrollTop; };
     // The panel takes every pixel between where it starts and the button, and a row landing
     // half in and half out at the bottom is fine — it is a scroll view, and a sliced row is
     // the honest signal that there is more below.
   }
-  function closeMenu() { stopShopFig(); stopRelics(); paused = false; menuReturn = null; menuEl.classList.remove("show");
+  function closeMenu() { stopShopFig(); stopRelics(); shopPreview = null;
+                         paused = false; menuReturn = null; menuEl.classList.remove("show");
                          document.body.classList.remove("menu-open");
                          Sound.ambient(cineActive ? "intro" : titleActive ? "title" : null); }
 
@@ -8096,14 +8757,19 @@
     relicPainters = [];
     menuBody.innerHTML = "";
     menuEl.classList.toggle("top",
-      screen === "shop" || screen.indexOf("shop:") === 0 || screen === "levels");
+      screen === "shop" || screen.indexOf("shop:") === 0 || screen === "levels" || screen === "world");
+    // the map is a map: it wants the screen, the same as the shop's shelves do
+    menuEl.classList.toggle("wide",
+      screen === "shop" || screen.indexOf("shop:") === 0 || screen === "world");
+    // Anywhere but the rack it came from — another tab, another screen — and the fitting is off.
+    if (shopPreview && screen !== "shop:" + shopPreview.key) shopPreview = null;
     const title = document.getElementById("menu-title");
     title.className = "";                      // only the main screen wears the logo treatment
     // ---- the shop: him at the top, a tab per category, then that tab's rack ----
     if (screen === "shop" || screen.indexOf("shop:") === 0) {
       if (screen.indexOf("shop:") === 0) shopTab = screen.slice(5);
       if (!LOOK.some(l => l.key === shopTab)) shopTab = LOOK[0].key;
-      title.textContent = "Tile Shop"; title.className = "shop";
+      title.textContent = "Tile Shop"; title.className = "shop big gilt";
       saveWallet();                                   // banks whatever the last run earned
 
       // A picture of him wearing everything currently on, standing on a real tile. It sits
@@ -8142,7 +8808,9 @@
       const tr = lookItem("trail");
       if (tr.cols) {
         const bandH = rs*RUNNER.bodyH, tn = tr.cols.length, tsw = bandH/tn;
-        const A = trailAnchor(ts);                    // he is drawn at angle 0 here, so local IS world
+        // he is drawn at angle 0 here, so local IS world — and on the stride the figure runs,
+        // which is the one the ribbon has to agree with
+        const A = trailAnchor(ts, ts/RUNNER.stepMs, true);
         const cyb = foot.y + rs*A.y;
         const headX = foot.x + rs*(A.x + RUNNER.bodyW*0.20), tailX = S*0.03;
         for (let i = 0; i < tn; i++) {
@@ -8192,11 +8860,17 @@
       const rack = document.createElement("div"); rack.className = "shop-rack";
       const grid = document.createElement("div"); grid.className = "tal-grid";
       const cat = LOOK.find(l => l.key === shopTab);
-      const wornId = lookWorn(cat.key);
+      // What the shelf marks as EQUIPPED is what you actually own and wear — not the fitting.
+      // Reading lookWorn here meant that trying something on took the green off the thing you
+      // are still wearing and gave it to nothing, since the fitting wears gold instead.
+      const wornId = lookOwned(cat.key);
       cat.items.forEach(it => {
         const have = owns(it), on = wornId === it.id;
+        const trying = !!shopPreview && shopPreview.key === cat.key && shopPreview.id === it.id;
         const el = document.createElement("button");
-        el.className = "tal" + (on ? " on" : "") + (have ? "" : " locked");
+        const afford = wallet.tiles >= it.cost;
+        el.className = "tal" + (on ? " on" : "") + (have ? "" : " locked")
+                             + (trying ? " preview" : "") + (trying && !afford ? " poor" : "");
         // Locked stock is shown in full — its real colours and its real name. Greying it to a
         // silhouette and putting the price where the name goes hid the two things you need in
         // order to want it, and the price is what tells you it is locked anyway.
@@ -8205,6 +8879,10 @@
         // not make its icon and name jump up the tile, and a cell that reflows on purchase
         // makes the whole grid twitch as you shop.
         const pr = document.createElement("span"); pr.className = "price";
+        // Tried on: the same row says what pressing it again would do, in front of the number
+        // it would cost. One more word in a row that already exists costs the cell no height.
+        if (trying) { const lb = document.createElement("span"); lb.textContent = "Purchase";
+                      lb.style.fontWeight = "900"; pr.appendChild(lb); }
         pr.appendChild(coinChip(11));
         const pn = document.createElement("span"); pn.textContent = it.cost;
         pr.appendChild(pn);
@@ -8219,10 +8897,14 @@
         el.appendChild(sc); el.appendChild(nm);
         el.onclick = () => {
           Sound.unlock();
-          if (have) { wearLook(cat.key, it.id); Sound.tap(); }
-          else if (wallet.tiles >= it.cost) {           // buy, then wear it straight away
+          if (have) { shopPreview = null; wearLook(cat.key, it.id); Sound.tap(); }
+          // Locked stock takes two taps. The first is a fitting: it goes on the figure so you
+          // can see it before you decide, and the cell tells you what keeping it would cost.
+          // The second is the purchase, and only the second one spends anything.
+          else if (!trying) { shopPreview = { key: cat.key, id: it.id }; Sound.tap(); }
+          else if (wallet.tiles >= it.cost) {
             wallet.tiles -= it.cost; wallet.owned.add(it.id); saveWallet();
-            wearLook(cat.key, it.id); Sound.tapBig(); Sound.coin();
+            shopPreview = null; wearLook(cat.key, it.id); Sound.tapBig(); Sound.coin();
           } else { Sound.tap(); el.classList.add("nope");
                    setTimeout(() => el.classList.remove("nope"), 420); return; }
           buildMenu("shop:" + cat.key);
@@ -8231,16 +8913,42 @@
       });
       rack.appendChild(grid);
       menuBody.appendChild(rack);
-      const go = btn("Carry on",
+      // Trying something on puts the offer down here too, where your thumb already is after
+      // tapping the cell — on a full-width shelf the cell you pressed can be a long way from
+      // where you are holding the phone.
+      if (shopPreview && shopPreview.key === cat.key) {
+        const it = cat.items.find(i => i.id === shopPreview.id);
+        if (it) {
+          const buy = btn("Purchase", () => {
+            Sound.unlock();
+            if (wallet.tiles < it.cost) { Sound.tap(); buy.classList.add("nope");
+              setTimeout(() => buy.classList.remove("nope"), 420); return; }
+            wallet.tiles -= it.cost; wallet.owned.add(it.id); saveWallet();
+            shopPreview = null; wearLook(cat.key, it.id); Sound.tapBig(); Sound.coin();
+            buildMenu("shop:" + cat.key);
+          }, true);
+          buy.className = "shop-buy" + (wallet.tiles >= it.cost ? "" : " poor");
+          buy.textContent = "";
+          const lb = document.createElement("span"); lb.textContent = "Purchase";
+          buy.appendChild(lb); buy.appendChild(coinChip(17));
+          const pn = document.createElement("span"); pn.textContent = it.cost;
+          buy.appendChild(pn);
+          menuBody.appendChild(buy);
+        }
+      }
+      const go = btn("Back",
                      () => (menuReturn === "overlay" ? closeMenu() : buildMenu("main")), true);
       go.className = "shop-go";
-      labelWithArrow(go, "Carry on");
+      labelWithArrow(go, "Back");
       menuBody.appendChild(go);
+      // the buy button is stacked on top of this one, so it has to know how tall it is
+      requestAnimationFrame(() => document.documentElement.style.setProperty(
+        "--go-h", Math.round(go.getBoundingClientRect().height) + "px"));
       return;
     }
     // ---- Holy Talismans: found, never bought, and shown as objects rather than as stock ----
     if (screen === "talismans") {
-      title.textContent = "Holy Talismans"; title.className = "shop";
+      title.textContent = "Holy Talismans"; title.className = "shop big amber";
       const worn = settings.talisman;
       const grid = document.createElement("div"); grid.className = "relic-grid";
       TALISMANS.forEach((t, i) => {
@@ -8277,10 +8985,10 @@
       const n = talUnlocked.size;
       menuBody.appendChild(sub(n + " of " + TALISMANS.length + " found" +
         (n === TALISMANS.length ? " — the whole set" : "")));
-      const back = btn("Carry on",
+      const back = btn("Back",
                        () => (menuReturn === "overlay" ? closeMenu() : buildMenu("main")), true);
       back.className = "shop-go";
-      labelWithArrow(back, "Carry on");
+      labelWithArrow(back, "Back");
       menuBody.appendChild(back);
       startRelics();
       return;
@@ -8330,10 +9038,70 @@
       menuBody.appendChild(back);
       return;
     }
+    // ---- the Tileverse: the campaign as one climbing trail ----
+    if (screen === "world") {
+      title.textContent = "Tileverse"; title.className = "shop big gilt";
+      const rack = document.createElement("div"); rack.className = "shop-rack lvl-rack";
+      const map = document.createElement("div"); map.className = "lvl-map";
+      const best = loadBest();
+      // 1.35 rad a level puts a full left-right-left cycle in about four and a half of them.
+      // The first try wandered at 0.85, which over six levels reads as a diagonal drifting off
+      // the side of the map rather than a path that comes back.
+      const STEP = 104, PAD = 58, AMP = 25, STONES = 3, WIND = 1.35;
+      const N = LEVELS.length;
+      const H = PAD*2 + (N - 1)*STEP;
+      map.style.height = H + "px";
+      // Level 1 at the BOTTOM. `t` counts up from there, so y counts DOWN the box — the whole
+      // reason the map reads as a climb rather than a list.
+      const xAt = t => 50 + Math.sin(t * WIND) * AMP;      // percent across
+      const yAt = t => H - PAD - t*STEP;                   // pixels down
+      // Stones first so the levels sit on top of them where the two overlap.
+      for (let t = 0; t < N - 1; t++) {
+        const x1 = xAt(t), y1 = yAt(t), x2 = xAt(t+1), y2 = yAt(t+1);
+        for (let k = 1; k <= STONES; k++) {
+          const f = k / (STONES + 1);
+          const st = document.createElement("div"); st.className = "step";
+          st.style.left = (x1 + (x2-x1)*f) + "%";
+          st.style.top  = (y1 + (y2-y1)*f) + "px";
+          map.appendChild(st);
+        }
+      }
+      LEVELS.forEach((L, i) => {
+        const b = best["L" + i], done = !!(b && (b.done || b.stars));
+        const el = document.createElement("button");
+        el.className = "stop" + (done ? " done" : "") + (i === levelIdx ? " here" : "");
+        el.style.left = xAt(i) + "%";
+        el.style.top  = yAt(i) + "px";
+        el.innerHTML = "<span>" + (i + 1) + "</span><span class='st" + (done ? "" : " none") + "'>" +
+          (done ? "\u2713" : "\u2014") + "</span>";
+        el.title = L.name || ("Level " + (i + 1));
+        el.onclick = () => { levelIdx = i; loadLevel(i); closeMenu(); };
+        map.appendChild(el);
+      });
+      rack.appendChild(map);
+      menuBody.appendChild(rack);
+      const back = btn("Back", () => buildMenu("main"));
+      back.className = "shop-go";
+      menuBody.appendChild(back);
+      // Open on where you are, or at the bottom — where level 1 is, and where the climb starts.
+      //
+      // TWO frames, and the rack's own scrollTop rather than scrollIntoView(). buildMenu caps
+      // the rack's height on the next frame, so positioning it on the first one puts it where
+      // the uncapped box would have been. And scrollIntoView walks UP to the nearest scrollable
+      // ancestor: with the rack not yet capped that was the menu itself, which it dragged 2900px
+      // out of position — after which the cap was measured off a rack top that was off-screen.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const here = map.querySelector(".stop.here");
+        rack.scrollTop = here
+          ? Math.max(0, parseFloat(here.style.top) - rack.clientHeight/2)
+          : rack.scrollHeight;
+      }));
+      return;
+    }
     if (screen === "levels") {
       // Laid out like the shop: the header stays under the notch at the top, the grid scrolls
       // on its own, and BACK is pinned to the viewport instead of trailing 33 cells down.
-      title.textContent = "Tileverse"; title.className = "shop";
+      title.textContent = "Levels"; title.className = "shop big gilt";
       menuBody.appendChild(btn("Intro", () => { closeMenu(); startCine("menu"); }));   // first item
       const rack = document.createElement("div"); rack.className = "shop-rack lvl-rack";
       const grid = document.createElement("div"); grid.className = "lvl-grid";
@@ -8361,14 +9129,17 @@
     labelWithArrow(resume, "Resume");
     menuBody.appendChild(resume);
     menuBody.appendChild(btn("Restart Level", () => { loadLevel(levelIdx); closeMenu(); }));
-    menuBody.appendChild(btn("Tileverse", () => buildMenu("levels")));
+    menuBody.appendChild(btn("Tileverse", () => buildMenu("world")));
+    menuBody.appendChild(btn("Levels", () => buildMenu("levels")));
     // The balance belongs on the way in, not two taps deep: the question "can I afford
     // anything yet" is the only reason to open the shop at all.
     const shopBtn = btn("Tile Shop", () => buildMenu("shop"));
     shopBtn.classList.add("gold");
     walletInto(shopBtn, "Tile Shop");
     menuBody.appendChild(shopBtn);
-    menuBody.appendChild(btn("Holy Talismans", () => buildMenu("talismans")));
+    const talBtn = btn("Holy Talismans", () => buildMenu("talismans"));
+    talBtn.classList.add("amber");
+    menuBody.appendChild(talBtn);
     menuBody.appendChild(toggle("Sound", !Sound.isMuted(), () => { Sound.unlock(); Sound.setMuted(!Sound.isMuted()); buildMenu(screen); }));
     menuBody.appendChild(toggle("Colorblind", colorblind, () => { colorblind = !colorblind; settings.colorblind = colorblind; saveSettings(); applyColorblind(); buildMenu(screen); }));
     menuBody.appendChild(btn("Debug", () => buildMenu("debug")));
@@ -8411,6 +9182,8 @@
       return null;
     },
     occupied: (c, r) => occupiedFor(null).has(key(c, r)),
+    // where a hunting monster standing on (c,r) would step next — the chase, without a chase
+    hunt: (c, r) => monsterHuntStep([c, r]),
     talismans: { all: () => TALISMANS.map(t=>t.id), unlocked: () => [...talUnlocked],
                  wear: (id) => { settings.talisman = id; saveSettings(); },
                  worn: () => settings.talisman || null,
@@ -8424,6 +9197,10 @@
       relink: () => linkParkedTiles(),      // the pass update() runs every frame
       stone: (c, r, ts, st) => drawStone(c, r, ts, st),   // one stone repaint, for timing it
       tally: (c, r) => showTally(c || 0, r || 0),   // fire the pickup tally without finding a coin
+      // which way it goes, and how far the card has turned at u of its life
+      tallyDir: (u) => ({ dx: tallyDX, dy: tallyDY, spin: tallySpin(u || 0), swing: tallySwing }),
+      // where the ribbon leaves him, in his own frame, at a given point in the stride
+      trailAt: (ts, phase, moving) => trailAnchor(ts || 0, phase, moving !== false),
       monster: (x, y, ts, face, phase, cfg) => drawMonster(x, y, ts, face, phase, cfg),
       monsterKinds: () => Object.keys(MONSTER_KINDS),
       trapPhase: (t) => trapPhase(t),
