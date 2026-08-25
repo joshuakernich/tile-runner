@@ -1,0 +1,176 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Tile Runner · Crumble Lab</title>
+<style>
+  :root { --panel:#17142b; --line:#2a2450; --ink:#e8e6ff; --dim:#9a94c8; --accent:#7dff6b; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#0d0b1a; color:var(--ink); font:13px ui-monospace,Menlo,monospace;
+         display:grid; grid-template-columns:minmax(0,1fr) 290px; gap:14px; padding:14px; min-height:100vh; }
+  h1 { font-size:13px; letter-spacing:2px; text-transform:uppercase; color:var(--dim); margin-bottom:8px; }
+  h2 { font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--dim); margin:12px 0 4px; }
+  canvas#stage { border:1px solid var(--line); border-radius:8px; width:100%; height:auto; display:block; }
+  aside { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px;
+          overflow:auto; max-height:calc(100vh - 28px); }
+  label { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:5px 0; font-size:11px; }
+  input[type=range] { width:140px; }
+  .val { color:var(--accent); min-width:46px; text-align:right; }
+  button { font:inherit; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+           background:#241f45; color:var(--ink); border:1px solid var(--line); border-radius:6px;
+           padding:7px 9px; cursor:pointer; }
+  button.prim { background:var(--accent); color:#0d2a08; border-color:transparent; }
+  .row { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .note { font-size:10px; line-height:1.5; color:var(--dim); margin-top:10px; }
+</style>
+
+<main>
+  <h1>Crumble tile — the dark drawn inward</h1>
+  <canvas id="stage" width="880" height="440"></canvas>
+  <div class="row">
+    <button class="prim" id="copy">Copy RIFT block</button>
+    <button id="strip">Filmstrip</button>
+  </div>
+  <p class="note">Left: on the board at real size, on the track it eats. Right: the same tile blown up.
+     The squares are one function of time and index — no particles, no state — so it costs the same
+     whether one is on screen or twenty, and it can never drift out of step with itself.</p>
+</main>
+
+<aside>
+  <h2>the swarm</h2>
+  <label>squares <input type="range" id="n" min="1" max="10" value="4"><span class="val" id="nv"></span></label>
+  <h2>the swirl</h2>
+  <label>turns in <input type="range" id="turns" min="0" max="200" value="55"><span class="val" id="turnsv"></span></label>
+  <label>period ms <input type="range" id="ms" min="400" max="3000" value="1500"><span class="val" id="msv"></span></label>
+  <label>ease <input type="range" id="ease" min="60" max="300" value="150"><span class="val" id="easev"></span></label>
+  <h2>the squares</h2>
+  <label>start size <input type="range" id="big" min="60" max="200" value="110"><span class="val" id="bigv"></span></label>
+  <h2>the eye</h2>
+  <label>eye <input type="range" id="hole" min="20" max="95" value="60"><span class="val" id="holev"></span></label>
+  <label>off centre <input type="range" id="drift" min="0" max="40" value="17"><span class="val" id="driftv"></span></label>
+  <label>tremble <input type="range" id="tremble" min="0" max="60" value="14"><span class="val" id="tremblev"></span></label>
+  <h2>the dark</h2>
+  <label>opacity at the eye <input type="range" id="peak" min="10" max="100" value="100"><span class="val" id="peakv"></span></label>
+  <label>tint <input type="range" id="tint" min="0" max="100" value="0"><span class="val" id="tintv"></span></label>
+  <label>halo <input type="range" id="halo" min="0" max="100" value="60"><span class="val" id="halov"></span></label>
+  <p class="note">Frozen at one instant so it can be read. Everything here is a fraction of a CELL,
+     so it scales with the board rather than with the screen.</p>
+</aside>
+
+<script>
+const $ = id => document.getElementById(id);
+const cv = $("stage"), ctx = cv.getContext("2d");
+
+// the game's own colours for this tile
+const HOT = "#ffa848", PALE = "#ffe2b0", VOID = "#0a0713", HALO = "78,44,128";
+const TRACK = "#e8a13c", RAIL = "#f5d9b0", DEEP = "#8c3b2e", BOARD = "#243a1e";
+
+const P = () => ({
+  n:+$("n").value, drift:+$("drift").value/100,
+  turns:+$("turns").value/100, ms:+$("ms").value, ease:+$("ease").value/100,
+  big:+$("big").value/100, peak:+$("peak").value/100, tint:+$("tint").value/100,
+  tremble:+$("tremble").value/1000,
+  hole:+$("hole").value/100, halo:+$("halo").value/100,
+});
+
+// Every square is CENTRED on the tile and turns on the spot as it shrinks. There is no orbit:
+// the swirl is the rotation, and the fall is the scale. A square starts larger than the tile,
+// closes on the eye, and the instant it matches the eye it is gone — swallowed rather than
+// faded. `drift` lets them wander a hair off centre so the stack breathes instead of nesting
+// like a set of rings.
+function drawRift(g, x, y, cell, ts, p, gone) {
+  const a = gone ? 0.35 : 1;
+  const eye = cell * p.hole;                       // the black square in the middle
+  const start = cell * p.big;                      // where a square comes in at
+  g.save(); g.translate(x, y);
+  if (p.halo > 0) {                                // the pull, as a bruise in the floor
+    const s2 = cell*0.5;
+    const h = g.createRadialGradient(0,0,s2*0.3,0,0,s2*1.2);
+    h.addColorStop(0,   "rgba("+HALO+",0)");
+    h.addColorStop(0.6, "rgba("+HALO+","+(p.halo*a)+")");
+    h.addColorStop(1,   "rgba("+HALO+",0)");
+    g.fillStyle = h; g.beginPath(); g.arc(0,0,s2*1.2,0,Math.PI*2); g.fill();
+  }
+  for (let i = 0; i < p.n; i++) {
+    // its own place in the fall, 0 at full size, 1 at the eye — evenly spaced, looping
+    const k = ((ts / p.ms) + i/p.n) % 1;
+    const e = Math.pow(k, p.ease);
+    const sz = start + (eye - start) * e;          // 110% of a tile down to exactly the eye
+    if (sz <= eye + 0.5) continue;                 // it has arrived; the eye has it now
+    const ang = e * p.turns * Math.PI*2 + i*0.4;   // the swirl IS this
+    const off = cell * p.drift * (1 - e);          // a hair off centre, closing as it lands
+    const ox = Math.cos(i*2.4 + e*3.1) * off, oy = Math.sin(i*2.4 + e*3.1) * off;
+    g.save();
+    // Invisible where it comes in, solid as it lands. The tile does not throw matter out — it
+    // draws the dark IN, and a square you cannot see at the rim that is at full strength by the
+    // time it matches the eye is what that looks like. `peak` is that landing opacity: at 1 the
+    // square and the eye become the same black at the same instant, which is what makes the
+    // hand-off invisible rather than a swap.
+    g.globalAlpha = a * p.peak * e;
+    g.translate(ox, oy);
+    g.rotate(ang);
+    // Almost black, but not quite the same almost-black twice: the hue walks round the wheel
+    // square to square at a lightness low enough that you read it as colour in the dark rather
+    // than as colour.
+    const hue = Math.round((i / p.n) * 360 + e * 40) % 360;
+    g.fillStyle = "hsl(" + hue + "," + Math.round(p.tint*100) + "%," + (4 + p.tint*7).toFixed(1) + "%)";
+    g.fillRect(-sz/2, -sz/2, sz, sz);
+    g.restore();
+  }
+  // The eye, over everything: a hole, last — and never still. Two sine terms at frequencies
+  // that do not divide into each other, so the shake never repeats and never falls into a
+  // rhythm you could tap along to. It is the one thing on the tile that does not move in the
+  // swirl's time, which is what makes it read as something straining rather than something
+  // animating.
+  const tr = cell * p.tremble;
+  const jx = (Math.sin(ts/47) + Math.sin(ts/31.3)*0.6) * tr;
+  const jy = (Math.cos(ts/41) + Math.cos(ts/27.7)*0.6) * tr;
+  g.globalAlpha = a;
+  g.fillStyle = VOID;
+  g.fillRect(-eye/2 + jx, -eye/2 + jy, eye, eye);
+  g.restore();
+}
+
+function board(g, x, y, cell) {                       // a scrap of track for scale
+  g.fillStyle = "rgba(220,226,255,0.30)";
+  g.fillRect(x-cell*1.5, y-cell/2, cell*3, cell);
+  g.fillStyle = DEEP;  g.fillRect(x-cell*1.5, y+cell*0.04, cell*3, cell*0.46);
+  g.fillStyle = TRACK; g.fillRect(x-cell*1.5, y-cell*0.06, cell*3, cell*0.12);
+  g.fillStyle = RAIL;  g.fillRect(x-cell*1.5, y-cell*0.09, cell*3, cell*0.035);
+}
+
+function render(ts) {
+  const p = P();
+  for (const k of ["n","turns","ms","ease","big","drift","hole","halo","peak","tint","tremble"])
+    $(k+"v").textContent = (k==="n"||k==="arms"||k==="ms") ? $(k).value : (+$(k).value/100).toFixed(2);
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.fillStyle = BOARD; ctx.fillRect(0,0,cv.width,cv.height);
+  const cellS = 96;
+  board(ctx, 220, 220, cellS);
+  drawRift(ctx, 220, 220, cellS, ts, p, false);
+  drawRift(ctx, 660, 220, 300, ts, p, false);
+  requestAnimationFrame(render);
+}
+document.querySelectorAll("input").forEach(el => el.addEventListener("input", () => {}));
+$("copy").onclick = () => {
+  const p = P();
+  const txt = "  const RIFT = {\n" +
+    Object.entries(p).map(([k,v]) => "    " + (k+":").padEnd(8) + " " + v + ",").join("\n") + "\n  };";
+  navigator.clipboard && navigator.clipboard.writeText(txt);
+  $("copy").textContent = "copied"; setTimeout(()=>$("copy").textContent="Copy RIFT block", 1200);
+};
+$("strip").onclick = () => {
+  const N=6, w=300, out=document.createElement("canvas");
+  out.width=w*3; out.height=w*2;
+  const og=out.getContext("2d"), p=P();
+  const tmp=document.createElement("canvas"); tmp.width=tmp.height=300;
+  const tg=tmp.getContext("2d");
+  for(let i=0;i<N;i++){
+    tg.setTransform(1,0,0,1,0,0); tg.fillStyle=BOARD; tg.fillRect(0,0,300,300);
+    drawRift(tg,150,150,240, i/N*p.ms, p, false);
+    og.drawImage(tmp,(i%3)*w,Math.floor(i/3)*w,w,w);
+    og.strokeStyle="rgba(255,255,255,0.12)"; og.strokeRect((i%3)*w,Math.floor(i/3)*w,w,w);
+  }
+  window.__strip = out.toDataURL("image/png");
+};
+requestAnimationFrame(render);
+</script>

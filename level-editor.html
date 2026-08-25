@@ -73,6 +73,7 @@
   button.act:hover{border-color:var(--accent);}
   button.prim{background:#1c6; color:#04120a; font-weight:700; border:none;}
   button.act:disabled{opacity:.4;cursor:default;}
+  button.danger{color:#ff9aa8;} button.danger:hover{border-color:#ff4d6d;}
   textarea{width:100%;height:200px;background:#0d0b22;color:#bfe;border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit;font-size:11px;line-height:1.45;white-space:pre;}
   .hint{font-size:11px;opacity:.7;line-height:1.5;}
   .pill{font-size:11px;background:#0d0b22;border:1px solid var(--line);border-radius:20px;padding:3px 9px;}
@@ -102,10 +103,13 @@
     <div class="lvlist" id="lvlist"></div>
     <button class="act" id="newLvl">+ New blank</button>
     <button class="act" id="dupLvl">+ Duplicate open level</button>
+    <button class="act danger" id="delLvl">− Delete open level</button>
     <div class="hint">Click to open. Drag a level up or down to change where it falls in the
       game — everything renumbers to match, because the running order <i>is</i> the order in
       <code>levels.js</code>. <b>Duplicate</b> drops a copy of the level you have open into the
-      very next slot and opens it, so a variant starts from the thing it varies.</div>
+      very next slot and opens it, so a variant starts from the thing it varies. <b>Delete</b>
+      takes it out of the run and renumbers what is left; it lands in <code>levels.js</code>
+      the next time you save.</div>
   </aside>
 
   <!-- ---------- middle: the map ---------- -->
@@ -247,6 +251,9 @@
           <option value="mush">Mushroom</option>
         <option value="rewind">Tape of Regret</option>
         <option value="pulse">Bell of Unmaking</option>
+        <option value="spur">Immediacy</option>
+        <option value="brake">Millstone</option>
+        <option value="ankh">Ankh</option>
         </select></label>
         <label class="opt" data-for="platform">platform shape <select id="pfShape">
           <option value="ns">│ straight N–S</option>
@@ -321,9 +328,9 @@ const MON_KINDS = ["hrail","vrail","patrol","square","hunter","trap","stealth"];
 const MON_COL = { hrail:"#b24dff", vrail:"#4dc9ff", patrol:"#b24dff",
                   square:"#ff9b3d", hunter:"#6b7192", trap:"#ff5c5c", stealth:"#cfd8ff" };
 const monVariant = h => h.variant || (h.path ? "patrol" : (h.axis||"h")==="v" ? "vrail" : "hrail");
-const TAL_IDS = ["clock","magnet","star","finger","mush","rewind","pulse"];
+const TAL_IDS = ["clock","magnet","star","finger","mush","rewind","pulse","spur","brake","ankh"];
 const TAL_COL = {clock:"#8fd8ff", magnet:"#ff6d6d", star:"#ffd24a", finger:"#ffe9a8", mush:"#ff8fc8",
-                 rewind:"#9ad9b0", pulse:"#c9b6ff"};
+                 rewind:"#9ad9b0", pulse:"#c9b6ff", spur:"#ffb03a", brake:"#9aa3b8", ankh:"#7ee0c8"};
 const PF_SHAPES = ["ns","ew","ne","es","sw","wn"];
 const PF_OPP = { n:"s", s:"n", e:"w", w:"e" };
 const PF_VEC = { n:[0,-1], s:[0,1], e:[1,0], w:[-1,0] };
@@ -454,13 +461,26 @@ function monCells(h){
     return out;
   }
   if (v==="hunter" || v==="stealth" || v==="trap") return [[h.c,h.r]];
-  const out=[], p=h.path||[];
-  for(let i=0;i<p.length-1;i++){
-    const [c1,r1]=p[i], [c2,r2]=p[i+1];
+  // The square loop is a ring of four corners. It used to fall through to the path branch
+  // and come back EMPTY, which made it unhittable: you could not erase one, and nothing
+  // could tell it was in the way.
+  if (v==="square"){
+    const w=h.w||2, hh=h.h||2;
+    return pathCells([[h.c,h.r],[h.c+w,h.r],[h.c+w,h.r+hh],[h.c,h.r+hh]], true);
+  }
+  return pathCells(h.path||[], !!h.loop);
+}
+// Every cell a run of waypoints passes through, joined by straight runs exactly as the game
+// interpolates them. `loop` walks the closing leg back to the first waypoint too — the leg
+// the editor has always DRAWN for a looping patrol but never hit-tested.
+function pathCells(p, loop){
+  const pts = (loop && p.length>1) ? p.concat([p[0]]) : p, out=[];
+  for(let i=0;i<pts.length-1;i++){
+    const [c1,r1]=pts[i], [c2,r2]=pts[i+1];
     const n=Math.max(Math.abs(c2-c1), Math.abs(r2-r1)) || 1;
     for(let k=0;k<n;k++) out.push([Math.round(c1+(c2-c1)*k/n), Math.round(r1+(r2-r1)*k/n)]);
   }
-  if(p.length) out.push(p[p.length-1].slice());
+  if(pts.length) out.push(pts[pts.length-1].slice());
   return out;
 }
 // The patrol being drawn right now, if any. Kept out of L.hazards until it is finished,
@@ -683,12 +703,12 @@ function commit(){ edited[L.n] = toStored(L); scheduleAuto(); }
 
 // ---------- autosave (browser storage, guarded so a locked-down sandbox can't break the editor) ----------
 function scheduleAuto(){ if(!autoAvail) return; if(autoTimer) clearTimeout(autoTimer); autoTimer=setTimeout(saveAuto,350); }
-function saveAuto(){ try{ localStorage.setItem(LSKEY, JSON.stringify({v:2, edited, current:L?L.n:1, ts:Date.now()})); showAuto("saved"); }catch(e){ autoAvail=false; showAuto(); } }
+function saveAuto(){ try{ localStorage.setItem(LSKEY, JSON.stringify({v:2, edited, runLen, current:L?L.n:1, ts:Date.now()})); showAuto("saved"); }catch(e){ autoAvail=false; showAuto(); } }
 function showAuto(kind){ const el=$("auto"); if(!el) return;
   if(!autoAvail){ el.textContent="autosave: unavailable"; el.className="pill warn"; return; }
   const t=new Date().toTimeString().slice(0,8);
   el.textContent = (kind==="restored"?"restored · ":"autosaved ")+t; el.className="pill"; }
-function resetShipped(){ edited={}; try{ localStorage.removeItem(LSKEY); }catch(e){}
+function resetShipped(){ edited={}; runLen=null; try{ localStorage.removeItem(LSKEY); }catch(e){}
   reloadShipped().then(()=>setStatus("reset to shipped — " + EMBEDDED.length + " levels")); }
 // Anything in the autosave shadows the shipped level of the same number, forever. That is
 // right for work in progress and wrong for everything else: a level pasted back into
@@ -740,6 +760,11 @@ function showShipped(){ const el=$("shipped"); if(!el) return;
 // what the file says stops being a draft — which is what you want the moment a batch lands.
 async function reloadShipped(){
   const ok = await loadShipped();
+  // A fresh read of levels.js makes the FILE the authority on how long the run is, so a
+  // remembered length stops applying. It has to: paste sixty levels into levels.js by hand,
+  // hit reload, and a stale runLen of fifty would quietly hide the last ten. The cost is that
+  // a delete you never saved comes back on reload — visible, and one click to redo.
+  if(ok) runLen = null;
   const dropped = pruneAutosave(); if(dropped) saveAuto();
   showShipped(); rebuildLevelList();
   const known = n => !!(edited[n] || EMBEDDED.find(x=>x.n===n));
@@ -751,7 +776,7 @@ async function reloadShipped(){
 
 function boot(){
   try{ const raw=localStorage.getItem(LSKEY); if(raw){ const d=JSON.parse(raw); if(d&&d.edited){
-    edited=d.edited;
+    edited=d.edited; runLen=d.runLen||null;
     const dropped = pruneAutosave();
     const kept = Object.keys(edited).length;
     rebuildLoadSel(); loadLevel(d.current||EMBEDDED[0].n);
@@ -1042,6 +1067,28 @@ function refreshOut(){
 }
 
 // ---------- direct-manipulation drag ----------
+// What is already sitting on a cell, as a short name, or null for open ground. `ignore` is
+// the thing being dragged: it never counts as blocking itself. Used to refuse a drop rather
+// than to clear the way — a drag crosses a lot of cells on its route, and quietly eating
+// whatever it passed over would be a very expensive way to move a coin two squares.
+function cellTaken(c, r, ignore){
+  if(c<0||r<0||c>=L.cols||r>=L.rows) return "the edge";
+  if(L.walls.has(keyOf(c,r))) return "a wall";
+  const at=p=>p[0]===c&&p[1]===r;
+  if(L.start && L.start!==ignore && at(L.start)) return "the start";
+  if(L.goal  && L.goal !==ignore && at(L.goal))  return "the flag";
+  for(const p of L.init)            if(p!==ignore && at(p)) return "a tile";
+  for(const p of L.keys)            if(p!==ignore && at(p)) return "a key";
+  for(const p of L.doors)           if(p!==ignore && at(p)) return "a door";
+  for(const p of (L.stone||[]))     if(p!==ignore && at(p)) return "a stone";
+  for(const p of (L.platforms||[])) if(p!==ignore && at(p)) return "a platform";
+  for(const p of (L.talismans||[])) if(p!==ignore && at(p)) return "a talisman";
+  for(const p of (L.coins||[]))     if(p!==ignore && at(p)) return "a coin";
+  for(const b of L.blocks)          if(b!==ignore && blockCells(b).some(at)) return "a block";
+  for(const h of L.hazards)         if(h!==ignore && (isMon(h)?monCells(h):sawCells(h)).some(at))
+                                      return isMon(h) ? "a monster" : "a saw";
+  return null;
+}
 function draggableAt(c,r){                        // topmost movable element under a cell
   const eq=p=>p[0]===c&&p[1]===r;
   // Searched from the head BACKWARDS so the front of the chain still wins a shared cell,
@@ -1051,6 +1098,13 @@ function draggableAt(c,r){                        // topmost movable element und
   if(L.goal && eq(L.goal)) return {type:'goal'};
   const k=L.keys.find(x=>x[0]===c&&x[1]===r);  if(k) return {type:'key',ref:k};
   const d=L.doors.find(x=>x[0]===c&&x[1]===r); if(d) return {type:'door',ref:d};
+  // The single-cell items, topmost first: the two floor pickups are drawn over everything,
+  // so they are what you get when one shares a square with the plate beneath it.
+  for(const [list,what] of [[L.talismans,'talisman'],[L.coins,'coin'],
+                            [L.stone,'stone'],[L.platforms,'platform']]){
+    const hit=(list||[]).find(x=>x[0]===c&&x[1]===r);
+    if(hit) return {type:'cellItem', ref:hit, what};
+  }
   // a rail end grabs as a handle; the block cell itself grabs the whole thing
   for(const b of L.blocks){
     const h=(b.axis!=='v'), bc=h?b.pos0:b.c, br=h?b.r:b.pos0;
@@ -1059,18 +1113,48 @@ function draggableAt(c,r){                        // topmost movable element und
     if(e) return {type:'blockEnd',ref:b,orig:{...b},end:e.end};          // handle: reshape the rail
   }
   const b=L.blocks.find(x=>blockCells(x).some(p=>p[0]===c&&p[1]===r)); if(b) return {type:'block',ref:b,orig:{...b}};
+  // Monsters. A rail's end cells are reshape handles, exactly as a block's are; grabbing any
+  // other cell of any variant picks the whole creature up. This has to run BEFORE the saw
+  // hit-tests below: a rail monster carries the same axis/lo/hi fields a saw does, so the saw
+  // branches used to match one and rewrite it into an actual saw as you dragged.
+  for(const h of L.hazards){
+    if(!isMon(h)) continue;
+    const v=monVariant(h);
+    if(v==='hrail' || v==='vrail'){
+      const e=sawEnds(h).find(p=>p.c===c&&p.r===r);
+      if(e) return {type:'monEnd', ref:h, orig:{...h}, end:e.end};
+    }
+    if(monCells(h).some(p=>p[0]===c&&p[1]===r))
+      return {type:'mon', ref:h, orig:JSON.parse(JSON.stringify(h))};
+  }
   // The blade wins over an end handle when they share a cell — at phase 0 the blade sits
   // ON the lo end, so end-first would make it permanently ungrabbable. Blade-first costs at
   // most one extra step: slide the blade inboard, then that end is free to resize.
   for(const h of L.hazards){
+    if(isMon(h)) continue;
     const st=sawStart(h); if(st.c===c && st.r===r) return {type:'sawBlade',ref:h,orig:{...h}};
   }
   for(const h of L.hazards){
+    if(isMon(h)) continue;
     const e=sawEnds(h).find(p=>p.c===c&&p.r===r);
     if(e) return {type:'sawEnd',ref:h,orig:{...h},end:e.end};           // handle: reshape the rail
   }
-  const s=L.hazards.find(x=>sawCells(x).some(p=>p[0]===c&&p[1]===r));  if(s) return {type:'saw',ref:s,orig:{...s}};
+  const s=L.hazards.find(x=>!isMon(x) && sawCells(x).some(p=>p[0]===c&&p[1]===r));
+  if(s) return {type:'saw',ref:s,orig:{...s}};
+  // Last, because it is the thing every other element is drawn ON TOP of: a bare wall cell.
+  if(L.walls.has(keyOf(c,r))) return {type:'wall', at:{c,r}};
   return null;
+}
+// A moved or reshaped monster has to stay on the board and off every other monster — the
+// same two rules placeMonster applies. Walls are deliberately not consulted: a patrol has
+// always been allowed to sweep across one, and a drag should not be stricter than a click.
+function monFits(nb, self){
+  const cells = monCells(nb);
+  if(!cells.length) return false;
+  if(!cells.every(p=>p[0]>=0 && p[1]>=0 && p[0]<L.cols && p[1]<L.rows)) return false;
+  const at = monClash(cells, self);
+  if(at){ setStatus("there is already a monster on "+at[0]+","+at[1]+" — one to a square"); return false; }
+  return true;
 }
 function applyDrag(c,r){
   const d=dragEl;
@@ -1079,6 +1163,51 @@ function applyDrag(c,r){
   else if(d.type==='goal'){ L.goal=[c,r]; L.walls.delete(keyOf(c,r)); }
   else if(d.type==='key'){ d.ref[0]=c; d.ref[1]=r; }
   else if(d.type==='door'){ d.ref[0]=c; d.ref[1]=r; L.walls.delete(keyOf(c,r)); }
+  // A stone, platform, coin or talisman: two numbers to rewrite, onto open ground only.
+  else if(d.type==='cellItem'){
+    if(c===d.ref[0] && r===d.ref[1]) return;
+    const busy=cellTaken(c,r,d.ref);
+    if(busy){ setStatus("can't drop the "+d.what+" there — "+busy+" is in the way"); return; }
+    d.ref[0]=c; d.ref[1]=r; setStatus(d.what+" moved to "+c+","+r);
+  }
+  // A wall moves one cell at a time, and only onto ground nothing else is standing on.
+  else if(d.type==='wall'){
+    if(c===d.at.c && r===d.at.r) return;
+    const busy=cellTaken(c,r,null);
+    if(busy){ setStatus("can't drop the wall there — "+busy+" is in the way"); return; }
+    L.walls.delete(keyOf(d.at.c,d.at.r)); L.walls.add(keyOf(c,r)); d.at={c,r};
+  }
+  // A rail monster reshaped by one of its ends, anchored on the opposite one — the same
+  // gesture a saw's end handle uses, except what it writes back is still a monster.
+  else if(d.type==='monEnd'){
+    const o=d.orig, h0=(o.axis||'h')==='h';
+    const fixed = d.end==='hi' ? {c:h0?o.lo:o.c, r:h0?o.r:o.lo} : {c:h0?o.hi:o.c, r:h0?o.r:o.hi};
+    const dc=c-fixed.c, dr=r-fixed.r;
+    const horiz = Math.abs(dc) >= Math.abs(dr);
+    const off = horiz ? dc : dr;
+    if(Math.abs(off) < 1) return;                     // a rail is at least two cells long
+    const a = horiz ? fixed.c : fixed.r, b2 = a + off;
+    const nb = horiz ? {...o, variant:'hrail', axis:'h', r:fixed.r, lo:Math.min(a,b2), hi:Math.max(a,b2)}
+                     : {...o, variant:'vrail', axis:'v', c:fixed.c, lo:Math.min(a,b2), hi:Math.max(a,b2)};
+    if(horiz) delete nb.c; else delete nb.r;          // the axis may have swung round
+    if(!monFits(nb, d.ref)) return;
+    for(const k of Object.keys(d.ref)) delete d.ref[k];
+    Object.assign(d.ref, nb);
+  }
+  // ...and any monster picked up by its body, moved whole.
+  else if(d.type==='mon'){
+    const o=d.orig, v=monVariant(o), dc=c-d.grab.c, dr=r-d.grab.r;
+    if(!dc && !dr) return;
+    let nb;
+    if(v==='hrail' || v==='vrail')
+      nb = (o.axis||'h')==='h' ? {...o, r:o.r+dr, lo:o.lo+dc, hi:o.hi+dc}
+                               : {...o, c:o.c+dc, lo:o.lo+dr, hi:o.hi+dr};
+    else if(v==='patrol') nb = {...o, path:o.path.map(pt=>[pt[0]+dc, pt[1]+dr])};
+    else                  nb = {...o, c:o.c+dc, r:o.r+dr};   // square loop, hunter, stealth, trap
+    if(!monFits(nb, d.ref)) return;
+    for(const k of Object.keys(d.ref)) delete d.ref[k];
+    Object.assign(d.ref, nb);
+  }
   else if(d.type==='blockEnd'){
     // Reshape the rail by dragging an end. The pointer picks the axis (whichever of the two
     // offsets from the block is larger) and the side, so an end can be pulled out, pushed
@@ -1353,9 +1482,17 @@ window.addEventListener("keydown",e=>{ if(e.key==="z"&&(e.ctrlKey||e.metaKey||tr
 // Every level the editor knows about, in play order. `n` and array position are the same
 // thing — index.html indexes LEVELS by position and throws `n` away — so reordering the
 // list means renumbering, not just re-sorting a view.
+// How long the campaign is, once the editor has rewritten the whole run — null while it has
+// not. `edited` SHADOWS the shipped levels rather than replacing them, which is right for a
+// level you have changed and wrong for one you have taken away: without this, deleting L3
+// renumbers 4..51 down into 3..50 and then the shipped L51 shows straight back through the
+// hole at the end. It only ever truncates, so adding levels needs no help from it.
+let runLen = null;
 function allLevels(){
   const map={}; EMBEDDED.forEach(l=>map[l.n]=l); Object.keys(edited).forEach(n=>map[n]=edited[n]);
-  return Object.keys(map).map(Number).sort((a,b)=>a-b).map(n=>map[n]);
+  let ns = Object.keys(map).map(Number).sort((a,b)=>a-b);
+  if(runLen) ns = ns.filter(n=>n<=runLen);
+  return ns.map(n=>map[n]);
 }
 function isDirty(n){
   const emb=EMBEDDED.find(x=>x.n===n);
@@ -1400,6 +1537,7 @@ function reorder(from, to){
   edited={};
   arr.forEach((l,i)=>{ const c=cloneLvl(l); c.n=i+1; edited[i+1]=c; });
   const nowN = openPayload ? (arr.indexOf(openPayload)+1) : 1;
+  runLen = arr.length;
   saveAuto(); rebuildLevelList(); loadLevel(nowN);
   setStatus("moved L"+(from+1)+" to slot "+(to+1)+" — renumbered 1–"+arr.length);
 }
@@ -1417,12 +1555,34 @@ $("dupLvl").onclick=()=>{
   arr.splice(at+1, 0, copy);
   edited={};
   arr.forEach((l,i)=>{ const c=cloneLvl(l); c.n=i+1; edited[i+1]=c; });
+  runLen = arr.length;
   saveAuto(); rebuildLevelList(); loadLevel(at+2);
   setStatus("duplicated L"+(at+1)+" into slot "+(at+2)+" — renumbered 1–"+arr.length);
 };
+// Take the open level out of the run. Same renumber as a drag or a duplicate — the campaign
+// closes up behind it — and the editor opens whatever slid into the vacated slot, so you end
+// up looking at the next level rather than at nothing. Undo does not reach this: Ctrl-Z walks
+// the open level's own map history, not the running order, so this asks first.
+$("delLvl").onclick=()=>{
+  if(!L) return;
+  const arr=allLevels(), at=arr.findIndex(l=>l.n===L.n);
+  if(at<0) return;
+  if(arr.length<=1){ setStatus("that is the only level — a campaign needs at least one"); return; }
+  const label = "L"+L.n + ((L.name||"").trim() ? " \u201c"+L.name.trim()+"\u201d" : "");
+  if(!confirm("Delete "+label+" ?\n\nThe remaining "+(arr.length-1)+
+              " levels renumber to close the gap. This cannot be undone.")) return;
+  arr.splice(at,1);
+  edited={};
+  arr.forEach((l,i)=>{ const c=cloneLvl(l); c.n=i+1; edited[i+1]=c; });
+  // Deleting the last level in the run leaves nothing after it, so step back instead.
+  runLen = arr.length;
+  saveAuto(); rebuildLevelList(); loadLevel(Math.min(at+1, arr.length));
+  setStatus("deleted "+label+" — renumbered 1\u2013"+arr.length);
+};
 $("newLvl").onclick=()=>{
-  const n=Math.max(...EMBEDDED.map(l=>l.n), ...Object.keys(edited).map(Number), 0)+1;
+  const n=(runLen ? runLen : Math.max(...EMBEDDED.map(l=>l.n), ...Object.keys(edited).map(Number), 0))+1;
   edited[n]={n,start:[2,7],init:[[2,6],[2,5]],goal:[2,0],cols:5,rows:8,intro:[],walls:[],cps:0.8};
+  if(runLen) runLen = n;                       // the run just got one longer
   rebuildLevelList(); loadLevel(n);
 };
 $("resetBtn").onclick=resetShipped;

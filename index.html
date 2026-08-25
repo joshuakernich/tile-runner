@@ -162,6 +162,11 @@
   #pauseFloat:active { transform:translateY(4px); box-shadow:none; }
   /* A talisman maze's win card. Bigger title, the charm itself where the stars normally go,
      and no score furniture — this screen is about the object, not the run. */
+  /* The ceremony fills the screen and its card is only the way out of it, so the card goes to
+     the FOOT rather than the middle — centred, it landed square on the charm's name. */
+  #overlay.relic { display:block; }
+  #overlay.relic .card { position:absolute; left:50%; transform:translateX(-50%);
+    bottom:calc(env(safe-area-inset-bottom) + 26px); width:330px; max-width:calc(100vw - 44px); }
   #overlay.relic #ov-title { font-size:26px; letter-spacing:3px; color:var(--goal); }
   .ov-relic { width:170px; height:170px; display:block; margin:2px auto -6px; }
   .ov-relic-does { display:block; font-size:15px; letter-spacing:2px; line-height:1.35;
@@ -188,7 +193,11 @@
   #mech-icon { width:112px; height:112px; margin:8px auto 4px; display:block; }
   .mech-card h3 { font-size:18px; letter-spacing:2px; text-transform:uppercase; color:var(--track); margin:2px 0 8px; }
   .mech-card p { font-size:var(--body); line-height:1.6; color:var(--ink); margin-bottom:16px; }
-  .mech-card button { width:100%; }
+  /* A shade up from the card it sits on. Both were --panel, so the one thing on the card you
+     are meant to press was the same colour as the card — it read as a label rather than as a
+     button, and the shadow under it was doing all the work of saying otherwise. */
+  .mech-card button { width:100%; background:#241f45; }
+  .mech-card button:active { background:#2c2652; }
   #ready { color:var(--free); }
   #board-wrap { flex:1; width:100%; display:flex; align-items:stretch; justify-content:center; min-height:0; overflow:hidden; }
   canvas { image-rendering:pixelated; touch-action:none; display:block; }
@@ -255,7 +264,7 @@
   }
   /* The same finish-line chequer on the gold, cut in a darker gold so it reads at all — white
      over #e0aa1e is nearly invisible, where a shade of the button's own colour is not. */
-  #ov-shop, #menu-body button.gold, #menu-body button.amber,
+  #ov-shop, #menu-body button.gold, #menu-body button.amber, #menu-body button.void,
   .tal-grid .tal.locked.preview, .tal-grid .tal.on, #menu-body .shop-buy {
     /* WHITE squares, not brown ones: the chequer should lift the colour it sits on rather than
        dirty it. On the gold it reads as a sheen; on the green it reads as the same sheen. */
@@ -363,13 +372,18 @@
      wipe the chequer set above it. */
   #menu-body button.gold, #ov-shop { background-color:#e0aa1e; border-color:transparent;
     color:#38270a; box-shadow:0 4px 0 #8a6410; }
+  /* The way into the campaign is the colour of the space it hangs in: black, same chequer,
+     which on this one reads as the faint grid of a thing seen from very far away. */
+  #menu-body button.void { background-color:#0a0912; border-color:transparent;
+    color:#e8e6ff; box-shadow:0 4px 0 #05040b; }
   /* The talismans are the other thing you collect, so they get the shop's treatment in their
      own metal: orange rather than gold, same chequer, same shadow rule — the button's own
      colour darkened — so the pair read as a set without reading as the same button. */
   #menu-body button.amber { background-color:#e07a1e; border-color:transparent;
     color:#3a1d05; box-shadow:0 4px 0 #8a4610; }
   #menu-body button.gold:active, #ov-shop:active,
-  #menu-body button.amber:active { transform:translateY(4px); box-shadow:none; }
+  #menu-body button.amber:active,
+  #menu-body button.void:active { transform:translateY(4px); box-shadow:none; }
   /* label · coin · count, on one line and centred as a group.
      `> button` matters: a shop item also contains a canvas.wallet — the tile in its price row —
      and without the child combinator this rule matched all 66 of them, forcing them centred
@@ -377,7 +391,11 @@
      every attempt to move the icon and name did nothing whatsoever. */
   #menu-body > button:has(canvas.wallet), #ov-shop {
     display:flex; align-items:center; justify-content:center; gap:9px; }
-  canvas.wallet { width:17px; height:17px; display:block; }
+  /* One size wherever it appears. `.ov-relic` sets 170px on any canvas inside the relic card,
+     and the shop button's tile is a canvas inside the relic card — so on that one screen the
+     little loot tile came out ten times too big. !important because the relic rule is more
+     specific and this is the more specific INTENT: the wallet glyph has one size. */
+  canvas.wallet { width:17px !important; height:17px !important; display:block; }
   /* armed, and about to throw everything away */
   #menu-body button.danger { border-color:#ff6d6d; color:#ff9d9d; box-shadow:0 0 0 2px #ff6d6d inset; }
   .menu-sub { font-size:var(--btn); font-weight:900; letter-spacing:2px; text-transform:uppercase; color:var(--dim);
@@ -554,6 +572,43 @@
      Absolute positions on a tall relative box, because the path is a curve and no flow layout
      draws a curve. */
   .lvl-map { position:relative; width:100%; }
+  /* The cloud. A real grid — one track per column, one per row, identical gaps — so every tile
+     lines up with its neighbours in both directions and the only irregular thing on screen is
+     the outline the set of them makes. */
+  /* No gap at all: the tiles touch, so the cloud is one object with a ragged edge rather than
+     fifty-one objects near each other. */
+  /* Room around it. The cloud is an object, and an object needs space to be one — pressed to
+     the edges of the pane it reads as a table that has been cropped. The padding is part of the
+     scrolling area rather than a frame around it, so the space above and below scrolls past
+     with the cloud instead of pinning it. */
+  .lvl-map.blob { display:grid; gap:0; box-sizing:border-box;
+    padding:64px 40px;
+    grid-template-columns:repeat(var(--cols, 9), 1fr);
+    grid-auto-rows:1fr; }
+  #menu-body .lvl-map.blob .stop { position:relative; transform:none; width:auto; height:auto;
+    aspect-ratio:1; padding:0; overflow:hidden;
+    background:transparent; border:0; box-shadow:none; }
+  /* the level's own backdrop, nine squares of it, filling the tile */
+  .lvl-map.blob .stop .swatch { position:absolute; inset:0; width:100%; height:100%;
+    display:block; image-rendering:pixelated; }
+  /* the number rides on top, dark-rimmed so it reads over any palette underneath */
+  .lvl-map.blob .stop > span { position:relative; font-size:15px; font-weight:900; color:#fff;
+    text-shadow:0 1px 0 rgba(5,4,13,0.9), 0 -1px 0 rgba(5,4,13,0.9),
+                1px 0 0 rgba(5,4,13,0.9), -1px 0 0 rgba(5,4,13,0.9); }
+  /* Open levels are shown as they ARE — full strength, no wash over them, cleared or not.
+     Clearing a level does not change how it looks; it is the same place either way, and a green
+     film over half the cloud was hiding the very palettes the tiles exist to show. */
+  /* ...and everything past where you have got is drained: the colour is what tells you a level
+     is somewhere you have been let into. */
+  .lvl-map.blob .stop.shut .swatch { filter:grayscale(1) brightness(0.55); }
+  .lvl-map.blob .stop.shut > span { color:#8b90a3;
+    text-shadow:0 1px 0 rgba(5,4,13,0.9), 0 -1px 0 rgba(5,4,13,0.9),
+                1px 0 0 rgba(5,4,13,0.9), -1px 0 0 rgba(5,4,13,0.9); }
+  #menu-body .lvl-map.blob .stop.done { background:transparent; }
+  .lvl-map.blob .stop:active .swatch { filter:brightness(1.35); }
+  .lvl-map.blob .stop.shut:active .swatch { filter:grayscale(1) brightness(0.85); }
+  #menu-body .lvl-map.blob .stop.here { box-shadow:inset 0 0 0 3px var(--track); z-index:2; }
+  #menu-body .lvl-map.blob .stop:active { transform:none; }
   #menu-body .lvl-map .stop {
     position:absolute; transform:translate(-50%,-50%);
     width:var(--stop, 62px); height:var(--stop, 62px); padding:0;
@@ -1641,6 +1696,34 @@
       }
       return t;
     }
+    // A tile going down the rift: a pitch falling away under a filtered rush of noise that
+    // closes as it goes. Short — the tile is gone in half a second and a long swallow would
+    // still be sounding while the runner is somewhere else.
+    function swallow() {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime;
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = "triangle";
+      o.frequency.setValueAtTime(BASE*2.2, t0);
+      o.frequency.exponentialRampToValueAtTime(BASE*0.30, t0 + 0.46);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.20, t0 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0006, t0 + 0.50);
+      o.connect(g); g.connect(master); g.connect(sendBus);
+      o.start(t0); o.stop(t0 + 0.54);
+      if (noiseBuf) {                                     // the rush of it being drawn in
+        const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+        const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 1.6;
+        bp.frequency.setValueAtTime(2600, t0);
+        bp.frequency.exponentialRampToValueAtTime(340, t0 + 0.46);   // closing as it falls
+        const ng = ac.createGain();
+        ng.gain.setValueAtTime(0.0001, t0);
+        ng.gain.exponentialRampToValueAtTime(0.13, t0 + 0.06);
+        ng.gain.exponentialRampToValueAtTime(0.0006, t0 + 0.48);
+        src.connect(bp); bp.connect(ng); ng.connect(master);
+        src.start(t0); src.stop(t0 + 0.52);
+      }
+    }
     function tileDrop() {                                    // parked off the track
       if (muted || !ac || ac.state !== "running") return;
       tileThud(0.85);
@@ -1845,6 +1928,40 @@
     }
     // Each power announces itself differently — you should be able to tell which one you
     // pressed without looking, since after that you are watching the board, not the button.
+    // The ceremony's four cues. Deliberately not the level's music: this is the one moment the
+    // game stops being a game, so it borrows the language of one — a fanfare, a held shimmer,
+    // something descending, and a stab of horns when it lands.
+    function ceremony(beat){
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime;
+      const voice = (semi, at, dur, wave, vel, wet) => {
+        const t = t0 + at;
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = wave; o.frequency.setValueAtTime(BASE * Math.pow(2, semi/12), t);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(vel, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0006, t + dur);
+        o.connect(g); g.connect(master); if (wet !== false) g.connect(sendBus);
+        o.start(t); o.stop(t + dur + 0.06);
+      };
+      if (beat === "fanfare") {                    // up the chord, brass-ish, four rungs
+        [12, 16, 19, 24].forEach((n, i) => voice(n, i*0.11, 0.9, "sawtooth", 0.13));
+      } else if (beat === "beam") {                // a held shimmer, high and thin
+        [31, 36, 40].forEach((n, i) => voice(n, i*0.06, 2.2, "sine", 0.055));
+      } else if (beat === "descend") {             // something lowering itself
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "triangle";
+        o.frequency.setValueAtTime(BASE*4, t0);
+        o.frequency.exponentialRampToValueAtTime(BASE*1.5, t0 + 1.35);
+        g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.10, t0 + 0.10);
+        g.gain.exponentialRampToValueAtTime(0.0006, t0 + 1.5);
+        o.connect(g); g.connect(master); g.connect(sendBus); o.start(t0); o.stop(t0 + 1.6);
+        [43, 48].forEach((n, i) => voice(n, 0.2 + i*0.5, 1.0, "sine", 0.045));
+      } else {                                     // horns: the stab it lands on
+        [12, 19, 24, 28].forEach((n, i) => voice(n, i*0.012, 1.3, "sawtooth", 0.15));
+        [12, 19].forEach((n, i) => voice(n - 12, i*0.012, 1.4, "triangle", 0.11, false));
+      }
+    }
     function power(id){
       if (muted || !ac || ac.state !== "running") return;
       const t0 = ac.currentTime;
@@ -1878,6 +1995,12 @@
         [12, 16, 19, 24, 28].forEach((semi, i) => ping(semi, i*0.055, 0.5, "triangle", 0.24));
       } else if (id === "finger") {                // a choir stab from on high
         [24, 28, 31, 36].forEach(semi => ping(semi, 0, 1.1, "sine", 0.16));
+      } else if (id === "spur") {                  // a whipcrack up: three rungs, fast
+        [19, 26, 31].forEach((semi, i) => ping(semi, i*0.035, 0.26, "square", 0.16));
+      } else if (id === "brake") {                 // ...and the same three falling, dragged out
+        [31, 24, 17].forEach((semi, i) => ping(semi, i*0.075, 0.5, "triangle", 0.16));
+      } else if (id === "ankh") {                  // a held chord that lifts — coming back
+        [12, 19, 24, 28].forEach((semi, i) => ping(semi, i*0.09, 1.5 - i*0.16, "sine", 0.17));
       } else if (id === "pulse") {                 // a struck bell, and the air leaving with it
         [12, 19, 26.4, 31].forEach((semi, i) => ping(semi, i*0.004, 1.4 - i*0.22, "sine", 0.20 - i*0.03));
         const o = ac.createOscillator(), g = ac.createGain();     // the shove that goes out with it
@@ -2034,7 +2157,7 @@
     function isMuted() { return muted; }
     return { unlock, clearTile, smash, win, lose, fall, death, boost, slow, coin, key, doorOpen,
              slide, clack, tap, tapBig, power, warp, vortex, crunch, growl,
-             tileDrop, tileLaid, heartbeat, duck,
+             tileDrop, tileLaid, ceremony, swallow, heartbeat, duck,
              ambient,
              swish, introGather, introFlash, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
              levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, setMusicGate,
@@ -2062,7 +2185,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v8.0";                    // shown on the title & pause screens
+  const VERSION = "v8.1";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -2076,6 +2199,8 @@
   const GATE_COLORS = ["#7dff6b", "#ff9e4d", "#c77dff"];   // per switch/door group (button, wire, door seam)
   // collected boost / slow pickups apply a time-limited speed effect
   const BOOST_MULT = 1.8, SLOW_MULT = 0.5, BOOST_MS = 3000, SLOW_MS = 2600;
+  const SPEED_CHARM_MS = 500;      // the Spur and the Millstone, in ms — half a second each
+  const REVIVE_HOLD_MS = 3000;     // how long the Ankh stands him still after bringing him back
   const SPEED_SCALE = (1000 / START_CPS) / (LEVELS[0] ? LEVELS[0].speed : 1250);
   const COIN_BONUS = 5;                      // score value per coin
   const levelAttempts = {};                  // how many times each level has been started this session
@@ -2142,7 +2267,7 @@
     // the player ever sees.
     { id:"finger", name:"Hammer of God", col:"#ffe9a8", ms:0,
       face:"#e8dcc0", edge:"#8d7c58",
-      blurb:"Move any laid tile",
+      blurb:"A fell voice that shatters stone",
       etch:(g,x,y,r)=>{
         // A sledge, head-on: a broad head with the haft hanging from the middle of it. The
         // two overlap by a hair so they fill as one solid silhouette rather than a head
@@ -2159,9 +2284,9 @@
         g.closePath(); g.fill();
         rr(x-r*0.13, y-r*0.30, r*0.26, r*1.00, r*0.10); } },     // ...and the haft
 
-    { id:"mush", name:"Mushroom", col:"#ff8fc8", ms:6000,
+    { id:"mush", name:"Mushroom", col:"#ff8fc8", ms:0,
       face:"#ff7fb8", edge:"#9e2a60",
-      blurb:"Everything goes wobbly",
+      blurb:"A gift from the Gods",
       etch:(g,x,y,r)=>{
         g.beginPath();                                           // stem
         g.moveTo(x-r*0.22, y-r*0.04); g.lineTo(x+r*0.22, y-r*0.04);
@@ -2187,9 +2312,54 @@
         }
         g.fillRect(x - r*0.72, y - r*0.44, r*0.12, r*0.88); } },
 
+    // The two speed charms are the same mechanism as the boost and slow PADS on the floor,
+    // fired by hand instead of run over — so they need no new plumbing at all, and a player who
+    // has met a pad already knows exactly what these do. Half a second is deliberately short:
+    // long enough to clear a saw or miss one, not long enough to re-plan around.
+    { id:"spur", name:"Immediacy", col:"#ffb03a", ms:SPEED_CHARM_MS,
+      face:"#f2a02e", edge:"#8a4c05",
+      blurb:"A spur for the mind and body",
+      etch:(g,x,y,r)=>{
+        g.lineCap="round"; g.lineJoin="round"; g.lineWidth=r*0.15;
+        for (const dx of [-0.44, 0.02, 0.48]) {          // three chevrons, pointing the way on
+          g.beginPath();
+          g.moveTo(x + r*(dx-0.16), y - r*0.44);
+          g.lineTo(x + r*(dx+0.20), y);
+          g.lineTo(x + r*(dx-0.16), y + r*0.44);
+          g.stroke();
+        } } },
+
+    { id:"brake", name:"Millstone", col:"#9aa3b8", ms:SPEED_CHARM_MS,
+      face:"#8b95ab", edge:"#3a4152",
+      blurb:"Slows the heart and body, if only for a moment.",
+      etch:(g,x,y,r)=>{
+        g.lineCap="butt"; g.lineWidth=r*0.12;
+        g.beginPath(); g.arc(x, y, r*0.66, 0, 7); g.stroke();      // the wheel
+        for (let k=0;k<4;k++){ const a2=k/4*Math.PI*2 + Math.PI/4;  // the dressing grooves
+          g.beginPath();
+          g.moveTo(x+Math.cos(a2)*r*0.26, y+Math.sin(a2)*r*0.26);
+          g.lineTo(x+Math.cos(a2)*r*0.64, y+Math.sin(a2)*r*0.64); g.stroke(); }
+        g.beginPath();                                             // the square eye through it
+        g.rect(x - r*0.17, y - r*0.17, r*0.34, r*0.34); g.fill(); } },
+
+    // The one charm you do not choose the moment for. Pressing it ARMS it — like the Hammer,
+    // which also waits for something to happen rather than running on a clock — and it is
+    // spent the instant the run would have ended, putting him back on the last tile he stood
+    // on and holding him there while you work out what went wrong.
+    { id:"ankh", name:"Ankh", col:"#7ee0c8", ms:0,
+      face:"#63cbb1", edge:"#1f5f50",
+      blurb:"A second chance to die",
+      etch:(g,x,y,r)=>{
+        g.lineCap="round"; g.lineWidth=r*0.16;
+        g.beginPath(); g.arc(x, y - r*0.42, r*0.28, Math.PI*0.72, Math.PI*0.28); g.stroke();  // the loop
+        g.beginPath();
+        g.moveTo(x, y - r*0.16); g.lineTo(x, y + r*0.78);            // the shaft
+        g.moveTo(x - r*0.46, y + r*0.10); g.lineTo(x + r*0.46, y + r*0.10);   // the arms
+        g.stroke(); } },
+
     { id:"pulse", name:"Bell of Unmaking", col:"#c9b6ff", ms:0,
       face:"#b49df5", edge:"#4a3080",
-      blurb:"Unmakes monsters within two tiles",
+      blurb:"A mighty scream to unmake monsters",
       etch:(g,x,y,r)=>{
         // three rings going out and a struck centre — the shape of the thing it does
         g.lineCap="round";
@@ -2202,6 +2372,11 @@
   // One painter for all five. Each keeps its own metal; the shape, the shading and the
   // engraving are shared, so a talisman can never drift into looking like a different class
   // of object from the coin it sits next to on the board.
+  // Shelved for now. A charm named here is out of the game entirely — off the shelf, off the
+  // rack at the foot of a level, un-fireable, and skipped if a level tries to place one on the
+  // board. One list rather than a flag on each, so putting them back is deleting a word.
+  const TAL_OFF = new Set(["clock", "rewind", "star"]);
+  const talLive = t => !TAL_OFF.has(typeof t === "string" ? t : t.id);
   TALISMANS.forEach(t => { t.draw = (g, x, y, r) => talBadge(g, x, y, r, t); });
   const talById = id => TALISMANS.find(t => t.id === id) || null;
   const TAL_KEY = "tilerunner:talismans";
@@ -2216,7 +2391,8 @@
   }
   function unlockTalisman(id){ if (talUnlocked.has(id)) return false; talUnlocked.add(id); saveTalismans(talUnlocked); return true; }
   // the pendant currently worn (an id, or null)
-  function wornTalisman(){ const w = settings.talisman; return w && talUnlocked.has(w) ? talById(w) : null; }
+  function wornTalisman(){ const w = settings.talisman;
+    return w && talLive(w) && talUnlocked.has(w) ? talById(w) : null; }
 
   const BEST_KEY = "tilerunner:best";
   function loadBest(){ try { return JSON.parse(localStorage.getItem(BEST_KEY)) || {}; } catch(_){ return {}; } }
@@ -2238,6 +2414,13 @@
   const settings = loadSettings();
   let paused = false;
   let titleActive = true;               // the attract/title screen is up before the first play
+  // The very first launch gets a different title: no runner, because there is no runner yet —
+  // the opening is about him arriving. It is the same screen otherwise, over the same cosmos
+  // the opening happens in, and it asks for the one thing that has not happened yet.
+  const CINE_SEEN_KEY = "tilerunner:cine";
+  const cineSeen = () => { try { return localStorage.getItem(CINE_SEEN_KEY) === "1"; } catch(_) { return true; } };
+  const markCineSeen = () => { try { localStorage.setItem(CINE_SEEN_KEY, "1"); } catch(_) {} };
+  const firstLaunch = () => !cineSeen();
   let colorblind = !!settings.colorblind;
   // gameplay colours that need colorblind-safe alternates (Okabe–Ito)
   function pal(k){
@@ -2783,7 +2966,8 @@
   const curTrack = () => lookItem("track").track || (state && state.trackPal && state.trackPal.track) || getVar("--track");
   const curRail  = () => lookItem("track").rail  || (state && state.trackPal && state.trackPal.rail)  || getVar("--rail");
 
-  function loadLevel(i) { Sound.warp(false); Sound.ambient(null);   // the tiles drive the music now
+  function loadLevel(i) { endCeremony();                            // no ceremony survives a load
+                         Sound.warp(false); Sound.ambient(null);   // the tiles drive the music now
     levelIdx = clamp(i, 0, LEVELS.length - 1);
     levelAttempts[levelIdx] = (levelAttempts[levelIdx] || 0) + 1;      // count each start (incl. retries)
     beginLevel(LEVELS[levelIdx], String(levelIdx + 1));
@@ -2841,7 +3025,8 @@
       // --- Batch 2: optional extra cell types & hazards ---
       coinCells: new Set((L.coins||[]).map(c=>key(c[0],c[1]))),
       // [c, r, id] — a talisman sits on the floor and is grabbed by passing over it
-      talismans: (L.talismans||[]).map(t=>({ c:t[0], r:t[1], id:t[2], got:false })),
+      talismans: (L.talismans||[]).filter(t => talLive(t[2]))
+                                  .map(t=>({ c:t[0], r:t[1], id:t[2], got:false })),
       coinsGot: 0,
       keys: (L.keys || (L.key ? [[L.key[0], L.key[1], "#ffd24a"]] : [])).map(k=>({ c:k[0], r:k[1], color:k[2]||"#ffd24a", got:false })),
       doors: (L.doors||[]).map(d=>({ c:d[0], r:d[1], color:d[2]||"#ff6d6d", open:false, reached:false })),
@@ -2855,6 +3040,11 @@
       boost: new Set((L.boost||[]).map(c=>key(c[0],c[1]))),
       slow:  new Set((L.slow ||[]).map(c=>key(c[0],c[1]))),
       speedFx: { kind: null, t: 0 },        // active timed speed effect from a collected pickup
+      reviveHold: 0,                        // ms left of the Ankh's pause, if he has just used one
+      // Her track is given outright — a list of cells, run end to end. `lover` on a level is
+      // the whole feature: no tiles to lay, nothing to solve, just somebody running beside you.
+      lover: (L.lover && L.lover.length > 1)
+        ? { path: L.lover.map(p => ({ c:p[0], r:p[1] })), idx:0, t:0, phase:0 } : null,
       // The worn talisman's one shot at this level: armed on load, spent on the button.
       // kind is the id while the effect runs; armed survives past it for the Finger, which
       // waits for a tile to be pressed rather than running on a clock.
@@ -2864,6 +3054,7 @@
       vortex: null,                         // ...and what happens to the world when he is
       crumble: new Set((L.crumble||[]).map(c=>key(c[0],c[1]))),
       crumbled: new Set(),
+      eaten: [],                            // tiles the rift is currently swallowing
       // fixed platforms: permanent free track cast into a wall plinth (see trackConnects)
       platforms: (L.platforms||[]).map((p,i)=>({ id:i, c:p[0], r:p[1], dirs:parsePfDirs(p[2]), lit:0 })),
       platformMap: new Map(),
@@ -3174,7 +3365,7 @@
     tile:   { name:"Track Tiles", desc:"The runner never stops! Drag cleared tiles to lay track ahead." },
     key:    { name:"Colour Key", desc:"Grab a coloured key to open its matching door." },
     flag:   { name:"The Exit", desc:"Lay a tile on the flag to finish the level." },
-    wall:   { name:"Metal Wall", desc:"Solid — you can't build on it. Route around." },
+    wall:   { name:"Wall Entity", desc:"Passive entities whose noble purpose is simply to get in the way" },
     stone:  { name:"Stone Block", desc:"Tap to smash it, then build through the gap." },
     coin:   { name:"Loot Tile", desc:"Run over one and its tile is yours to spend in the shop." },
     boost:  { name:"Boost", desc:"Grab it for a short burst of speed. Keep those tiles flowing!" },
@@ -3190,7 +3381,7 @@
     platform:{ name:"Fixed Platform", desc:"Track already bolted to the level. You can't build on it — but run your path into one of its open ends and the runner rides across for FREE, no tile spent. It only connects where the rails are drawn." },
     mdoor:  { name:"Sliding Door", desc:"Slide it open by dragging BOTH panels apart — push each side away from the centre." },
     // ---- tutorial prompts for the hand-built levels ----
-    recycle:  { name:"Reusable Tiles", desc:"The runner never stops! Drag cleared tiles to lay track ahead." },
+    recycle:  { name:"Drag Tiles", desc:"The runner never stops! Drag cleared tiles to lay track ahead." },
     turn:     { name:"Take a Turn", desc:"Lay a tile to the SIDE of the runner's path and it turns to follow. Steer it toward the flag." },
     offscreen:{ name:"Off-screen Arrows", desc:"When the flag is off-screen, a coloured arrow at the edge points the way. Follow it to find the exit." },
   };
@@ -3273,15 +3464,11 @@
     const real = fn => { try { withCanvas(g, CP, OX, OY, fn); return true; } catch(_) { return false; } };
     const N0 = { c:0, r:0 };
     if (type==="tile" || type==="recycle") {
-      // a free tile, exactly as the board draws one: glass pane plus the nine grip dots
+      // A free tile and nothing else: the glass pane with its nine grip dots, exactly as the
+      // board draws one. The recycling arrow that used to loop round it was explaining the
+      // mechanic twice — the card says it in words underneath, and the dots already say
+      // "pick this up" better than an arrow saying "it comes back" does.
       real(() => { drawGlass(0, 0, cell); drawDragDots(cell/2, cell/2, cell); });
-      if (type==="recycle") {                       // ...looping back round to the front
-        g.strokeStyle=V("--track"); g.lineWidth=S*0.045; g.lineCap="round";
-        g.beginPath(); g.arc(cx,cy,S*0.33,Math.PI*0.75,Math.PI*0.15); g.stroke();
-        const ax=cx+Math.cos(Math.PI*0.15)*S*0.33, ay=cy+Math.sin(Math.PI*0.15)*S*0.33;
-        g.beginPath(); g.moveTo(ax-S*0.02,ay-S*0.08); g.lineTo(ax+S*0.06,ay+S*0.01);
-        g.lineTo(ax-S*0.05,ay+S*0.07); g.closePath(); g.fillStyle=V("--track"); g.fill();
-      }
       return;
     }
     if (type==="turn") {   // a laid elbow — the same corner surface the runner rides
@@ -3694,7 +3881,7 @@
     haptic(st.hp > 0 ? 10 : 18);
     const wx = (c + 0.5) * cell, wy = (r + 0.5) * cell;
     if (st.hp > 0) {                                 // chip it — a few shards, a small knock
-      Sound.clearTile ? Sound.clearTile() : Sound.smash();
+      Sound.crunch(1);                               // every tap on stone is the same crunch
       state.shake = Math.max(state.shake, cell * 0.07);
       for (let i = 0; i < 5; i++) {
         const a = (i / 5) * Math.PI * 2 + (bgHash(c + i, r) % 100) / 60, sp = cell * 0.0011;
@@ -3706,7 +3893,10 @@
     // final tap — shatter
     state.stones.delete(key(c, r));
     markOccDirty();                            // a stone opened up — occupancy changed
-    Sound.smash();
+    // ...including the one that breaks it. It used to chip with the tile-clear note and
+    // shatter with the smash, which made a stone sound like two different materials depending
+    // on how much of it was left.
+    Sound.crunch(1);
     state.shake = Math.max(state.shake, cell * 0.16);
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2 + (bgHash(c + i, r) % 100) / 60;
@@ -3932,6 +4122,48 @@
     if (linked) updateReadyHud();
   }
 
+  // ---------- The lover ---------------------------------------------------
+  // She is not a hazard and she is not a puzzle: she runs her own track, laid for her by the
+  // level, at the same pace he does. Nothing she touches matters and nothing touches her. The
+  // whole point is that for one level there is someone else out there.
+  const LOVER = {
+    skin: { body:"#ff9ec7", ink:"#5c1638" },
+    // a bow, drawn in her own frame the way every hat is: two loops and a knot on the crown
+    hat: { col:"#ff5f9e", draw(g, s, bw, byTop, col) {
+      g.fillStyle = col;
+      for (const sx2 of [-1, 1]) {
+        g.beginPath();
+        g.ellipse(sx2*bw*0.30, byTop - s*0.030, bw*0.24, s*0.042, sx2*0.5, 0, Math.PI*2);
+        g.fill();
+      }
+      g.beginPath(); g.arc(0, byTop - s*0.028, s*0.028, 0, Math.PI*2); g.fill();
+    } },
+  };
+  function loverPos() {
+    const lv = state.lover;
+    if (!lv || lv.path.length < 2) return null;
+    const f = Math.min(lv.idx + lv.t, lv.path.length - 1), i = Math.floor(f), fr = f - i;
+    const a = lv.path[i], b = lv.path[Math.min(i + 1, lv.path.length - 1)];
+    return { x:(a.c + (b.c - a.c)*fr + 0.5)*cell, y:(a.r + (b.r - a.r)*fr + 0.5)*cell,
+             angle: Math.atan2(b.r - a.r, b.c - a.c) };
+  }
+  function tickLover(dt) {
+    const lv = state.lover;
+    if (!lv || state.status !== "play") return;
+    lv.phase += dt / RUNNER.stepMs;
+    if (lv.idx >= lv.path.length - 1) return;          // she has arrived; she waits
+    lv.t += dt / Math.max(1, state.msPerCell);
+    while (lv.t >= 1 && lv.idx < lv.path.length - 1) { lv.t -= 1; lv.idx++; }
+    if (lv.idx >= lv.path.length - 1) lv.t = 0;
+  }
+  function drawLover(ts) {
+    const p = loverPos();
+    if (!p) return;
+    const lv = state.lover;
+    const running = state.status === "play" && lv.idx < lv.path.length - 1;
+    paintRunner(p.x, p.y, cell, lv.phase, p.angle, running, ts, 0, true, LOVER);
+  }
+
   // ---------- Runner logic ------------------------------------------------
   function update(dt) {
     if (state.status !== "play") return;
@@ -3959,6 +4191,8 @@
     // Hands of Time stops HIM, not the level: the saws keep sweeping and the monsters keep
     // rowing, so a second of standing still is a second of everything else catching up.
     if (powerActive("clock")) factor = 0;
+    // ...and the Ankh's breath, which is the same stop by a different door
+    if (s.reviveHold > 0) { s.reviveHold -= dt; factor = 0; }
     // fixed pace for now — no within-level combo speed-up (was: 1 + min(combo*0.01, 0.5))
     const comboSpeed = 1;
     factor *= comboSpeed;
@@ -4137,7 +4371,7 @@
   // decided at the moment you use it rather than committed to in a menu beforehand.
   function firePower(id) {
     const s = state;
-    const def = id ? (talUnlocked.has(id) ? talById(id) : null) : wornTalisman();
+    const def = id ? (talLive(id) && talUnlocked.has(id) ? talById(id) : null) : wornTalisman();
     if (!s || s.status !== "play" || !def || s.power.spent) return false;
     s.power.spent = true;
     s.power.kind = def.id;
@@ -4147,21 +4381,103 @@
     spawnPop(runnerCell().c, runnerCell().r, def.col);
     Sound.power(def.id);
     haptic([10, 30, 14]);
-    if (def.id === "mush") Sound.warp(true);
+
     if (def.id === "star") Sound.starTheme(def.ms);
     // Instant powers do their work here and then let go, rather than sitting armed.
     if (def.id === "rewind") {
       rewindRunner(REWIND_TILES);
       s.power.kind = null; s.power.t = 0; s.power.armed = false;
     }
+    // A FOURTH tile, out of nowhere, in the middle of the board. The Mushroom used to warp the
+    // screen for six seconds, which was a joke at the player's expense rather than a power —
+    // this is the only charm that changes what you have to work with instead of what is
+    // happening to you, and three tiles is the whole shape of the game.
+    if (def.id === "mush") {
+      spawnSpareTile(def.col);
+      s.power.kind = null; s.power.t = 0; s.power.armed = false;
+    }
+    // The Hammer stopped being a thing you aim and became a thing you set off: it used to wait,
+    // armed, for you to tap a laid tile and lift it. A charm that does its work the moment you
+    // press it is one fewer rule to hold, and breaking rock is what a sledge was always for.
+    if (def.id === "finger") {
+      smashStones(HAMMER_TILES);
+      s.power.kind = null; s.power.t = 0; s.power.armed = false;
+    }
     if (def.id === "pulse") {
       unmakeMonsters(PULSE_TILES, def.col);
       s.power.kind = null; s.power.t = 0; s.power.armed = false;
     }
+    // The Ankh does nothing at all when pressed. It arms, and `startFall` spends it.
+    // Both speed charms just start the effect the floor pads start. The charm's own clock is
+    // set to the same half second, so the draining bar on the button and the thing it is
+    // draining for are one duration rather than two that only look alike.
+    if (def.id === "spur")  s.speedFx = { kind:"boost", t:SPEED_CHARM_MS };
+    if (def.id === "brake") s.speedFx = { kind:"slow",  t:SPEED_CHARM_MS };
     return true;
   }
   const powerActive = id => state && state.power.kind === id && state.power.t > 0;
   const PULSE_TILES = 2;                   // how far the Bell reaches, in cells
+  const HAMMER_TILES = 2;                  // ...and the Hammer, which breaks rock instead
+  // One more tile in the hand, dropped as close to the middle of the board as there is room
+  // for. It goes down LOOSE, exactly as if you had dragged it there yourself: it is a fourth
+  // tile to cycle, not a piece of track laid for you.
+  function spawnSpareTile(col) {
+    const s = state;
+    const t = { id: s.tiles.length, c: 0, r: 0, status: "free" };
+    s.tiles.push(t);
+    // Free STAYS free. A loose tile that happens to sit where the track could continue links
+    // itself on the next frame — that is what closes a circuit — so dropping this one in the
+    // exact middle handed the player a length of laid track instead of a tile to carry. Look
+    // outward from the middle for the first free cell that does NOT continue the front.
+    const occ = occupiedFor(t), h = head();
+    const mc = Math.floor(COLS/2), mr = Math.floor(ROWS/2);
+    let spot = null;
+    for (let rad = 0; rad < Math.max(COLS, ROWS) && !spot; rad++)
+      for (let dr = -rad; dr <= rad && !spot; dr++)
+        for (let dc = -rad; dc <= rad && !spot; dc++) {
+          if (Math.max(Math.abs(dc), Math.abs(dr)) !== rad) continue;   // the ring, not the disc
+          const c = mc + dc, r = mr + dr;
+          if (!inBounds(c, r) || occ.has(key(c, r))) continue;
+          if (trackConnects(h, { c, r }) && !foldsBack(c, r)) continue; // it would lay itself
+          spot = { c, r };
+        }
+    // Every free cell on the board continues the track: take the nearest one anyway rather
+    // than give nothing, and let it lay itself. A tile is a tile.
+    if (!spot) spot = nearestFreeCell(t, mc, mr);
+    if (!spot) { s.tiles.pop(); return false; }   // nowhere free at all — nothing to give
+    t.c = spot.c; t.r = spot.r;
+    markOccDirty(); updateReadyHud();
+    spawnPop(t.c, t.r, col || "#ff8fc8");
+    spawnLight(t.c, t.r, 0.9, 460);
+    s.shake = Math.max(s.shake, cell * 0.10);
+    return true;
+  }
+  // Every stone inside the ring comes apart at once, however much hit-point it had left.
+  // Measured the way the Bell measures monsters — his real position against the stone's real
+  // centre — so the two charms cannot disagree about what "within two tiles" means.
+  function smashStones(tiles) {
+    const s = state, rp = visualAt(s.runIdx + s.runT), reach = tiles * cell;
+    spawnLight(runnerCell().c, runnerCell().r, tiles / 1.55, 520);
+    const doomed = [];
+    for (const sk of s.stones.keys()) {
+      const i = sk.indexOf(","), c = +sk.slice(0, i), r = +sk.slice(i+1);
+      if (Math.hypot((c+0.5)*cell - rp.x, (r+0.5)*cell - rp.y) <= reach) doomed.push([sk, c, r]);
+    }
+    for (const [sk, c, r] of doomed) {
+      s.stones.delete(sk);
+      const wx = (c+0.5)*cell, wy = (r+0.5)*cell;
+      spawnPop(c, r, "#cfc7b4");
+      for (let i = 0; i < 12; i++) {
+        const a = (i/12)*Math.PI*2 + (i%5)*0.29, sp = cell*0.0015;
+        s.shards.push({ x:wx, y:wy, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - cell*0.0007,
+                        life:0, max:400, sz: cell*0.06*(0.6 + (i%3)*0.25) });
+      }
+    }
+    if (doomed.length) { markOccDirty(); s.shake = Math.max(s.shake, cell*0.20); }
+    Sound.power("finger");
+    if (doomed.length) Sound.crunch(1);
+    return doomed.length;
+  }
   // One ring out from where he stands, and every monster caught inside it comes apart.
   //
   // Measured from his own position rather than his cell, and against each monster's world
@@ -4282,7 +4598,7 @@
       }
     }
     if (s.power.t <= 0) {                          // done — put everything back
-      if (s.power.kind === "mush") Sound.warp(false);
+
       s.power.kind = null; s.power.t = 0; s.power.armed = false;
     }
   }
@@ -4304,24 +4620,6 @@
   // The Hammer of God: lift a tile that has already been laid, along with everything laid
   // after it, and put it back in your hand. Only ahead of the runner — pulling the ground
   // out from under him would just be a scripted death.
-  function fingerLift(c, r) {
-    const s = state;
-    if (!(s.power.kind === "finger" && s.power.armed)) return null;
-    const idx = s.path.findIndex(n => n.kind === "tile" && n.c === c && n.r === r);
-    if (idx <= s.runIdx + 1) return null;          // he is on it, or about to step onto it
-    const t = s.tiles[s.path[idx].tileId];
-    if (!t) return null;
-    while (s.path.length > idx) {                  // everything from here forward comes off
-      const n = s.path.pop();
-      if (n.kind === "tile" && s.tiles[n.tileId]) s.tiles[n.tileId].status = "free";
-      else if (n.kind === "platform") { const pf = (s.platforms||[]).find(p => p.id === n.pfId); if (pf) pf.lit = 0; }
-    }
-    s.power.armed = false; s.power.kind = null;    // spent
-    s.lastPlacedId = null;
-    markOccDirty(); updateReadyHud();
-    spawnPop(c, r, "#ffe9a8");
-    return t;
-  }
 
   // the runner grabs the key by passing over its cell
   function collectKey() {
@@ -4400,9 +4698,14 @@
           const t = s.tiles[node.tileId];
           if (t) {
             if (s.crumble.has(key(node.c, node.r))) {       // fragile floor: tile is consumed
+              // It does not just stop existing. The rift takes it: a ghost of the tile is left
+              // behind to spiral into the eye the way everything else on this square does, so
+              // the one time the player LOSES a tile is the one time they get to watch it go.
+              s.eaten.push({ c: node.c, r: node.r, t: 0 });
               t.status = "spent"; t.c = -1; t.r = -1;
               s.crumbled.add(key(node.c, node.r));
               s.shake = Math.max(s.shake, cell * 0.12);
+              Sound.swallow();
             } else {
               t.status = "free";
             }
@@ -4483,9 +4786,29 @@
   // forward momentum and gravity takes it from there. Into a wall he has just been stopped
   // dead by something solid, so he comes back off it: thrown BACKWARDS along his own travel
   // direction, popped up a little, and tumbling the other way.
+  // Back onto the last tile he actually stood on, and held there. runIdx is already that node —
+  // the fall fires as he runs off the END of it — so putting runT back to 0 stands him at its
+  // centre rather than half over the edge. The hold is a factor of zero on his pace, the same
+  // stop the Hands of Time uses, so nothing else in the game has to know about it.
+  function reviveRunner() {
+    const s = state;
+    s.runT = 0;
+    s.combo = 0;
+    s.power.armed = false; s.power.kind = null; s.power.t = 0;
+    s.reviveHold = REVIVE_HOLD_MS;
+    const n = s.path[Math.min(s.runIdx, s.path.length - 1)];
+    if (n) { spawnLight(n.c, n.r, 1.4, 700); spawnPop(n.c, n.r, "#7ee0c8"); }
+    s.shake = Math.max(s.shake, cell * 0.14);
+    Sound.power("ankh");
+    haptic([14, 40, 14]);
+  }
   const WALL_BOUNCE = 0.55;          // of his running speed, sent back the way he came
   const WALL_POP    = 0.62;          // upward kick out of the impact, same units
   function startFall(offWall) {
+    // Every way a run ends comes through here, which is exactly why the Ankh is spent here and
+    // not in each of them. Nothing else about the fall has happened yet — no sound, no status
+    // change — so bringing him back is simply declining to start it.
+    if (state.power.kind === "ankh" && state.power.armed) { reviveRunner(); return; }
     const ri = runnerInfo();
     state.status = "falling";
     state.combo = 0;                 // the run ends — combo breaks
@@ -4594,21 +4917,11 @@
     // and what it does. Reaching the end of one of these is the only time the game hands you
     // a new verb, so it does not share the ordinary "Level Clear" card.
     if (relic) {
-      overlay.className = "win relic show";
-      ovTitle.textContent = relic.name;
-      ovStars.innerHTML = "";
-      const c = document.createElement("canvas"); c.width = 260; c.height = 260;
-      c.className = "ov-relic";
-      ovStars.appendChild(c);
-      const g = c.getContext("2d");
-      relicShowT = 0; relicShow = { g, def: relic };     // the frame loop turns it
-      // The card reads top to bottom: the charm, its name, what it DOES, then the standing
-      // rule. ov-score sits above ov-msg in the markup, so the blurb goes in score.
-      ovScore.innerHTML = "<span class='ov-relic-does'></span>";
-      ovScore.firstChild.textContent = relic.blurb;
-      setByline(ovMsg, "A new talisman. Use it from the foot of any level — one power per run.");
-      labelWithArrow(ovBtn, last ? "Level Select" : "Continue");
-      updateOvShop();
+      // Finding one of these is the rarest thing in the game, and it used to be a card with a
+      // picture on it. It gets a ceremony now: the board goes, he stands alone in the dark, a
+      // shaft of light finds him, and the charm comes down out of it. Nothing is on screen but
+      // those two until the horns land — the name, what it does, and only then the way out.
+      startCeremony(relic, last);
       return;
     }
     relicShow = null;
@@ -4619,6 +4932,208 @@
       : pickQuip(att > 1 ? WIN_QUIPS_RETRY : WIN_QUIPS));
     labelWithArrow(ovBtn, last ? "Level Select" : "Next Level");
     updateOvShop();
+  }
+  // ---------- The talisman ceremony ---------------------------------------
+  // Five beats, each one waiting on the last rather than on a shared clock, so any of them can
+  // be retimed without shifting the rest. The whole thing is drawn on the GAME canvas, not in
+  // the overlay: the overlay is a card, and a card is exactly what this is not.
+  const CEREMONY = {
+    dark:  700,    // the board fades out and the fanfare goes up
+    beam:  900,    // the shaft of light finds him
+    fall: 1500,    // the charm descends into it
+    land:  700,    // it settles over his head; the horns; the words
+  };
+  let cere = null;
+  function endCeremony() { cere = null; }
+  // The quilt every level wears, in the charm's own colour and mostly not in it: a handful of
+  // near-blacks with the metal itself walked down through them, so the backdrop belongs to the
+  // talisman without ever competing with the beam standing on top of it.
+  // ---- the VOID -----------------------------------------------------------------------
+  // The place this game happens in, as opposed to any level inside it: a near-black quilt with
+  // the hue walked right round the wheel — every level's family of colour represented, none of
+  // them owning it — with hard white stars over the top. Anywhere that is OUTSIDE a level asks
+  // for this by name: the Tileverse, the opening, and whatever comes next.
+  const VOID_THEME = { colors: Array.from({ length: 8 }, (_, i) =>
+                         "hsl(" + Math.round(i * 360 / 8) + ",46%,7%)"),
+                       patchW: 0.55, drift: 0.5, dir: 1, stripeW: 3 };
+  const drawVoid = ts => drawBackground(ts, VOID_THEME, true);
+  function ceremonyTheme(def) {
+    const n = parseInt((def.col || "#ffd24a").replace("#",""), 16);
+    const r0 = (n>>16)&255, g0 = (n>>8)&255, b0 = n&255;
+    const mix = k => "rgb(" + Math.round(6 + r0*k) + "," + Math.round(5 + g0*k) + "," +
+                              Math.round(11 + b0*k) + ")";
+    return { colors: [mix(0.02), mix(0.10), mix(0.05), mix(0.16), mix(0.03), mix(0.11)],
+             patchW: 0.55, drift: 0.5, dir: 1, stripeW: 3 };
+  }
+  function startCeremony(def, last) {
+    cere = { def, last, t:0, beat:0, ready:false, snd:{}, theme: ceremonyTheme(def) };
+    overlay.className = "";                  // nothing on screen but the ceremony
+    paused = false;
+    state.status = "ceremony";
+    Sound.levelMusicStop(true);
+    Sound.ceremony("fanfare");
+  }
+  function tickCeremony(dt) {
+    if (!cere) return;
+    cere.t += dt;
+    const C = CEREMONY, T = cere.t;
+    const at = (T < C.dark) ? 0 : (T < C.dark+C.beam) ? 1
+             : (T < C.dark+C.beam+C.fall) ? 2 : (T < C.dark+C.beam+C.fall+C.land) ? 3 : 4;
+    if (at !== cere.beat) {
+      cere.beat = at;
+      if (at === 1) Sound.ceremony("beam");
+      if (at === 2) Sound.ceremony("descend");
+      if (at === 3) Sound.ceremony("horns");
+      if (at === 4) showCeremonyCard();
+    }
+  }
+  // The card is the LAST beat, not the frame around it: it arrives once the charm has landed.
+  function showCeremonyCard() {
+    const def = cere.def;
+    void def;
+    // Back to "win" the moment the card is up, so the Continue button is the same button it
+    // always was. The ceremony keeps painting underneath it — `cere` is what draws, not the
+    // status — and is cleared when that button is pressed.
+    // No card at all. A pair of chrome buttons in front of this was the game handing you a
+    // form to fill in at the one moment it has stopped being a game — the title screen asks
+    // for a tap and nothing else, and so does this. `ready` is what the tap listens for, so
+    // the prompt and the thing it promises arrive together.
+    cere.ready = true;
+    overlay.className = "";
+  }
+  // A tap anywhere once the horns have landed. Returns true when it consumed the tap, so the
+  // board underneath never sees it.
+  function ceremonyTap() {
+    if (!cere || !cere.ready) return false;
+    const last = cere.last;
+    endCeremony();
+    Sound.tapBig();
+    if (last) { overlay.className = ""; openMenu("world"); }
+    else { levelIdx = levelIdx + 1; loadLevel(levelIdx); }
+    return true;
+  }
+  function drawCeremony(ts) {
+    if (!cere) return;
+    const C = CEREMONY, T = cere.t;
+    const W = viewW, H = viewH;
+    // 1. the level goes out and the charm's own quilt comes up behind it. Faded IN over the
+    //    board rather than swapped for it, so the level does not blink out from under him.
+    const dark = Math.min(1, T / C.dark);
+    ctx.save();
+    ctx.globalAlpha = dark;
+    drawPatchwork(ts, cere.theme);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "rgba(5,4,13," + (0.55*dark) + ")";     // ...and pressed down, so it is a room
+    ctx.fillRect(0, 0, W, H);
+    // The glisten goes on TOP of that press, and harder than the levels wear it. Under the
+    // wash it was being dimmed by the very thing that makes the room dark; over it, and on a
+    // near-black quilt, it reads as the light catching something.
+    drawGlints(ts, { x:bgScrollX, y:bgScrollY }, patchStepPx || cell*0.55, 1.3*dark);
+    // High enough that the words below him and the buttons below those all have room: the card
+    // that follows is pinned to the lower half, and he was standing behind it.
+    const fx = W/2, fy = H*0.42;                       // where he stands
+    // 2. the beam
+    const bK = Math.max(0, Math.min(1, (T - C.dark) / C.beam));
+    if (bK > 0) {
+      // The shaft used to STOP at the floor: a polygon whose bottom edge was a straight line
+      // right across the pool it was supposed to be making, which read as a seam drawn through
+      // the middle of the circle. It now runs on past the floor to the bottom of the pool and
+      // fades to nothing on the way, so the two meet as light meeting light and there is no
+      // edge anywhere to see.
+      // Nearly a column. It was a wide cone — 0.28 of a cell at the top opening to 1.15 at the
+      // floor — which is a stage light swung out over an audience, not a shaft coming straight
+      // down on one person. The narrower it is, the further away whatever is holding it reads.
+      const halfTop = cell*0.62, halfBot = cell*0.86, top = -H*0.1;
+      const poolH = halfBot*0.34;
+      // The shaft stops ON the floor and is already at zero by the time it gets there. Running
+      // it PAST the floor to blur the join put light outside the circle it was supposed to be
+      // casting — a lit skirt below the pool with nothing making it. Fading to nothing at the
+      // floor line does the same job with none of the spill: there is no edge to see because
+      // there is nothing left to draw by then, and the pool below carries on from there.
+      const g = ctx.createLinearGradient(0, top, 0, fy);
+      g.addColorStop(0,    "rgba(255,248,214,0)");
+      g.addColorStop(0.35, "rgba(255,248,214," + (0.15*bK) + ")");
+      g.addColorStop(0.86, "rgba(255,248,214," + (0.24*bK) + ")");
+      g.addColorStop(1,    "rgba(255,248,214,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(fx - halfTop, top); ctx.lineTo(fx + halfTop, top);
+      ctx.lineTo(fx + halfBot, fy);  ctx.lineTo(fx - halfBot, fy);
+      ctx.closePath(); ctx.fill();
+      // the pool it throws on the floor, laid over the tail of the shaft
+      const p = ctx.createRadialGradient(fx, fy, 0, fx, fy, halfBot);
+      p.addColorStop(0, "rgba(255,248,214," + (0.30*bK) + ")");
+      p.addColorStop(1, "rgba(255,248,214,0)");
+      ctx.fillStyle = p;
+      ctx.beginPath(); ctx.ellipse(fx, fy, halfBot, poolH, 0, 0, Math.PI*2); ctx.fill();
+    }
+    // he is lit from the moment the beam is
+    paintRunner(fx, fy, cell, ts/RUNNER.stepMs*0.35, 0, false, ts, 0, true);
+    // 3 + 4. the charm comes down and settles over his head
+    const dK = Math.max(0, Math.min(1, (T - C.dark - C.beam) / C.fall));
+    if (dK > 0) {
+      const ease = 1 - Math.pow(1 - dK, 3);
+      const restY = fy - cell*1.55, y = -cell + (restY + cell)*ease;
+      const landed = Math.max(0, Math.min(1, (T - C.dark - C.beam - C.fall) / C.land));
+      const bob = landed > 0 ? Math.sin(T/520) * cell*0.05 : 0;
+      const R = cell*0.42*(0.72 + 0.28*ease);
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, dK*2.2);
+      // a glow travelling down with it, so it reads as coming out of the light
+      const hal = ctx.createRadialGradient(fx, y + bob, 0, fx, y + bob, R*2.4);
+      hal.addColorStop(0, "rgba(255,248,214,0.42)"); hal.addColorStop(1, "rgba(255,248,214,0)");
+      ctx.fillStyle = hal;
+      ctx.beginPath(); ctx.arc(fx, y + bob, R*2.4, 0, Math.PI*2); ctx.fill();
+      // the hanging loop goes down FIRST, so the panel covers where it enters — talBadge does
+      // not draw it, which is why the charm on the shelf has one and this had none
+      talHook(ctx, fx, y + bob, R, cere.def);
+      cere.def.draw(ctx, fx, y + bob, R);
+      ctx.restore();
+      // ...and once it has landed, what it is. On the canvas, under him, rather than only on
+      // the card that follows: the card is the way OUT of the moment, and by the time you are
+      // reading a button the moment is over.
+      const wK = Math.max(0, Math.min(1, (T - C.dark - C.beam - C.fall) / (C.land*0.7)));
+      if (wK > 0) {
+        const nameSz = Math.round(Math.min(W*0.085, cell*0.52));
+        const blurbSz = Math.round(nameSz*0.40);
+        ctx.save();
+        ctx.globalAlpha = wK;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.font = "900 " + nameSz + "px " + UI_FONT;
+        const ny = fy + cell*0.92;
+        // the same flat extrusion the card headings wear, so it reads as one game
+        ctx.fillStyle = "#6b4d0c";
+        for (let k = 1; k <= 4; k++) ctx.fillText(cere.def.name.toUpperCase(), fx + k, ny + k);
+        ctx.fillStyle = "#ffd24a";
+        ctx.fillText(cere.def.name.toUpperCase(), fx, ny);
+        // the blurb, wrapped to the screen rather than to a guess
+        ctx.font = "700 " + blurbSz + "px " + UI_FONT;
+        ctx.fillStyle = "rgba(226,222,255,0.86)";
+        const words = cere.def.blurb.split(" "), lines = [];
+        let line = "";
+        for (const wd of words) {
+          const t2 = line ? line + " " + wd : wd;
+          if (ctx.measureText(t2).width > W*0.78 && line) { lines.push(line); line = wd; }
+          else line = t2;
+        }
+        if (line) lines.push(line);
+        lines.forEach((ln, i) => ctx.fillText(ln, fx, ny + nameSz*0.95 + i*blurbSz*1.45));
+        ctx.restore();
+      }
+      // ...and once it is all said, the same prompt the title screen ends on, breathing at the
+      // same rate, in the same place down the screen.
+      if (cere.ready) {
+        const pulse = 0.5 + 0.5*Math.sin(ts/380);
+        ctx.save();
+        ctx.globalAlpha = 0.45 + 0.55*pulse;
+        ctx.fillStyle = "#eef0ff";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.font = "900 " + Math.round(Math.min(W*0.05, 19)) + "px " + UI_FONT;
+        ctx.fillText("TAP TO CONTINUE", W/2, H*0.90);
+        ctx.restore();
+      }
+    }
+    ctx.restore();
   }
   // The charm on the win card: it rises into place, then hangs there turning gently.
   let relicShow = null, relicShowT = 0;
@@ -4682,10 +5197,19 @@
 
   // ---------- Rendering ---------------------------------------------------
   function draw(ts) {
-    drawBackground(ts);                       // parallax procedural backdrop (screen space)
+    // Outside a level — the map of them all — the backdrop is the void rather than any one
+    // level's quilt.
+    if (worldOpen()) drawVoid(ts);
+    else drawBackground(ts);                  // parallax procedural backdrop (screen space)
     // pause / win / death: show ONLY the level background (a clean replica) behind the card
     const menuOpen = menuEl && menuEl.classList.contains("show");
-    if (state.status === "win" || state.status === "lose" || menuOpen) return;
+    if (state.status === "win" || state.status === "lose" || menuOpen) {
+      // ...except the ceremony, which is not a card on a background — it IS the screen, and it
+      // stays lit under its own card once the words arrive.
+      if (cere && !menuOpen) drawCeremony(ts);
+      return;
+    }
+    if (state.status === "ceremony") { drawCeremony(ts); return; }
     const sh = state.shake || 0;
     const shx = sh ? (Math.random()*2-1)*sh : 0, shy = sh ? (Math.random()*2-1)*sh : 0;
     ctx.save();
@@ -4721,8 +5245,19 @@
     drawTrack(ts);
     if (state.drag) drawTargets(ts);
     for (const t of state.tiles)
-      if ((t.status === "free" || t.status === "parked") && (!state.drag || state.drag.tile.id !== t.id))
-        drawFreeTile(cx(t.c), cy(t.r), ts, false);
+      if ((t.status === "free" || t.status === "parked") && (!state.drag || state.drag.tile.id !== t.id)) {
+        // A tile parked over a rift shivers: the floor under it is already trying to take it,
+        // and it is the only warning the player gets that this one is not coming back. Same
+        // two-sine shake the eye uses, at a third the throw, so the pair read as one thing
+        // pulling and the other resisting rather than as two separate animations.
+        const doomed = state.crumble && state.crumble.has(key(t.c, t.r)) &&
+                       !state.crumbled.has(key(t.c, t.r));
+        let jx = 0, jy = 0;
+        if (doomed) { const tr = cell * RIFT.tremble * 0.34;
+          jx = (Math.sin(ts/47) + Math.sin(ts/31.3)*0.6) * tr;
+          jy = (Math.cos(ts/41) + Math.cos(ts/27.7)*0.6) * tr; }
+        drawFreeTile(cx(t.c) + jx, cy(t.r) + jy, ts, false);
+      }
     drawLaidFlash();                              // over the tile it belongs to, nothing else
 
     drawPickups(ts);
@@ -4731,6 +5266,7 @@
     drawLights();
     drawTrail();                                  // worn light trail, under the runner
     drawStarDust();                               // ...and the Cloak's dust, behind him too
+    drawLover(ts);                                // she runs her own track, beside his
     if (state.status === "intro") drawIntro(ts);
     else if (state.status === "campan" || state.status === "hold") { /* not formed yet */ }
     else drawRunner(ts);                          // "cue" included: standing, about to go
@@ -4763,8 +5299,8 @@
         drawOffscreenArrow((state.goal.c+0.5)*cell, (state.goal.r+0.5)*cell, "#ffffff", "flag");   // white flag
     }
     drawSpeedHud();
+    drawCeremony(ts);                   // over the board and under nothing: it IS the screen
     drawTalismanFlash(16, ts);
-    drawWobble(ts);                     // the Mushroom, over the top of the finished frame
     drawVortex(ts);                     // ...and the whirlpool, over the top of everything
   }
 
@@ -4772,35 +5308,6 @@
   // copied off and repainted as a stack of horizontal strips, each slid sideways on a
   // travelling sine — the old scanline-warp trick. It costs one full-canvas copy and a
   // strip's worth of blits, and only while the power is up. The whole frame goes through it,
-  // HUD included: for six seconds the game itself is what's unwell.
-  let wobbleCv = null;
-  const WOBBLE_STRIP = 5;               // CSS px per strip; smaller = smoother, more blits
-  function drawWobble(ts) {
-    if (!powerActive("mush")) return;
-    const p = state.power, ms = p.ms || 1;
-    // eased in and out, so it swims up and settles rather than snapping on and off
-    const k = Math.min(1, (ms - p.t) / 420) * Math.min(1, p.t / 500);
-    if (k <= 0.001) return;
-    if (!wobbleCv) wobbleCv = document.createElement("canvas");
-    const W = canvas.width, H = canvas.height;
-    if (wobbleCv.width !== W || wobbleCv.height !== H) { wobbleCv.width = W; wobbleCv.height = H; }
-    const g = wobbleCv.getContext("2d");
-    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, H);
-    g.drawImage(canvas, 0, 0);
-    ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = "#0a0817"; ctx.fillRect(0, 0, viewW, viewH);   // strips slide, so clear first
-    ctx.filter = "hue-rotate(" + Math.round(Math.sin(ts/700)*46*k) + "deg) saturate(" + (1 + 0.55*k) + ")";
-    const amp = cell * 0.16 * k, amp2 = cell * 0.05 * k;
-    for (let y = 0; y < viewH; y += WOBBLE_STRIP) {
-      const h = Math.min(WOBBLE_STRIP, viewH - y);
-      const dx = Math.sin(y/38 + ts/230)*amp + Math.sin(y/13 - ts/150)*amp2;
-      const dy = Math.sin(y/90 + ts/380)*amp*0.35;
-      ctx.drawImage(wobbleCv, 0, y*dpr, W, h*dpr, dx, y + dy, viewW, h);
-    }
-    ctx.filter = "none";
-    ctx.restore();
-  }
 
   // The speedo's plate size, and the margin it sits at. The pause button is DOM and the speedo
   // is canvas, so nothing makes them agree by themselves — this is the number both take, one
@@ -5106,6 +5613,7 @@
     const s = state;
     for (const ck of s.crumble) if (!s.crumbled.has(ck)) { const [c,r]=ck.split(",").map(Number); drawCrumble(c,r,false,ts); }
     for (const ck of s.crumbled) { const [c,r]=ck.split(",").map(Number); drawCrumble(c,r,true,ts); }
+    drawEaten();                                  // ...and whatever is currently going down one
     for (const bk of s.boost) { const [c,r]=bk.split(",").map(Number); drawFxPickup(c,r,ts,"boost"); }
     for (const bk of s.slow)  { const [c,r]=bk.split(",").map(Number); drawFxPickup(c,r,ts,"slow"); }
     for (const d of s.doors) {
@@ -5311,8 +5819,8 @@
         let ghostA = 1;
         if (K.ghost) {
           const P = h.rowP || 0, dv = MONSTER.railDrive;
-          ghostA = P < dv ? 1 - 0.35*(P/dv)             // the thrust: full, dimming as it ends
-                          : 0.06 + 0.59*Math.pow(1 - (P-dv)/(1-dv), 3);
+          ghostA = P < dv ? 0.60 - 0.22*(P/dv)          // the thrust: a suggestion, dimming as it ends
+                          : 0.02 + 0.36*Math.pow(1 - (P-dv)/(1-dv), 3);
         }
         let jx = 0, jy = 0;
         if (K.move === "trap") {
@@ -6069,46 +6577,102 @@
       ctx.beginPath(); ctx.moveTo(x+s*0.30, yy - dir*s*0.06); ctx.lineTo(x+s*0.5, yy + dir*s*0.06); ctx.lineTo(x+s*0.70, yy - dir*s*0.06); ctx.stroke(); }
     ctx.globalAlpha = 1; ctx.restore();
   }
-  function drawCrumble(c, r, gone, ts) {
-    // a swirling black hole: a pure-black event horizon ringed by a glowing accretion
-    // disc, with spiral arms of matter being dragged inward.
-    const x = cx(c)+cell*0.5, y = cy(r)+cell*0.5, s = cell*0.44, rot = (ts||0)/650;
-    const a = gone ? 0.35 : 1, coreR = s*0.46;   // bigger event-horizon hole
-    ctx.save(); ctx.translate(x, y);
-    // faint gravitational halo
-    ctx.globalAlpha = a;
-    const halo = ctx.createRadialGradient(0,0,s*0.3,0,0,s);
-    halo.addColorStop(0,"rgba(50,28,86,0)"); halo.addColorStop(0.7,"rgba(78,44,128,0.16)"); halo.addColorStop(1,"rgba(78,44,128,0)");
-    ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(0,0,s,0,Math.PI*2); ctx.fill();
-    // spiral arms of infalling matter (swirling around the hole)
-    ctx.lineCap = "round";
-    const arms = 5;
-    for (let i=0;i<arms;i++){
-      ctx.beginPath();
-      for (let t=0;t<=1.0001;t+=0.05){
-        const rad = coreR + (s*0.96 - coreR)*t;                    // from the horizon rim outward
-        const ang = rot + i/arms*Math.PI*2 + (1-t)*Math.PI*2.6;    // winds tighter toward the core
-        const px = Math.cos(ang)*rad, py = Math.sin(ang)*rad;
-        if (t===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
-      }
-      ctx.globalAlpha = a*0.8;
-      ctx.strokeStyle = i%2 ? "rgba(255,168,72,0.75)" : "rgba(255,226,176,0.7)";
-      ctx.lineWidth = Math.max(1.2, s*0.05);
-      ctx.stroke();
+  // The Spacetime Rift, tuned in crumble-lab.html — paste the RIFT block between the two.
+  //
+  // Everything is anchored on the tile's centre: there is no orbit here. The SWIRL is the
+  // rotation and the FALL is the scale — a square arrives larger than the tile, turns as it
+  // closes, and the instant it matches the eye it is gone. It comes in invisible and reaches
+  // full strength exactly as it lands, so the square and the eye become the same black at the
+  // same moment and the hand-off cannot be seen.
+  //
+  // It is one function of time and index: no particles, no state, nothing to update. Twenty of
+  // these on a board cost what one does, and none of them can drift out of step with itself.
+  const RIFT = {
+    n:       4,        // squares falling at once
+    drift:   0.17,     // how far off centre they wander, fraction of a cell
+    turns:   0.55,     // turns each one makes on its way in
+    ms:      1500,     // one square's whole fall
+    ease:    1.5,      // slow to leave, then it lets go
+    big:     1.1,      // where a square comes in, as a fraction of a CELL
+    peak:    1,        // its opacity as it lands on the eye
+    tint:    0,        // 0 = black; higher walks a hue round the wheel square to square
+    tremble: 0.014,    // how hard the eye shakes, fraction of a cell
+    hole:    0.6,      // the eye itself, as a fraction of a cell
+    halo:    0.6,      // the bruise the pull leaves in the floor
+  };
+  const EATEN_MS = 520;                    // how long a swallowed tile takes to go
+  function tickEaten(dt) {
+    const s = state; if (!s || !s.eaten || !s.eaten.length) return;
+    for (const e of s.eaten) e.t += dt;
+    s.eaten = s.eaten.filter(e => e.t < EATEN_MS);
+  }
+  // The tile itself, on its way in. Same law as the rift's own squares — turn as it shrinks,
+  // centred on the eye — so it does not read as a different effect happening at the same place.
+  function drawEaten() {
+    const s = state; if (!s.eaten) return;
+    for (const e of s.eaten) {
+      const k = Math.min(1, e.t / EATEN_MS), q = 1 - Math.pow(1 - k, 3);
+      const x = cx(e.c) + cell*0.5, y = cy(e.r) + cell*0.5;
+      // What goes down the hole is the TILE — the blank glass pane with its grip dots, the thing
+      // the player carries — not the length of track that happened to be drawn on it. Losing a
+      // tile is what this costs you, so a tile is what you should see leave.
+      //
+      // The shrink is a transform because drawGlass always draws one CELL; scaling also keeps
+      // the pane's bevel and its dots in proportion the whole way down.
+      const k2 = 1 - q * (1 - RIFT.hole*0.6);
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(q * RIFT.turns * Math.PI*2 * 1.6);        // it goes round harder than the rest
+      ctx.scale(k2, k2);
+      ctx.globalAlpha = 1 - k*k;                            // and out as it gets there
+      drawGlass(-cell/2, -cell/2, cell);
+      drawDragDots(0, 0, cell);
+      ctx.restore();
     }
-    // glowing accretion rim just outside the event horizon
-    ctx.globalAlpha = a*(0.82 + 0.18*Math.sin((ts||0)/200));
-    const ring = ctx.createRadialGradient(0,0,coreR*0.85,0,0,coreR*1.55);
-    ring.addColorStop(0,"rgba(255,240,210,0)"); ring.addColorStop(0.45,"rgba(255,192,110,0.95)"); ring.addColorStop(1,"rgba(255,140,70,0)");
-    ctx.fillStyle = ring; ctx.beginPath(); ctx.arc(0,0,coreR*1.55,0,Math.PI*2); ctx.fill();
-    // event horizon — pure black core
+  }
+  function drawCrumble(c, r, gone, ts) {
+    const x = cx(c) + cell*0.5, y = cy(r) + cell*0.5;
+    const P = RIFT, a = gone ? 0.35 : 1, t = ts || 0;
+    const eye = cell * P.hole, start = cell * P.big;
+    ctx.save(); ctx.translate(x, y);
+    if (P.halo > 0) {                                   // the pull, as a bruise in the floor
+      const s2 = cell*0.5;
+      const h = ctx.createRadialGradient(0, 0, s2*0.3, 0, 0, s2*1.2);
+      h.addColorStop(0,   "rgba(78,44,128,0)");
+      h.addColorStop(0.6, "rgba(78,44,128," + (P.halo*a) + ")");
+      h.addColorStop(1,   "rgba(78,44,128,0)");
+      ctx.fillStyle = h;
+      ctx.beginPath(); ctx.arc(0, 0, s2*1.2, 0, Math.PI*2); ctx.fill();
+    }
+    for (let i = 0; i < P.n; i++) {
+      const k = ((t / P.ms) + i/P.n) % 1;               // its own place in the fall, looping
+      const e = Math.pow(k, P.ease);
+      const sz = start + (eye - start) * e;
+      if (sz <= eye + 0.5) continue;                    // arrived; the eye has it now
+      const ang = e * P.turns * Math.PI*2 + i*0.4;
+      const off = cell * P.drift * (1 - e);             // closing on centre as it lands
+      ctx.save();
+      ctx.globalAlpha = a * P.peak * e;                 // invisible at the rim, solid at the eye
+      ctx.translate(Math.cos(i*2.4 + e*3.1) * off, Math.sin(i*2.4 + e*3.1) * off);
+      ctx.rotate(ang);
+      ctx.fillStyle = P.tint > 0
+        ? "hsl(" + (Math.round((i / P.n) * 360 + e * 40) % 360) + "," +
+          Math.round(P.tint*100) + "%," + (4 + P.tint*7).toFixed(1) + "%)"
+        : "#07060d";
+      ctx.fillRect(-sz/2, -sz/2, sz, sz);
+      ctx.restore();
+    }
+    // The eye, last and over everything — and never still. Two sines at frequencies that do not
+    // divide into each other, so the shake never repeats and never falls into a rhythm you
+    // could tap along to. It is deliberately NOT on the swirl's clock: the two running in
+    // different times is what makes it read as something straining rather than something
+    // being animated.
+    const tr = cell * P.tremble;
+    const jx = (Math.sin(t/47) + Math.sin(t/31.3)*0.6) * tr;
+    const jy = (Math.cos(t/41) + Math.cos(t/27.7)*0.6) * tr;
     ctx.globalAlpha = a;
-    const core = ctx.createRadialGradient(0,0,0,0,0,coreR);
-    core.addColorStop(0,"#000000"); core.addColorStop(0.72,"#000000"); core.addColorStop(1,"#0b0714");
-    ctx.fillStyle = core; ctx.beginPath(); ctx.arc(0,0,coreR,0,Math.PI*2); ctx.fill();
-    // thin bright photon ring hugging the horizon
-    ctx.globalAlpha = a*0.9; ctx.lineWidth = Math.max(1, s*0.03);
-    ctx.strokeStyle = "rgba(255,224,176,0.9)"; ctx.beginPath(); ctx.arc(0,0,coreR,0,Math.PI*2); ctx.stroke();
+    ctx.fillStyle = "#07060d";
+    ctx.fillRect(-eye/2 + jx, -eye/2 + jy, eye, eye);
     ctx.restore();
   }
   // a coloured key-door: two slim riveted panels (styled like the wall tiles) side by side
@@ -6735,8 +7299,10 @@
     blinkMs:  3000,    // one blink cycle (it is a double-blink)
   };
   // Draws one pair, wherever a face wants them. `face` is +1/-1 for which way it looks, `t`
-  // is the clock, `off` staggers the blink so a row of walls never shutters as one.
-  function drawEyes(g, cx0, cy0, s, col, face, t, off) {
+  // is the clock, `off` staggers the blink so a row of walls never shutters as one. `nx`/`ny`
+  // nudge the PUPILS (not the sockets) toward something the face is watching — it has to happen
+  // in here, on top of the glance, or the caller ends up painting a second pair beside this one.
+  function drawEyes(g, cx0, cy0, s, col, face, t, off, nx, ny) {
     const R = s*EYES.r, gap = s*EYES.gap, bias = s*EYES.bias*(face || 0);
     const G = EYES.glanceMs, gt = (t + (off||0)) % G;
     let gx = 0, gy = 0;
@@ -6754,8 +7320,9 @@
       g.stroke();
     } else {
       g.fillStyle = col;
-      g.beginPath(); g.arc(x1 + gx, cy0 + gy, R, 0, Math.PI*2); g.fill();
-      g.beginPath(); g.arc(x2 + gx, cy0 + gy, R, 0, Math.PI*2); g.fill();
+      const px = gx + (nx || 0), py = gy + (ny || 0);
+      g.beginPath(); g.arc(x1 + px, cy0 + py, R, 0, Math.PI*2); g.fill();
+      g.beginPath(); g.arc(x2 + px, cy0 + py, R, 0, Math.PI*2); g.fill();
     }
   }
   const RUNNER = {
@@ -6861,7 +7428,11 @@
   // The runner himself, at an arbitrary place and size — knees, foot lift, bob, talisman and
   // all. Split out of drawRunner so the title screen and the opening cinematic can draw the
   // real character instead of a lookalike, and so there is only ever one of him to retune.
-  function paintRunner(sx, sy, s, phase, angle, moving, ts, sq, grounded) {
+  // `as` paints someone who is NOT the player: a skin and a hat given outright instead of read
+  // off the wardrobe, and none of the player's powers applying. She is the same character in
+  // every other respect — the same stride, the same shadow, the same everything — because
+  // there is only one of him to tune and she should never drift away from it.
+  function paintRunner(sx, sy, s, phase, angle, moving, ts, sq, grounded, as) {
     // SWAGGER rides on top of the stock stride rather than replacing it — every field is a
     // multiplier or an addition, so the numbers in RUNNER still drive all five styles.
     const w = lookItem("swagger");
@@ -6886,10 +7457,10 @@
     // local frame: +x = travel, feet at y=0, body toward -y (surface "up")
     // A worn colour replaces RUNNER's two rather than editing the block the labs paste
     // between themselves — the tuning stays the tuning, the skin is just what's on today.
-    const skin = lookItem("drip");
+    const skin = as ? as.skin : lookItem("drip");
     // The Cloak of Light overrides the drip entirely — a finish is a paint job, and this is
     // supposed to read as him being made of the stuff for three seconds.
-    const golden = powerActive("star");
+    const golden = !as && powerActive("star");
     const pale = golden ? "#ffdf78" : (skin.body || RUNNER.body);
     const inkCol = golden ? "#6b3f04" : (skin.ink || RUNNER.ink);
     const legL = s*RUNNER.legLen, bodyH = s*RUNNER.bodyH, bodyW = s*RUNNER.bodyW;
@@ -7016,7 +7587,7 @@
     drawEyes(ctx, 0, byTop + bodyH*RUNNER.eyeY, s, inkCol, 1, ts, 0);
     // last, so it sits on top of everything. Scaled up about the crown of his head — at the
     // shipped size the hats were a few pixels of trim on a small character and read as noise.
-    const hat = lookItem("hat");
+    const hat = as ? (as.hat || { draw:null }) : lookItem("hat");
     if (hat.draw) {
       ctx.save();
       ctx.translate(0, byTop); ctx.scale(HAT_SCALE, HAT_SCALE); ctx.translate(0, -byTop);
@@ -7065,34 +7636,40 @@
       const rp = s.status === "falling" && s.fall ? s.fall : visualAt(s.runIdx + s.runT);
       rx = rp.x; ry = rp.y;
     }
+    // Only the walls you can SEE. This loop used to run for every wall on the board, which on
+    // the big mazes is two hundred of them for the twenty or so on screen — and each one built
+    // a gradient and drew a pair of animated eyes. Everything off-screen was painted into the
+    // clip and thrown away.
+    const c0 = Math.floor(camX / cell) - 1, c1 = Math.ceil((camX + viewW) / cell) + 1;
+    const r0 = Math.floor(camY / cell) - 1, r1 = Math.ceil((camY + viewH) / cell) + 1;
+    // ...and the gradient is vertical, so it depends on the ROW and nothing else. One per row
+    // on screen rather than one per wall: a dozen instead of two hundred, and identical output.
+    const rowGrad = new Map();
+    const gradFor = (r) => { let g2 = rowGrad.get(r);
+      if (!g2) { g2 = plateGrad(ctx, 0, cy(r), cell); rowGrad.set(r, g2); }
+      return g2; };
     ctx.save();
     for (const wk of s.walls) {
       const i = wk.indexOf(","), c = +wk.slice(0, i), r = +wk.slice(i+1);
+      if (c < c0 || c > c1 || r < r0 || r > r1) continue;      // not on screen; nothing to look with
       const cx0 = (c + 0.5)*cell, cy0 = (r + WALL_EYES.y)*cell;
       // The plate's own face, so an eye is the colour the edge is at that height — the same
-      // rule the rivets follow. Built per cell because the gradient is positioned in world
-      // space; a single shared one would band across the whole board.
-      const grd = plateGrad(ctx, cx(c), cy(r), cell);
+      // rule the rivets follow.
+      const grd = gradFor(r);
       // Each wall blinks on its own offset, or a row of them shutters like a Mexican wave.
       const off = (_sHash(c + 1, r + 1) % 1000) / 1000 * EYES.blinkMs;
-      drawEyes(ctx, cx0, cy0, cell, grd, 0, ts, off);
-      // ...and the pupils follow him, which the shared painter knows nothing about
+      // ...and the pupils follow him. This is handed to the painter rather than over-painted
+      // afterwards: the painter also applies its own wandering glance, so a second pass drawing
+      // pupils without it lands beside the first pair instead of on top of it.
+      let nx = 0, ny = 0;
       if (rx != null) {
         const dx = rx - cx0, dy = ry - cy0, d = Math.hypot(dx, dy) / cell;
         if (d < WALL_EYES.reach && d > 0.01) {
-          const k2 = cell*WALL_EYES.track * (1 - d/WALL_EYES.reach);
-          const bt = (ts + off) % EYES.blinkMs;
-          const shut = bt < EYES.blinkMs*0.04 || (bt > EYES.blinkMs*0.058 && bt < EYES.blinkMs*0.085);
-          if (!shut) {                                   // redraw the pupils, nudged his way
-            ctx.fillStyle = grd;
-            const R = cell*EYES.r, gap = cell*EYES.gap;
-            for (const ex of [cx0 - gap/2, cx0 + gap/2]) {
-              ctx.beginPath();
-              ctx.arc(ex + dx/(d*cell)*k2, cy0 + dy/(d*cell)*k2, R, 0, Math.PI*2); ctx.fill();
-            }
-          }
+          const k2 = WALL_EYES.track * (1 - d/WALL_EYES.reach) / d;
+          nx = dx*k2; ny = dy*k2;
         }
       }
+      drawEyes(ctx, cx0, cy0, cell, grd, 0, ts, off, nx, ny);
     }
     ctx.restore();
   }
@@ -7700,7 +8277,36 @@
     bgScrollY = (bgScrollY + v*0.45) % per;
     return { x: bgScrollX, y: bgScrollY };
   }
-  function drawPatchwork(ts, themeOverride) {
+  // Is the level map the thing on screen? Its backdrop is its own, and it moves.
+  const worldOpen = () => !!menuEl && menuEl.classList.contains("show") && menuScreen === "world";
+  // Stars over the Tileverse's quilt: single squares, because everything in this game is a
+  // square, and one pixel of a star is the only honest size for something that far off. They
+  // are pinned to the QUILT rather than the screen — same scroll offset, same wrap — so they
+  // travel with the backdrop instead of sitting on the glass in front of it.
+  const WORLD_STARS = 190, WORLD_STAR_FIELD = 900;   // over a field this many px square, tiled
+  function drawWorldStars(ts, off) {
+    const F = WORLD_STAR_FIELD;
+    const ox = ((off.x % F) + F) % F, oy = ((off.y % F) + F) % F;
+    ctx.save();
+    for (let ty = -1; ty <= Math.ceil(viewH / F); ty++)
+      for (let tx = -1; tx <= Math.ceil(viewW / F); tx++) {
+        for (let i = 0; i < WORLD_STARS; i++) {
+          const h = bgHash(i * 17 + 3, i * 29 + 11);
+          const sx = (h % F) + tx*F - ox, sy = ((h >>> 8) % F) + ty*F - oy;
+          if (sx < -2 || sy < -2 || sx > viewW + 2 || sy > viewH + 2) continue;
+          // a slow breath, out of step star to star, so the field is never all at one brightness
+          const k = 0.5 + 0.5*Math.sin(ts/2600 + ((h >>> 17) % 1000)/1000 * Math.PI*2);
+          const sz = 2 + ((h >>> 5) % 3 === 0 ? 2 : 0);      // most are two squares, some are four
+          // White, and solid. The blue-white at part strength read as dust on the lens; a star
+          // is a hard white square or it is nothing. The breath is still there — it just runs
+          // between bright and brighter now instead of between faint and less faint.
+          ctx.fillStyle = "rgba(255,255,255," + (0.62 + 0.38*k*k) + ")";
+          ctx.fillRect(Math.round(sx), Math.round(sy), sz, sz);
+        }
+      }
+    ctx.restore();
+  }
+  function drawPatchwork(ts, themeOverride, stars) {
     const T = themeOverride || (state && state.bgTheme) || DEFAULT_THEME;
     const w = (cell || 90) * Math.min(T.patchW || 0.55, PATCH_MAX);
     // Keyed on the EXACT patch width. It used to round to whole pixels, and since `cell` is
@@ -7712,7 +8318,10 @@
     if (key !== patchKey) { buildPatchPattern(T, w); patchKey = key; }
     // The quilt only moves while an overlay is up: paused, or on the win / fail card. The
     // title screen passes a theme override and is deliberately excluded.
-    const scrolling = titleActive ||
+    // The quilt only moves while nothing else on screen does. The ceremony is the clearest case
+    // of that in the game — a still character under a still beam — and it was the one screen
+    // excluded, because it passes a theme of its own and the rule keyed off that.
+    const scrolling = titleActive || cineActive || !!cere || worldOpen() ||
       (!themeOverride && (paused || (state && (state.status === "win" || state.status === "lose"))));
     const off = bgScrollOffset(ts, scrolling);
     ctx.save();
@@ -7727,14 +8336,16 @@
     ctx.fillRect(off.x, off.y, viewW, viewH);
     ctx.restore();
     drawGlints(ts, off, patchStepPx || w);   // the quilt's real step, so a glint fills a patch
+    if (stars) drawWorldStars(ts, off);      // ...and whatever it is hangs in a sky
   }
   // The glisten. Each patch on screen is identified by its position in the endless quilt,
   // hashed once to decide whether it glints at all and to give it its own phase, so they
   // breathe out of step. Additive, so it lifts the patch's own colour rather than washing it,
   // and FLAT across the whole patch — the patch itself is the shape, so a soft blob inside it
   // just blurred the edge the quilt is made of.
-  function drawGlints(ts, off, w) {
-    if (BG_GLINT_A <= 0) return;
+  function drawGlints(ts, off, w, strength) {
+    const A = BG_GLINT_A * (strength == null ? 1 : strength);
+    if (A <= 0) return;
     const i0 = Math.floor(off.x / w), j0 = Math.floor(off.y / w);
     const nx = Math.ceil(viewW / w) + 1, ny = Math.ceil(viewH / w) + 1;
     ctx.save();
@@ -7744,7 +8355,7 @@
       if ((h % 1000) / 1000 >= BG_GLINT_RATE) continue;            // most patches never glint
       const ph = ((h >>> 9) % 1000) / 1000;
       const k = 0.5 + 0.5*Math.sin(ts/BG_GLINT_MS*Math.PI*2 + ph*Math.PI*2);
-      const a = Math.pow(k, 6) * BG_GLINT_A;                       // long dark, brief bloom
+      const a = Math.pow(k, 6) * A;                                // long dark, brief bloom
       if (a < 0.004) continue;
       const x = qi*w - off.x, y = qj*w - off.y;
       ctx.fillStyle = "rgba(255,250,228," + a + ")";
@@ -7757,9 +8368,9 @@
     }
     ctx.restore();
   }
-  function drawBackground(ts, themeOverride) {
+  function drawBackground(ts, themeOverride, stars) {
     if (!grainPattern) buildPaper();
-    drawPatchwork(ts, themeOverride);                            // pieced quilt of muted patches
+    drawPatchwork(ts, themeOverride, stars);                     // pieced quilt of muted patches
     ctx.globalAlpha = 0.22; ctx.fillStyle = "#0a0817";            // lighter wash -> unify without deepening
     ctx.fillRect(0, 0, viewW, viewH); ctx.globalAlpha = 1;
     if (!grainScreen || grainScreenW !== viewW || grainScreenH !== viewH) buildGrainScreen();
@@ -7920,16 +8531,14 @@
     Sound.unlock();                     // first touch unlocks audio (iOS autoplay policy)
     if (cineActive)  { endCine(); return; }     // tap anywhere to skip the opening
     if (titleActive) { leaveTitle(); return; }
+    if (ceremonyTap()) return;                  // ...and to leave a talisman ceremony
     if (state.status !== "play") return;
     const { x, y } = screenXY(e);
     if (dismissTalismanFlash(x, y)) return;    // the card is over the board; it gets the tap first
     const wx = x + camX, wy = y + camY;
     const { c, r } = cellAtWorld(wx, wy);
     if (!inBounds(c, r)) return;
-    // The Hammer of God, if it is armed, gets the tap first: it can lift a tile that is
-    // already laid, which freeTileAt would never find.
-    const lifted = fingerLift(c, r);
-    const tile = lifted || freeTileAt(c, r);
+    const tile = freeTileAt(c, r);
     if (!tile) {
       // grab a sliding platform (tap the platform itself and drag it along its rail)
       for (const sl of (state.sliders||[])) {
@@ -8062,6 +8671,9 @@
       else if (state.status === "squash") tickSquash(dt);
       update(dt);
       updateHazards(dt);
+      tickLover(dt);
+      tickEaten(dt);
+      tickCeremony(dt);
       if (state.status === "falling") tickFall(dt);
       updateShards(dt);
       tickStarDust(dt);
@@ -8121,7 +8733,7 @@
   function updatePowerBtn() {
     const live = !titleActive && !paused && state &&
                  (state.status === "play" || state.status === "vortex");
-    const ids = live ? TALISMANS.filter(t => talUnlocked.has(t.id)).map(t => t.id) : [];
+    const ids = live ? TALISMANS.filter(t => talLive(t) && talUnlocked.has(t.id)).map(t => t.id) : [];
     if (!ids.length) { if (_powerCls !== "off") { powerEl.className = ""; _powerCls = "off"; } return; }
     if (ids.join(",") !== _rackIds) buildPowerRack(ids);
     if (_powerCls !== "on") { powerEl.className = "on"; _powerCls = "on"; }
@@ -8591,10 +9203,11 @@
   // ---------- Buttons & menu ---------------------------------------------
   ovBtn.addEventListener("click", () => {
     Sound.unlock(); Sound.tapBig();
+    endCeremony();                // whatever happens next, the ceremony is over
     if (state.status === "win") {
       // finished the last level: drop the player into level select rather than
       // silently wrapping them back round to level 1
-      if (levelIdx >= LEVELS.length - 1) { overlay.className = ""; openMenu("levels"); return; }
+      if (levelIdx >= LEVELS.length - 1) { overlay.className = ""; openMenu("world"); return; }
       levelIdx = levelIdx + 1; loadLevel(levelIdx); return;
     }
     loadLevel(levelIdx);          // lose / retry
@@ -8689,7 +9302,7 @@
     // half in and half out at the bottom is fine — it is a scroll view, and a sliced row is
     // the honest signal that there is more below.
   }
-  function closeMenu() { stopShopFig(); stopRelics(); shopPreview = null;
+  function closeMenu() { stopShopFig(); stopRelics(); shopPreview = null; endCeremony();
                          paused = false; menuReturn = null; menuEl.classList.remove("show");
                          document.body.classList.remove("menu-open");
                          Sound.ambient(cineActive ? "intro" : titleActive ? "title" : null); }
@@ -8752,12 +9365,46 @@
     buildMenu_(screen);
     requestAnimationFrame(fitScrollRack);
   }
+  // Which cells of the matrix the blob occupies, for `n` levels. Grow a wobbly radius until it
+  // holds enough, then drop whichever cells sit closest to the boundary until it holds exactly
+  // enough — trimming from the rim keeps the lumps, where trimming by distance from the centre
+  // would quietly round it back into a circle.
+  //
+  // The three sine terms are prime-ish multiples of the angle so they never line up and repeat:
+  // one big lobe, one medium, one small. Fixed phases, so it is the same cloud every time.
+  function tileverseLayout(n) {
+    const edgeAt = (th, base) => base * (1 + 0.20*Math.sin(3*th + 0.9)
+                                           + 0.13*Math.sin(5*th - 2.1)
+                                           + 0.07*Math.sin(7*th + 4.3));
+    let found = [];
+    for (let base = 1.5; base < 40; base += 0.12) {
+      const R = Math.ceil(base * 1.5) + 2, out = [];
+      for (let r = -R; r <= R; r++) for (let c = -R; c <= R; c++) {
+        const d = Math.hypot(c, r);
+        const slack = edgeAt(Math.atan2(r, c), base) - d;
+        if (slack >= 0) out.push({ c, r, slack });
+      }
+      if (out.length >= n) { found = out; break; }
+    }
+    if (found.length < n) return [];                     // never happens; a level list this big would not fit
+    found.sort((a, b) => a.slack - b.slack);             // rim first
+    found = found.slice(found.length - n);               // ...and the rim is what goes
+    const minC = Math.min(...found.map(p => p.c)), minR = Math.min(...found.map(p => p.r));
+    found.forEach(p => { p.c -= minC; p.r -= minR; });
+    found.sort((a, b) => a.r - b.r || a.c - b.c);        // reading order: 1 at the top left
+    return found;
+  }
+  let menuScreen = "main";
   function buildMenu_(screen) {
+    menuScreen = screen;
     stopShopFig(); stopRelics();          // whatever was animating is about to leave the DOM
     relicPainters = [];
     menuBody.innerHTML = "";
+    // Anything that is a SHELF is pinned to the top: its content changes length as you unlock
+    // things, and a centred card slides up and down the screen while you browse it.
     menuEl.classList.toggle("top",
-      screen === "shop" || screen.indexOf("shop:") === 0 || screen === "levels" || screen === "world");
+      screen === "shop" || screen.indexOf("shop:") === 0 || screen === "levels" ||
+      screen === "world" || screen === "talismans");
     // the map is a map: it wants the screen, the same as the shop's shelves do
     menuEl.classList.toggle("wide",
       screen === "shop" || screen.indexOf("shop:") === 0 || screen === "world");
@@ -8936,10 +9583,10 @@
           menuBody.appendChild(buy);
         }
       }
-      const go = btn("Back",
+      const go = btn("Done",
                      () => (menuReturn === "overlay" ? closeMenu() : buildMenu("main")), true);
       go.className = "shop-go";
-      labelWithArrow(go, "Back");
+      labelWithArrow(go, "Done");
       menuBody.appendChild(go);
       // the buy button is stacked on top of this one, so it has to know how tall it is
       requestAnimationFrame(() => document.documentElement.style.setProperty(
@@ -8951,7 +9598,7 @@
       title.textContent = "Holy Talismans"; title.className = "shop big amber";
       const worn = settings.talisman;
       const grid = document.createElement("div"); grid.className = "relic-grid";
-      TALISMANS.forEach((t, i) => {
+      TALISMANS.filter(talLive).forEach((t, i) => {
         const got = talUnlocked.has(t.id), on = got && worn === t.id;
         const el = document.createElement("div");
         el.className = "relic" + (on ? " on" : "") + (got ? "" : " locked");
@@ -8985,7 +9632,7 @@
       const n = talUnlocked.size;
       menuBody.appendChild(sub(n + " of " + TALISMANS.length + " found" +
         (n === TALISMANS.length ? " — the whole set" : "")));
-      const back = btn("Back",
+      const back = btn("Done",
                        () => (menuReturn === "overlay" ? closeMenu() : buildMenu("main")), true);
       back.className = "shop-go";
       labelWithArrow(back, "Back");
@@ -9008,8 +9655,9 @@
       menuBody.appendChild(sub("Holy Talismans"));
       menuBody.appendChild(btn("Unlock all talismans", (e) => {
         Sound.unlock(); Sound.tapBig();
-        for (const t of TALISMANS) unlockTalisman(t.id);   // the real unlock path, so it persists
-        e && e.target && (e.target.textContent = "All " + TALISMANS.length + " unlocked");
+        const live = TALISMANS.filter(talLive);
+        for (const t of live) unlockTalisman(t.id);        // the real unlock path, so it persists
+        e && e.target && (e.target.textContent = "All " + live.length + " unlocked");
       }));
       menuBody.appendChild(sub("Danger"));
       // Wipes EVERYTHING the player has: levels cleared, coins, everything bought and worn,
@@ -9033,68 +9681,78 @@
         setTimeout(() => { try { location.reload(); } catch(_) {} }, 480);
       });
       menuBody.appendChild(rb);
-      const back = btn("Back", () => buildMenu("main"));
+      const back = btn("Done", () => buildMenu("main"));
       back.className = "shop-go";
       menuBody.appendChild(back);
       return;
     }
     // ---- the Tileverse: the campaign as one climbing trail ----
+    // ---- the Tileverse: every level at once, as one object ----
+    // A perfect matrix — same pitch across and down, nothing nudged — with a silhouette that is
+    // anything but. The campaign is one THING rather than a list, and a rectangle of tiles says
+    // "table of contents" where a cloud says "place". The edge is generated from a few sine
+    // terms round the angle, so it is lumpy in a way no hand would draw twice and yet is exactly
+    // the same lumps every time you open it.
     if (screen === "world") {
       title.textContent = "Tileverse"; title.className = "shop big gilt";
+      // The opening lived on the grid screen, which nothing routes to any more — so it comes
+      // here. It is the story of how the Tileverse got made; this is where it belongs anyway.
+      menuBody.appendChild(btn("Intro", () => { closeMenu(); startCine("menu"); }));
       const rack = document.createElement("div"); rack.className = "shop-rack lvl-rack";
-      const map = document.createElement("div"); map.className = "lvl-map";
+      const map = document.createElement("div"); map.className = "lvl-map blob";
       const best = loadBest();
-      // 1.35 rad a level puts a full left-right-left cycle in about four and a half of them.
-      // The first try wandered at 0.85, which over six levels reads as a diagonal drifting off
-      // the side of the map rather than a path that comes back.
-      const STEP = 104, PAD = 58, AMP = 25, STONES = 3, WIND = 1.35;
-      const N = LEVELS.length;
-      const H = PAD*2 + (N - 1)*STEP;
-      map.style.height = H + "px";
-      // Level 1 at the BOTTOM. `t` counts up from there, so y counts DOWN the box — the whole
-      // reason the map reads as a climb rather than a list.
-      const xAt = t => 50 + Math.sin(t * WIND) * AMP;      // percent across
-      const yAt = t => H - PAD - t*STEP;                   // pixels down
-      // Stones first so the levels sit on top of them where the two overlap.
-      for (let t = 0; t < N - 1; t++) {
-        const x1 = xAt(t), y1 = yAt(t), x2 = xAt(t+1), y2 = yAt(t+1);
-        for (let k = 1; k <= STONES; k++) {
-          const f = k / (STONES + 1);
-          const st = document.createElement("div"); st.className = "step";
-          st.style.left = (x1 + (x2-x1)*f) + "%";
-          st.style.top  = (y1 + (y2-y1)*f) + "px";
-          map.appendChild(st);
-        }
-      }
-      LEVELS.forEach((L, i) => {
-        const b = best["L" + i], done = !!(b && (b.done || b.stars));
+      const cells = tileverseLayout(LEVELS.length);
+      const cols = Math.max(...cells.map(p => p.c)) + 1;
+      const rows = Math.max(...cells.map(p => p.r)) + 1;
+      // The tile is whatever divides the panel evenly; the map is then exactly as tall as it
+      // needs to be. Read off the rack rather than guessed, so it fills whatever it is given.
+      map.style.setProperty("--cols", cols);
+      map.style.setProperty("--rows", rows);
+      // How far you have got: everything cleared, plus the one after the furthest of them, is
+      // open. Everything past that is greyed. It is a LOOK, not a gate — every tile is still
+      // pressable, because this game has never stopped you picking a level and quietly starting
+      // now is not a decision a colour should be making.
+      const isDone = k => { const b = best["L" + k]; return !!(b && (b.done || b.stars)); };
+      let furthest = -1;
+      for (let k = 0; k < LEVELS.length; k++) if (isDone(k)) furthest = k;
+      cells.forEach((p, i) => {
+        const done = isDone(i), open = done || i <= furthest + 1;
         const el = document.createElement("button");
-        el.className = "stop" + (done ? " done" : "") + (i === levelIdx ? " here" : "");
-        el.style.left = xAt(i) + "%";
-        el.style.top  = yAt(i) + "px";
-        el.innerHTML = "<span>" + (i + 1) + "</span><span class='st" + (done ? "" : " none") + "'>" +
-          (done ? "\u2713" : "\u2014") + "</span>";
-        el.title = L.name || ("Level " + (i + 1));
+        el.className = "stop" + (done ? " done" : "") + (open ? "" : " shut") +
+                       (i === levelIdx ? " here" : "");
+        el.style.gridColumn = (p.c + 1); el.style.gridRow = (p.r + 1);
+        // Nine of the level's OWN backdrop colours, laid out the way the quilt lays them. The
+        // seed is the level number, which is all beginLevel gives genTheme, so this is the
+        // actual palette you will be looking at rather than a stand-in for it — every tile in
+        // the cloud is a little window onto its level.
+        const sw = document.createElement("canvas"); sw.className = "swatch";
+        sw.width = sw.height = 48;
+        const g = sw.getContext("2d");
+        const cols = genTheme(hashSeed(String(i + 1))).colors;
+        for (let k = 0; k < 9; k++) {
+          g.fillStyle = cols[k % cols.length];
+          g.fillRect((k % 3) * 16, Math.floor(k / 3) * 16, 16, 16);
+        }
+        el.appendChild(sw);
+        const num = document.createElement("span"); num.textContent = (i + 1);
+        el.appendChild(num);
+        el.title = (LEVELS[i] && LEVELS[i].name) || ("Level " + (i + 1));
         el.onclick = () => { levelIdx = i; loadLevel(i); closeMenu(); };
         map.appendChild(el);
       });
       rack.appendChild(map);
       menuBody.appendChild(rack);
-      const back = btn("Back", () => buildMenu("main"));
+      const back = btn("Done", () => buildMenu("main"));
       back.className = "shop-go";
       menuBody.appendChild(back);
-      // Open on where you are, or at the bottom — where level 1 is, and where the climb starts.
-      //
-      // TWO frames, and the rack's own scrollTop rather than scrollIntoView(). buildMenu caps
-      // the rack's height on the next frame, so positioning it on the first one puts it where
-      // the uncapped box would have been. And scrollIntoView walks UP to the nearest scrollable
-      // ancestor: with the rack not yet capped that was the menu itself, which it dragged 2900px
-      // out of position — after which the cap was measured off a rack top that was off-screen.
+      // Open on the level you are on, centred in the pane. offsetTop is measured inside the
+      // map, and the map now carries its own padding, so the two are added rather than assumed
+      // to be the same thing.
       requestAnimationFrame(() => requestAnimationFrame(() => {
         const here = map.querySelector(".stop.here");
         rack.scrollTop = here
-          ? Math.max(0, parseFloat(here.style.top) - rack.clientHeight/2)
-          : rack.scrollHeight;
+          ? Math.max(0, here.offsetTop + map.offsetTop - rack.clientHeight/2 + here.offsetHeight/2)
+          : 0;
       }));
       return;
     }
@@ -9116,7 +9774,7 @@
       });
       rack.appendChild(grid);
       menuBody.appendChild(rack);
-      const back = btn("Back", () => buildMenu("main"));
+      const back = btn("Done", () => buildMenu("main"));
       back.className = "shop-go";
       menuBody.appendChild(back);
       return;
@@ -9129,8 +9787,13 @@
     labelWithArrow(resume, "Resume");
     menuBody.appendChild(resume);
     menuBody.appendChild(btn("Restart Level", () => { loadLevel(levelIdx); closeMenu(); }));
-    menuBody.appendChild(btn("Tileverse", () => buildMenu("world")));
-    menuBody.appendChild(btn("Levels", () => buildMenu("levels")));
+    const worldBtn = btn("Tileverse", () => buildMenu("world"));
+    worldBtn.classList.add("void");
+    menuBody.appendChild(worldBtn);
+    // The plain grid is off the menu. The Tileverse says everything it said and says it as a
+    // place; two doors onto the same list was one door too many. The screen itself is left
+    // standing — it costs nothing, and the Intro button lives on it — but nothing routes there
+    // any more, so every way in now lands on the map.
     // The balance belongs on the way in, not two taps deep: the question "can I afford
     // anything yet" is the only reason to open the shop at all.
     const shopBtn = btn("Tile Shop", () => buildMenu("shop"));
@@ -9173,7 +9836,7 @@
     smash: (c, r) => breakStone(c, r),
     sound: Sound,
     power: { fire: (id) => firePower(id), state: () => state.power,
-             lift: (c, r) => !!fingerLift(c, r) },
+             smash: (n) => smashStones(n == null ? HAMMER_TILES : n) },
     load: (i) => { titleActive = false; const pf = document.getElementById("pauseFloat"); if (pf) pf.style.display = "";
                    levelIdx = clamp(i, 0, LEVELS.length - 1); loadLevel(levelIdx); },
     tapCell: (c, r) => {                       // simulate a tap at a grid cell (stone/switch)
@@ -9199,6 +9862,10 @@
       tally: (c, r) => showTally(c || 0, r || 0),   // fire the pickup tally without finding a coin
       // which way it goes, and how far the card has turned at u of its life
       tallyDir: (u) => ({ dx: tallyDX, dy: tallyDY, spin: tallySpin(u || 0), swing: tallySwing }),
+      // run the talisman ceremony for a given charm, without having to find one first
+      ceremony: (id) => { const d = talById(id || "pulse"); if (d) startCeremony(d, false);
+                          return !!d; },
+      ceremonyAt: () => cere ? { beat: cere.beat, t: Math.round(cere.t) } : null,
       // where the ribbon leaves him, in his own frame, at a given point in the stride
       trailAt: (ts, phase, moving) => trailAnchor(ts || 0, phase, moving !== false),
       monster: (x, y, ts, face, phase, cfg) => drawMonster(x, y, ts, face, phase, cfg),
@@ -9258,7 +9925,6 @@
     boom2:  8950,                        // ...a runner, who assembles out of streaming pixels
                                          // over INTRO_CONVERGE — the game's own level-start effect
     line3:  [9750, 10200, 11500, 12000], // "A runner appeared"
-    bg:     [12100, 13400],              // the quilt fades up out of the black
     line4:  [13300, 13800, 15400, 16000],// "And so he ran..."
     run:    13500,                       // and off he goes
     fade:   [15800, 16800],              // back to black
@@ -9269,10 +9935,10 @@
                        line2:"A tile came into the cosmos", and2:"But a tile is nothing without...",
                        line3:"The runner.", line4:"And so he ran..." };
   const CINE_SETTLE = 620;               // how long he flickers after forming, before going solid
-  let cineActive = false, cineNext = "level", cineT = 0, cineTheme = null, cineFired = 0, cineParts = [];
+  let cineActive = false, cineNext = "level", cineT = 0, cineFired = 0, cineParts = [];
   function startCine(next){
     cineActive = true; cineNext = next || "level"; cineT = 0; cineFired = 0;
-    cineTheme = genTheme(hashSeed("TILE RUNNER title"));
+    markCineSeen();                     // whatever happens now, this is no longer a first launch
     // Stored in units of the runner's size rather than as absolute points, so the field still
     // aims true if the window is resized mid-cinematic. 90 of them, as in startIntro().
     // They converge on the centre of his BODY but each one settles at its own spot inside his
@@ -9296,7 +9962,7 @@
     if (!cineActive) return;
     cineActive = false;
     Sound.ambient(null);                                // the level's own arrangement takes over
-    if (cineNext === "menu") openMenu("levels");        // replayed from the menu — go back to it
+    if (cineNext === "menu") openMenu("world");         // replayed from the menu — go back to it
     else loadLevel(levelIdx);                           // opening run — straight into the level
   }
   function tickCine(dt){
@@ -9329,12 +9995,15 @@
   }
   function drawCine(ts){
     const t = cineT;
-    // the quilt is always drawn, then blacked out by however much of the fade is left —
-    // painting it under black is what lets beat 5 simply lift the black away
-    drawBackground(ts, cineTheme);
-    const bgA = t < CINE.bg[0] ? 0 : Math.min(1, (t - CINE.bg[0]) / (CINE.bg[1] - CINE.bg[0]));
-    ctx.globalAlpha = 1 - bgA; ctx.fillStyle = "#000000";
-    ctx.fillRect(0, 0, viewW, viewH); ctx.globalAlpha = 1;
+    // The cosmos the story is about is the same one the Tileverse hangs in — the opening says
+    // "a tile came into the cosmos", and this IS that cosmos rather than a stand-in for it.
+    //
+    // It is there from the first frame. There used to be a black curtain over it that lifted
+    // two thirds of the way in, on the reasoning that "At first, there was nothing" wanted an
+    // empty screen — but a near-black field with a few stars in it is a far better picture of
+    // nothing than a black rectangle is, and the story reads better arriving IN a place than
+    // having one appear late.
+    drawVoid(ts);
 
     const s = Math.min(viewW*0.30, viewH*0.17);        // the one tile, centre stage
     const cx = viewW/2, cy = viewH*0.60;
@@ -9544,7 +10213,12 @@
   }
 
   function drawTitle(ts){
-    drawBackground(ts, titleTheme);                            // same look as the in-game backdrop
+    const first = firstLaunch();
+    // Before the opening has ever run, the title is the cosmos itself — the place the game is
+    // about to be made in. After that it is a level's quilt with him running across it, which
+    // is what the game turned out to be.
+    if (first) drawVoid(ts);
+    else drawBackground(ts, titleTheme);                       // same look as the in-game backdrop
     ctx.fillStyle = "rgba(8,6,20,0.12)"; ctx.fillRect(0,0,viewW,viewH);   // very light darken for legibility
 
     const size = Math.min(viewW*0.195, viewH*0.14);
@@ -9552,6 +10226,8 @@
     const y1 = cyT - size*0.5, y2 = cyT + size*0.5;            // two words, centred & close together
 
     // --- the runner maze winds BEHIND the header (drawn first) ---
+    // ...and on a first launch there is none of it. He has not been made yet.
+    if (!first) {
     const m = introMetrics();
     const u = TITLE.u, lead = Math.floor(u + 1.6);
     ctx.save();
@@ -9569,6 +10245,7 @@
     // and the legs follow, instead of him sprinting on the spot.
     paintRunner(pos.x, pos.y, m.s, u*Math.PI*3, Math.atan2(pb.y-pa.y, pb.x-pa.x), true, ts, 0);
     ctx.restore();
+    }
 
     // --- big dramatic 3D extruded title, centred over the maze ---
     // TILE is the short word and sits above the long one; optically it needs to come back
@@ -9583,7 +10260,7 @@
       ctx.fillStyle = "#eef0ff";
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.font = "900 " + Math.round(Math.min(viewW*0.05, 19)) + "px " + UI_FONT;   // match the byline size
-      ctx.fillText("TAP TO PLAY", viewW/2, viewH*0.90);
+      ctx.fillText(first ? "TAP TO CREATE A TILEVERSE" : "TAP TO PLAY", viewW/2, viewH*0.90);
       ctx.globalAlpha = 1;
     }
     // small version number, bottom-right corner
