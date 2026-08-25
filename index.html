@@ -281,8 +281,11 @@
      depth; a black bar between two blocks reads as a divider. */
   #overlay.lose #ov-btn, #overlay.win #ov-btn {
     font-size:var(--btn); padding:11px 16px;
-    box-shadow:0 4px 0 #171233;
-    background-color:#2b2552;
+    /* The same plate every menu button is, rather than a lighter blue of its own — these two
+       are the same kind of thing as RESUME or TILEVERSE and were reading as a different family
+       for no reason but a hardcoded colour. The chequer is what marks them out. */
+    box-shadow:0 4px 0 var(--panel-lo);
+    background-color:var(--panel);
     background-image:
       conic-gradient(transparent 0 25%, rgba(255,255,255,0.03) 0 50%,
                      transparent 0 75%, rgba(255,255,255,0.03) 0);
@@ -2227,7 +2230,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v8.2";                    // shown on the title & pause screens
+  const VERSION = "v8.3";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -3094,8 +3097,8 @@
       coinFly: [],                          // coins on their way to him, pulled by the Magnet
       loop: null,                           // a circuit he is going round, once we are sure
       vortex: null,                         // ...and what happens to the world when he is
-      crumble: new Set((L.crumble||[]).map(c=>key(c[0],c[1]))),
-      crumbled: new Set(),
+      singularity: new Set((L.singularity||[]).map(c=>key(c[0],c[1]))),
+      collapsed: new Set(),
       eaten: [],                            // tiles the rift is currently swallowing
       // fixed platforms: permanent free track cast into a wall plinth (see trackConnects)
       platforms: (L.platforms||[]).map((p,i)=>({ id:i, c:p[0], r:p[1], dirs:parsePfDirs(p[2]), lit:0 })),
@@ -3411,7 +3414,7 @@
     stone:  { name:"Stone Block", desc:"Tap to smash it, then build through the gap." },
     coin:   { name:"Loot Tile", desc:"Run over one and its tile is yours to spend in the shop." },
     boost:  { name:"Boost", desc:"Grab it for a short burst of speed. Keep those tiles flowing!" },
-    crumble:{ name:"Spacetime Rift", desc:"A vortex in the floor. Crossing it swallows that tile for good — spend wisely." },
+    singularity:{ name:"Singularity", desc:"A vortex in the floor. Crossing it swallows that tile for good — spend wisely." },
     slow:   { name:"Slow", desc:"Grab it and the runner drags for a few seconds — plan around it." },
     door:   { name:"Colour Door", desc:"Opens when you collect the matching-colour key." },
     switch: { name:"Buttons & Doors", desc:"Tap the arcade buttons to slide their door open. Follow the wires — some doors need EVERY linked button pressed." },
@@ -3441,7 +3444,7 @@
     if (L.stone && L.stone.length) m.push("stone");
     if (L.coins && L.coins.length) m.push("coin");
     if (L.boost && L.boost.length) m.push("boost");
-    if (L.crumble && L.crumble.length) m.push("crumble");
+    if (L.singularity && L.singularity.length) m.push("singularity");
     if (L.slow && L.slow.length) m.push("slow");
     if (L.doors && L.doors.length) m.push("door");
     if (L.gates && L.gates.length) m.push("switch");
@@ -3542,7 +3545,7 @@
     else if (type==="stone") { tile("#8a7f63"); g.strokeStyle="rgba(30,26,20,0.7)"; g.lineWidth=S*0.03; g.lineJoin="round";
       g.beginPath(); g.moveTo(cx,S*0.24);g.lineTo(cx-S*0.09,cy);g.lineTo(cx+S*0.07,cy+S*0.11);g.lineTo(cx-S*0.02,S*0.78);
       g.moveTo(cx-S*0.09,cy);g.lineTo(S*0.24,cy+S*0.03); g.stroke(); }
-    else if (type==="crumble") {
+    else if (type==="singularity") {
       const rad=S*0.4, coreR=rad*0.56;
       g.lineCap="round";
       for(let a2=0;a2<5;a2++){ g.strokeStyle=a2%2?"rgba(255,168,72,0.8)":"rgba(255,226,176,0.75)"; g.lineWidth=S*0.03; g.beginPath();
@@ -3874,7 +3877,7 @@
   // occupiedFor() used to rebuild a full Set (walls + every tile + stones + …) on
   // EVERY call — and it's called each frame by the junction glyph and, while dragging,
   // by the drop-ghost. That scan (with a key() string per tile/wall) was the drag hitch.
-  // The "static" part (walls, stones, crumbled cells, parked/free tiles) only changes
+  // The "static" part (walls, stones, collapsed cells, parked/free tiles) only changes
   // when a tile moves or a stone breaks, so we build it once and reuse it until marked
   // dirty. The genuinely per-frame parts (doors easing open, moving hazards, sliders)
   // are layered on top of a cheap copy.
@@ -3884,7 +3887,7 @@
     const occ = new Set(state.walls);
     for (const sk of state.stones.keys()) occ.add(sk);        // intact stone blocks placement
     for (const pf of (state.platforms||[])) occ.add(key(pf.c, pf.r));   // platforms are wall — you ride them, you don't build on them
-    for (const ck of state.crumbled) occ.add(ck);             // cells that have crumbled away
+    for (const ck of state.collapsed) occ.add(ck);             // cells that have collapsed away
     for (const t of state.tiles) { if (t.id === dragId) continue; if (t.status === "spent") continue; occ.add(key(t.c, t.r)); }
     return occ;
   }
@@ -3977,45 +3980,55 @@
     ctx.globalAlpha = 1;
   }
   // a bright ring of light pulsing outward from a cleared tile (additive glow)
-  // What a clearing tile throws off. Square, not round: everything on this board is a square,
-  // and a circle expanding out of one reads as something being emitted rather than as the tile
-  // itself letting go. Same reasoning as the laid-tile flash above.
+  // What a tile throws off when it lets go. SQUARE, not round: everything on this board is a
+  // square, and a circle expanding out of one reads as something being emitted rather than as
+  // the tile itself letting go. Same reasoning as the laid-tile flash above.
   //
   // Canvas has no square gradient, so the bloom is a stack of nested squares under `lighter` —
   // the middle collects every layer and the outermost only its own, which is a falloff built
-  // out of the compositing rather than out of a gradient object.
+  // out of the compositing rather than out of a gradient object. The crisp edge wears the same
+  // corner as every other square in the game, so it follows TILE.radius rather than drifting
+  // from it.
+  //
+  // One routine, because there are two callers: the board's cleared tiles and the title
+  // screen's flying one, which used to be two copies of the same gradient a thousand lines
+  // apart with a comment on one asking the reader to keep them in step.
   const LIGHT_BLOOM_STEPS = 5;
-  function drawLights() {
-    if (!state.lights || !state.lights.length) return;
+  function squarePulse(x, y, rad, fade, lw){
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
-    for (const p of state.lights) {
-      const k = p.life / p.max;                 // 0..1
-      const rad = cell * (0.25 + k * 1.3) * (p.k || 1);
-      const fade = (1 - k) * (1 - k);           // ease-out fade
-      for (let i = LIGHT_BLOOM_STEPS; i >= 1; i--) {
-        const f = i / LIGHT_BLOOM_STEPS, half = rad * f;
-        ctx.fillStyle = "rgba(255,236,190," + (0.085 * fade).toFixed(4) + ")";
-        rrect(p.x - half, p.y - half, half*2, half*2, tileR(half*2)); ctx.fill();
-      }
-      // crisp expanding square, on the same corner every other square in the game wears
-      ctx.globalAlpha = 0.9 * fade;
-      ctx.strokeStyle = "#fff7d6"; ctx.lineWidth = Math.max(1.5, cell*0.05*(1-k));
-      const h2 = rad*0.9;
-      rrect(p.x - h2, p.y - h2, h2*2, h2*2, tileR(h2*2)); ctx.stroke();
-      ctx.globalAlpha = 1;
+    for (let i = LIGHT_BLOOM_STEPS; i >= 1; i--) {
+      const half = rad * (i / LIGHT_BLOOM_STEPS);
+      ctx.fillStyle = "rgba(255,236,190," + (0.085 * fade).toFixed(4) + ")";
+      rrect(x - half, y - half, half*2, half*2, tileR(half*2)); ctx.fill();
     }
+    ctx.globalAlpha = 0.9 * fade;
+    ctx.strokeStyle = "#fff7d6"; ctx.lineWidth = lw;
+    const h2 = rad * 0.9;
+    rrect(x - h2, y - h2, h2*2, h2*2, tileR(h2*2)); ctx.stroke();
+    ctx.globalAlpha = 1;
     ctx.restore();
   }
-  // expanding-ring "pop" pulses (tile placed, coin grabbed, …)
+  function drawLights() {
+    if (!state.lights || !state.lights.length) return;
+    for (const p of state.lights) {
+      const k = p.life / p.max;                 // 0..1
+      squarePulse(p.x, p.y, cell * (0.25 + k*1.3) * (p.k || 1),
+                  (1 - k) * (1 - k),            // ease-out fade
+                  Math.max(1.5, cell*0.05*(1-k)));
+    }
+  }
+  // The smaller pulses that mark something happening ON a cell — a tile placed, stone broken,
+  // a door opened, a coin taken, a charm fired, a monster unmade. Square for the same reason
+  // the clear burst is, and in the colour of whatever set it off.
   function drawPops() {
     if (!state.pops) return;
     for (const p of state.pops) {
-      const k = p.life / p.max;
+      const k = p.life / p.max, half = cell*(0.18 + k*0.55);
       ctx.globalAlpha = (1 - k) * 0.85;
       ctx.strokeStyle = p.color;
       ctx.lineWidth = Math.max(2, cell*0.05*(1-k));
-      ctx.beginPath(); ctx.arc(p.x, p.y, cell*(0.18 + k*0.55), 0, Math.PI*2); ctx.stroke();
+      rrect(p.x - half, p.y - half, half*2, half*2, tileR(half*2)); ctx.stroke();
     }
     ctx.globalAlpha = 1;
   }
@@ -4747,13 +4760,13 @@
         if (node.tileId != null) {
           const t = s.tiles[node.tileId];
           if (t) {
-            if (s.crumble.has(key(node.c, node.r))) {       // fragile floor: tile is consumed
+            if (s.singularity.has(key(node.c, node.r))) {       // fragile floor: tile is consumed
               // It does not just stop existing. The rift takes it: a ghost of the tile is left
               // behind to spiral into the eye the way everything else on this square does, so
               // the one time the player LOSES a tile is the one time they get to watch it go.
               s.eaten.push({ c: node.c, r: node.r, t: 0 });
               t.status = "spent"; t.c = -1; t.r = -1;
-              s.crumbled.add(key(node.c, node.r));
+              s.collapsed.add(key(node.c, node.r));
               s.shake = Math.max(s.shake, cell * 0.12);
               Sound.swallow();
             } else {
@@ -5300,8 +5313,8 @@
         // and it is the only warning the player gets that this one is not coming back. Same
         // two-sine shake the eye uses, at a third the throw, so the pair read as one thing
         // pulling and the other resisting rather than as two separate animations.
-        const doomed = state.crumble && state.crumble.has(key(t.c, t.r)) &&
-                       !state.crumbled.has(key(t.c, t.r));
+        const doomed = state.singularity && state.singularity.has(key(t.c, t.r)) &&
+                       !state.collapsed.has(key(t.c, t.r));
         let jx = 0, jy = 0;
         if (doomed) { const tr = cell * RIFT.tremble * 0.34;
           jx = (Math.sin(ts/47) + Math.sin(ts/31.3)*0.6) * tr;
@@ -5661,8 +5674,8 @@
   // --- Batch 2 cell-type rendering ---------------------------------------
   function drawBarriers(ts) {
     const s = state;
-    for (const ck of s.crumble) if (!s.crumbled.has(ck)) { const [c,r]=ck.split(",").map(Number); drawCrumble(c,r,false,ts); }
-    for (const ck of s.crumbled) { const [c,r]=ck.split(",").map(Number); drawCrumble(c,r,true,ts); }
+    for (const ck of s.singularity) if (!s.collapsed.has(ck)) { const [c,r]=ck.split(",").map(Number); drawSingularity(c,r,false,ts); }
+    for (const ck of s.collapsed) { const [c,r]=ck.split(",").map(Number); drawSingularity(c,r,true,ts); }
     drawEaten();                                  // ...and whatever is currently going down one
     for (const bk of s.boost) { const [c,r]=bk.split(",").map(Number); drawFxPickup(c,r,ts,"boost"); }
     for (const bk of s.slow)  { const [c,r]=bk.split(",").map(Number); drawFxPickup(c,r,ts,"slow"); }
@@ -6627,7 +6640,7 @@
       ctx.beginPath(); ctx.moveTo(x+s*0.30, yy - dir*s*0.06); ctx.lineTo(x+s*0.5, yy + dir*s*0.06); ctx.lineTo(x+s*0.70, yy - dir*s*0.06); ctx.stroke(); }
     ctx.globalAlpha = 1; ctx.restore();
   }
-  // The Spacetime Rift, tuned in crumble-lab.html — paste the RIFT block between the two.
+  // The Singularity, tuned in crumble-lab.html — paste the RIFT block between the two.
   //
   // Everything is anchored on the tile's centre: there is no orbit here. The SWIRL is the
   // rotation and the FALL is the scale — a square arrives larger than the tile, turns as it
@@ -6680,7 +6693,7 @@
       ctx.restore();
     }
   }
-  function drawCrumble(c, r, gone, ts) {
+  function drawSingularity(c, r, gone, ts) {
     const x = cx(c) + cell*0.5, y = cy(r) + cell*0.5;
     const P = RIFT, a = gone ? 0.35 : 1, t = ts || 0;
     const eye = cell * P.hole, start = cell * P.big;
@@ -8582,7 +8595,7 @@
   canvas.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     Sound.unlock();                     // first touch unlocks audio (iOS autoplay policy)
-    if (cineActive)  { endCine(); return; }     // tap anywhere to skip the opening
+    if (cineActive)  { cineStep(); return; }    // tap anywhere to skip ahead one chapter
     if (titleActive) { leaveTitle(); return; }
     if (ceremonyTap()) return;                  // ...and to leave a talisman ceremony
     if (state.status !== "play") return;
@@ -10010,7 +10023,7 @@
   // studio card that wears it reads as part of the game rather than as the house behind it.
   const LOGO = {
     words: ["BIG", "MAN", "LITTLE"],
-    lead:  0.045,    // between lines, as a fraction of the mark's width
+    lead:  0.105,    // between lines, as a fraction of the mark's width
     ink:   "#f4f2ff",
   };
   // Draws the mark centred on (cx, cy) and exactly W wide, and reports the band it filled so
@@ -10088,6 +10101,23 @@
   // "not yet". Retime the card and not one line of the beat table has to move.
   const CINE_LEAD = 3300;
   const CINE_CARD = { in: 560, out: 2850, gone: 3300 };
+  // Where each chapter of the story begins, in cineT. A tap moves the show on by ONE of these
+  // rather than throwing the whole thing away — someone who has seen the Tiloid a dozen times
+  // can still want to watch the Tileverse build. Taking a tap past the last one ends it.
+  //
+  // The chapters are where the WORDS change, because that is what reads as a chapter, each
+  // rewound a little so the beat has its run-up rather than starting mid-sentence.
+  const CINE_STEPS = [
+    0,                                    // BIG MAN LITTLE presents
+    CINE_LEAD,                            // AT FIRST THERE WAS NOTHING
+    CINE_LEAD + CINE.born   - 320,        // THEN THE SACRED TILOID CAME INTO BEING
+    CINE_LEAD + CINE.line3[0] - 200,      // THE SACRED TILOID UNFOLDED
+    CINE_LEAD + CINE.line4[0] - 200,      // AND THE TILEVERSE WAS CREATED
+    CINE_LEAD + CINE.line5[0] - 200,      // BUT A TILEVERSE IS NOTHING
+    CINE_LEAD + CINE.line6[0] - 200,      // WITHOUT ITS RUNNER
+    CINE_LEAD + CINE.fall[0]  - 500,      // ...and he drops into it
+    CINE_LEAD + CINE.line7[0] - 400,      // AND SO HE RUNS
+  ];
   const CINE_RUN_SPD = 0.0008;      // tiles per ms once he sets off (~the game's own pace)
   const CINE_POP     = 340;         // how long one tile takes to bud out of its parent
   const CINE_PERSP   = 4.5;         // camera distance from the solid, in cells
@@ -10393,6 +10423,31 @@
     return CINE.grow[0] + (CINE.grow[1] - CINE.grow[0] - CINE_POP) *
            ((C.rank[i] - C.seeds + 1) / spread);
   }
+  // Move the clock, and bring the one-shot state with it. Everything drawn is a function of
+  // the clock and needs no help, but the BANGS are latches: skip four chapters without this
+  // and every sound that was jumped over fires at once on the very next tick.
+  function cineSeek(ms){
+    cineT = ms;
+    const t = cineT - CINE_LEAD;
+    cineFired = 0;
+    if (cineT >= CINE_CARD.in*0.6) cineFired |= 32;
+    if (t >= CINE.born)      cineFired |= 1;
+    if (t >= CINE.unfold[0]) cineFired |= 2;
+    if (t >= CINE.grow[1])   cineFired |= 4;
+    if (t >= CINE.dive[0])   cineFired |= 8;
+    if (t >= CINE.plinth)    cineFired |= 16;
+    cineGrew = 0;
+    if (cineCloud && t >= CINE.grow[0])
+      for (let i = 0; i < cineCloud.n; i++)
+        if (!cineCloud.isSeed[i] && t >= cineGrowAt(i)) cineGrew++;
+  }
+  // One tap, one chapter.
+  function cineStep(){
+    for (const at of CINE_STEPS) {
+      if (at > cineT + 1) { cineSeek(at); try { Sound.tap && Sound.tap(); } catch(_){} return; }
+    }
+    endCine();                            // nothing left ahead of us; the story is over
+  }
   function tickCine(dt){
     cineT += dt;
     const t = cineT - CINE_LEAD;
@@ -10565,6 +10620,8 @@
         const i0 = Math.floor(u), f = u - i0;
         for (let k = 0; k < TITLE_QUEUE - 1; k++)
           introDrawPlatform(rowAt(i0 + k), rowAt(i0 + k - 1), rowAt(i0 + k + 1), m);
+        // i0+1 is the front of the queue: the tile that landed as this flight started.
+        laidFlashAt(rowAt(i0 + 1), m, f / (CINE_RUN_SPD * LAID_FLASH_MS));
         dragPlatform(rowAt, i0 - 1, i0 - 1 + TITLE_QUEUE, f, m, ts);
       }
 
@@ -10613,7 +10670,7 @@
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillStyle = "#eef0ff";
       ctx.font = "900 " + Math.round(Math.min(viewW*0.034, 14)) + "px " + UI_FONT;
-      ctx.fillText("TAP TO SKIP", viewW/2, viewH*0.93);
+      ctx.fillText("TAP TO SKIP AHEAD", viewW/2, viewH*0.93);
       ctx.restore();
     }
     const fk = t < CINE.fade[0] ? 0 : Math.min(1, (t - CINE.fade[0]) / (CINE.fade[1] - CINE.fade[0]));
@@ -10649,24 +10706,19 @@
   // path, which is how it can arc without its shape popping when it lands.
   const TITLE_QUEUE = 3;                               // same three tiles the player cycles
   const DRAG_HOLD = 0.22;                              // of the gap: it rests before it lifts
-  const DRAG_FILL_AT = 0.86;                           // where in the flight the track casts back in
-  // The same burst the board throws when a tile clears (see drawLights), in screen space and
-  // driven straight off the drag's progress rather than off a particle list — nothing here
-  // has any state to keep between frames.
+  // Where in the flight the track casts back into the tile. 1 means it never does WHILE FLYING:
+  // a carried tile is an empty pane the whole way over, and it only wears track once it has
+  // parked at the front of the queue and the loop starts drawing it as ground. The track used
+  // to appear at 0.86 — still airborne, still arcing — which read as the tile deciding what it
+  // was before it had landed. g never quite reaches 1 (the flight's fraction wraps to 0 at the
+  // hand-over), so this is "not in flight, ever", not "on the last frame".
+  const DRAG_FILL_AT = 1;
+  // The same burst the board throws when a tile clears — literally the same routine now, in
+  // screen space and driven straight off the drag's progress rather than off a particle list,
+  // because nothing here has any state to keep between frames.
   function dragPulse(x, y, k, s){
     if (k <= 0 || k >= 1) return;
-    const rad = s * (0.25 + k*1.3), fade = (1-k)*(1-k);
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    const g = ctx.createRadialGradient(x, y, rad*0.2, x, y, rad);
-    g.addColorStop(0, "rgba(255,248,220," + (0.42*fade) + ")");
-    g.addColorStop(0.6, "rgba(255,224,160," + (0.24*fade) + ")");
-    g.addColorStop(1, "rgba(255,224,160,0)");
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI*2); ctx.fill();
-    ctx.globalAlpha = 0.9*fade;
-    ctx.strokeStyle = "#fff7d6"; ctx.lineWidth = Math.max(1.5, s*0.05*(1-k));
-    ctx.beginPath(); ctx.arc(x, y, rad*0.9, 0, Math.PI*2); ctx.stroke();
-    ctx.restore();
+    squarePulse(x, y, s * (0.25 + k*1.3), (1-k)*(1-k), Math.max(1.5, s*0.05*(1-k)));
   }
   function dragPlatform(cellAt, srcIdx, dstIdx, f, m, ts){
     const src = introCenter(cellAt(srcIdx), m), dst = introCenter(cellAt(dstIdx), m);
@@ -10695,9 +10747,27 @@
     // puts on one — same pulse, faded out as the track casts back in rather than cut.
     if (!filled) {
       const pulse = 0.5 + 0.5*Math.sin((ts||0)/180);
+      // ...and the grip dots fade out over the run-in, so the pane is already bare when the
+      // track arrives rather than the two swapping in one frame.
       ctx.globalAlpha = tileA * (0.6 + 0.35*pulse) * clamp((DRAG_FILL_AT - g)/0.12, 0, 1);
       drawDragDots(dst.x, dst.y, m.s);
     }
+    ctx.restore();
+  }
+  // The same flash the board throws when a tile becomes track (drawLaidFlash), in screen
+  // space. The auto-run keeps no state between frames, so instead of a spawn-and-decay list
+  // this is driven straight off HOW FAR INTO the current flight we are: the tile at the front
+  // of the queue is the one that just parked, and it parked when this flight began — so the
+  // flight's own fraction IS its age, and no bookkeeping is needed to know that.
+  function laidFlashAt(cellObj, m, k){
+    if (k <= 0 || k >= 1) return;
+    const C = introCenter(cellObj, m), fade = (1 - k) * (1 - k);
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";     // brighten the tile, do not paint over it
+    ctx.globalAlpha = 0.85 * fade;
+    ctx.fillStyle = "#fff7d6";
+    rrect(C.x - m.s/2, C.y - m.s/2, m.s, m.s, tileR(m.s));
+    ctx.fill();
     ctx.restore();
   }
   function introCenter(cellObj, m){ return { x: m.x0 + cellObj.c*m.s + m.s/2, y: m.row0Y + cellObj.r*m.s + m.s/2 }; }
@@ -10748,6 +10818,8 @@
     const i0 = Math.floor(u), f = u - i0;
     for (let k = 0; k < TITLE_QUEUE - 1; k++)
       introDrawPlatform(introCellAt(i0+k), introCellAt(i0+k-1), introCellAt(i0+k+1), m);
+    // i0+1 is the front of the queue: the tile that landed as this flight started.
+    laidFlashAt(introCellAt(i0 + 1), m, f / (TITLE_TRACK_SPEED * LAID_FLASH_MS));
     dragPlatform(introCellAt, i0 - 1, i0 - 1 + TITLE_QUEUE, f, m, ts);
     // runner follows the winding surface, tilting through the rises, dips and corners
     const surf = introSurface(introCellAt(i0), introCellAt(i0-1), introCellAt(i0+1), m);

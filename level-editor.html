@@ -221,6 +221,7 @@
       <div class="tool" data-tool="platform">Platform</div>
       <div class="tool" data-tool="talisman">Talisman</div>
       <div class="tool" data-tool="coin">Coin</div>
+      <div class="tool" data-tool="singularity">Singularity</div>
       <div class="tool" data-tool="key">Key</div>
       <div class="tool" data-tool="door">Door</div>
     </div>
@@ -312,6 +313,8 @@ function toWorking(o){
   w.platforms = (o.platforms||[]).map(p=>p.slice());   // [c,r,"ns"] fixed free track
   w.talismans = (o.talismans||[]).map(t=>t.slice());   // [c,r,"id"] one-off collectibles
   w.coins = (o.coins||[]).map(c=>c.slice());           // [c,r] floating golden tiles
+  // [c,r] holes in the floor. Cross one and the tile you crossed on is swallowed for good.
+  w.singularity = (o.singularity||[]).map(c=>c.slice());
   w.intro = (o.intro||[]).slice();
   w.cps = o.cps || 0.8;          // starting pace, tiles/sec
   w.name = o.name || "";         // what the level is called; optional, and omitted when blank
@@ -352,6 +355,7 @@ function toStored(w){
   if((w.platforms||[]).length) o.platforms = w.platforms.map(p=>p.slice());
   if((w.talismans||[]).length) o.talismans = w.talismans.map(t=>t.slice());
   if((w.coins||[]).length) o.coins = w.coins.map(c=>c.slice());
+  if((w.singularity||[]).length) o.singularity = w.singularity.map(c=>c.slice());
   return o;
 }
 
@@ -436,6 +440,7 @@ function eraseAt(c,r){
   const pB=(L.platforms||[]).length; L.platforms = (L.platforms||[]).filter(x=>!(x[0]===c&&x[1]===r)); if(L.platforms.length!==pB)hit=true;
   const tB=(L.talismans||[]).length; L.talismans = (L.talismans||[]).filter(x=>!(x[0]===c&&x[1]===r)); if(L.talismans.length!==tB)hit=true;
   const cB=(L.coins||[]).length; L.coins = (L.coins||[]).filter(x=>!(x[0]===c&&x[1]===r)); if(L.coins.length!==cB)hit=true;
+  const gB=(L.singularity||[]).length; L.singularity = (L.singularity||[]).filter(x=>!(x[0]===c&&x[1]===r)); if(L.singularity.length!==gB)hit=true;
   return hit;
 }
 function blockCells(b){ const h=b.axis!=='v'; const out=[]; for(let i=b.lo;i<=b.hi;i++) out.push(h?[i,b.r]:[b.c,i]); return out; }
@@ -603,6 +608,7 @@ function applyTool(c,r,isDrag){
     case "platform": pushUndo(); paintPlatform(c,r); break;
     case "talisman": pushUndo(); paintTalisman(c,r); break;
     case "coin":     pushUndo(); paintCoin(c,r); break;
+    case "singularity": pushUndo(); paintSingularity(c,r); break;
     case "block": pushUndo(); placeBlock(c,r); break;
     case "saw":   pushUndo(); placeSaw(c,r); break;
     case "monster": placeMonster(c,r); break;   // pushes its own undo when it finishes
@@ -615,6 +621,15 @@ function paintCoin(c,r){
   const i = L.coins.findIndex(t=>t[0]===c&&t[1]===r);
   if(i>=0){ L.coins.splice(i,1); setStatus("coin removed"); return; }
   L.coins.push([c,r]); setStatus("coin placed");
+}
+// A hole in the floor. It is not something standing ON the cell, it IS the cell — so placing
+// one clears whatever was there, and clicking it again takes it away.
+function paintSingularity(c,r){
+  L.singularity = L.singularity || [];
+  const i = L.singularity.findIndex(t=>t[0]===c&&t[1]===r);
+  if(i>=0){ L.singularity.splice(i,1); setStatus("singularity removed"); return; }
+  L.walls.delete(keyOf(c,r)); eraseNonWallAt(c,r);
+  L.singularity.push([c,r]); setStatus("singularity placed");
 }
 // a talisman is a floor pickup: it does NOT block track, so it can share a cell with nothing else
 function paintTalisman(c,r){
@@ -645,6 +660,7 @@ function eraseNonWallAt(c,r){ // walls take over a cell — clear conflicting ma
   L.platforms=(L.platforms||[]).filter(p=>!(p[0]===c&&p[1]===r));
   L.talismans=(L.talismans||[]).filter(t=>!(t[0]===c&&t[1]===r));
   L.coins=(L.coins||[]).filter(t=>!(t[0]===c&&t[1]===r));
+  L.singularity=(L.singularity||[]).filter(t=>!(t[0]===c&&t[1]===r));
 }
 function hasStone(c,r){ return (L.stone||[]).some(s=>s[0]===c&&s[1]===r); }
 function paintStone(c,r){
@@ -884,6 +900,23 @@ function draw(){
   L.doors.forEach(d=>{ const [x,y]=cellXY(d[0],d[1]); const co=d[2]||"#ffd24a";
     rr(x+2,y+2,CELL-4,CELL-4,6,co); padlock(x,y); });
   L.keys.forEach(k=>{ const [x,y]=cellXY(k[0],k[1]); keyIcon(x,y,k[2]||"#ffd24a"); });
+  // A singularity is the cell, not a marker on it: the whole square goes dark, with squares
+  // caught falling toward the eye at its centre — the same read as the game's own rift.
+  (L.singularity||[]).forEach(([c,r])=>{
+    const [x,y]=cellXY(c,r);
+    ctx.save();
+    ctx.fillStyle="#07060f"; ctx.fillRect(x+1,y+1,CELL-2,CELL-2);
+    ctx.strokeStyle="#6a5cff"; ctx.lineWidth=1.5; ctx.globalAlpha=0.55;
+    for(const f of [0.92,0.68,0.46]){
+      const h=CELL*f/2;
+      ctx.strokeRect(x+CELL/2-h, y+CELL/2-h, h*2, h*2);
+    }
+    ctx.globalAlpha=1; ctx.fillStyle="#000";
+    const e=CELL*0.30/2; ctx.fillRect(x+CELL/2-e, y+CELL/2-e, e*2, e*2);
+    ctx.strokeStyle="#b9b0ff"; ctx.lineWidth=1;
+    ctx.strokeRect(x+CELL/2-e, y+CELL/2-e, e*2, e*2);
+    ctx.restore();
+  });
   (L.coins||[]).forEach(([c,r])=>{ const [x,y]=cellXY(c,r); const s2=CELL*0.34;
     ctx.fillStyle="#c78b16"; ctx.fillRect(x+CELL/2-s2/2+2, y+CELL/2-s2/2+2, s2, s2);
     ctx.fillStyle="#ffd24a"; ctx.fillRect(x+CELL/2-s2/2, y+CELL/2-s2/2, s2, s2);
@@ -1084,6 +1117,7 @@ function cellTaken(c, r, ignore){
   for(const p of (L.platforms||[])) if(p!==ignore && at(p)) return "a platform";
   for(const p of (L.talismans||[])) if(p!==ignore && at(p)) return "a talisman";
   for(const p of (L.coins||[]))     if(p!==ignore && at(p)) return "a coin";
+  for(const p of (L.singularity||[])) if(p!==ignore && at(p)) return "a singularity";
   for(const b of L.blocks)          if(b!==ignore && blockCells(b).some(at)) return "a block";
   for(const h of L.hazards)         if(h!==ignore && (isMon(h)?monCells(h):sawCells(h)).some(at))
                                       return isMon(h) ? "a monster" : "a saw";
@@ -1101,7 +1135,8 @@ function draggableAt(c,r){                        // topmost movable element und
   // The single-cell items, topmost first: the two floor pickups are drawn over everything,
   // so they are what you get when one shares a square with the plate beneath it.
   for(const [list,what] of [[L.talismans,'talisman'],[L.coins,'coin'],
-                            [L.stone,'stone'],[L.platforms,'platform']]){
+                            [L.stone,'stone'],[L.platforms,'platform'],
+                            [L.singularity,'singularity']]){
     const hit=(list||[]).find(x=>x[0]===c&&x[1]===r);
     if(hit) return {type:'cellItem', ref:hit, what};
   }
@@ -1350,6 +1385,8 @@ cv.addEventListener("mousedown", e=>{
     lastCell=c; commit(); draw(); refreshOut(); return; }
   if(tool==="coin"){ pushUndo(); if(e.button===2) eraseAt(c.c,c.r); else paintCoin(c.c,c.r);
     lastCell=c; commit(); draw(); refreshOut(); return; }
+  if(tool==="singularity"){ pushUndo(); if(e.button===2) eraseAt(c.c,c.r); else paintSingularity(c.c,c.r);
+    lastCell=c; commit(); draw(); refreshOut(); return; }
   if(tool==="talisman"){ pushUndo(); if(e.button===2) eraseAt(c.c,c.r); else paintTalisman(c.c,c.r);
     lastCell=c; commit(); draw(); refreshOut(); return; }
   lastCell=c; applyTool(c.c,c.r,false);
@@ -1429,6 +1466,14 @@ function toolIcon(g, t, S){
                      g.beginPath(); g.arc(S/2,S*.22,S*.10,Math.PI*0.15,Math.PI*0.85,true); g.stroke(); break;
     case "coin":     box(S*.18,S*.18,S*.64,S*.64,S*.12,"#c78b16");
                      box(S*.25,S*.25,S*.50,S*.50,S*.09,"#ffd24a"); break;
+    case "singularity":
+                     box(M,M,F,F,S*.06,"#07060f");
+                     g.strokeStyle="#6a5cff"; g.lineWidth=Math.max(1,S*.045); g.globalAlpha=.6;
+                     for(const f of [0.74,0.52]){ const h=S*f/2;
+                       g.strokeRect(S/2-h,S/2-h,h*2,h*2); }
+                     g.globalAlpha=1; box(S*.35,S*.35,S*.30,S*.30,0,"#000");
+                     g.strokeStyle="#b9b0ff"; g.lineWidth=Math.max(1,S*.035);
+                     g.strokeRect(S*.35,S*.35,S*.30,S*.30); break;
     case "key":      g.strokeStyle=color; g.lineWidth=S*.10;
                      g.beginPath(); g.arc(S*.36,S*.40,S*.16,0,7); g.stroke();
                      g.lineCap="round"; g.beginPath(); g.moveTo(S*.47,S*.51); g.lineTo(S*.80,S*.84);
