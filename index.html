@@ -827,20 +827,20 @@
   // it the camera stops dead on the last row/column and the edge tiles sit welded to the
   // frame; a sliver of overshoot lets the backdrop breathe around the board. Every edge gets
   // the same slack — the top used to get double, which just read as a lopsided board.
-  // Widened from 0.05 when the boundary walls went in: at 0.05 the camera stopped 6px past
-  // the board, so the left and right courses were drawn and never seen. This shows a band of
-  // them when the runner hugs a side, without meaningfully changing how much board is in shot.
-  const CAM_EDGE_PAD = 0.22;                  // left, right and bottom
-  // The TOP gets much more than the other three. The speed plate and the pause button live up
-  // there, and with the same sliver everywhere the whole first row sat squarely behind them.
-  // The UI band measures a shade under half a cell, so this leaves the first row overlapping
-  // it by only its top sliver. Going past ~0.46 opens a visible gap instead, which reads as
-  // the board having slipped down the screen rather than as breathing room.
-  const CAM_TOP_PAD = 0.38;
-  // ...and the BOTTOM gets its own, because the talisman rack lives down there on every level.
-  // The rack is 58px of charm plus a 10px gap — about 0.54 of a cell — so this clears it with
-  // a little to spare rather than leaving the last row half-buried under the charms.
-  const CAM_BOTTOM_PAD = 0.60;
+  // How far past each edge the camera may travel. Half a cell, the same on all four sides.
+  //
+  // These used to differ — 0.22 at the sides, 0.38 at the top, 0.60 at the bottom — and every
+  // one of those numbers was chosen to stop something LOOKING WRONG at the edge: too little and
+  // the boundary courses were drawn and never seen; too much at the top and the board read as
+  // having slipped down the screen; the bottom needed enough to keep the last row out from
+  // under the talisman rack. Three numbers all tuned against the same worry, which was that
+  // past the edge there was nothing to show.
+  //
+  // Now there is: the level's backdrop stops at the level and the cosmos shows around it. So
+  // the reach is simply half a tile of it, evenly, and the edge is allowed to be seen.
+  const CAM_EDGE_PAD   = 0.5;                 // left and right
+  const CAM_TOP_PAD    = 0.5;
+  const CAM_BOTTOM_PAD = 0.5;
   const TRACK_T = 0.44;        // platform thickness as fraction of cell (hangs below centre)
   const SAMPLE_D = 0.42;       // tangent smoothing window (path-param units)
   const FALL_G = 0.0022, FALL_MS = 850;   // gravity fall on lose
@@ -2230,7 +2230,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v8.3";                    // shown on the title & pause screens
+  const VERSION = "v8.4";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -5262,8 +5262,13 @@
   function draw(ts) {
     // Outside a level — the map of them all — the backdrop is the void rather than any one
     // level's quilt.
+    // Decided here rather than below, because the board's EDGE is now something you can see:
+    // the backdrop is clipped to it, so the quilt has to shake with the board or the level
+    // would slide about inside its own outline.
+    const sh = state.shake || 0;
+    const shx = sh ? (Math.random()*2-1)*sh : 0, shy = sh ? (Math.random()*2-1)*sh : 0;
     if (worldOpen()) drawVoid(ts);
-    else drawBackground(ts);                  // parallax procedural backdrop (screen space)
+    else drawBoardBackdrop(ts, shx, shy);     // the level's quilt, bounded by the level
     // pause / win / death: show ONLY the level background (a clean replica) behind the card
     const menuOpen = menuEl && menuEl.classList.contains("show");
     if (state.status === "win" || state.status === "lose" || menuOpen) {
@@ -5273,12 +5278,15 @@
       return;
     }
     if (state.status === "ceremony") { drawCeremony(ts); return; }
-    const sh = state.shake || 0;
-    const shx = sh ? (Math.random()*2-1)*sh : 0, shy = sh ? (Math.random()*2-1)*sh : 0;
     ctx.save();
     ctx.translate(-Math.round(camX - shx), -Math.round(camY - shy));
 
-    drawEdgeWalls();                              // the board's own boundary, before anything on it
+    // The board's own boundary. Off now: the level's backdrop stops at the level and the cosmos
+    // shows around it, so the edge is a thing you can SEE rather than something that had to be
+    // hinted at with hazard stripes when a tile strayed near it. Flip this to bring them back —
+    // the machinery below is intact and costs nothing while nothing calls it, including the two
+    // full-viewport canvases it would otherwise allocate for its mask.
+    if (EDGE_STRIPES) drawEdgeWalls();
     if (wallLayerDirty) buildWallLayer();
     if (wallLayer) {
       // Only the part of it that is on screen. The layer holds the WHOLE world at device
@@ -7815,6 +7823,7 @@
   // the early-out below never touches the layers at all.
   const EDGE_NEAR = 2;                      // full strength within this many tiles of a tile
   const EDGE_FAR  = 3;                      // and invisible beyond this many
+  const EDGE_STRIPES = false;               // see the call site in draw()
   let edgeLayer = null, edgeMask = null, edgeLayerKey = "";
   let edgeBars = null, edgeBarsKey = "";
   function edgeBarPath(B) {
@@ -8273,6 +8282,16 @@
   const PATCH_MAX = 0.70;
   const PATCH_TILE_MAX = 2048;                         // px ceiling on the repeat tile
   let patchPat = null, patchKey = "", patchPeriodPx = 0, patchStepPx = 0;
+  // TWO backdrops are on screen at once now — the level's quilt inside the board, the cosmos
+  // around it — and the pattern above is one slot keyed by theme. Two themes alternating
+  // through one slot means the key never matches on either call, so the tile is rasterised
+  // again every time: twice a frame, for a canvas that can be hundreds of pixels square.
+  // Keyed by theme instead, so both live side by side and neither is rebuilt. Held to a few
+  // entries because only two are ever live and there are fifty-odd themes in the campaign.
+  const patchCache = new Map();
+  // Three: the level's, the cosmos', and one spare so changing level does not evict a live
+  // one. Each tile can be a couple of thousand pixels square, so this is not free.
+  const PATCH_CACHE_MAX = 3;
   function patchColor(T, i, j) {
     const N = T.colors.length;
     if (N < 2) return T.colors[0];
@@ -8381,7 +8400,16 @@
     // patch size while the glisten pass stepped at the new one, so the glints walked off the
     // squares they were supposed to be lighting, further out with every patch across the screen.
     const key = T.colors.join("|") + "|" + T.dir + "/" + T.stripeW + "@" + w.toFixed(4);
-    if (key !== patchKey) { buildPatchPattern(T, w); patchKey = key; }
+    let hit = patchCache.get(key);
+    if (!hit) {
+      buildPatchPattern(T, w);                       // writes the module slots
+      hit = { pat: patchPat, periodPx: patchPeriodPx, stepPx: patchStepPx };
+      patchCache.set(key, hit);
+      if (patchCache.size > PATCH_CACHE_MAX) patchCache.delete(patchCache.keys().next().value);
+    }
+    // ...and the slots follow whichever backdrop is being drawn right now, so everything
+    // downstream (the glints, and drawGlints' other caller) reads the theme it is painting.
+    patchPat = hit.pat; patchPeriodPx = hit.periodPx; patchStepPx = hit.stepPx; patchKey = key;
     // The quilt only moves while an overlay is up: paused, or on the win / fail card. The
     // title screen passes a theme override and is deliberately excluded.
     // The quilt only moves while nothing else on screen does. The ceremony is the clearest case
@@ -8432,6 +8460,30 @@
       // pixel's coverage is split between them and sums back to one.
       ctx.fillRect(x, y, w, w);
     }
+    ctx.restore();
+  }
+  // A level's quilt stops where the LEVEL stops, and the cosmos the Tileverse hangs in shows
+  // around it. The backdrop is painted in screen space, so the board's edge has to be brought
+  // into screen space to clip against: the world's origin sits at (-camX, -camY).
+  //
+  // Two full-screen backdrop passes would be wasteful, and on most levels the board covers the
+  // viewport entirely — so the cosmos is drawn only where the board is NOT, through an even-odd
+  // clip, and skipped altogether when there is no such place.
+  function drawBoardBackdrop(ts, shx, shy) {
+    const bx = -Math.round(camX - (shx || 0)), by = -Math.round(camY - (shy || 0));
+    const inset = bx > 0.5 || by > 0.5 || bx + worldW < viewW - 0.5 || by + worldH < viewH - 0.5;
+    if (inset) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, viewW, viewH);
+      ctx.rect(bx, by, worldW, worldH);
+      ctx.clip("evenodd");                    // everywhere the board is not
+      drawVoid(ts);
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.beginPath(); ctx.rect(bx, by, worldW, worldH); ctx.clip();
+    drawBackground(ts);
     ctx.restore();
   }
   function drawBackground(ts, themeOverride, stars) {
