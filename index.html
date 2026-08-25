@@ -68,6 +68,24 @@
     text-shadow: 2px 0 var(--shadow), -2px 0 var(--shadow), 0 2px var(--shadow), 0 -2px var(--shadow), 2px 2px var(--accent);
   }
   :root { --body: 19px; --btn: 15px; }   /* body text = death-screen byline; buttons a touch smaller */
+  /* The finish-line chequer, at one scale everywhere it appears. A plain menu button is 45px
+     tall and should read as THREE squares high, so a square is 15 and the repeating cell —
+     which is a 2x2 of them — is 30. The taller buttons (NEXT LEVEL is double height) get more
+     squares rather than bigger ones, which is the point of having a single scale.
+
+     Drawn with ONE conic-gradient rather than the old pair of 45-degree linear ones. The
+     linear recipe builds each square out of two triangles from two layers, the second nudged
+     half a cell, which only lands square if both layers agree on where the origin is — and
+     they were both starting at the PADDING box while being painted across the border box, so
+     the whole pattern sat 3px in from the top-left corner. A conic gradient makes the 2x2
+     itself, so there is one layer, no offset, and the corner square starts exactly at the
+     corner. background-origin is spelled out for the same reason. */
+  :root { --chq: 30px; }
+  /* Every button in the game is this tall, and so is every square of the Tileverse. It is a
+     min-height rather than a padding sum so that WHAT IS IN a button — text, an arrow chip, a
+     coin icon — cannot change how tall it comes out: the pause menu's RESUME used to measure
+     46 against its neighbours' 45 purely because it carries an 18px canvas. */
+  :root { --btn-h: 45px; }
   #hud {
     display:flex; gap:12px; align-items:center; justify-content:center;
     margin-top:8px; font-size:var(--body); letter-spacing:2px; text-transform:uppercase; color:var(--dim);
@@ -211,6 +229,17 @@
     color:var(--ink); background:var(--panel); border:3px solid transparent;
     /* the shadow is the button's OWN colour darkened, the rule the gold and amber ones follow */
     box-shadow:0 4px 0 var(--panel-lo); padding:11px 16px; cursor:pointer; touch-action:manipulation;
+    min-height:var(--btn-h);
+  }
+  /* Anything that is a full-width action centres its contents in that height. The grid cells
+     that happen to be buttons — shop stock, shop tabs, Tileverse squares — set their own
+     layout and are left alone. */
+  #menu-body > button, #ov-btn, #ov-shop, #menu-body .shop-go, #menu-body .shop-buy, #mech-ok {
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    /* height, not min-height: these are all one line, and an 18px arrow chip is taller than
+       the line box the padding was sized for, so RESUME and the two DONEs came out a pixel
+       over their neighbours. box-sizing is border-box globally, so this IS the outer 45. */
+    height:var(--btn-h); padding-top:0; padding-bottom:0;
   }
   button:active { transform:translateY(4px); box-shadow:none; }
   #overlay {
@@ -251,16 +280,15 @@
      even though they measure identically. A shadow the colour of the thing casting it reads as
      depth; a black bar between two blocks reads as a divider. */
   #overlay.lose #ov-btn, #overlay.win #ov-btn {
-    font-size:var(--btn); padding:34px 40px;
+    font-size:var(--btn); padding:11px 16px;
     box-shadow:0 4px 0 #171233;
     background-color:#2b2552;
     background-image:
-      linear-gradient(45deg, rgba(255,255,255,0.03) 25%, transparent 25%, transparent 75%,
-                             rgba(255,255,255,0.03) 75%),
-      linear-gradient(45deg, rgba(255,255,255,0.03) 25%, transparent 25%, transparent 75%,
-                             rgba(255,255,255,0.03) 75%);
-    background-size:18px 18px;
-    background-position:0 0, 9px 9px;
+      conic-gradient(transparent 0 25%, rgba(255,255,255,0.03) 0 50%,
+                     transparent 0 75%, rgba(255,255,255,0.03) 0);
+    background-size:var(--chq) var(--chq);
+    background-position:0 0;
+    background-origin:border-box;
   }
   /* The same finish-line chequer on the gold, cut in a darker gold so it reads at all — white
      over #e0aa1e is nearly invisible, where a shade of the button's own colour is not. */
@@ -269,18 +297,19 @@
     /* WHITE squares, not brown ones: the chequer should lift the colour it sits on rather than
        dirty it. On the gold it reads as a sheen; on the green it reads as the same sheen. */
     background-image:
-      linear-gradient(45deg, rgba(255,255,255,0.13) 25%, transparent 25%, transparent 75%,
-                             rgba(255,255,255,0.13) 75%),
-      linear-gradient(45deg, rgba(255,255,255,0.13) 25%, transparent 25%, transparent 75%,
-                             rgba(255,255,255,0.13) 75%);
-    background-size:18px 18px;
-    background-position:0 0, 9px 9px;
+      conic-gradient(transparent 0 25%, rgba(255,255,255,0.13) 0 50%,
+                     transparent 0 75%, rgba(255,255,255,0.13) 0);
+    background-size:var(--chq) var(--chq);
+    background-position:0 0;
+    background-origin:border-box;
   }
   /* A DEFINITE width, not 100% of a shrink-to-fit parent: the overlay card sizes itself to
      its content, so "100%" came out as whatever the byline happened to measure — 300px on the
      clear screen and 214 on the death screen. 330 is the menu card's width. */
   /* Both are the same box: same width, and box-sizing so the different paddings cannot make
-     one wider than the other. NEXT LEVEL is deliberately taller — that is height, not width. */
+     one wider than the other. NEXT LEVEL used to be deliberately double height; it is now the
+     one standard height every other button in the game is, and the chequer is what marks it
+     out instead. */
   #overlay.lose #ov-btn, #overlay.win #ov-btn,
   #overlay.lose #ov-shop, #overlay.win #ov-shop {
     box-sizing:border-box; width:330px; max-width:calc(100vw - 44px);
@@ -581,10 +610,14 @@
      the edges of the pane it reads as a table that has been cropped. The padding is part of the
      scrolling area rather than a frame around it, so the space above and below scrolls past
      with the cloud instead of pinning it. */
+  /* Squares of a FIXED size — the same height as a button — rather than a share of whatever
+     the panel happens to be. A cloud that resized itself with the window meant the campaign
+     looked bigger on a wide phone than a narrow one, and it means a fifty-level cloud and a
+     twelve-level one draw their tiles at different sizes. Now a tile is a tile. */
   .lvl-map.blob { display:grid; gap:0; box-sizing:border-box;
-    padding:64px 40px;
-    grid-template-columns:repeat(var(--cols, 9), 1fr);
-    grid-auto-rows:1fr; }
+    padding:64px 40px; justify-content:center;
+    grid-template-columns:repeat(var(--cols, 9), var(--btn-h));
+    grid-auto-rows:var(--btn-h); }
   #menu-body .lvl-map.blob .stop { position:relative; transform:none; width:auto; height:auto;
     aspect-ratio:1; padding:0; overflow:hidden;
     background:transparent; border:0; box-shadow:none; }
@@ -607,6 +640,15 @@
   #menu-body .lvl-map.blob .stop.done { background:transparent; }
   .lvl-map.blob .stop:active .swatch { filter:brightness(1.35); }
   .lvl-map.blob .stop.shut:active .swatch { filter:grayscale(1) brightness(0.85); }
+  /* The origin story, one square left of level one. Half-transparent because it is not a
+     level — you cannot be "up to" it, and it should not read as a place you have not reached
+     yet either, which is what the greyscale wash means everywhere else on this map. */
+  #menu-body .lvl-map.blob .stop.intro { opacity:0.42; }
+  #menu-body .lvl-map.blob .stop.intro:active { opacity:0.72; }
+  .lvl-map.blob .stop.intro .play { position:absolute; inset:0; margin:auto;
+    width:36%; height:36%; background:#fff;
+    clip-path:polygon(12% 2%, 94% 50%, 12% 98%);
+    filter:drop-shadow(0 1px 0 rgba(5,4,13,0.9)); }
   #menu-body .lvl-map.blob .stop.here { box-shadow:inset 0 0 0 3px var(--track); z-index:2; }
   #menu-body .lvl-map.blob .stop:active { transform:none; }
   #menu-body .lvl-map .stop {
@@ -637,7 +679,7 @@
     position:fixed; left:50%; transform:translateX(-50%);
     bottom:calc(env(safe-area-inset-bottom) + 16px);
     width:calc(100% - 44px); max-width:330px; z-index:2;
-    font-size:13px; letter-spacing:2px; padding:14px 10px; line-height:1.2;
+    font-size:13px; letter-spacing:2px; padding:11px 10px; line-height:1.2;
   }
   #menu-body .shop-go:active { transform:translateX(-50%) translateY(4px); box-shadow:none; }
   /* The same offer as the cell, said again where your thumb already is. Pinned directly above
@@ -645,9 +687,9 @@
      has appeared in the middle of the shelf. */
   #menu-body .shop-buy {
     position:fixed; left:50%; transform:translateX(-50%);
-    bottom:calc(env(safe-area-inset-bottom) + 16px + var(--go-h, 52px) + 10px);
+    bottom:calc(env(safe-area-inset-bottom) + 16px + var(--go-h, var(--btn-h)) + 10px);
     width:calc(100% - 44px); max-width:var(--shop-w); z-index:2;
-    font-size:13px; letter-spacing:2px; padding:14px 10px; line-height:1.2;
+    font-size:13px; letter-spacing:2px; padding:11px 10px; line-height:1.2;
     display:flex; align-items:center; justify-content:center; gap:9px;
     background-color:#e0aa1e; border-color:transparent; color:#000; box-shadow:0 4px 0 #8a6410;
   }
@@ -2185,7 +2227,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v8.1";                    // shown on the title & pause screens
+  const VERSION = "v8.2";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -3935,6 +3977,14 @@
     ctx.globalAlpha = 1;
   }
   // a bright ring of light pulsing outward from a cleared tile (additive glow)
+  // What a clearing tile throws off. Square, not round: everything on this board is a square,
+  // and a circle expanding out of one reads as something being emitted rather than as the tile
+  // itself letting go. Same reasoning as the laid-tile flash above.
+  //
+  // Canvas has no square gradient, so the bloom is a stack of nested squares under `lighter` —
+  // the middle collects every layer and the outermost only its own, which is a falloff built
+  // out of the compositing rather than out of a gradient object.
+  const LIGHT_BLOOM_STEPS = 5;
   function drawLights() {
     if (!state.lights || !state.lights.length) return;
     ctx.save();
@@ -3943,16 +3993,16 @@
       const k = p.life / p.max;                 // 0..1
       const rad = cell * (0.25 + k * 1.3) * (p.k || 1);
       const fade = (1 - k) * (1 - k);           // ease-out fade
-      // soft radial bloom
-      const g = ctx.createRadialGradient(p.x, p.y, rad*0.2, p.x, p.y, rad);
-      g.addColorStop(0, "rgba(255,248,220," + (0.42*fade) + ")");
-      g.addColorStop(0.6, "rgba(255,224,160," + (0.24*fade) + ")");
-      g.addColorStop(1, "rgba(255,224,160,0)");
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, Math.PI*2); ctx.fill();
-      // crisp expanding ring
+      for (let i = LIGHT_BLOOM_STEPS; i >= 1; i--) {
+        const f = i / LIGHT_BLOOM_STEPS, half = rad * f;
+        ctx.fillStyle = "rgba(255,236,190," + (0.085 * fade).toFixed(4) + ")";
+        rrect(p.x - half, p.y - half, half*2, half*2, tileR(half*2)); ctx.fill();
+      }
+      // crisp expanding square, on the same corner every other square in the game wears
       ctx.globalAlpha = 0.9 * fade;
       ctx.strokeStyle = "#fff7d6"; ctx.lineWidth = Math.max(1.5, cell*0.05*(1-k));
-      ctx.beginPath(); ctx.arc(p.x, p.y, rad*0.9, 0, Math.PI*2); ctx.stroke();
+      const h2 = rad*0.9;
+      rrect(p.x - h2, p.y - h2, h2*2, h2*2, tileR(h2*2)); ctx.stroke();
       ctx.globalAlpha = 1;
     }
     ctx.restore();
@@ -7342,7 +7392,7 @@
     kneeR:    0,       // knee cap radius, 0 = none
     bodyW:    0.26,
     bodyH:    0.26,
-    bodyR:    0.07,    // corner radius of the body
+    bodyR:    0,    // corner radius of the body
     shadow:   0.037,   // ground shadow: vertical RADIUS, so drawn height is twice this —
                        // 0.074, a shade under the 0.085 rail it sits on
     shadowW:  0.65,    // ground shadow width, fraction of body width
@@ -7563,9 +7613,12 @@
     if (shoe.draw) for (const [fx, fy] of feet) {
       ctx.save(); ctx.translate(fx, fy); shoe.draw(ctx, s, shoe.col); ctx.restore();
     }
-    // body — rounded, no outline
+    // body — no outline. The corner comes from RUNNER, like every other measurement of him:
+    // this was a hardcoded 0.07 while both labs read R.bodyR, so the lab's corner slider moved
+    // a runner the game did not draw. The block parity check compares VALUES between the three
+    // copies and cannot see a key that one of them quietly stopped using.
     ctx.fillStyle = finish;
-    rrect(-bodyW/2, byTop, bodyW, bodyH, s*0.07); ctx.fill();
+    rrect(-bodyW/2, byTop, bodyW, bodyH, s*RUNNER.bodyR); ctx.fill();
     // the finish's own detail — facets, streaks — kept inside the silhouette
     if (skin.sheen) {
       ctx.save(); ctx.clip();                       // the body path is still current after fill()
@@ -8393,7 +8446,7 @@
   // the same 0.16 written out in a dozen places, so a tile and the wall beside it could
   // silently drift apart. Edit in tile-lab.html and paste the block back.
   const TILE = {
-    radius:     0.075,   // corner radius, fraction of a cell
+    radius:     0.000,   // corner radius, fraction of a cell
     glassA:     0.50,    // the pane's flat fill alpha
     glassGrain: 1.00,    // paper grain over the pane
     bodyGrain:  1.00,    // paper grain over a laid platform body
@@ -9635,7 +9688,7 @@
       const back = btn("Done",
                        () => (menuReturn === "overlay" ? closeMenu() : buildMenu("main")), true);
       back.className = "shop-go";
-      labelWithArrow(back, "Back");
+      labelWithArrow(back, "Done");     // the button was built as Done and then relabelled Back
       menuBody.appendChild(back);
       startRelics();
       return;
@@ -9695,9 +9748,9 @@
     // the same lumps every time you open it.
     if (screen === "world") {
       title.textContent = "Tileverse"; title.className = "shop big gilt";
-      // The opening lived on the grid screen, which nothing routes to any more — so it comes
-      // here. It is the story of how the Tileverse got made; this is where it belongs anyway.
-      menuBody.appendChild(btn("Intro", () => { closeMenu(); startCine("menu"); }));
+      // The opening is not a button any more — it is a square of the map, one place to the
+      // LEFT of level one. It is the story of what happened before the campaign, so it lives
+      // in the space before the campaign's first tile.
       const rack = document.createElement("div"); rack.className = "shop-rack lvl-rack";
       const map = document.createElement("div"); map.className = "lvl-map blob";
       const best = loadBest();
@@ -9706,7 +9759,11 @@
       const rows = Math.max(...cells.map(p => p.r)) + 1;
       // The tile is whatever divides the panel evenly; the map is then exactly as tall as it
       // needs to be. Read off the rack rather than guessed, so it fills whatever it is given.
-      map.style.setProperty("--cols", cols);
+      // The intro square sits at level one's column minus one. If level one is already in
+      // column zero there is nowhere to its left, so the whole cloud shifts one place right
+      // and the map grows a column — the shape is untouched, it just starts further over.
+      const introC = cells[0].c - 1, shift = introC < 0 ? 1 : 0;
+      map.style.setProperty("--cols", cols + shift);
       map.style.setProperty("--rows", rows);
       // How far you have got: everything cleared, plus the one after the furthest of them, is
       // open. Everything past that is greyed. It is a LOOK, not a gate — every tile is still
@@ -9720,7 +9777,7 @@
         const el = document.createElement("button");
         el.className = "stop" + (done ? " done" : "") + (open ? "" : " shut") +
                        (i === levelIdx ? " here" : "");
-        el.style.gridColumn = (p.c + 1); el.style.gridRow = (p.r + 1);
+        el.style.gridColumn = (p.c + 1 + shift); el.style.gridRow = (p.r + 1);
         // Nine of the level's OWN backdrop colours, laid out the way the quilt lays them. The
         // seed is the level number, which is all beginLevel gives genTheme, so this is the
         // actual palette you will be looking at rather than a stand-in for it — every tile in
@@ -9740,6 +9797,23 @@
         el.onclick = () => { levelIdx = i; loadLevel(i); closeMenu(); };
         map.appendChild(el);
       });
+      // ...and the origin story, wearing the cosmos it is set in rather than a level's palette,
+      // half-there because it is not a place you can go — it is what the places are made of.
+      const intro = document.createElement("button");
+      intro.className = "stop intro";
+      intro.style.gridColumn = (introC + 1 + shift); intro.style.gridRow = (cells[0].r + 1);
+      intro.title = "How the Tileverse was made";
+      const isw = document.createElement("canvas"); isw.className = "swatch";
+      isw.width = isw.height = 48;
+      const ig = isw.getContext("2d"), vcol = VOID_THEME.colors;
+      for (let k = 0; k < 9; k++) {
+        ig.fillStyle = vcol[k % vcol.length];
+        ig.fillRect((k % 3) * 16, Math.floor(k / 3) * 16, 16, 16);
+      }
+      intro.appendChild(isw);
+      intro.appendChild(document.createElement("span")).className = "play";
+      intro.onclick = () => { closeMenu(); startCine("menu"); };
+      map.appendChild(intro);
       rack.appendChild(map);
       menuBody.appendChild(rack);
       const back = btn("Done", () => buildMenu("main"));
@@ -9832,6 +9906,21 @@
     // Handy for retiming CINE without sitting through the whole thing.
     cine: (ms) => { if (ms == null) return cineT; startCine(cineNext); cineT = ms; return cineT; },
     runner: () => runnerInfo(),
+    // Corner radius, live. Every tile-shaped thing in the game takes its corners from
+    // tileR() = s * TILE.radius, so this one number is the whole knob — but two caches bake
+    // the old corner in and have to be told: the wall layer is a pre-rendered bitmap of every
+    // wall on the board, and the stone bitmaps only re-cut themselves when the CELL resizes.
+    // radius-lab.html drives this, which is why the lab shows the game's own art rather than
+    // a copy of it that could quietly drift.
+    tile: (patch) => { if (patch) { Object.assign(TILE, patch);
+                                    markWallLayerDirty(); _stoneCache.clear(); }
+                       return { ...TILE }; },
+    // Load a level OBJECT, the shape levels.js holds, rather than an index into the campaign.
+    // Lets a lab hand the game a board carrying one of everything.
+    demo: (L, label) => { titleActive = false;
+                          const pf = document.getElementById("pauseFloat");
+                          if (pf) pf.style.display = "";
+                          beginLevel(L, label || "demo"); },
     stones: () => [...state.stones],
     smash: (c, r) => breakStone(c, r),
     sound: Sound,
@@ -9910,51 +9999,383 @@
     else loadLevel(levelIdx);            // start the level fresh (with its own intro + any tutorial pop)
   }
 
-  // ---------- Opening cinematic -------------------------------------------
-  // A creation myth in six beats. Plays ahead of level one every time the game is started
-  // from the title there, and is always replayable from the top of the Levels menu.
-  // Tap anywhere to skip.
-  // Every beat is a timestamp in ms so the whole thing can be retimed by reading down
-  // this one table; nothing below hard-codes a duration.
-  const CINE = {
-    line1:  [ 600, 1300, 2900, 3500],    // "At first, there was nothing."
-    and1:   [3700, 4100, 4700, 5100],    // "And then"
-    boom1:  4950,                        // ...a tile
-    line2:  [5150, 5600, 7000, 7500],    // "A tile came into the cosmos"
-    and2:   [7400, 7900, 8700, 9150],    // "But a tile is nothing without..." (longer line, longer read)
-    boom2:  8950,                        // ...a runner, who assembles out of streaming pixels
-                                         // over INTRO_CONVERGE — the game's own level-start effect
-    line3:  [9750, 10200, 11500, 12000], // "A runner appeared"
-    line4:  [13300, 13800, 15400, 16000],// "And so he ran..."
-    run:    13500,                       // and off he goes
-    fade:   [15800, 16800],              // back to black
-    end:    17100
+  // ---------- BIG MAN LITTLE ----------------------------------------------
+  // The studio mark: the name set as a JUSTIFIED STACK — every line ruled to the same width,
+  // so the number of letters in a word is what decides how tall it stands. BIG and MAN are
+  // three letters each and come out big; LITTLE is six and comes out half the height. The joke
+  // does its own typesetting, and the block squares off on both edges because every line was
+  // measured to the same rule.
+  //
+  // Deliberately not the game's gold extrusion — that treatment is TILE RUNNER's own, and a
+  // studio card that wears it reads as part of the game rather than as the house behind it.
+  const LOGO = {
+    words: ["BIG", "MAN", "LITTLE"],
+    lead:  0.045,    // between lines, as a fraction of the mark's width
+    ink:   "#f4f2ff",
   };
-  const CINE_RUN_SPD = 0.0008;           // tiles per ms once he sets off (~the game's own pace)
-  const CINE_LINES = { line1:"At first, there was nothing.", and1:"And then",
-                       line2:"A tile came into the cosmos", and2:"But a tile is nothing without...",
-                       line3:"The runner.", line4:"And so he ran..." };
-  const CINE_SETTLE = 620;               // how long he flickers after forming, before going solid
-  let cineActive = false, cineNext = "level", cineT = 0, cineFired = 0, cineParts = [];
-  function startCine(next){
-    cineActive = true; cineNext = next || "level"; cineT = 0; cineFired = 0;
-    markCineSeen();                     // whatever happens now, this is no longer a first launch
-    // Stored in units of the runner's size rather than as absolute points, so the field still
-    // aims true if the window is resized mid-cinematic. 90 of them, as in startIntro().
-    // They converge on the centre of his BODY but each one settles at its own spot inside his
-    // silhouette — body box or legs — so he assembles as a shape rather than collapsing to a
-    // dot and expanding out of it. Bounds come from RUNNER, so they follow any retune.
-    cineParts = [];
-    for (let i = 0; i < 90; i++) {
-      const inBody = Math.random() < 0.72;              // most of him is body; the rest is legs
-      cineParts.push({
-        ang: Math.random()*Math.PI*2, dist: 0.55 + Math.random()*0.6,
-        ex: (Math.random()*2 - 1) * RUNNER.bodyW * (inBody ? 0.5 : 0.35),
-        ey: inBody ? -(RUNNER.legLen + RUNNER.bodyH*Math.random())
-                   : -RUNNER.legLen * Math.random(),
-        sz: 0.05 + Math.random()*0.07,
-        col: Math.random() < 0.7 ? getVar("--runner") : "#ffffff" });
+  // Draws the mark centred on (cx, cy) and exactly W wide, and reports the band it filled so
+  // a caller can hang something under it.
+  function drawLogo(cx, cy, W, ts, alpha){
+    if (alpha <= 0.004) return { top: cy, bottom: cy };
+    const lines = LOGO.words.map(word => {
+      ctx.font = "900 100px " + UI_FONT;
+      const w = ctx.measureText(word).width || 1;
+      const size = 100 * W / w;
+      ctx.font = "900 " + Math.round(size) + "px " + UI_FONT;
+      const m = ctx.measureText(word);
+      // Real ink extents, not the em box: a justified stack has to sit on the letters
+      // themselves or the gaps between the lines come out uneven.
+      const asc = m.actualBoundingBoxAscent  || size*0.72;
+      const dsc = m.actualBoundingBoxDescent || 0;
+      return { word, size, asc, dsc, h: asc + dsc };
+    });
+    const lead   = W*LOGO.lead;
+    const totalH = lines.reduce((s, l) => s + l.h, 0) + lead*(lines.length - 1);
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = LOGO.ink;
+    let y = cy - totalH/2;
+    for (const l of lines) {
+      ctx.font = "900 " + Math.round(l.size) + "px " + UI_FONT;
+      ctx.fillText(l.word, cx, y + l.asc);
+      y += l.h + lead;
     }
+    ctx.restore();
+    return { top: cy - totalH/2, bottom: cy + totalH/2 };
+  }
+
+  // ---------- Opening cinematic -------------------------------------------
+  // The creation myth, in eight beats: nothing, the Sacred Tiloid, its unfolding into the
+  // Tileverse, and the runner the whole place was missing. Plays ahead of level one when the
+  // game is started from the title, and is replayable from the top of the Tileverse.
+  // Tap anywhere to skip.
+  //
+  // Every beat is a timestamp in ms so the whole thing retimes by reading down this one
+  // table; nothing below hard-codes a duration.
+  const CINE = {
+    line1:  [  400,  1100,  2500,  3050],   // AT FIRST THERE WAS NOTHING...
+    born:   2950,                           // ...and then it is there, on a flash
+    line2:  [ 3150,  3700,  6000,  6550],   // THEN THE SACRED TILOID CAME INTO BEING
+    spin:   [ 2950,  7600],                 // it turns, and swells toward a sphere and back
+    line3:  [ 6700,  7200,  9400,  9950],   // THE SACRED TILOID UNFOLDED
+    unfold: [ 7400,  9200],                 // six faces peel off the solid and lie flat
+    grow:   [ 9200, 13400],                 // ...and bud outward until the cloud is whole
+    line4:  [13500, 14000, 16000, 16550],   // AND THE TILEVERSE WAS CREATED
+    line5:  [16700, 17200, 18900, 19450],   // BUT A TILEVERSE IS NOTHING
+    line6:  [19450, 19950, 21700, 22250],   // WITHOUT ITS RUNNER
+    dive:   [21300, 22250],                 // the camera falls into level one
+    fall:   [22250, 22950],                 // he drops into it
+    plinth: 22950,                          // and the tile arrives under his feet
+    line7:  [23600, 24100, 26000, 26550],   // AND SO HE RUNS
+    run:    23900,
+    fade:   [26300, 27300],
+    end:    27600
+  };
+  const CINE_LINES = {
+    line1: "AT FIRST THERE WAS NOTHING...",
+    line2: "THEN THE SACRED TILOID CAME INTO BEING",
+    line3: "THE SACRED TILOID UNFOLDED",
+    line4: "AND THE TILEVERSE WAS CREATED",
+    line5: "BUT A TILEVERSE IS NOTHING",
+    line6: "WITHOUT ITS RUNNER",
+    line7: "AND SO HE RUNS",
+  };
+  // The house card, ahead of everything. It buys its time by OFFSETTING the story rather than
+  // by renumbering the table above: drawCine works in story time, `cineT - CINE_LEAD`, which
+  // is simply negative while the card is up and every envelope below already reads that as
+  // "not yet". Retime the card and not one line of the beat table has to move.
+  const CINE_LEAD = 3300;
+  const CINE_CARD = { in: 560, out: 2850, gone: 3300 };
+  const CINE_RUN_SPD = 0.0008;      // tiles per ms once he sets off (~the game's own pace)
+  const CINE_POP     = 340;         // how long one tile takes to bud out of its parent
+  const CINE_PERSP   = 4.5;         // camera distance from the solid, in cells
+  const cineC01    = v => v < 0 ? 0 : v > 1 ? 1 : v;
+  const cineMix    = (a, b, k) => a + (b - a)*k;
+  const cineSmooth = k => k*k*(3 - 2*k);
+
+  let cineActive = false, cineNext = "level", cineT = 0, cineFired = 0, cineGrew = 0;
+  let cineCloud = null, cineNet = null;
+
+  // The Tileverse cloud, plus the order it grows in. Breadth-first out from the six faces, so
+  // every tile after the sixth has a NEIGHBOUR already standing to bud out of — which is the
+  // whole point of the beat: nothing appears out of empty space.
+  function cineBuildCloud(){
+    const cells = tileverseLayout(LEVELS.length);
+    if (!cells.length) return null;
+    const cols = Math.max(...cells.map(p => p.c)) + 1;
+    const rows = Math.max(...cells.map(p => p.r)) + 1;
+    const at = new Map(); cells.forEach((p, i) => at.set(p.c + "," + p.r, i));
+    return { cells, cols, rows, at, n: cells.length };
+  }
+  // ...and the order the rest of it arrives in, once the net has claimed its six squares.
+  function cineSeedGrowth(C, seeds){
+    const parent = new Array(C.n).fill(-1), rank = new Array(C.n).fill(-1);
+    const isSeed = new Array(C.n).fill(false), q = [];
+    for (const i of seeds) { if (i == null || rank[i] >= 0) continue; rank[i] = 0; isSeed[i] = true; q.push(i); }
+    for (let h = 0; h < q.length; h++) {
+      const i = q[h], p = C.cells[i];
+      for (const [dc, dr] of DIRS) {
+        const j = C.at.get((p.c + dc) + "," + (p.r + dr));
+        if (j == null || rank[j] >= 0) continue;
+        rank[j] = q.length; parent[j] = i; q.push(j);
+      }
+    }
+    // The blob is a filled disc, so this never fires — but a layout that ever grew an island
+    // would otherwise leave tiles that simply never appear.
+    for (let i = 0; i < C.n; i++) if (rank[i] < 0) { rank[i] = q.length; q.push(i); }
+    C.parent = parent; C.rank = rank; C.isSeed = isSeed; C.seeds = seeds.length;
+  }
+
+  // Where the camera is, as a tile size and the screen point cloud-cell (0,0)'s corner sits at.
+  // Three framings, and the whole shot is a walk between them: the six faces filling the frame,
+  // the finished cloud fitting it, and level one filling it again on the dive.
+  function cineCam(t){
+    const C = cineCloud, base = Math.min(viewW, viewH);
+    // The squares the NET claimed, which are not the first six in reading order — a cube net
+    // cannot be a 2x3 block, so it reaches further into the cloud than the sixth tile.
+    const seeds = cineNet.seeds.map(i => C.cells[i]);
+    const span = (arr, k) => [Math.min(...arr.map(p => p[k])), Math.max(...arr.map(p => p[k]))];
+    const [sc0, sc1] = span(seeds, "c"), [sr0, sr1] = span(seeds, "r");
+    const A = { tile: Math.min(base*0.20, viewW*0.72/(sc1 - sc0 + 1)),
+                fc: (sc0 + sc1 + 1)/2, fr: (sr0 + sr1 + 1)/2, ax: 0.5, ay: 0.52 };
+    const B = { tile: Math.min(viewW*0.88/C.cols, viewH*0.60/C.rows),
+                fc: C.cols/2, fr: C.rows/2, ax: 0.5, ay: 0.52 };
+    const D = { tile: base*0.62, fc: C.cells[0].c + 0.5, fr: C.cells[0].r + 0.5,
+                ax: 0.5, ay: 0.60 };
+    // Tile size moves in log space: a zoom that halves and halves again reads as one steady
+    // move, where a linear one lurches at the wide end and crawls at the tight end.
+    const blend = (P, Q, k) => ({
+      tile: Math.exp(cineMix(Math.log(P.tile), Math.log(Q.tile), k)),
+      fc: cineMix(P.fc, Q.fc, k), fr: cineMix(P.fr, Q.fr, k),
+      ax: cineMix(P.ax, Q.ax, k), ay: cineMix(P.ay, Q.ay, k) });
+    let f;
+    if      (t <= CINE.grow[0]) f = A;
+    else if (t <  CINE.grow[1]) f = blend(A, B, cineSmooth((t - CINE.grow[0])/(CINE.grow[1] - CINE.grow[0])));
+    else if (t <= CINE.dive[0]) f = B;
+    else if (t <  CINE.dive[1]) f = blend(B, D, cineSmooth((t - CINE.dive[0])/(CINE.dive[1] - CINE.dive[0])));
+    else f = D;
+    return { tile: f.tile,
+             ox: viewW*f.ax - f.fc*f.tile,
+             oy: viewH*f.ay - f.fr*f.tile };
+  }
+
+  // Nine flat colours on a 4x4 lattice of corners — the same quilt a Tileverse tile wears,
+  // painted into whatever shape the cinematic has bent it into. One routine serves the folded
+  // cube and the flat tile alike, which is what lets a face MORPH from one into the other.
+  function cinePanel(pts, idx, alpha, shade){
+    if (alpha <= 0.004) return;
+    const cols = genTheme(hashSeed(String(idx + 1))).colors;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) {
+      const a = pts[j*4+i], b = pts[j*4+i+1], c = pts[(j+1)*4+i+1], d = pts[(j+1)*4+i];
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+      ctx.lineTo(c[0], c[1]); ctx.lineTo(d[0], d[1]); ctx.closePath();
+      ctx.fillStyle = cols[(j*3 + i) % cols.length];
+      ctx.fill();
+      // ...and stroked in its own colour. Two filled polygons sharing an edge leave a hairline
+      // of whatever is behind them, and forty tiles of that reads as a grid nobody drew.
+      ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 1; ctx.stroke();
+      if (shade > 0.002) { ctx.fillStyle = "rgba(0,0,0," + shade.toFixed(3) + ")"; ctx.fill(); }
+    }
+    ctx.restore();
+  }
+
+  // ---- the Tiloid, as a real cube that really unfolds ---------------------------------
+  // Rolling a cube around a plane sets each of its six faces down on its own square, and the
+  // order it sets them down in IS the fold tree. Whatever comes out is a genuine cube net by
+  // construction: bend every hinge back to a right angle and it closes up into the solid
+  // again. That is the whole trick here — the cube and the net are the SAME six squares at
+  // two ends of one hinge angle, so nothing has to be modelled twice or matched up by hand.
+  const CINE_ROLL = [
+    { d:[ 1, 0], f: s => ({D:s.E, E:s.U, U:s.W, W:s.D, N:s.N, S:s.S}) },
+    { d:[-1, 0], f: s => ({D:s.W, W:s.U, U:s.E, E:s.D, N:s.N, S:s.S}) },
+    { d:[ 0, 1], f: s => ({D:s.S, S:s.U, U:s.N, N:s.D, W:s.W, E:s.E}) },
+    { d:[ 0,-1], f: s => ({D:s.N, N:s.U, U:s.S, S:s.D, W:s.W, E:s.E}) },
+  ];
+  function cineRollNet(orders){
+    const faces = {}, used = new Set();
+    faces[0] = { id:0, c:0, r:0, parent:-1, depth:0 };
+    used.add("0,0");
+    (function walk(c, r, st, depth){
+      for (const k of orders[Math.min(depth, orders.length - 1)]) {
+        const R = CINE_ROLL[k], ns = R.f(st);
+        const nc = c + R.d[0], nr = r + R.d[1], key = nc + "," + nr;
+        if (faces[ns.D] || used.has(key)) continue;   // that face is down already, or that square is taken
+        faces[ns.D] = { id: ns.D, c: nc, r: nr, parent: st.D, dir: R.d, depth: depth + 1 };
+        used.add(key);
+        walk(nc, nr, ns, depth + 1);
+      }
+    })(0, 0, {D:0,U:1,N:2,S:3,W:4,E:5}, 0);
+    return Object.keys(faces).length === 6 ? faces : null;
+  }
+  // Rodrigues, for a hinge: spin p around the line through A with unit direction a.
+  function cineRot(p, A, a, th){
+    const c = Math.cos(th), s = Math.sin(th);
+    const x = p[0]-A[0], y = p[1]-A[1], z = p[2]-A[2];
+    const dt = a[0]*x + a[1]*y + a[2]*z;
+    return [ A[0] + x*c + (a[1]*z - a[2]*y)*s + a[0]*dt*(1-c),
+             A[1] + y*c + (a[2]*x - a[0]*z)*s + a[1]*dt*(1-c),
+             A[2] + z*c + (a[0]*y - a[1]*x)*s + a[2]*dt*(1-c) ];
+  }
+  // Which net, and where it lies in the cloud. Every rolling order gives a different net, and
+  // every net can be seated at a lot of places; the one that wins covers the earliest levels,
+  // because the sides of the Tiloid ought to be the front of the campaign.
+  function cineBuildNet(C){
+    const perms = [];
+    (function perm(a, rest){ if (!rest.length) { perms.push(a); return; }
+      for (let i = 0; i < rest.length; i++) perm(a.concat(rest[i]), rest.slice(0,i).concat(rest.slice(i+1))); })([], [0,1,2,3]);
+    // ...and every way round each one can be laid. Turning or flipping a net leaves it a net,
+    // and the cloud is a lopsided thing, so the orientation decides which levels it can reach.
+    const TURNS = [[1,0,0,1],[0,-1,1,0],[-1,0,0,-1],[0,1,-1,0],
+                   [-1,0,0,1],[0,1,1,0],[1,0,0,-1],[0,-1,-1,0]];
+    const shape = (order, M) => {
+      const faces = cineRollNet(order);
+      if (!faces) return null;
+      const out = {};
+      for (const k of Object.keys(faces)) {
+        const F = faces[k];
+        out[F.id] = { id:F.id, parent:F.parent, depth:F.depth,
+                      c: F.c*M[0] + F.r*M[1], r: F.c*M[2] + F.r*M[3],
+                      dir: F.dir && [F.dir[0]*M[0] + F.dir[1]*M[1], F.dir[0]*M[2] + F.dir[1]*M[3]] };
+      }
+      return out;
+    };
+    // One direction order gives four of the eleven nets; letting the order change with depth
+    // reaches the rest. Distinct nets only — there are at most eleven, and searching the same
+    // one from thirty different roll orders is thirty times the work for the same answer.
+    const seen = new Set(), rolls = [];
+    for (const a of perms) for (const b of perms) {
+      const f = cineRollNet([a, b]);
+      if (!f) continue;
+      const sig = Object.keys(f).map(k => k + ":" + f[k].c + "," + f[k].r + ":" + f[k].parent).sort().join("|");
+      if (seen.has(sig)) continue;
+      seen.add(sig); rolls.push([a, b]);
+    }
+    let best = null;
+    for (const order of rolls) for (const M of TURNS) {
+      const faces = shape(order, M);
+      if (!faces) continue;
+      const ids = Object.keys(faces).map(Number);
+      const mc = Math.min(...ids.map(i => faces[i].c)), mr = Math.min(...ids.map(i => faces[i].r));
+      for (let dr = 0; dr < C.rows; dr++) for (let dc = 0; dc < C.cols; dc++) {
+        let score = 0, ok = true;
+        for (const i of ids) {
+          const j = C.at.get((faces[i].c - mc + dc) + "," + (faces[i].r - mr + dr));
+          if (j == null) { ok = false; break; }
+          score += j;
+        }
+        if (ok && (!best || score < best.score)) best = { score, order, M, dc: dc - mc, dr: dr - mr };
+      }
+    }
+    if (!best) return null;
+    const faces = shape(best.order, best.M), list = [];
+    // Seat the whole net FIRST. The hinges are read off the parent's seated position, and a
+    // face whose parent had not been moved yet would hinge about a line one seat away — which
+    // is a fold that opens somewhere else entirely.
+    for (const k of Object.keys(faces)) {
+      const F = faces[k];
+      F.c += best.dc; F.r += best.dr;
+      F.cloud = C.at.get(F.c + "," + F.r);
+      list.push(F);
+    }
+    for (const F of list) if (F.parent >= 0) {
+      const P = faces[F.parent];                         // the hinge is the edge they share
+      F.hp = [P.c + 0.5 + F.dir[0]*0.5, P.r + 0.5 + F.dir[1]*0.5, 0];
+      F.ha = [-F.dir[1], F.dir[0], 0];                   // ...and this sign folds it UP, away from us
+    }
+    list.sort((a, b) => a.depth - b.depth);              // parents before the children that hang off them
+    const byId = {}; for (const F of list) byId[F.id] = F;
+    // The solid's middle, measured by actually folding it rather than reasoned about: every
+    // hinge to a right angle, then average the six face centres.
+    const T = {}; let sx = 0, sy = 0;
+    for (const F of list) {
+      T[F.id] = F.parent < 0 ? (p => p)
+                             : (p => T[F.parent](cineRot(p, F.hp, F.ha, Math.PI/2)));
+      const q = T[F.id]([F.c + 0.5, F.r + 0.5, 0]);
+      sx += q[0]; sy += q[1];
+    }
+    return { faces: byId, order: list.map(F => F.id),
+             maxDepth: Math.max(...list.map(F => F.depth)),
+             pivot: { x: sx/6, y: sy/6 }, seeds: list.map(F => F.cloud) };
+  }
+
+  // One camera for the whole first half. The solid, the unfolding net and the finished cloud
+  // are all the same six-plus squares in one coordinate space — cells of the Tileverse — so
+  // the shot from cube to cloud is a single transform easing its rotation to nothing and its
+  // scale to the map's. At the far end it reduces EXACTLY to the map's own mapping, which is
+  // why the net lands on the cloud rather than near it.
+  function cineView(t, cam){
+    const base = Math.min(viewW, viewH);
+    const sp   = cineC01((t - CINE.spin[0]) / Math.max(1, CINE.spin[1] - CINE.spin[0]));
+    const spin = k => ({ ry: 0.62 + k*5.6, rx: -0.48 + Math.sin(k*Math.PI*2)*0.18 });
+    let { ry, rx } = spin(sp);
+    const uk = cineSmooth(cineC01((t - CINE.unfold[0]) / (CINE.unfold[1] - CINE.unfold[0])));
+    if (t >= CINE.unfold[0]) {
+      // Where the turn had got to when the unfold began, carried FORWARD to the next whole
+      // revolution. Easing the angle back to zero instead would spin the solid backwards.
+      const s0 = spin(cineC01((CINE.unfold[0] - CINE.spin[0]) / Math.max(1, CINE.spin[1] - CINE.spin[0])));
+      ry = cineMix(s0.ry, Math.ceil(s0.ry/(Math.PI*2))*Math.PI*2, uk);
+      rx = cineMix(s0.rx, 0, uk);
+    }
+    const P = cineNet.pivot;
+    return { cry: Math.cos(ry), sry: Math.sin(ry), crx: Math.cos(rx), srx: Math.sin(rx),
+             S:  Math.exp(cineMix(Math.log(base*0.36), Math.log(cam.tile), uk)),
+             ox: cineMix(viewW/2,    cam.ox + P.x*cam.tile, uk),
+             oy: cineMix(viewH*0.52, cam.oy + P.y*cam.tile, uk),
+             px: P.x, py: P.y, pz: cineMix(-0.5, 0, uk), uk };
+  }
+  function cineProj(p, V){
+    const x = p[0] - V.px, y = p[1] - V.py, z = p[2] - V.pz;
+    const X = x*V.cry + z*V.sry;  let Z = -x*V.sry + z*V.cry;
+    const Y = y*V.crx - Z*V.srx;      Z =  y*V.srx + Z*V.crx;
+    const f = CINE_PERSP / (CINE_PERSP + Z);
+    return [V.ox + X*f*V.S, V.oy + Y*f*V.S, Z];
+  }
+  // The six sides, wherever they are between solid and flat. A face waits for its parent to
+  // lie down before it starts its own hinge, so at every moment each one is swinging off
+  // something already flat — which is how a real net opens, and how the tiles after the sixth
+  // arrive too.
+  function cineFoldFaces(t, V){
+    const N = cineNet, span = CINE.unfold[1] - CINE.unfold[0];
+    const each = span / (N.maxDepth + 0.8);
+    const T = {}, out = [];
+    for (const id of N.order) {
+      const F = N.faces[id];
+      if (F.parent < 0) T[id] = p => p;
+      else {
+        const k  = cineC01((t - CINE.unfold[0] - (F.depth - 1)*each*0.85) / each);
+        const th = (Math.PI/2) * (1 - cineSmooth(k));
+        const up = T[F.parent];
+        T[id] = p => up(cineRot(p, F.hp, F.ha, th));
+      }
+      const map = T[id], raw = [], pts = [];
+      let zs = 0;
+      for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) raw.push(map([F.c + i/3, F.r + j/3, 0]));
+      for (const q of raw) { const s = cineProj(q, V); pts.push(s); zs += s[2]; }
+      // Lit from just off the lens, so a face turned away from us goes dark and the solid
+      // reads as a solid — and so that a face lying flat is lit dead on and needs no shading
+      // at all, which is what lets the tiles it becomes match the ones that grow later.
+      const ax = raw[3][0]-raw[0][0], ay = raw[3][1]-raw[0][1], az = raw[3][2]-raw[0][2];
+      const bx = raw[12][0]-raw[0][0], by = raw[12][1]-raw[0][1], bz = raw[12][2]-raw[0][2];
+      let nx = ay*bz - az*by, ny = az*bx - ax*bz, nz = ax*by - ay*bx;
+      const L = Math.hypot(nx, ny, nz) || 1; nx /= L; ny /= L; nz /= L;
+      const rx2 = nx*V.cry + nz*V.sry;  let rz = -nx*V.sry + nz*V.cry;
+      const ry2 = ny*V.crx - rz*V.srx;      rz =  ny*V.srx + rz*V.crx;
+      const lam = Math.abs(rx2*-0.22 + ry2*-0.30 + rz*-0.93);
+      out.push({ pts, z: zs/16, idx: F.cloud, shade: (1 - lam)*0.62*(1 - V.uk), num: V.uk });
+    }
+    return out;
+  }
+
+  function startCine(next){
+    cineActive = true; cineNext = next || "level"; cineT = 0; cineFired = 0; cineGrew = 0;
+    cineCloud = cineBuildCloud();
+    cineNet = cineCloud ? cineBuildNet(cineCloud) : null;
+    if (cineNet) cineSeedGrowth(cineCloud, cineNet.seeds); else cineCloud = null;
+    markCineSeen();                     // whatever happens now, this is no longer a first launch
     const pf = document.getElementById("pauseFloat"); if (pf) pf.style.display = "none";
     Sound.ambient("intro");
   }
@@ -9965,13 +10386,35 @@
     if (cineNext === "menu") openMenu("world");         // replayed from the menu — go back to it
     else loadLevel(levelIdx);                           // opening run — straight into the level
   }
+  // When each tile of the cloud arrives. The six faces are already there; everything after
+  // them goes in breadth-first order, so the growth reads as a wave rolling off the seed.
+  function cineGrowAt(i){
+    const C = cineCloud, spread = Math.max(1, C.n - C.seeds);
+    return CINE.grow[0] + (CINE.grow[1] - CINE.grow[0] - CINE_POP) *
+           ((C.rank[i] - C.seeds + 1) / spread);
+  }
   function tickCine(dt){
     cineT += dt;
-    // one-shot bangs — drawCine runs every frame, so the sound can't live in there
-    if (!(cineFired & 1) && cineT >= CINE.boom1) { cineFired |= 1; if (Sound.introFlash) Sound.introFlash(); }
-    if (!(cineFired & 2) && cineT >= CINE.boom2) { cineFired |= 2; if (Sound.introGather) Sound.introGather(); }
-    if (!(cineFired & 4) && cineT >= CINE.boom2 + INTRO_CONVERGE) { cineFired |= 4; if (Sound.introFlash) Sound.introFlash(); }
-    if (cineT >= CINE.end) endCine();
+    const t = cineT - CINE_LEAD;
+    // one-shot bangs — drawCine runs every frame, so the sound cannot live in there
+    const once = (bit, at, fn) => { if (!(cineFired & bit) && t >= at) { cineFired |= bit; try { fn(); } catch(_){} } };
+    if (!(cineFired & 32) && cineT >= CINE_CARD.in*0.6) { cineFired |= 32; try { Sound.tap && Sound.tap(); } catch(_){} }
+    once(1,  CINE.born,      () => { Sound.introFlash && Sound.introFlash(); Sound.power && Sound.power(); });
+    once(2,  CINE.unfold[0], () => Sound.swish && Sound.swish());
+    once(4,  CINE.grow[1],   () => Sound.introFlash && Sound.introFlash());
+    once(8,  CINE.dive[0],   () => Sound.warp && Sound.warp());
+    once(16, CINE.plinth,    () => { Sound.tapBig && Sound.tapBig(); Sound.introGather && Sound.introGather(); });
+    // ...and the growth, which is a hundred arrivals rather than one. Every third, or the
+    // whole beat is a single flat buzz.
+    if (cineCloud && t >= CINE.grow[0] && t <= CINE.grow[1] + CINE_POP) {
+      let up = 0;
+      for (let i = cineCloud.seeds; i < cineCloud.n; i++) if (t >= cineGrowAt(i)) up++;
+      if (up > cineGrew) {
+        if (Math.floor(up/3) > Math.floor(cineGrew/3) && Sound.tileLaid) { try { Sound.tileLaid(); } catch(_){} }
+        cineGrew = up;
+      }
+    }
+    if (t >= CINE.end) endCine();
   }
   // 0 before a, ramps to 1 by b, holds to c, back to 0 by d
   function cineEnv(t, e){
@@ -9989,113 +10432,182 @@
     ctx.font = "900 " + Math.round(fs) + "px " + UI_FONT;
     const maxW = viewW * 0.84, wpx = ctx.measureText(str).width;
     if (wpx > maxW) { fs = fs * maxW / wpx; ctx.font = "900 " + Math.round(fs) + "px " + UI_FONT; }
+    // The words ride over the cloud once it fills the screen, and white on a bright quilt is
+    // no words at all — so they carry their own shadow rather than relying on the backdrop.
+    ctx.shadowColor = "rgba(0,0,0,0.85)"; ctx.shadowBlur = Math.round(fs*0.5);
     ctx.fillStyle = "#ffffff";
+    ctx.fillText(str, viewW/2, cy);
     ctx.fillText(str, viewW/2, cy);
     ctx.restore();
   }
   function drawCine(ts){
-    const t = cineT;
-    // The cosmos the story is about is the same one the Tileverse hangs in — the opening says
-    // "a tile came into the cosmos", and this IS that cosmos rather than a stand-in for it.
-    //
-    // It is there from the first frame. There used to be a black curtain over it that lifted
-    // two thirds of the way in, on the reasoning that "At first, there was nothing" wanted an
-    // empty screen — but a near-black field with a few stars in it is a far better picture of
-    // nothing than a black rectangle is, and the story reads better arriving IN a place than
-    // having one appear late.
+    const t = cineT - CINE_LEAD;
+    // The house card. It gets the bare cosmos to itself — the story has not started, so
+    // everything below is still waiting on a clock that has not reached zero.
+    if (t < 0) {
+      drawVoid(ts);
+      const k = cineC01(cineT / CINE_CARD.in);
+      const a = Math.min(k*1.6, cineT < CINE_CARD.out ? 1
+                              : 1 - cineC01((cineT - CINE_CARD.out) / (CINE_CARD.gone - CINE_CARD.out)));
+      const W = Math.min(viewW*0.52, viewH*0.30), CY = viewH*0.47;
+      ctx.save();
+      const e = 0.94 + 0.06*easeOutBack(k);              // settles rather than arrives
+      ctx.translate(viewW/2, CY); ctx.scale(e, e); ctx.translate(-viewW/2, -CY);
+      const box = drawLogo(viewW/2, CY, W, ts, a);
+      ctx.restore();
+      ctx.save();
+      ctx.globalAlpha = a * 0.7 * cineC01((cineT - CINE_CARD.in*0.8) / 420);
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillStyle = LOGO.ink;
+      const fs = Math.max(9, Math.min(W*0.070, 17));
+      ctx.font = "900 " + Math.round(fs) + "px " + UI_FONT;
+      // Letter-spaced by hand, a glyph at a time: canvas only got letterSpacing very
+      // recently, and a house card wants the word opened right out.
+      const word = "PRESENTS", sp = fs*0.70;
+      let wsum = 0; for (const ch of word) wsum += ctx.measureText(ch).width + sp;
+      let x = viewW/2 - (wsum - sp)/2;
+      for (const ch of word) { const w = ctx.measureText(ch).width;
+        ctx.fillText(ch, x + w/2, box.bottom + fs*2.4); x += w + sp; }
+      ctx.restore();
+      return;
+    }
+    // The cosmos the story is about is the same one the Tileverse hangs in, and it is there
+    // from the first frame: a near-black field with a few stars in it is a far better picture
+    // of "nothing" than a black rectangle, and the story reads better arriving IN a place.
     drawVoid(ts);
+    if (!cineCloud) { cineText(CINE_LINES.line1, viewH*0.46, cineEnv(t, CINE.line1), true); return; }
+    const C = cineCloud, cam = cineCam(t);
 
-    const s = Math.min(viewW*0.30, viewH*0.17);        // the one tile, centre stage
-    const cx = viewW/2, cy = viewH*0.60;
-    const m = { s, x0: cx - s/2, row0Y: cy - s/2 };
-    const here = { c:0, r:0 }, prev = { c:-1, r:0 }, next = { c:1, r:0 };   // a straight east-west tile
-
-    let shake = 0;                                      // both booms punch the frame
-    for (const b of [CINE.boom1, CINE.boom2]) {
+    let shake = 0;                                      // the arrivals punch the frame
+    for (const b of [CINE.born, CINE.plinth]) {
       const k = (t - b) / 260;
-      if (k > 0 && k < 1) shake = Math.max(shake, (1-k) * s*0.06);
+      if (k > 0 && k < 1) shake = Math.max(shake, (1 - k) * Math.min(viewW, viewH)*0.012);
     }
     ctx.save();
-    if (shake) ctx.translate((Math.random()*2-1)*shake, (Math.random()*2-1)*shake);
+    if (shake) ctx.translate((Math.random()*2 - 1)*shake, (Math.random()*2 - 1)*shake);
 
-    if (t >= CINE.boom1 && t <= CINE.run) {             // the tile, springing in
-      const k = Math.min(1, (t - CINE.boom1) / 420), e = easeOutBack(k);
+    // ---- the Tiloid, and the cloud it unfolds into --------------------------------------
+    // The quilt fades out under the dive, once there is a platform to stand on instead of it.
+    const cloudA = t < CINE.plinth ? 1 : 1 - cineC01((t - CINE.plinth)/380);
+    if (t >= CINE.born && cloudA > 0.004) {
+      const V = cineView(t, cam);
+      const pop = cineC01((t - CINE.born)/420);
       ctx.save();
-      ctx.translate(cx, cy); ctx.scale(e, e); ctx.translate(-cx, -cy);
-      introDrawPlatform(here, prev, next, m);
+      if (pop < 1) {                                  // it snaps into being rather than fading up
+        const g = easeOutBack(pop);
+        ctx.translate(viewW/2, viewH*0.52); ctx.scale(g, g); ctx.translate(-viewW/2, -viewH*0.52);
+      }
+      // The six sides, far ones first, so the solid reads as solid rather than as six
+      // transparencies. Once they have lain down every z is 0 and the order stops mattering.
+      const faces = cineFoldFaces(t, V);
+      faces.sort((a, b) => b.z - a.z);
+      for (const f of faces) cinePanel(f.pts, f.idx, cloudA, f.shade);
       ctx.restore();
-    }
-    // Once he sets off, the same three-tile queue the player cycles: two on the ground and
-    // one arcing over his head from the back to the front. This is the game's whole premise,
-    // and it is also what stops him running off the end of the one tile into mid-air.
-    if (t > CINE.run) {
-      const u = (t - CINE.run) * CINE_RUN_SPD, i0 = Math.floor(u), f = u - i0;
-      const rowAt = (c) => ({ c, r:0 });
-      for (let k = 0; k < TITLE_QUEUE - 1; k++)
-        introDrawPlatform(rowAt(i0+k), rowAt(i0+k-1), rowAt(i0+k+1), m);
-      dragPlatform(rowAt, i0 - 1, i0 - 1 + TITLE_QUEUE, f, m, ts);
-    }
-    if (t >= CINE.boom2) {
-      // He arrives the way he arrives in game: pixels streaming in from every side, easing
-      // onto the tile, with the character fading up underneath them. Same particle count,
-      // same ease, same INTRO_CONVERGE window and the same two sounds as drawIntro().
-      const ct = t - CINE.boom2;
-      let rx = cx;
-      if (t > CINE.run) rx = cx + (t - CINE.run) * CINE_RUN_SPD * s;   // and away to the right
-      const phase = t > CINE.run ? (t - CINE.run)*CINE_RUN_SPD*Math.PI*3 : 0;   // stride follows distance
-      if (ct < INTRO_CONVERGE) {
-        const u = ct / INTRO_CONVERGE, e = 1 - Math.pow(1-u, 3), reach = Math.max(viewW, viewH);
-        // they come in aimed at the middle of his body, not at his feet
-        const fy = cy - s*(RUNNER.legLen + RUNNER.bodyH*0.5);
-        for (const p of cineParts) {
-          const x0 = cx + Math.cos(p.ang)*p.dist*reach, y0 = fy + Math.sin(p.ang)*p.dist*reach;
-          const tx = cx + p.ex*s, ty = cy + p.ey*s;       // and each lands on its own piece of him
-          const px = x0 + (tx - x0)*e, py = y0 + (ty - y0)*e, sz = p.sz*s*(1 - u*0.4);
-          ctx.globalAlpha = 0.35 + 0.65*u; ctx.fillStyle = p.col;
-          ctx.fillRect(px - sz/2, py - sz/2, sz, sz);
+
+      // ...and every tile after the sixth, swinging out of the flat neighbour that made it on
+      // the shared edge — the same hinge the net opened on, carried on past the solid.
+      if (t >= CINE.grow[0]) {
+        for (const i of C.rank.map((_, k) => k).sort((a, b) => C.rank[a] - C.rank[b])) {
+          if (C.isSeed[i]) continue;
+          const k = cineC01((t - cineGrowAt(i)) / CINE_POP);
+          if (k <= 0) continue;
+          const p = C.cells[i];
+          const sx = cam.ox + p.c*cam.tile, sy = cam.oy + p.r*cam.tile;       // cull on where it lands
+          if (sx > viewW + cam.tile || sy > viewH + cam.tile ||
+              sx < -cam.tile*2 || sy < -cam.tile*2) continue;
+          const pa = C.parent[i] >= 0 ? C.cells[C.parent[i]] : p;
+          const d = [p.c - pa.c, p.r - pa.r];
+          if (!d[0] && !d[1]) d[0] = 1;                                       // an island; never happens
+          const hp = [pa.c + 0.5 + d[0]*0.5, pa.r + 0.5 + d[1]*0.5, 0];
+          const ha = [-d[1], d[0], 0];
+          const th = Math.PI * (1 - cineSmooth(k));    // starts face-down ON its parent, flips out flat
+          const pts = [];
+          for (let jj = 0; jj < 4; jj++) for (let ii = 0; ii < 4; ii++)
+            pts.push(cineProj(cineRot([p.c + ii/3, p.r + jj/3, 0], hp, ha, th), V));
+          cinePanel(pts, i, cloudA, 0);
         }
-        ctx.globalAlpha = u*0.6; paintRunner(rx, cy, s, phase, 0, t > CINE.run, ts, 0); ctx.globalAlpha = 1;
-      } else {
-        // He is solid the moment he forms. The flash is a white copy of him laid over the
-        // top, pulsing and decaying away, rather than him going translucent — fading a
-        // just-assembled character back out reads as him failing to arrive.
-        const moving = t > CINE.run;
-        paintRunner(rx, cy, s, phase, 0, moving, ts, 0);
-        const ft = ct - INTRO_CONVERGE;
-        if (ft < CINE_SETTLE) {
-          const fl = 0.9 * (0.5 + 0.5*Math.sin(ct/60)) * (1 - ft/CINE_SETTLE);
-          if (fl > 0.01) {
-            // paint him again in flat white. RUNNER is the single source of his colours, so
-            // borrowing it for one frame is how the flash keeps his exact silhouette.
-            const body = RUNNER.body, ink = RUNNER.ink;
-            RUNNER.body = "#ffffff"; RUNNER.ink = "#ffffff";
-            ctx.globalAlpha = fl;
-            paintRunner(rx, cy, s, phase, 0, moving, ts, 0);
-            ctx.globalAlpha = 1;
-            RUNNER.body = body; RUNNER.ink = ink;
-          }
-        }
+      }
+    }
+
+    // ---- the runner, and the tile that arrives to catch him ------------------------------
+    // The run reuses the cloud's own geometry: cell (0,0) of the track is laid exactly where
+    // level one's tile is sitting, at exactly its size, so the dive lands on it and the
+    // platform takes its place without anything moving.
+    if (t >= CINE.fall[0]) {
+      const running = t > CINE.run;
+      const u = running ? (t - CINE.run) * CINE_RUN_SPD : 0;
+      // He stays put and the world moves, exactly as it does in play. Running him across a
+      // fixed frame instead would walk him off the right-hand edge inside two tiles.
+      //
+      // The camera also eases back out the moment he sets off: level one filled the screen for
+      // the dive, and at that size the "trail of tiles" is one tile and a bit of the next.
+      const runK = cineSmooth(cineC01((t - CINE.run)/700));
+      const s = Math.exp(cineMix(Math.log(cam.tile),
+                                 Math.log(Math.min(viewW*0.30, viewH*0.17)), runK));
+      // At u = 0 and s = the dive's tile size this is EXACTLY the box level one just filled,
+      // so the quilt hands over to the platform without anything moving.
+      const cx = viewW/2, groundY = viewH*0.60;
+      const m = { s, x0: cx - s/2 - u*s, row0Y: groundY - s/2 };
+      const rowAt = c => ({ c, r: 0 });
+
+      // the tile springs in under him at the moment he would otherwise keep falling
+      if (t >= CINE.plinth && !running) {
+        const k = cineC01((t - CINE.plinth)/420), e = easeOutBack(k);
+        ctx.save();
+        ctx.translate(cx, groundY); ctx.scale(e, e); ctx.translate(-cx, -groundY);
+        introDrawPlatform(rowAt(0), rowAt(-1), rowAt(1), m);
+        ctx.restore();
+      }
+      // ...and once he sets off, the same three-tile queue the player cycles: two on the
+      // ground and one arcing over his head from the back to the front. That is the game's
+      // whole premise, and it is what stops him running off the end into the void.
+      if (running) {
+        const i0 = Math.floor(u), f = u - i0;
+        for (let k = 0; k < TITLE_QUEUE - 1; k++)
+          introDrawPlatform(rowAt(i0 + k), rowAt(i0 + k - 1), rowAt(i0 + k + 1), m);
+        dragPlatform(rowAt, i0 - 1, i0 - 1 + TITLE_QUEUE, f, m, ts);
+      }
+
+      // He falls in from off the top of the frame, accelerating, and is solid by the time he
+      // lands — a character who fades up as he arrives reads as one who failed to.
+      const fk = cineC01((t - CINE.fall[0]) / (CINE.fall[1] - CINE.fall[0]));
+      const rise = (1 - fk*fk) * viewH*0.85;
+      const rx = cx;
+      const phase = running ? u*Math.PI*3 : 0;
+      ctx.globalAlpha = Math.min(1, fk*3.5);
+      paintRunner(rx, groundY - rise, s, phase, 0, running, ts, 0);
+      ctx.globalAlpha = 1;
+
+      // the landing, as a ring of dust rather than another white flash
+      const lk = cineC01((t - CINE.plinth)/380);
+      if (lk > 0 && lk < 1) {
+        ctx.save();
+        ctx.globalAlpha = (1 - lk)*0.5; ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = Math.max(1, s*0.03*(1 - lk));
+        ctx.beginPath(); ctx.ellipse(cx, groundY, s*(0.12 + lk*0.30), s*(0.04 + lk*0.11), 0, 0, Math.PI*2);
+        ctx.stroke(); ctx.restore();
       }
     }
     ctx.restore();
 
-    for (const b of [CINE.boom1, CINE.boom2]) {         // white flash on each arrival
+    for (const b of [CINE.born, CINE.grow[1]]) {        // white flash on each act of creation
       const k = (t - b) / 300;
       if (k > 0 && k < 1) {
-        ctx.globalAlpha = (1-k) * 0.85; ctx.fillStyle = "#ffffff";
+        ctx.globalAlpha = (1 - k) * 0.8; ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, viewW, viewH); ctx.globalAlpha = 1;
       }
     }
 
     cineText(CINE_LINES.line1, viewH*0.46, cineEnv(t, CINE.line1), true);
-    cineText(CINE_LINES.and1,  viewH*0.30, cineEnv(t, CINE.and1));
-    cineText(CINE_LINES.line2, viewH*0.30, cineEnv(t, CINE.line2));
-    cineText(CINE_LINES.and2,  viewH*0.30, cineEnv(t, CINE.and2));
-    cineText(CINE_LINES.line3, viewH*0.30, cineEnv(t, CINE.line3));
-    cineText(CINE_LINES.line4, viewH*0.30, cineEnv(t, CINE.line4));
+    cineText(CINE_LINES.line2, viewH*0.14, cineEnv(t, CINE.line2));
+    cineText(CINE_LINES.line3, viewH*0.14, cineEnv(t, CINE.line3));
+    cineText(CINE_LINES.line4, viewH*0.14, cineEnv(t, CINE.line4));
+    cineText(CINE_LINES.line5, viewH*0.14, cineEnv(t, CINE.line5));
+    cineText(CINE_LINES.line6, viewH*0.14, cineEnv(t, CINE.line6));
+    cineText(CINE_LINES.line7, viewH*0.14, cineEnv(t, CINE.line7));
 
     // faint skip prompt — drawn before the fade, so the fade takes it with everything else
-    if (t > 900 && t < CINE.fade[0]) {
+    if (cineT > 900 && t < CINE.fade[0]) {
       ctx.save();
       ctx.globalAlpha = 0.26 * Math.min(1, (t - 900) / 700);
       ctx.textAlign = "center"; ctx.textBaseline = "middle";

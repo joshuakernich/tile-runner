@@ -53,6 +53,7 @@ bump and installed home-screen copies keep serving the old icons and manifest.
 | `coin-lab.html` | The golden coin: float, rock, shine and its inscribed panel. **Copy COIN block**. |
 | `eye-lab.html` | The one pair of eyes every face wears — runner, monsters, walls, stones. **Copy EYES block**. |
 | `talisman-lab.html` | The five charms: loop, inscribed panel, raised icon. **Copy TAL block**. |
+| `radius-lab.html` | The one corner radius. Drives the **running game** in an iframe over a board carrying one of everything — free tiles, walls, stone, doors, platforms, the rift, monsters — via `__TR.tile()` and `__TR.demo()`, so it shows the shipped renderer rather than a copy that can drift. **Copy radius line**. Must be *served*, not opened off the filesystem. |
 | `tile-lab.html` / `junction-lab.html` | The laid tile's cross-section and the leading tile's 3-way junction. **Copy TILE / JUNCTION block**. |
 | `stone-generator.html` | Design reference for the stone crack art. |
 | `tools/` | The two check scripts. |

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta http-equiv="Cache-Control" content="no-store"/>
+<title>Tile Runner — Corner Radius Lab</title>
+<style>
+  :root{ --bg:#12102a; --panel:#1b1838; --line:#2b2850; --ink:#cfe9ff; --accent:#7dd0ff; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:10px 14px;border-bottom:1px solid var(--line);
+         display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;}
+  header h1{font-size:15px;margin:0 12px 0 0;font-weight:700;letter-spacing:.5px;}
+  .app{display:grid;grid-template-columns:260px minmax(0,1fr);gap:14px;padding:14px;align-items:start;}
+  .rail{position:sticky;top:14px;display:flex;flex-direction:column;gap:12px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;}
+  .card h2{font-size:11px;letter-spacing:1px;opacity:.55;margin:0 0 8px;
+           font-weight:700;text-transform:uppercase;}
+  .row{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:12px;}
+  .row label{flex:0 0 74px;opacity:.85;}
+  .row input[type=range]{flex:1;min-width:0;accent-color:var(--accent);}
+  .row output{flex:0 0 46px;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent);}
+  button{background:#233;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+         padding:8px 12px;cursor:pointer;font:inherit;font-size:12px;width:100%;}
+  button:hover{border-color:var(--accent);}
+  button.prim{background:#1c6;color:#04120a;font-weight:700;border:none;}
+  .presets{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+  .presets button{padding:6px 0;font-size:11px;}
+  .hint{font-size:11px;line-height:1.5;opacity:.65;}
+  .stage{display:flex;flex-direction:column;gap:8px;align-items:center;min-width:0;}
+  iframe{width:100%;max-width:520px;height:78vh;border:1px solid var(--line);
+         border-radius:12px;background:#000;display:block;}
+  .legend{font-size:11px;opacity:.7;line-height:1.6;max-width:520px;}
+  code{color:var(--accent);}
+  .warn{color:#ffd24a;}
+</style>
+</head>
+<body>
+<header>
+  <h1>TILE RUNNER · CORNER RADIUS</h1>
+  <span class="hint" id="status">booting the game…</span>
+</header>
+
+<div class="app">
+  <aside class="rail">
+    <div class="card">
+      <h2>Radius</h2>
+      <div class="row">
+        <label for="rad">radius</label>
+        <input type="range" id="rad" min="0" max="0.5" step="0.005" value="0"/>
+        <output id="radOut">0.0</output>
+      </div>
+      <div class="presets">
+        <button data-r="0">0</button>
+        <button data-r="0.075">.075</button>
+        <button data-r="0.16">.16</button>
+        <button data-r="0.5">½</button>
+      </div>
+      <p class="hint" style="margin:10px 0 0">
+        A fraction of one cell. <code>0.5</code> is a circle; <code>0</code> is a hard square.
+        Shipped is <code>0</code>.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Board</h2>
+      <div class="row">
+        <label for="cell">tile size</label>
+        <input type="range" id="cell" min="4" max="9" step="1" value="5"/>
+        <output id="cellOut">5</output>
+      </div>
+      <p class="hint" style="margin:6px 0 0">
+        Columns across the specimen board. Fewer columns = bigger tiles. A radius that reads
+        well on a small board can look like a blob on a big one, so check both.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Export</h2>
+      <button class="prim" id="copy">Copy radius line</button>
+      <p class="hint" style="margin:8px 0 0">
+        Paste over <code>radius:</code> in the <code>TILE</code> block in
+        <code>index.html</code> (near <code>tileR</code>).
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Reload</h2>
+      <button id="reload">Reload the game</button>
+      <p class="hint" style="margin:8px 0 0">
+        Picks up edits to <code>index.html</code> without losing your slider position.
+      </p>
+    </div>
+  </aside>
+
+  <div class="stage">
+    <iframe id="game" src="index.html" title="Tile Runner"></iframe>
+    <p class="legend">
+      Every tile-shaped thing in the game takes its corners from one number —
+      <code>tileR(s) = s * TILE.radius</code> — so this single slider moves all of them at once.
+      On the board above, top to bottom: <b>free tiles</b> you can drag (with their grip dots),
+      the <b>laid track</b> including a corner and the leading junction, <b>walls</b>,
+      a <b>fixed platform</b>, <b>stone</b> at three strengths, a <b>door</b> and its <b>key</b>,
+      a <b>rift</b>, a <b>coin</b>, a <b>talisman</b>, a <b>slider block</b> on its rail, and
+      <b>monsters</b> — a hunter, a stealth, a trap and a rail. The runner's own body has its own
+      corner and does <i>not</i> follow this slider.
+    </p>
+  </div>
+</div>
+
+<script>
+// The lab drives the REAL game in the frame rather than redrawing any of it here. Tile Runner
+// keeps its art in one file and the labs have a long history of quietly drifting from it; the
+// only way a radius lab can be trusted is if what it shows IS the shipped renderer.
+const $ = id => document.getElementById(id);
+const frame = $("game");
+let W = null;                                   // the game's window, once it is up
+
+// One board carrying one of everything, laid out in reading order so nothing overlaps and
+// every specimen has open floor around it. Rebuilt whenever the tile size changes.
+function specimen(cols){
+  const rows = 9;                               // short enough that the whole board is in frame
+  const L = { n: 0, name: "RADIUS", cols, rows, cps: 0.0001, intro: [],
+              start: [0, rows-1], init: [], goal: [cols-1, rows-1],
+              walls: [], stone: [], platforms: [], doors: [], keys: [],
+              coins: [], talismans: [], crumble: [], blocks: [], hazards: [] };
+  const C = c => Math.min(c, cols-1);
+  // bottom row: the start, a run of laid track with a corner in it, and the leading junction
+  L.init.push([C(1), rows-1], [C(1), rows-2]);
+  // ...and two loose tiles parked off the track, which is what makes them draggable
+  L.init.push([C(3), rows-1], [C(4), rows-2]);
+  L.walls.push([C(3), rows-3], [C(4), rows-3]);
+  L.platforms.push([C(1), rows-3, "ew"]);
+  L.stone.push([C(0), rows-4, 1], [C(1), rows-4, 2], [C(2), rows-4, 3]);
+  L.doors.push([C(4), rows-4, "#ffd24a"]);
+  L.keys.push([C(3), rows-4, "#ffd24a"]);
+  L.crumble.push([C(0), rows-5]);
+  L.coins.push([C(2), rows-5]);
+  L.talismans.push([C(4), rows-5, "pulse"]);
+  L.blocks.push({ axis:"h", r: rows-6, pos0: C(1), lo: C(0), hi: C(3) });
+  L.hazards.push({ kind:"monster", variant:"hunter",  c: C(0), r: rows-8, speed: 2200 },
+                 { kind:"monster", variant:"stealth", c: C(2), r: rows-8, speed: 2200 },
+                 { kind:"monster", variant:"trap",    c: C(4), r: rows-8, speed: 2200 },
+                 { kind:"monster", variant:"hrail", axis:"h", r: rows-7,
+                   lo: C(0), hi: C(3), speed: 2200, phase: 0 });
+  return L;
+}
+
+function push(){
+  if (!W || !W.__TR) return;
+  const r = +$("rad").value;
+  try {
+    W.__TR.tile({ radius: r });
+    $("status").textContent = "radius " + r.toFixed(3) + " — live";
+  } catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+}
+function reboard(){
+  if (!W || !W.__TR || !W.__TR.demo) return;
+  try { W.__TR.demo(specimen(+$("cell").value), "R"); push(); }
+  catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+}
+
+// The game boots into its title screen and its own rAF loop; wait for the debug surface to
+// exist rather than guessing at a delay.
+function attach(){
+  W = frame.contentWindow;
+  let tries = 0;
+  (function wait(){
+    if (W.__TR && W.__TR.demo && W.__TR.tile) { reboard(); return; }
+    if (++tries > 200) {
+      $("status").innerHTML = '<span class="warn">the game never came up — is this being SERVED? ' +
+        'file:// blocks the frame from being read.</span>';
+      return;
+    }
+    setTimeout(wait, 50);
+  })();
+}
+frame.addEventListener("load", attach);
+
+const fmt = v => v.toFixed(3).replace(/0+$/, "").replace(/\.$/, ".0");
+$("rad").addEventListener("input", () => { $("radOut").textContent = fmt(+$("rad").value); push(); });
+$("cell").addEventListener("input", () => { $("cellOut").textContent = $("cell").value; reboard(); });
+document.querySelectorAll(".presets button").forEach(b => b.onclick = () => {
+  $("rad").value = b.dataset.r; $("radOut").textContent = fmt(+b.dataset.r); push();
+});
+$("copy").onclick = () => {
+  const line = "    radius:     " + (+$("rad").value).toFixed(3) +
+               ",   // corner radius, fraction of a cell";
+  navigator.clipboard.writeText(line).then(
+    () => $("status").textContent = "copied: " + line.trim(),
+    () => $("status").innerHTML = '<span class="warn">clipboard refused — the line is: ' + line.trim() + "</span>");
+};
+$("reload").onclick = () => { frame.contentWindow.location.reload(); };
+</script>
+</body>
+</html>
