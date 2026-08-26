@@ -140,7 +140,20 @@
       <h2>This level</h2>
       <button class="act" id="dupLvl">Duplicate</button>
       <button class="act" id="copyOne2">Copy JSON</button>
+      <button class="act prim" id="testLvl">Test ▸</button>
       <button class="act danger" id="delLvl">Delete</button>
+    </div>
+
+    <div class="card">
+      <h2>Save</h2>
+      <button class="act prim" id="saveFs">Save to levels.js</button>
+      <div class="rowbtns">
+        <button class="act" id="pickFs">Choose file…</button>
+        <button class="act" id="dlAll">Download</button>
+      </div>
+      <button class="act" id="copyAll">Copy full levels.js</button>
+      <button class="act" id="reloadBtn">Reload levels.js</button>
+      <button class="act danger" id="resetBtn">Reset to shipped</button>
     </div>
   </aside>
 
@@ -181,17 +194,18 @@
         malevolent tile entity that comes for the runner — it walks the shortest open route to
         him, around walls rather than into them, and re-thinks it at every cell; a <i>trap</i>
         sits still, yawns open wide enough to run
-        through, then snaps shut on whatever is in it. Clicking an existing monster re-applies the kind
-        and speed boxes. Only <i>patrol</i> is drawn by hand: click each cell of its route in turn — the
+        through, then snaps shut on whatever is in it. Clicking the square a monster is <i>standing on</i>
+        re-applies the kind and speed boxes; clicking anywhere else on its route drops a new monster
+        there, so routes may cross and overlap freely. Only <i>patrol</i> is drawn by hand: click each cell of its route in turn — the
         first click starts the path, every click after adds a waypoint. <b>Enter</b> finishes it as a
         there-and-back patrol; <b>L</b> closes it into a loop; <b>Esc</b> throws the draft away. It moves
         at the speed box's ms per cell and pauses briefly at each waypoint, and touching it is fatal.</div>
       <div class="tip" data-for="stone"><b>Stone</b>: drag to paint breakable stone blocks (the <i>hp</i>
         box sets how many taps to smash). Right-drag or drag over a stone to remove.</div>
-      <div class="tip" data-for="platform"><b>Platform</b>: fixed free track cast into a wall. Click an
+      <div class="tip" data-for="platform"><b>Rail</b>: fixed free track cast into a wall. Click an
         empty cell to place it in the selected <i>shape</i>; click it again to cycle through the six
         shapes; right-click to remove. The runner rides it for free but can only enter/leave through the
-        two drawn ends — the reachability check knows this. Platforms <i>override</i> the player's route,
+        two drawn ends — the reachability check knows this. Rails <i>override</i> the player's route,
         so a level built on them needs the forced-chain check, not plain reachability.</div>
       <div class="tip" data-for="talisman"><b>Talisman</b>: a one-off collectible. Click to place the one
         chosen in the dropdown, click again to cycle, right-click to remove. It does <i>not</i> block
@@ -208,30 +222,17 @@
     <div class="toolbar">
       <button class="act" id="undo">Undo (Z)</button>
       <button class="act" id="clearBtn">Clear</button>
-      <button class="act" id="reloadBtn">Reload levels.js</button>
-      <button class="act" id="resetBtn">Reset to shipped</button>
     </div>
 
     <div class="side">
       <div class="row">
-        <button class="act prim" id="saveFs">Save to levels.js</button>
-        <button class="act" id="pickFs">Choose file…</button>
-        <button class="act" id="copyAll">Copy full levels.js</button>
-        <button class="act" id="dlAll">Download</button>
         <span class="pill" id="solve">—</span>
       </div>
       <textarea id="out" spellcheck="false"></textarea>
       <div class="hint">
         <b>Drag the map's edges</b> to resize it. The right and bottom edges just add or remove
         columns and rows; the left and top edges push everything across as they grow, so the map
-        expands in that direction instead of the far one. Shrinking drops whatever falls outside.<br>
-        <b>Save to levels.js</b> writes straight over the file — you pick it once and it remembers.
-        That file is the source of truth, but <code>index.html</code> and this editor's own
-        <code>EMBEDDED</code> copy still need syncing afterwards, and
-        <code>node tools/check.mjs</code> is what tells you they are out of step.<br>
-        <b>Autosave</b> keeps every edit in your browser, so you can close/refresh and pick up where
-        you left off (levels you've changed show a <b>*</b>). “Reset to shipped” wipes the draft back
-        to the current game levels.
+        expands in that direction instead of the far one. Shrinking drops whatever falls outside.
       </div>
     </div>
   </main>
@@ -248,7 +249,7 @@
       <div class="tool" data-tool="block">Block</div>
       <div class="tool" data-tool="monster">Monster</div>
       <div class="tool" data-tool="stone">Stone</div>
-      <div class="tool" data-tool="platform">Platform</div>
+      <div class="tool" data-tool="platform">Rail</div>
       <div class="tool" data-tool="talisman">Talisman</div>
       <div class="tool" data-tool="coin">Coin</div>
       <div class="tool" data-tool="singularity">Singularity</div>
@@ -284,7 +285,7 @@
         <option value="brake">Millstone</option>
         <option value="ankh">Ankh</option>
         </select></label>
-        <label class="opt" data-for="platform">platform shape <select id="pfShape">
+        <label class="opt" data-for="platform">rail shape <select id="pfShape">
           <option value="ns">│ straight N–S</option>
           <option value="ew">─ straight E–W</option>
           <option value="ne">└ elbow N–E</option>
@@ -540,28 +541,17 @@ let monDraft = null;
 // guard only asked about the cell under the pointer, which left three ways to stack them: a
 // rail dropped so that its far end crosses one, a patrol drawn through one, and a square loop
 // whose ring passes over one. This asks about EVERY cell the new monster would occupy.
-function monClash(cells, ignore){
-  const busy = new Set();
-  for (const h of L.hazards){
-    if(!isMon(h) || h === ignore) continue;
-    for (const [c,r] of monCells(h)) busy.add(c+","+r);
-  }
-  return cells.find(([c,r]) => busy.has(c+","+r)) || null;
-}
-// ...and the one line that refuses. Returns true when the caller should give up.
-function monBlocked(h){
-  const at = monClash(monCells(h));
-  if(!at) return false;
-  setStatus("there is already a monster on " + at[0] + "," + at[1] + " — one to a square");
-  return true;
-}
+// Monsters may share cells — freely, and with each other. There used to be a one-to-a-square
+// rule refusing any placement or drag whose cells met another monster's, which made two routes
+// that merely CROSS impossible to author: a horizontal rail and a vertical one over the same
+// junction is an ordinary thing to want and the editor would not have it. The game has never
+// cared; nothing in it reads a monster's path as owning ground.
 function finishMonster(loop){
   if(!monDraft) return;
   if(monDraft.path.length < 2){ monDraft=null; setStatus("monster needs at least two waypoints — draft dropped"); return; }
   const h = { kind:'monster', variant:'patrol', path: monDraft.path.map(p=>p.slice()),
               speed: Math.round((+$("monSpeed").value || 0.8) * 1000) };   // seconds -> ms per tile
   if(loop) h.loop = true;
-  if(monBlocked(h)){ monDraft = null; draw(); return; }
   pushUndo();
   L.hazards.push(h);
   monDraft = null;
@@ -572,7 +562,16 @@ function placeMonster(c,r){
   const kind = $("monPick").value || "hrail";
   const speed = Math.round((+$("monSpeed").value || 0.8) * 1000);   // the field is SECONDS per tile
   if (kind !== "patrol" && !monDraft){
-    const hit = L.hazards.find(h=>h.kind==="monster" && monCells(h).some(x=>x[0]===c&&x[1]===r));
+    // Clicking an existing monster still re-applies the kind and speed boxes — but only on the
+    // square the monster is actually STANDING on, not anywhere along its route. Every cell of a
+    // path used to retype, which once meant "one to a square" and now would mean a path could
+    // never be built across another one: the click would always be swallowed by the monster
+    // already there instead of placing the new one.
+    const hit = L.hazards.find(h=>{
+      if(h.kind!=="monster") return false;
+      const p = monStartPos(h);
+      return p && Math.round(p.c)===c && Math.round(p.r)===r;
+    });
     if (hit){ hit.variant = kind; hit.speed = speed; setStatus("monster -> "+kind); return; }
     // Built first, tested, and only then pushed — the refusal has to know the shape of the
     // thing, and a rail or a ring is several cells wide.
@@ -591,7 +590,6 @@ function placeMonster(c,r){
     } else {
       cand = {kind:"monster", variant:kind, c, r, speed};
     }
-    if (monBlocked(cand)) return;
     pushUndo(); L.walls.delete(keyOf(c,r));
     L.hazards.push(cand);
     setStatus(kind === "hrail" || kind === "vrail"
@@ -690,7 +688,7 @@ function paintPlatform(c,r){
   const i = L.platforms.findIndex(p=>p[0]===c&&p[1]===r);
   if(i>=0){
     const next = PF_SHAPES[(PF_SHAPES.indexOf(L.platforms[i][2]) + 1) % PF_SHAPES.length];
-    L.platforms[i][2] = next; $("pfShape").value = next; setStatus("platform → "+next);
+    L.platforms[i][2] = next; $("pfShape").value = next; setStatus("rail → "+next);
     return;
   }
   L.walls.delete(keyOf(c,r));
@@ -1162,7 +1160,7 @@ function cellTaken(c, r, ignore){
   for(const p of L.keys)            if(p!==ignore && at(p)) return "a key";
   for(const p of L.doors)           if(p!==ignore && at(p)) return "a door";
   for(const p of (L.stone||[]))     if(p!==ignore && at(p)) return "a stone";
-  for(const p of (L.platforms||[])) if(p!==ignore && at(p)) return "a platform";
+  for(const p of (L.platforms||[])) if(p!==ignore && at(p)) return "a rail";
   for(const p of (L.talismans||[])) if(p!==ignore && at(p)) return "a talisman";
   for(const p of (L.coins||[]))     if(p!==ignore && at(p)) return "a coin";
   for(const p of (L.singularity||[])) if(p!==ignore && at(p)) return "a singularity";
@@ -1232,16 +1230,14 @@ function draggableAt(c,r){                        // topmost movable element und
   if(L.walls.has(keyOf(c,r))) return {type:'wall', at:{c,r}};
   return null;
 }
-// A moved or reshaped monster has to stay on the board and off every other monster — the
-// same two rules placeMonster applies. Walls are deliberately not consulted: a patrol has
-// always been allowed to sweep across one, and a drag should not be stricter than a click.
+// A moved or reshaped monster has only to stay on the board. Other monsters are no obstacle —
+// drag one straight over another and their routes overlap. Walls are deliberately not consulted
+// either: a patrol has always been allowed to sweep across one, and a drag should not be
+// stricter than a click.
 function monFits(nb, self){
   const cells = monCells(nb);
   if(!cells.length) return false;
-  if(!cells.every(p=>p[0]>=0 && p[1]>=0 && p[0]<L.cols && p[1]<L.rows)) return false;
-  const at = monClash(cells, self);
-  if(at){ setStatus("there is already a monster on "+at[0]+","+at[1]+" — one to a square"); return false; }
-  return true;
+  return cells.every(p=>p[0]>=0 && p[1]>=0 && p[0]<L.cols && p[1]<L.rows);
 }
 function applyDrag(c,r){
   const d=dragEl;
@@ -1507,7 +1503,12 @@ function drawSelection(){
 // ---- the fields, per kind of thing ----
 const INSP_NAME = { wall:"Wall", start:"Start", goal:"Flag", init:"Tile", key:"Key", door:"Door",
                     block:"Slider block", blockEnd:"Slider block", saw:"Saw", sawEnd:"Saw",
-                    sawBlade:"Saw", mon:"Monster", monEnd:"Monster" };
+                    sawBlade:"Saw", mon:"Monster", monEnd:"Monster",
+                    // cell items, which the inspector used to title with their raw internal
+                    // name. "platform" is the reason: the board calls it a rail now, and the
+                    // data key is the only place the old word should still show up.
+                    stone:"Stone", platform:"Rail", talisman:"Talisman", coin:"Coin",
+                    singularity:"Singularity" };
 function inspRow(label, el){
   const w = document.createElement("label"); w.className = "opt";
   w.appendChild(document.createTextNode(label)); w.appendChild(el); return w;
@@ -1539,7 +1540,7 @@ function buildInspector(){
   const t = sel.type, ref = sel.ref;
 
   if (t === "cellItem") {
-    who.textContent = sel.what + " at " + ref[0] + "," + ref[1];
+    who.textContent = (INSP_NAME[sel.what] || sel.what) + " at " + ref[0] + "," + ref[1];
     if (sel.what === "stone")
       opts.appendChild(inspRow("hardness", inspNum(ref[2] || 2, 1, 5, 1, v => ref[2] = clamp(v,1,5))));
     if (sel.what === "platform")
@@ -1969,7 +1970,16 @@ $("newLvl").onclick=()=>{
   if(runLen) runLen = n;                       // the run just got one longer
   rebuildLevelList(); loadLevel(n);
 };
-$("resetBtn").onclick=resetShipped;
+// The one destructive button in the Save card, sitting one row under the harmless Reload it is
+// easily mistaken for. Reload keeps your drafts; this bins them. Only ask when there is actually
+// something to lose — with no drafts the two do the same thing and a dialog is just noise.
+$("resetBtn").onclick=()=>{
+  const drafts = Object.keys(edited).length;
+  if(drafts && !confirm("Reset to shipped?\n\n" + drafts + " unsaved level" + (drafts===1?"":"s") +
+     " will be thrown away and levels.js re-read. This cannot be undone.\n\n" +
+     "\u201cReload levels.js\u201d re-reads the file and keeps your drafts.")) return;
+  resetShipped();
+};
 $("reloadBtn").onclick=reloadShipped;
 
 // exports
@@ -2033,6 +2043,19 @@ if(!FS_OK){ $("saveFs").textContent="Download levels.js"; $("pickFs").disabled=t
 idbGet("levelsHandle").then(h=>{ if(h){ fsHandle=h; $("saveFs").title="writes over "+h.name; } });
 
 $("copyOne2").onclick=()=>{ commit(); copy($("out").value); setStatus("level JSON copied"); };
+// Play the level you are looking at, in the real game, without saving it first: park the DRAFT
+// where the game can pick it up and open it with ?test=<n>, which skips the title, the cinematic
+// and the Tileverse. toStored() rather than commit() on purpose — testing a level should not
+// mark it as edited. The tab is named, so pressing this repeatedly reuses one tab instead of
+// littering; the timestamp is what forces that tab to actually re-boot on the second press.
+$("testLvl").onclick=()=>{
+  if(!L) return;
+  const lv = toStored(L);
+  try{ localStorage.setItem("tilerunner:test", JSON.stringify(lv)); }
+  catch(e){ setStatus("couldn't hand the level over — storage is unavailable"); return; }
+  window.open("index.html?test=" + lv.n + "&t=" + Date.now(), "tr-test");
+  setStatus("testing L" + lv.n + " in the game tab");
+};
 $("copyAll").onclick=()=>{ commit(); copy(fullArray()); setStatus("full levels.js copied"); };
 $("dlAll").onclick=()=>{ commit(); dlAll(); setStatus("downloaded levels.js"); };
 function copy(t){ navigator.clipboard&&navigator.clipboard.writeText(t).catch(()=>{}); const ta=$("out"); ta.value=t; ta.select(); try{document.execCommand("copy");}catch(e){} }

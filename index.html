@@ -1659,6 +1659,82 @@
       o.connect(lp); lp.connect(g); g.connect(master);
       o.start(t); o.stop(t + 1.0);
     }
+    // Intro: the low roll of something enormous arriving. Two detuned sub-oscillators under a
+    // bed of noise, all of it swelling rather than striking — nothing has HIT, it is simply
+    // becoming present, and it should be felt before it is heard.
+    function rumble(ms) {
+      if (muted || !ac || ac.state !== "running") return;
+      const t = ac.currentTime, dur = (ms || 2400)/1000;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.30, t + dur*0.82);   // the swell IS the whole gesture
+      g.gain.exponentialRampToValueAtTime(0.0004, t + dur);
+      g.connect(master);
+      [27.5, 28.4].forEach((hz, i) => {                          // a beat frequency, so it wavers
+        const o = ac.createOscillator();
+        o.type = i ? "triangle" : "sawtooth";
+        o.frequency.setValueAtTime(hz, t);
+        o.frequency.linearRampToValueAtTime(hz*1.5, t + dur*0.9);
+        o.connect(g); o.start(t); o.stop(t + dur + 0.05);
+      });
+      if (noiseBuf) {                                            // grit, under a closing filter
+        const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+        src.playbackRate.value = 0.25;
+        const lp = ac.createBiquadFilter(); lp.type = "lowpass";
+        lp.frequency.setValueAtTime(90, t);
+        lp.frequency.exponentialRampToValueAtTime(320, t + dur*0.85);
+        const ng = ac.createGain();
+        ng.gain.setValueAtTime(0.0001, t);
+        ng.gain.exponentialRampToValueAtTime(0.16, t + dur*0.8);
+        ng.gain.exponentialRampToValueAtTime(0.0004, t + dur);
+        src.connect(lp); lp.connect(ng); ng.connect(master);
+        src.start(t); src.stop(t + dur + 0.05);
+      }
+    }
+    // A face landing flat. Air pushed out from under a big flat thing, then the edge meeting the
+    // plane — noise through a filter falling fast, with a short sine thud under it. `k` runs 0..1
+    // across the whole unfolding, lifting the pitch a little each time, so forty of these in a
+    // row read as a sequence going somewhere rather than one sound repeated forty times.
+    // Two octaves of minor pentatonic, which the flap climbs as the Tileverse opens out.
+    const FLAP_SCALE = [0, 3, 5, 7, 10, 12, 15, 17, 19, 22, 24];
+    function flap(k) {
+      if (muted || !ac || ac.state !== "running" || !noiseBuf) return;
+      const t = ac.currentTime, p = 0.82 + (k || 0)*0.62;
+      const src = ac.createBufferSource(); src.buffer = noiseBuf;
+      src.playbackRate.value = 1.05*p + Math.random()*0.12;   // never quite the same flap twice
+      const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 1.3;
+      bp.frequency.setValueAtTime(1600*p, t);
+      bp.frequency.exponentialRampToValueAtTime(430*p, t + 0.085);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.17, t + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0004, t + 0.11);
+      src.connect(bp); bp.connect(g); g.connect(master);
+      src.start(t); src.stop(t + 0.13);
+      const o = ac.createOscillator(), og = ac.createGain();   // the edge, arriving
+      o.type = "sine";
+      o.frequency.setValueAtTime(200*p, t);
+      o.frequency.exponentialRampToValueAtTime(92*p, t + 0.06);
+      og.gain.setValueAtTime(0.0001, t);
+      og.gain.exponentialRampToValueAtTime(0.07, t + 0.005);
+      og.gain.exponentialRampToValueAtTime(0.0004, t + 0.09);
+      o.connect(og); og.connect(master);
+      o.start(t); o.stop(t + 0.1);
+      // ...and a NOTE, so forty of these in a row are a phrase rather than forty noises. A
+      // minor pentatonic climbed across the whole unfolding: every degree of it is consonant
+      // with every other, so the tune cannot land on a sour interval however the levels fall.
+      // Rung, not struck — a soft attack and a tail into the reverb send.
+      const deg = FLAP_SCALE[Math.min(FLAP_SCALE.length - 1,
+                              Math.round((k || 0) * (FLAP_SCALE.length - 1)))];
+      const m = ac.createOscillator(), mg = ac.createGain();
+      m.type = "triangle";
+      m.frequency.setValueAtTime(BASE * Math.pow(2, deg/12), t);
+      mg.gain.setValueAtTime(0.0001, t);
+      mg.gain.exponentialRampToValueAtTime(0.085, t + 0.018);
+      mg.gain.exponentialRampToValueAtTime(0.0004, t + 0.34);
+      m.connect(mg); mg.connect(master); mg.connect(sendBus);
+      m.start(t); m.stop(t + 0.36);
+    }
     // Intro: a bright materialise chord when the character forms.
     function introFlash() {
       if (muted || !ac || ac.state !== "running") return;
@@ -2012,7 +2088,12 @@
     // beat  seconds per beat        pad/bass/lead  levels     lift  octaves above the root
     const AMBIENCE = {
       title: { beat:0.46, pad:0.10,  bass:0.085, lead:0.075, wave:"triangle", lift:12, grow:0 },
-      intro: { beat:0.78, pad:0.085, bass:0.060, lead:0.055, wave:"sine",     lift:12, grow:2 },
+      // The cinematic gets the BED and nothing over it: the pad, and the bass it earns two bars
+      // in. `lead:0` drops the MOTIF line that used to come in on top — a tune playing through
+      // the creation of the universe puts the whole thing at the level of a menu screen, and it
+      // was competing with the flaps and the tile notes, which are the sounds that are actually
+      // telling you what is happening.
+      intro: { beat:0.78, pad:0.085, bass:0.060, lead:0,     wave:"sine",     lift:12, grow:2 },
       pause: { beat:0.62, pad:0.085, bass:0.075, lead:0.055, wave:"sine",     lift:12, grow:0 },
     };
     let ambTimer = null, ambAt = 0, ambBar = 0, ambMode = null, ambSince = 0;
@@ -2031,7 +2112,7 @@
           voice(t, semi - 12, "sine", bar*1.05, M.pad, bar*0.35, true);
         if (age >= M.grow)                                     // the cinematic earns its bass
           voice(t, chord.root - 24, "triangle", bar*0.9, M.bass, 0.05, false);
-        if (age >= M.grow*2)                                   // ...and then its melody
+        if (M.lead > 0 && age >= M.grow*2)                     // ...and then its melody, if it has one
           for (let k = 0; k < 4; k++)
             voice(t + M.beat*k, MOTIF[(ambBar*4 + k) % MOTIF.length] + chord.root + M.lift,
                   M.wave, M.beat*1.7, M.lead, 0.03, true, true);
@@ -2309,7 +2390,7 @@
              slide, clack, tap, tapBig, power, warp, vortex, crunch, growl,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck,
              ambient,
-             swish, introGather, introFlash, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
+             swish, introGather, introFlash, rumble, flap, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
              levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, setMusicGate,
              musicNow: () => ({ ...MU }) };
   })();
@@ -2335,7 +2416,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v8.7";                    // shown on the title & pause screens
+  const VERSION = "v8.8";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -2986,7 +3067,7 @@
         rr2(g, -s*0.030, -s*0.034, s*0.080, s*0.048, s*0.012); g.fill();
         g.fillStyle = "#3a4256";
         for (let k=0;k<3;k++) g.fillRect(-s*0.022 + k*s*0.030, s*0.014, s*0.012, s*0.016); } },
-    { id:"platform", name:"Platforms", cost:25, col:"#ff8fc8",
+    { id:"platform", name:"Rails", cost:25, col:"#ff8fc8",
       draw(g,s,col){ g.fillStyle = col;
         rr2(g, -s*0.028, -s*0.036, s*0.074, s*0.040, s*0.012); g.fill();
         g.fillStyle = "#f2f4ff"; rr2(g, -s*0.036, s*0.004, s*0.092, s*0.030, s*0.010); g.fill(); } },
@@ -3584,7 +3665,7 @@
     hunter: { name:"The Hunter", desc:"A malevolent tile entity. It is coming for you. Keep moving." },
     slider: { name:"Sliding Platform", desc:"The wall only opens where this platform sits. Drag it along its rail to line up the crossing, then build across it." },
     block:  { name:"Movable Block", desc:"A heavy block plugging the tunnel. Drag it aside along its rail to clear the way, then build through." },
-    platform:{ name:"Fixed Platform", desc:"Track already bolted to the level. You can't build on it — but run your path into one of its open ends and the runner rides across for FREE, no tile spent. It only connects where the rails are drawn." },
+    platform:{ name:"Fixed Rail", desc:"Rail already bolted to the level. You can't build on it — but run your path into one of its open ends and the runner rides across for FREE, no tile spent. It only connects at its drawn ends." },
     mdoor:  { name:"Sliding Door", desc:"Slide it open by dragging BOTH panels apart — push each side away from the centre." },
     // ---- tutorial prompts for the hand-built levels ----
     recycle:  { name:"Drag Tiles", desc:"The runner never stops! Drag cleared tiles to lay track ahead." },
@@ -4060,10 +4141,12 @@
     const occ = new Set(_occStatic);                          // cheap copy of the cached static layer
     for (const d of state.doors) if (!d.open) occ.add(key(d.c, d.r));                 // closed colored doors
     for (const grp of state.gateGroups) if (grp.openT < 0.85) occ.add(grp.doorKey);  // sliding door still closed
-    // Only the monsters that hold ground block placement. The ones that slide along a rail,
-    // and the trap you are meant to run through, you build across and time instead.
-    for (const h of state.hazards)
-      if (h.kind === "monster" ? monKind(h).blocks : false) occ.add(key(h.cc, h.cr));
+    // Monsters do NOT block placement — any of them, ever. You can always lay a tile under one
+    // and time your run through it. The patrols and hunters used to hold their square, which
+    // made a moving thing behave like a wall for as long as it happened to stand there: the
+    // same drop was legal a second earlier and a second later, so a refusal read as the game
+    // being broken rather than as the monster being there. Timing is the puzzle; the tile goes
+    // down and it is on you to arrive when the square is clear.
     for (const sl of (state.sliders||[])) {                    // slider band = wall, except the platform's cell
       const cur = Math.round(sl.pos);
       if (sl.axis === "h") { for (let c=sl.lo;c<=sl.hi;c++) if (c!==cur) occ.add(key(c, sl.r)); }
@@ -5142,6 +5225,35 @@
     state && talLive("ankh") && talUnlocked.has("ankh") && !state.power.used.has("ankh");
   const WALL_BOUNCE = 0.55;          // of his running speed, sent back the way he came
   const WALL_POP    = 0.62;          // upward kick out of the impact, same units
+  // ---------- caught ------------------------------------------------------
+  // A monster reaching him used to drop him down the hole on the same frame it touched him,
+  // which read as the runner tripping over nothing: the thing that killed you had already
+  // rowed on by the time you looked. Now the whole board stops dead on the frame of contact,
+  // the bite lands, and that picture is held for a beat before the fall starts.
+  //
+  // The freeze is total on purpose — the hazards stop mid-thrust and the animation clock stops
+  // with them, so idle bobs and jaws hold too. A still frame is what makes the cause legible:
+  // you get long enough to see WHAT hit you and from which side.
+  const CRUNCH_MS = 420;              // how long the board holds that picture
+  function startCrunch() {
+    const s = state;
+    if (s.status !== "play") return;  // already dying, or not running: nothing to catch
+    s.status = "crunched";
+    s.crunch = { t: 0, ts: lastTs };  // ts freezes the DRAWN clock at this instant
+    Sound.crunch(1);                  // the bite: splintering under the weight of two halves
+  }
+  function tickCrunch(dt) {
+    const s = state; if (!s.crunch) return;
+    s.crunch.t += dt;
+    if (s.crunch.t < CRUNCH_MS) return;
+    s.crunch = null;
+    // Hand back exactly the state startFall expects to end — including the Ankh, which is
+    // spent in there. Held over the pause, the charm now brings him back after the crunch
+    // rather than instead of it, so you see what nearly had him.
+    s.status = "play";
+    startFall();
+  }
+
   function startFall(offWall) {
     // Every way a run ends comes through here, which is exactly why the Ankh is spent here and
     // not in each of them. Nothing else about the fall has happened yet — no sound, no status
@@ -6366,16 +6478,16 @@
   //          nothing at all (the trap)
   //   split  "h" halves part up and down; "v" they part left and right. Set to the axis it
   //          travels along, so it always bites in the direction it is going.
-  //   blocks whether you may lay track through its cell. The movers you can build across and
-  //          time your run through; only the patrols hold ground.
+  // No monster blocks placement, so there is no flag for it: you may lay track through any of
+  // their cells and time the run instead.
   const MONSTER_KINDS = {
-    hrail:  { move:"rail",   split:"h", body:"#b24dff", blocks:false },   // was a horizontal saw
-    vrail:  { move:"rail",   split:"v", body:"#4dc9ff", blocks:false },   // was a vertical saw
-    patrol: { move:"path",   split:"h", body:"#b24dff", blocks:true  },   // the waypoint walker
+    hrail:  { move:"rail",   split:"h", body:"#b24dff" },                 // was a horizontal saw
+    vrail:  { move:"rail",   split:"v", body:"#4dc9ff" },                 // was a vertical saw
+    patrol: { move:"path",   split:"h", body:"#b24dff" },                 // the waypoint walker
     // Round and round a ring — and it turns corners, so oars on two faces would be the wrong
     // two half the time. `banks:"all"` puts spikes on every face: the pair perpendicular to
     // travel row, the other pair simply bristle in and out with the stroke.
-    square: { move:"path", look:"rail", banks:"all", split:"h", body:"#ff9b3d", blocks:true },
+    square: { move:"path", look:"rail", banks:"all", split:"h", body:"#ff9b3d" },
     // Hunts him down, but SWIMS like the rail pair: `look:"rail"` draws it with
     // banks of oars instead of jaws, and its banks turn with it — whichever way it is heading,
     // they sit on the two sides perpendicular to that.
@@ -6383,16 +6495,14 @@
     // only colour on it in its eyes. `eye` overrides the family rule that a face is drawn in
     // its owner's own colour — which on this one would be black eyes on a black panel.
     hunter: { move:"hunt", look:"rail", banks:"all", split:"h",
-              body:"#100f18", eye:"#ff2d2d", blocks:true },
+              body:"#100f18", eye:"#ff2d2d" },
     // Hunts him exactly as the Hunter does — same chase, same claim on a square — but you only
     // see it on the DRIVE. Between thrusts it is not there, and it is just as lethal while it
     // is gone: you cannot watch it, so you have to hold where it was in your head. `ghost` is
     // read at draw time only; nothing about how it moves or what it touches changes.
-    // It does NOT block placement: a thing you cannot see quietly refusing your tile would
-    // read as the game being broken rather than as the monster being there.
     stealth: { move:"hunt", look:"rail", banks:"all", split:"h",
-               body:"#cfd8ff", eye:"#6f7bd6", blocks:false, ghost:true },
-    trap:   { move:"trap",   split:"h", body:"#ff5c5c", blocks:false,     // sits still and waits
+               body:"#cfd8ff", eye:"#6f7bd6", ghost:true },
+    trap:   { move:"trap",   split:"h", body:"#ff5c5c",                   // sits still and waits
               gap: 1.30 },                                               // ...yawning a tile wide
   };
   // It was the "wanderer" until it learned to hunt. Old level data still says so.
@@ -9098,8 +9208,9 @@
       else if (state.status === "intro") tickIntro(dt);
       else if (state.status === "cue") tickCue(dt);      // assembled, waiting for the downbeat
       else if (state.status === "squash") tickSquash(dt);
-      update(dt);
-      updateHazards(dt);
+      else if (state.status === "crunched") tickCrunch(dt);
+      update(dt);                          // returns early unless he is running, so he is already still
+      if (state.status !== "crunched") updateHazards(dt);   // ...and nothing else moves either
       tickLover(dt);
       tickEaten(dt);
       tickCeremony(dt);
@@ -9116,7 +9227,7 @@
       tickPower(dt);
     }
     updateCamera(dt);
-    draw(ts);
+    draw(state.crunch ? state.crunch.ts : ts);   // a caught board is a still frame, bobs and all
     if (paused) drawPausedOverlay();
     updatePauseBtn();
     updatePowerBtn();
@@ -9381,13 +9492,32 @@
       const runCX = rp.x/cell, runCY = rp.y/cell;                   // runner centre in cell units
       let struck = false, prox = 0;
       const shielded = powerActive("star");                        // the Star: hazards can't touch him
+      // Contact is BODY against BODY, at the positions the two are actually DRAWN — the nearest
+      // point of the monster's square against the runner, exactly as the Hammer measures its
+      // radius. It used to ask only whether the two shared a cell, which is far coarser than it
+      // sounds: a monster mid-thrust rounds its cell while its body straddles the boundary, so
+      // a runner who has just crossed into that cell dies to something still most of a tile
+      // away — and, the other way about, walks clean through one whose body he is visibly
+      // overlapping from the cell next door. Both were rare while monsters held their square
+      // and you built around them. Now that track goes down under them, he crosses their cells
+      // constantly and every phantom hit shows.
+      const mh = cell * MONSTER.size / 2;                        // monster half-extent, as drawn
+      const rr = cell * Math.max(RUNNER.bodyW, RUNNER.bodyH) / 2; // and the runner's own body
       for (const h of s.hazards) {
         // A trap held wide open is a doorway, not a hazard — that is the whole point of it.
-        // Everything else on his cell is fatal on contact.
         const safe = h.kind === "monster" && monKind(h).move === "trap" && !trapPhase(h.trapT||0).lethal;
-        if (h.cc === rcx && h.cr === rcy && !shielded && !safe) struck = true;
+        if (shielded || safe) continue;
+        let hit;
+        if (h.wx != null && h.wy != null) {
+          const nx = Math.max(h.wx - mh, Math.min(rp.x, h.wx + mh));
+          const ny = Math.max(h.wy - mh, Math.min(rp.y, h.wy + mh));
+          hit = Math.hypot(nx - rp.x, ny - rp.y) <= rr;
+        } else {
+          hit = h.cc === rcx && h.cr === rcy;   // saws, and anything else with no drawn centre
+        }
+        if (hit) struck = true;
       }
-      if (struck) startFall();                                      // struck — the runner goes down
+      if (struck) startCrunch();                    // struck — the board stops, then he goes down
     }
   }
   // How far the runner is from a hazard, in cells — Infinity when he is not running, so
@@ -10454,31 +10584,42 @@
   // Every beat is a timestamp in ms so the whole thing retimes by reading down this one
   // table; nothing below hard-codes a duration.
   const CINE = {
-    line1:  [  400,  1100,  2500,  3050],   // AT FIRST THERE WAS NOTHING...
-    born:   2950,                           // ...and then it is there, on a flash
-    line2:  [ 3150,  3700,  6000,  6550],   // THEN THE SACRED TILOID CAME INTO BEING
-    spin:   [ 2950,  7600],                 // it turns, and swells toward a sphere and back
-    line3:  [ 6700,  7200,  9400,  9950],   // THE SACRED TILOID UNFOLDED
-    unfold: [ 7400,  9200],                 // six faces peel off the solid and lie flat
-    grow:   [ 9200, 13400],                 // ...and bud outward until the cloud is whole
-    line4:  [13500, 14000, 16000, 16550],   // AND THE TILEVERSE WAS CREATED
-    line5:  [16700, 17200, 18900, 19450],   // AND INTO THE TILEVERSE, A RUNNER WAS BORN.
-    line6:  [19450, 19950, 21700, 22250],   // WITH ONE SACRED PURPOSE...
-    dive:   [21300, 22250],                 // the camera falls into level one
-    fall:   [22250, 22950],                 // he drops into it
-    plinth: 22950,                          // and the tile arrives under his feet
-    line7:  [23600, 24100, 26000, 26550],   // TO RUN.
-    run:    23900,
-    fade:   [26300, 27300],
-    end:    27600
+    line1:  [  400,  1100,  2500,  3050],   // AT FIRST, THERE WAS NOTHING.
+    seed:   [ 3100,  5600],                 // a square shoulders its way in, shaking
+    born:   5600,                           // ...and is the Tiloid, on a flash
+    line2:  [ 5750,  6300,  8300,  8850],   // UNTIL THE SACRED TILOID CAME INTO THE VOID.
+    spin:   [ 5600, 10250],                 // it turns, and swells toward a sphere and back
+    line3:  [ 9000,  9500, 11300, 11850],   // IT UNFOLDED.
+    unfold: [ 9700, 11500],                 // six faces peel off the solid and lie flat
+    grow:   [11500, 15700],                 // ...and bud outward until the cloud is whole
+    line4:  [15800, 16300, 18300, 18850],   // AND THE TILEVERSE WAS CREATED.
+    // Three moments, not two: the camera first CENTRES on level one at the cloud's own scale,
+    // and only then expands into it. Doing both at once swings the tile across the frame while
+    // it grows, so it is off in a corner for most of the move and arrives rather than being
+    // approached. Pan, then push in.
+    dive:   [19000, 20050, 21800],          // begin the pan | begin the zoom | inside it
+    pixels: [20050, 22300],                 // the quilt subdivides with the ZOOM, not the pan
+    line5:  [22100, 22600, 24400, 24950],   // ALGORITHMIC EMERGENCE GAVE RISE TO A RUNNER
+    gather: [22300, 23100],                 // every one of those pixels rushes together into him
+    fall:   [23100, 23800],                 // and he drops out of the place he was made
+    plinth: 23800,                          // ...onto a tile that is suddenly under his feet
+    line6:  [25100, 25600, 27400, 27950],   // A BEING WITH ONE SACRED PURPOSE...
+    line7:  [28100, 28600, 33400, 33950],   // TO RUN.
+    run:    28400,                          // track lays itself ahead and he goes
+    // At 0.8 tiles a second, and on the winding path's average of two thirds of a column per
+    // tile, clearing the frame takes him between 4.7s (a narrow phone) and 6.3s (a wide one).
+    // The fade waits for the first of those and catches the last mid-stride, which is the right
+    // way round: better to fade on a runner still going than to sit on an empty picture.
+    fade:   [34000, 35000],
+    end:    35300
   };
   const CINE_LINES = {
-    line1: "AT FIRST THERE WAS NOTHING...",
-    line2: "THEN THE SACRED TILOID CAME INTO BEING",
-    line3: "THE SACRED TILOID UNFOLDED",
-    line4: "AND THE TILEVERSE WAS CREATED",
-    line5: "AND INTO THE TILEVERSE, A RUNNER WAS BORN.",
-    line6: "WITH ONE SACRED PURPOSE...",
+    line1: "AT FIRST, THERE WAS NOTHING.",
+    line2: "UNTIL THE SACRED TILOID CAME INTO THE VOID.",
+    line3: "IT UNFOLDED.",
+    line4: "AND THE TILEVERSE WAS CREATED.",
+    line5: "ALGORITHMIC EMERGENCE GAVE RISE TO A RUNNER",
+    line6: "A BEING WITH ONE SACRED PURPOSE...",
     line7: "TO RUN.",
   };
   // The house card, ahead of everything. It buys its time by OFFSETTING the story rather than
@@ -10491,27 +10632,69 @@
   // rather than throwing the whole thing away — someone who has seen the Tiloid a dozen times
   // can still want to watch the Tileverse build. Taking a tap past the last one ends it.
   //
-  // The chapters are where the WORDS change, because that is what reads as a chapter, each
-  // rewound a little so the beat has its run-up rather than starting mid-sentence.
+  // The story has ten beats; a tap stops at seven of them. Three are deliberately NOT landing
+  // places — the square rumbling in (3), the unfold (5) and the dive into level one (7). Each
+  // of those is the PAYOFF of the line before it rather than a chapter of its own, so a tap
+  // ought to carry you over it to the next thing that is said, not strand you at the top of an
+  // animation you have just chosen to hurry past. They all still play in full when the show
+  // runs of its own accord.
   const CINE_STEPS = [
-    0,                                    // BIG MAN LITTLE presents
-    CINE_LEAD,                            // AT FIRST THERE WAS NOTHING
-    CINE_LEAD + CINE.born   - 320,        // THEN THE SACRED TILOID CAME INTO BEING
-    CINE_LEAD + CINE.line3[0] - 200,      // THE SACRED TILOID UNFOLDED
-    CINE_LEAD + CINE.line4[0] - 200,      // AND THE TILEVERSE WAS CREATED
-    CINE_LEAD + CINE.line5[0] - 200,      // AND INTO THE TILEVERSE, A RUNNER WAS BORN.
-    CINE_LEAD + CINE.line6[0] - 200,      // WITH ONE SACRED PURPOSE...
-    CINE_LEAD + CINE.fall[0]  - 500,      // ...and he drops into it
-    CINE_LEAD + CINE.line7[0] - 400,      // TO RUN.
+    0,                                    //  1. BIG MAN LITTLE presents
+    CINE_LEAD,                            //  2. AT FIRST, THERE WAS NOTHING.
+                                          //  3. (the square rumbles in — played, never stopped at)
+    CINE_LEAD + CINE.born     - 320,      //  4. UNTIL THE SACRED TILOID CAME INTO THE VOID.
+                                          //  5. (IT UNFOLDED — played, never stopped at)
+    CINE_LEAD + CINE.line4[0] - 200,      //  6. AND THE TILEVERSE WAS CREATED.
+                                          //  7. (the dive into level one — played, never stopped at)
+    CINE_LEAD + CINE.line5[0] - 300,      //  8. ALGORITHMIC EMERGENCE GAVE RISE TO A RUNNER
+    CINE_LEAD + CINE.line6[0] - 200,      //  9. A BEING WITH ONE SACRED PURPOSE...
+    CINE_LEAD + CINE.line7[0] - 400,      // 10. TO RUN.
   ];
-  const CINE_RUN_SPD = 0.0008;      // tiles per ms once he sets off (~the game's own pace)
+  const CINE_RUN_SPD = 0.0008;      // tiles per ms once he sets off — 0.8 tiles a second
+  const CINE_LAY     = 190;         // ms between the two tiles that arrive to start him off
+  // Where along his first tile he is standing when he sets off. A tile is two background squares
+  // wide, so its centre is a seam and the nearest square centre is a quarter of a tile back —
+  // see cineFinalBox. The run picks up from exactly there.
+  const CINE_RUN_U0  = 0.25;
+  // The size he is, and the size the tiles under him are, from the moment he forms. The dive
+  // ends with level one filling the screen, so the tile he was made out of is far too big to
+  // stand on; the world comes back to human scale as he arrives in it — and human scale here is
+  // literally the game's own: `cell`, the very tile he will be running on a second later, which
+  // is what the title screen's own auto-run uses too. Nothing about the handover from the story
+  // to the game is a change of scale.
+  //
+  // It also makes the backdrop exactly right for free. Half of `cell` is the measure the level
+  // quilt is pieced to — see drawPatchwork — so the squares behind him in the cinematic are the
+  // same size as the squares behind him in play.
+  const CINE_RUN_TILE = () => cell || 90;
+  // What the square before the Tiloid flickers through. Not level one's palette: this is
+  // BEFORE the Tileverse has any colours of its own, so it runs the raw primaries and black,
+  // with the first level's greens folded in at the end as the only hint of what it is going to
+  // settle into being. Black is in there on purpose — a square that blinks out entirely for a
+  // frame is far more unstable-looking than one that merely changes hue.
+  const CINE_SEED_COLS = [
+    "#ff2d2d", "#2dff5a", "#2d6bff", "#ffe02d", "#00e5ff", "#ff2df0", "#ffffff",
+    "#000000", "#ff2d2d", "#000000", "#2d6bff", "#000000", "#ffe02d", "#2dff5a",
+  ].concat(genTheme(hashSeed("1")).colors);
   const CINE_POP     = 340;         // how long one tile takes to bud out of its parent
   const CINE_PERSP   = 4.5;         // camera distance from the solid, in cells
   const cineC01    = v => v < 0 ? 0 : v > 1 ? 1 : v;
   const cineMix    = (a, b, k) => a + (b - a)*k;
   const cineSmooth = k => k*k*(3 - 2*k);
 
-  let cineActive = false, cineNext = "level", cineT = 0, cineFired = 0, cineGrew = 0;
+  let cineActive = false, cineNext = "level", cineT = 0, cineFired = 0;
+  // Every moment at which some square of the world comes down flat — the six faces of the
+  // Tiloid and every tile that buds off them afterwards — in one sorted list, and how far
+  // through it we are. One list rather than two, because they are the same event.
+  let cineFlaps = null, cineFlapI = 0;
+  // ...and every moment a TRACK tile arrives under or ahead of the runner: the one that catches
+  // him, the two that start him off, and each one the queue flies to the front thereafter.
+  let cineLays = null, cineLayI = 0;
+  // Story time of the last tap-to-skip, or null while the show is running of its own accord.
+  // A line whose fade-in the tap landed in front of is drawn at full strength instead of
+  // easing up: skipping AHEAD to a chapter and then watching its words wash in is the tap
+  // failing to do the thing it was pressed for.
+  let cineSnapAt = null;
   let cineCloud = null, cineNet = null;
 
   // The Tileverse cloud, plus the order it grows in. Breadth-first out from the six faces, so
@@ -10544,6 +10727,33 @@
     C.parent = parent; C.rank = rank; C.isSeed = isSeed; C.seeds = seeds.length;
   }
 
+  // The box level one ends the dive as: square, big enough to cover the screen, a whole number
+  // of half-tiles on a side, and seated so its own grid IS the grid the runner's tiles sit on.
+  // Everything about the end of the dive falls out of this one rectangle.
+  function cineFinalBox(){
+    const s0 = CINE_RUN_TILE(), h2 = s0/2;
+    // An EVEN number of half-tiles, big enough that a centred square of that side covers the
+    // screen. Even matters: centred, the box's left edge sits h2*(n-2)/2 from the runner's own
+    // grid line, which is a whole number of squares only when n is. That one condition buys
+    // horizontal alignment without moving the camera off the tile — and the camera has to stay
+    // on the tile, or it drifts across the frame as it grows instead of opening out from where
+    // it already is.
+    const n = 2*Math.ceil(Math.max(viewW, viewH)/(2*h2));
+    const size = n*h2, x = (viewW - size)/2, y = (viewH - size)/2;
+    // Vertically there is no such luck, so the RUNNER'S GROUND moves to meet the quilt instead:
+    // the nearest line of the box's own grid to where the ground wanted to be. Worst case that
+    // is half a background square — about a thirtieth of the screen — and in exchange the tiles
+    // he runs on sit exactly two background squares deep, everywhere, for nothing.
+    const want = viewH*0.66 - s0/2;
+    const gy = y + Math.round((want - y)/h2)*h2;
+    // He forms in the dead CENTRE of a background square, not on the seam between two. The
+    // tile's own middle is a seam — a tile is exactly two squares wide — so the nearest centre
+    // is a quarter of a tile back from it, and that is where he lands: toward the BACK of the
+    // tile he arrives on, with the rest of it ahead of him to run into.
+    const spawnX = viewW/2 - s0/4;
+    const spawnY = y + (Math.floor((viewH*0.34 - y)/h2) + 0.5)*h2;
+    return { x, y, n, size, q: h2, groundY: gy + s0/2, spawnX, spawnY };
+  }
   // Where the camera is, as a tile size and the screen point cloud-cell (0,0)'s corner sits at.
   // Three framings, and the whole shot is a walk between them: the six faces filling the frame,
   // the finished cloud fitting it, and level one filling it again on the dive.
@@ -10558,8 +10768,16 @@
                 fc: (sc0 + sc1 + 1)/2, fr: (sr0 + sr1 + 1)/2, ax: 0.5, ay: 0.52 };
     const B = { tile: Math.min(viewW*0.88/C.cols, viewH*0.60/C.rows),
                 fc: C.cols/2, fr: C.rows/2, ax: 0.5, ay: 0.52 };
-    const D = { tile: base*0.62, fc: C.cells[0].c + 0.5, fr: C.cells[0].r + 0.5,
-                ax: 0.5, ay: 0.60 };
+    // ...and level one, filling the screen outright — the dive is supposed to end INSIDE the
+    // tile, with its quilt as the whole picture and nothing else left to look at.
+    //
+    // Its final size is not a round fraction of the screen but a WHOLE NUMBER of half-tiles,
+    // seated on the runner's own grid. That is what lets the tile scale as one picture on the
+    // way in and still land with its squares at exactly half a runner tile, edge on edge —
+    // pick the size freely and the two can only be reconciled by re-cutting the quilt every
+    // frame, which is the stepping this is here to avoid.
+    const F = cineFinalBox();
+    const D = { tile: F.size, fc: C.cells[0].c + 0.5, fr: C.cells[0].r + 0.5, ax: 0.5, ay: 0.5 };
     // Tile size moves in log space: a zoom that halves and halves again reads as one steady
     // move, where a linear one lurches at the wide end and crawls at the tight end.
     const blend = (P, Q, k) => ({
@@ -10570,7 +10788,13 @@
     if      (t <= CINE.grow[0]) f = A;
     else if (t <  CINE.grow[1]) f = blend(A, B, cineSmooth((t - CINE.grow[0])/(CINE.grow[1] - CINE.grow[0])));
     else if (t <= CINE.dive[0]) f = B;
-    else if (t <  CINE.dive[1]) f = blend(B, D, cineSmooth((t - CINE.dive[0])/(CINE.dive[1] - CINE.dive[0])));
+    // ...the same framing as B, but looking at level one instead of at the middle of the cloud
+    else if (t <  CINE.dive[2]) {
+      const Bc = { tile: B.tile, fc: D.fc, fr: D.fr, ax: D.ax, ay: D.ay };
+      f = t < CINE.dive[1]
+        ? blend(B,  Bc, cineSmooth((t - CINE.dive[0])/(CINE.dive[1] - CINE.dive[0])))
+        : blend(Bc, D,  cineSmooth((t - CINE.dive[1])/(CINE.dive[2] - CINE.dive[1])));
+    }
     else f = D;
     return { tile: f.tile,
              ox: viewW*f.ax - f.fc*f.tile,
@@ -10598,6 +10822,130 @@
       if (shade > 0.002) { ctx.fillStyle = "rgba(0,0,0," + shade.toFixed(3) + ")"; ctx.fill(); }
     }
     ctx.restore();
+  }
+
+  // ---- the quilt, at any resolution, going anywhere -----------------------------------
+  // The Tileverse tile wears a LEVEL_SWATCH x LEVEL_SWATCH quilt. Diving into one, that grid
+  // keeps SUBDIVIDING: each coarse square breaks into finer ones which mostly keep their
+  // parent's colour, and the further in we go the more of them strike out on their own. So the
+  // tile does not merely get bigger, it keeps turning out to have been made of more colours
+  // than you could see — which is the point of the beat, and the reason there is anything for
+  // the runner to be made OUT of a moment later.
+  //
+  // `pull` then drags every one of those pixels toward a point, shrinking as it goes. At 0 it
+  // is the quilt; at 1 the whole tile has collected into a fist at (px, py).
+  // Painted over the rectangle (bx,by,bw,bh) as squares of side `q` on a grid ANCHORED at
+  // (ox,oy) — not as a subdivision of the rectangle. That distinction is the whole point: the
+  // grid's origin is the runner's own tile grid, so however the square size changes on the way
+  // in, the squares never stop lining up with the tiles he will run on. It ends at exactly half
+  // a tile, two background squares to a tile edge, which is the measure the game's own backdrop
+  // is pieced to.
+  //
+  function cineQuiltPixels(o){
+    const { bx, by, bw, bh, q, ox, oy, idx, tx, ty, tileS, mix, alpha, ts } = o;
+    if (alpha <= 0.004 || !(q > 0.4)) return;
+    // The LEVEL's own theme, not a palette borrowed from it — so what the tile resolves into
+    // as we go in is literally the ground level one is played on.
+    const T = genTheme(hashSeed(String(idx + 1))), cols = T.colors;
+    const K = LEVEL_SWATCH, over = 1;
+    const i1 = Math.floor((bx - ox)/q + 1e-6), i2 = Math.ceil((bx + bw - ox)/q - 1e-6);
+    const j1 = Math.floor((by - oy)/q + 1e-6), j2 = Math.ceil((by + bh - oy)/q - 1e-6);
+    ctx.save();
+    // Held to its own rectangle. Two things would otherwise chatter along the tile's edge as it
+    // grows: every square is painted a pixel oversized to kill the antialiased hairlines between
+    // them, so the outermost row hangs a pixel over the edge; and `bw/q` lands either side of a
+    // whole number by a float's breadth from one frame to the next, which adds and drops a whole
+    // sliver of squares beyond the edge. The epsilons above settle the second, the clip makes
+    // both moot.
+    ctx.beginPath(); ctx.rect(bx, by, bw, bh); ctx.clip();
+    ctx.globalAlpha = alpha;
+    for (let j = j1; j < j2; j++) for (let i = i1; i < i2; i++) {
+      const h = bgHash(i + idx*97, j + idx*131);
+      const x = ox + i*q, y = oy + j*q, w = q;
+      // Two readings of the same square, dissolved between as `mix` climbs. Far off it is the
+      // Tileverse's flat nine-patch, read off where the square falls WITHIN the tile; up close
+      // it is the level's real quilt — patchColor's 45° ping-pong down the palette, which is
+      // where the gradient STRIPES come from.
+      const pi = Math.min(K-1, Math.max(0, Math.floor((x - tx)/(tileS/K))));
+      const pj = Math.min(K-1, Math.max(0, Math.floor((y - ty)/(tileS/K))));
+      const fill = (mix > 0 && (h % 1000)/1000 < mix)
+                 ? patchColor(T, i, j)
+                 : cols[(pj*K + pi) % cols.length];
+      ctx.fillStyle = fill;
+      ctx.fillRect(x, y, w + over, w + over);
+      // ...and the same lightness jitter paintPatch gives every patch in play. Without it the
+      // stripes are too smooth to read as pieced from squares.
+      const jit = ((h >>> 11) % 7) - 3;
+      if (jit && mix > 0) {
+        ctx.globalAlpha = alpha * Math.abs(jit)*0.018 * mix;
+        ctx.fillStyle = jit > 0 ? "#ffffff" : "#000000";
+        ctx.fillRect(x, y, w + over, w + over);
+        ctx.globalAlpha = alpha;
+      }
+    }
+    // The glisten off the quilt, on the backdrop pass only, and on exactly the numbers the
+    // level uses: BG_GLINT_RATE of the squares ever catch the light, a pow-6 breath so each is
+    // dark a long time and blooms briefly, additively at BG_GLINT_A.
+    if (ts != null && mix > 0) {
+      ctx.globalCompositeOperation = "lighter";
+      for (let j = j1; j < j2; j++) for (let i = i1; i < i2; i++) {
+        const h = bgHash(i + 7, j + 13);
+        if ((h % 1000)/1000 >= BG_GLINT_RATE) continue;
+        const ph = ((h >>> 9) % 1000)/1000;
+        const k = 0.5 + 0.5*Math.sin(ts/BG_GLINT_MS*Math.PI*2 + ph*Math.PI*2);
+        const a = Math.pow(k, 6) * BG_GLINT_A * alpha * mix;
+        if (a < 0.004) continue;
+        ctx.globalAlpha = a;
+        ctx.fillStyle = "rgba(255,250,228,1)";
+        ctx.fillRect(ox + i*q, oy + j*q, q, q);    // abutting, never overlapping: this is additive
+      }
+    }
+    ctx.restore();
+  }
+
+  // ---- Conway, on the ground level one is made of --------------------------------------
+  // The runner is not assembled out of the tile so much as GROWN on it. The backdrop's own
+  // squares become a Life board, seeded as a soup and run fast; at the same time the world it
+  // is allowed to live in closes down to a single square where he will be standing. So the
+  // pattern boils, thins, retreats, and the last thing still alive is him.
+  //
+  // Stepped from the SEED every time the generation goes backwards, so scrubbing the cinematic
+  // lands on the same board the natural playback would have — a Life that carried its state
+  // forward only would show a different pattern depending on how you got there.
+  const CINE_LIFE_MS = 55;                       // one generation
+  let cineLife = null;
+  function cineLifeSeed(n){
+    const a = new Uint8Array(n*n);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++)
+      a[j*n + i] = (bgHash(i + 3, j + 11) % 100) < 38 ? 1 : 0;   // a soup, at the usual density
+    return a;
+  }
+  function cineLifeStep(a, n, rc, rr, rad){
+    const b = new Uint8Array(n*n);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      let c = 0;
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        if (!di && !dj) continue;
+        const x = i + di, y = j + dj;
+        if (x < 0 || y < 0 || x >= n || y >= n) continue;        // the board has edges, not a torus
+        c += a[y*n + x];
+      }
+      const alive = a[j*n + i];
+      let nx = alive ? (c === 2 || c === 3 ? 1 : 0) : (c === 3 ? 1 : 0);
+      // ...and outside the shrinking window nothing survives, whatever its neighbours say.
+      if (nx && Math.hypot(i + 0.5 - rc, j + 0.5 - rr) > rad) nx = 0;
+      b[j*n + i] = nx;
+    }
+    return b;
+  }
+  function cineLifeAt(gen, n, rc, rr, radAt){
+    if (!cineLife || cineLife.n !== n || cineLife.gen > gen)
+      cineLife = { n, gen: 0, a: cineLifeSeed(n) };
+    while (cineLife.gen < gen) {
+      cineLife.a = cineLifeStep(cineLife.a, n, rc, rr, radAt(cineLife.gen + 1));
+      cineLife.gen++;
+    }
+    return cineLife.a;
   }
 
   // ---- the Tiloid, as a real cube that really unfolds ---------------------------------
@@ -10757,7 +11105,12 @@
   // arrive too.
   function cineFoldFaces(t, V){
     const N = cineNet, span = CINE.unfold[1] - CINE.unfold[0];
-    const each = span / (N.maxDepth + 0.8);
+    // Each face waits for its parent to be most of the way down before starting its own hinge
+    // (the 0.85), and takes `each` to fall. Sized so the DEEPEST face finishes exactly at the
+    // end of the window: solve (maxDepth-1)*0.85*each + each = span. The old divisor left the
+    // last face flat at about three quarters of the window and a quarter of it as dead air —
+    // a visible hold between the cube finishing and the cloud starting to bud.
+    const each = span / (0.85*N.maxDepth + 0.15);
     const T = {}, out = [];
     for (const id of N.order) {
       const F = N.faces[id];
@@ -10792,17 +11145,66 @@
   }
 
   function startCine(next){
-    cineActive = true; cineNext = next || "level"; cineT = 0; cineFired = 0; cineGrew = 0;
+    cineActive = true; cineNext = next || "level"; cineT = 0; cineFired = 0;
+    cineSnapAt = null;                  // nothing has been skipped yet; the words may ease in
     cineCloud = cineBuildCloud();
     cineNet = cineCloud ? cineBuildNet(cineCloud) : null;
     if (cineNet) cineSeedGrowth(cineCloud, cineNet.seeds); else cineCloud = null;
+    cineFlaps = cineBuildFlaps(); cineFlapI = 0;
+    cineLays  = cineBuildLays();  cineLayI  = 0;
     markCineSeen();                     // whatever happens now, this is no longer a first launch
     const pf = document.getElementById("pauseFloat"); if (pf) pf.style.display = "none";
+    // Nothing from before is allowed to play under this. The backing track is CUT rather than
+    // faded — a bar of the Tileverse's tune bleeding into "AT FIRST, THERE WAS NOTHING" is the
+    // one thing that beat cannot survive — the warp drone is released in case a charm left it
+    // running, and the ambient bed is cleared before the intro's own is laid down. The music
+    // gate already stops NEW notes being scheduled while the show is up; it does nothing about
+    // the ones already in the air, which is what this is for.
+    Sound.levelMusicStop(true);
+    Sound.warp(false);
+    Sound.ambient(null);
     Sound.ambient("intro");
+  }
+  // The six faces flatten on the schedule cineFoldFaces hinges them on — the root is already
+  // down when the unfold begins, and each other lands `each` after its own start. Every tile
+  // after them lands CINE_POP after it starts budding.
+  function cineBuildFlaps(){
+    const out = [];
+    if (cineNet) {
+      const span = CINE.unfold[1] - CINE.unfold[0];
+      const each = span / (0.85*cineNet.maxDepth + 0.15);
+      for (const id of cineNet.order) {
+        const F = cineNet.faces[id];
+        out.push(F.parent < 0 ? CINE.unfold[0]
+                              : CINE.unfold[0] + (F.depth - 1)*each*0.85 + each);
+      }
+    }
+    if (cineCloud)
+      for (let i = 0; i < cineCloud.n; i++)
+        if (!cineCloud.isSeed[i]) out.push(cineGrowAt(i) + CINE_POP);
+    return out.sort((a, b) => a - b);
+  }
+  // Where a track tile lands. Same list the white flash is drawn from, so the sound and the
+  // flash are the same event rather than two things timed to look alike.
+  function cineBuildLays(){
+    const out = [CINE.plinth, CINE.run, CINE.run + CINE_LAY];
+    // ...and one per tile thereafter: the flight lands as he crosses onto each new tile. From
+    // TWO, not one — crossing onto his second tile lands nothing, because tile two was already
+    // standing there. That first crossing is silent, and the flash above is skipped with it.
+    for (let n = 2; ; n++) {
+      const at = CINE.run + (n - CINE_RUN_U0)/CINE_RUN_SPD;
+      if (at > CINE.fade[1]) break;
+      out.push(at);
+    }
+    return out.sort((a, b) => a - b);
   }
   function endCine(){
     if (!cineActive) return;
     cineActive = false;
+    // ...and it takes nothing with it either. Whatever the level or the menu starts next should
+    // begin on silence rather than over the tail of the story.
+    Sound.levelMusicStop(true);
+    Sound.warp(false);
     Sound.ambient(null);                                // the level's own arrangement takes over
     if (cineNext === "menu") openMenu("world");         // replayed from the menu — go back to it
     else loadLevel(levelIdx);                           // opening run — straight into the level
@@ -10811,8 +11213,11 @@
   // them goes in breadth-first order, so the growth reads as a wave rolling off the seed.
   function cineGrowAt(i){
     const C = cineCloud, spread = Math.max(1, C.n - C.seeds);
+    // The first tile out of the seeds starts at grow[0] itself, not one slot after it — the
+    // six faces land flat on that exact frame, so the seventh tile should already be swinging
+    // out of one of them. Anything later reads as the animation stopping to think.
     return CINE.grow[0] + (CINE.grow[1] - CINE.grow[0] - CINE_POP) *
-           ((C.rank[i] - C.seeds + 1) / spread);
+           ((C.rank[i] - C.seeds) / spread);
   }
   // Move the clock, and bring the one-shot state with it. Everything drawn is a function of
   // the clock and needs no help, but the BANGS are latches: skip four chapters without this
@@ -10820,6 +11225,7 @@
   function cineSeek(ms){
     cineT = ms;
     const t = cineT - CINE_LEAD;
+    cineSnapAt = t;                     // a jump, so whatever line lands here lands at once
     cineFired = 0;
     if (cineT >= CINE_CARD.in*0.6) cineFired |= 32;
     if (t >= CINE.born)      cineFired |= 1;
@@ -10827,10 +11233,12 @@
     if (t >= CINE.grow[1])   cineFired |= 4;
     if (t >= CINE.dive[0])   cineFired |= 8;
     if (t >= CINE.plinth)    cineFired |= 16;
-    cineGrew = 0;
-    if (cineCloud && t >= CINE.grow[0])
-      for (let i = 0; i < cineCloud.n; i++)
-        if (!cineCloud.isSeed[i] && t >= cineGrowAt(i)) cineGrew++;
+    if (t >= CINE.seed[0])   cineFired |= 64;
+    if (t >= CINE.gather[0]) cineFired |= 128;
+    cineFlapI = 0;
+    if (cineFlaps) while (cineFlapI < cineFlaps.length && cineFlaps[cineFlapI] <= t) cineFlapI++;
+    cineLayI = 0;
+    if (cineLays) while (cineLayI < cineLays.length && cineLays[cineLayI] <= t) cineLayI++;
   }
   // One tap, one chapter.
   function cineStep(){
@@ -10845,25 +11253,47 @@
     // one-shot bangs — drawCine runs every frame, so the sound cannot live in there
     const once = (bit, at, fn) => { if (!(cineFired & bit) && t >= at) { cineFired |= bit; try { fn(); } catch(_){} } };
     if (!(cineFired & 32) && cineT >= CINE_CARD.in*0.6) { cineFired |= 32; try { Sound.tap && Sound.tap(); } catch(_){} }
+    once(64, CINE.seed[0],   () => Sound.rumble && Sound.rumble(CINE.seed[1] - CINE.seed[0]));
     once(1,  CINE.born,      () => { Sound.introFlash && Sound.introFlash(); Sound.power && Sound.power(); });
+    once(128,CINE.gather[0], () => Sound.introGather && Sound.introGather());
     once(2,  CINE.unfold[0], () => Sound.swish && Sound.swish());
     once(4,  CINE.grow[1],   () => Sound.introFlash && Sound.introFlash());
     once(8,  CINE.dive[0],   () => Sound.warp && Sound.warp());
-    once(16, CINE.plinth,    () => { Sound.tapBig && Sound.tapBig(); Sound.introGather && Sound.introGather(); });
-    // ...and the growth, which is a hundred arrivals rather than one. Every third, or the
-    // whole beat is a single flat buzz.
-    if (cineCloud && t >= CINE.grow[0] && t <= CINE.grow[1] + CINE_POP) {
-      let up = 0;
-      for (let i = cineCloud.seeds; i < cineCloud.n; i++) if (t >= cineGrowAt(i)) up++;
-      if (up > cineGrew) {
-        if (Math.floor(up/3) > Math.floor(cineGrew/3) && Sound.tileLaid) { try { Sound.tileLaid(); } catch(_){} }
-        cineGrew = up;
+    once(16, CINE.plinth,    () => Sound.introFlash && Sound.introFlash());   // the tile's own note comes from cineLays
+    // ...and a flap for every square that comes down flat, faces and tiles alike. A long frame
+    // can leave several due at once; the first two speak and the rest are simply caught up on,
+    // because four of these stacked on one frame is a click, not four flaps.
+    // The game's own tile-laid note, on every tile that arrives or locks into place.
+    if (cineLays) {
+      let laid = 0;
+      while (cineLayI < cineLays.length && t >= cineLays[cineLayI]) {
+        if (laid < 2) { try { Sound.tileLaid && Sound.tileLaid(); } catch(_){} laid++; }
+        cineLayI++;
+      }
+    }
+    if (cineFlaps) {
+      let spoke = 0;
+      while (cineFlapI < cineFlaps.length && t >= cineFlaps[cineFlapI]) {
+        if (spoke < 2) {
+          const k = cineFlapI / Math.max(1, cineFlaps.length - 1);
+          try { Sound.flap && Sound.flap(k); } catch(_){}
+          spoke++;
+        }
+        cineFlapI++;
       }
     }
     if (t >= CINE.end) endCine();
   }
-  // 0 before a, ramps to 1 by b, holds to c, back to 0 by d
+  // 0 before a, ramps to 1 by b, holds to c, back to 0 by d — except that a line skipped TO
+  // has no ramp. `cineSnapAt` is where the last tap put us; if that landed in this line's run-up
+  // (steps are rewound a little so each beat keeps its approach), the words are simply on.
   function cineEnv(t, e){
+    // A chapter is entered a little BEFORE its line, so the picture keeps its run-up. Skipped
+    // to, that run-up would be a beat of blank screen followed by words washing in — so when
+    // the tap landed in this line's approach, the line starts at the tap instead, at full
+    // strength. It still fades out on its own schedule.
+    if (cineSnapAt != null && cineSnapAt >= e[0] - 700 && cineSnapAt <= e[1]
+        && t >= cineSnapAt && t < e[2]) return 1;
     if (t <= e[0] || t >= e[3]) return 0;
     if (t < e[1]) return (t - e[0]) / (e[1] - e[0]);
     if (t <= e[2]) return 1;
@@ -10929,12 +11359,66 @@
       const k = (t - b) / 260;
       if (k > 0 && k < 1) shake = Math.max(shake, (1 - k) * Math.min(viewW, viewH)*0.012);
     }
+    // ...and the approach shakes it too, harder and harder, all the way to the Tiloid. The
+    // whole frame goes, not just the square: something is arriving that the void cannot hold
+    // still for.
+    if (t >= CINE.seed[0] && t < CINE.born) {
+      const k = cineC01((t - CINE.seed[0]) / (CINE.born - CINE.seed[0]));
+      shake = Math.max(shake, k*k * Math.min(viewW, viewH)*0.010);
+    }
     ctx.save();
     if (shake) ctx.translate((Math.random()*2 - 1)*shake, (Math.random()*2 - 1)*shake);
 
+    // ---- the square, before it is anything -----------------------------------------------
+    // One tile of quilt, alone in the void, pulsing and juddering and swelling until it cannot
+    // stay a square any longer. It wears level one's colours because that is what it is about
+    // to become six of.
+    if (t >= CINE.seed[0] && t < CINE.born) {
+      const k = cineC01((t - CINE.seed[0]) / (CINE.born - CINE.seed[0]));
+      const base = Math.min(viewW, viewH);
+      // grows on an accelerating curve, so it creeps in and then rushes the last of the way
+      const sz = base * cineMix(0.045, 0.30, k*k);
+      const puls = 1 + 0.055*Math.sin(t/74) * (0.4 + k);      // breathing, and breathing harder
+      const amp = base*0.012*k*k;                             // its own judder, over the frame's
+      const w = sz*puls;
+      const jx = (Math.random()*2 - 1)*amp, jy = (Math.random()*2 - 1)*amp;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, k*4);
+      // a bloom under it that grows with the noise, so the void itself seems to strain
+      const gr = ctx.createRadialGradient(viewW/2 + jx, viewH*0.52 + jy, w*0.4,
+                                          viewW/2 + jx, viewH*0.52 + jy, w*1.9);
+      gr.addColorStop(0, "rgba(150,140,255," + (0.16*k).toFixed(3) + ")");
+      gr.addColorStop(1, "rgba(150,140,255,0)");
+      ctx.fillStyle = gr; ctx.fillRect(0, 0, viewW, viewH);
+      const sx0 = viewW/2 + jx - w/2, sy0 = viewH*0.52 + jy - w/2;
+      // Nine squares, each flicking through level one's palette on its own offset — the thing
+      // has not settled on what it is yet. The flicker QUICKENS as the moment approaches, from
+      // a change every 160ms to one every 40, so the square reads as winding itself up rather
+      // than as simply sitting there strobing.
+      {
+        const K = LEVEL_SWATCH, qq = w/K;
+        // Every square runs its own tempo and its own starting offset, so the nine never change
+        // together — one holds while its neighbour is three colours further on. That is what
+        // makes it read as something unstable rather than as a panel being redrawn.
+        const rate = cineMix(150, 34, k*k);
+        for (let j = 0; j < K; j++) for (let i = 0; i < K; i++) {
+          const hh = bgHash(i*13 + 1, j*7 + 5);
+          const own = rate * (0.55 + ((hh >>> 7) % 100)/100 * 1.1);
+          const n = Math.floor(t / own) + ((hh >>> 3) % CINE_SEED_COLS.length);
+          ctx.fillStyle = CINE_SEED_COLS[n % CINE_SEED_COLS.length];
+          ctx.fillRect(sx0 + i*qq, sy0 + j*qq, qq + 1, qq + 1);
+        }
+      }
+      ctx.restore();
+    }
+
     // ---- the Tiloid, and the cloud it unfolds into --------------------------------------
     // The quilt fades out under the dive, once there is a platform to stand on instead of it.
-    const cloudA = t < CINE.plinth ? 1 : 1 - cineC01((t - CINE.plinth)/380);
+    // The quilt hands over to the pixel field, which is the same tile at a finer grain — so the
+    // cloud stays up until the dive is inside level one, and what fades is the pixels, later,
+    // as they gather themselves into the runner.
+    const cloudA = t < CINE.pixels[0] ? 1
+                 : 1 - cineC01((t - CINE.pixels[0]) / Math.max(1, CINE.dive[2] - CINE.pixels[0]));
     if (t >= CINE.born && cloudA > 0.004) {
       const V = cineView(t, cam);
       const pop = cineC01((t - CINE.born)/420);
@@ -10947,7 +11431,15 @@
       // transparencies. Once they have lain down every z is 0 and the order stops mattering.
       const faces = cineFoldFaces(t, V);
       faces.sort((a, b) => b.z - a.z);
-      for (const f of faces) cinePanel(f.pts, f.idx, cloudA, f.shade);
+      // Level one is dropped from this pass the moment the dive takes it over. Both were
+      // painting the same square — the cloud through cinePanel, which STROKES each patch in its
+      // own colour at a full pixel wide, and the dive as flat rects — and two renderings of one
+      // edge, half a pixel apart and both moving, is a shimmer down the border. One owner.
+      const mine = t >= CINE.pixels[0] ? C.cells[0] : null;
+      for (const f of faces) {
+        if (mine && f.idx === 0) continue;
+        cinePanel(f.pts, f.idx, cloudA, f.shade);
+      }
       ctx.restore();
 
       // ...and every tile after the sixth, swinging out of the flat neighbour that made it on
@@ -10976,55 +11468,143 @@
       }
     }
 
-    // ---- the runner, and the tile that arrives to catch him ------------------------------
-    // The run reuses the cloud's own geometry: cell (0,0) of the track is laid exactly where
-    // level one's tile is sitting, at exactly its size, so the dive lands on it and the
-    // platform takes its place without anything moving.
-    if (t >= CINE.fall[0]) {
-      const running = t > CINE.run;
-      const u = running ? (t - CINE.run) * CINE_RUN_SPD : 0;
-      // He stays put and the world moves, exactly as it does in play. Running him across a
-      // fixed frame instead would walk him off the right-hand edge inside two tiles.
-      //
-      // The camera also eases back out the moment he sets off: level one filled the screen for
-      // the dive, and at that size the "trail of tiles" is one tile and a bit of the next.
-      const runK = cineSmooth(cineC01((t - CINE.run)/700));
-      const s = Math.exp(cineMix(Math.log(cam.tile),
-                                 Math.log(Math.min(viewW*0.30, viewH*0.17)), runK));
-      // At u = 0 and s = the dive's tile size this is EXACTLY the box level one just filled,
-      // so the quilt hands over to the platform without anything moving.
-      const cx = viewW/2, groundY = viewH*0.60;
-      const m = { s, x0: cx - s/2 - u*s, row0Y: groundY - s/2 };
-      const rowAt = c => ({ c, r: 0 });
+    // ---- inside level one: the quilt that keeps subdividing ------------------------------
+    // Painted over exactly the box the cloud drew level one in, at exactly its size, so the
+    // handover is invisible — and then it keeps finding finer colours to be until it fills the
+    // screen with them. When the gather starts, every pixel makes for the point he forms at.
+    if (t >= CINE.pixels[0]) {
+      const p0 = C.cells[0];
+      const box = cam.tile, bx = cam.ox + p0.c*cam.tile, by = cam.oy + p0.r*cam.tile;
+      const k = cineSmooth(cineC01((t - CINE.pixels[0]) / (CINE.pixels[1] - CINE.pixels[0])));
+      const F = cineFinalBox();
+      // The square COUNT is fixed for the whole zoom and the grid is pinned to the tile's own
+      // corner, so every square grows exactly as the tile grows: the edges sweep outward as one
+      // picture. Deriving the size from a target instead re-cuts the quilt on every frame, and
+      // a grid that re-quantises while it grows is the stepping this replaces. Because the box
+      // ends as a whole number of half-tiles seated on the runner's grid, holding the count
+      // still is also what lands the squares at exactly half a tile, edge on edge.
+      const q  = box / F.n;
+      const qC = box / LEVEL_SWATCH;                 // the nine-patch the cloud was wearing
+      const xf = cineSmooth(cineC01(k / 0.30));      // ...dissolved into the finer one up front
+      // The tile itself STAYS. Having dived all the way into level one, that quilt is simply
+      // where we are now — it is the ground the runner is made on, the floor he lands on and
+      // the country he runs off across — so it holds as the backdrop for the rest of the show
+      // rather than dissolving back into the void he came from. Once the dive is home it is the
+      // whole screen that is level one, so that is what gets painted.
+      const home = t >= CINE.dive[2];
+      const R = home ? { bx:0, by:0, bw:viewW, bh:viewH } : { bx, by, bw:box, bh:box };
+      const base = { ...R, ox:bx, oy:by, idx:0, tx:bx, ty:by, tileS:box, mix:k*0.85 };
+      if (xf < 1) cineQuiltPixels({ ...base, q:qC, mix:0, alpha:1 });
+      cineQuiltPixels({ ...base, q, alpha:xf, ts });
+      // ...and on that ground, life. The squares run Conway at speed while the world they may
+      // live in shrinks onto the spot he is about to occupy — a pattern boiling away to one
+      // cell, which is him. The board is the backdrop's own grid, so what is alive is always
+      // exactly one background square, lit rather than moved.
+      if (t >= CINE.gather[0] && home) {
+        const span = CINE.gather[1] - CINE.gather[0];
+        const gens = Math.max(1, Math.round(span / CINE_LIFE_MS));
+        const gen  = Math.min(gens, Math.floor((t - CINE.gather[0]) / CINE_LIFE_MS));
+        const rc = (F.spawnX - F.x)/F.q, rr = (F.spawnY - F.y)/F.q;   // whole squares, both
+        const radAt = g => cineMix(F.n*1.6, 0.9, cineSmooth(cineC01(g/gens)));
+        const cells = cineLifeAt(gen, F.n, rc, rr, radAt);
+        // Fading out behind him as he takes over: by the time he is solid the board is gone.
+        const a = 1 - cineC01((t - (CINE.gather[1] - 160)) / 420);
+        if (a > 0.004) {
+          ctx.save();
+          ctx.globalAlpha = a;
+          for (let j = 0; j < F.n; j++) for (let i = 0; i < F.n; i++) {
+            if (!cells[j*F.n + i]) continue;
+            // Living cells are the quilt's own colour lifted toward white, so the pattern reads
+            // as the ground waking up rather than as something laid on top of it.
+            ctx.fillStyle = "rgba(236,244,255,0.82)";
+            ctx.fillRect(F.x + i*F.q, F.y + j*F.q, F.q + 1, F.q + 1);
+          }
+          ctx.restore();
+        }
+      }
+    }
 
-      // the tile springs in under him at the moment he would otherwise keep falling
+    // ---- the runner, and the tile that arrives to catch him ------------------------------
+    // He is MADE, not delivered: the pixels of level one collect at a point and he is what is
+    // left standing there. Then he drops, and a tile arrives under him just in time — which is
+    // the game's whole promise, made once before it is ever asked of the player.
+    if (t >= CINE.gather[1] - 300) {
+      const s0 = CINE_RUN_TILE(), FB = cineFinalBox();
+      const cx = viewW/2, groundY = FB.groundY, spawnY = FB.spawnY;
+      // The run: two tiles arrive to start him off, and from there the TITLE SCREEN's own
+      // sequence takes over — the same winding auto-path, the same three-tile queue, the same
+      // tile lifting off the back and flying to the front. That cycle already keeps exactly two
+      // tiles ahead of him forever, so there is nothing to lay by hand once it has the wheel.
+      const running = t > CINE.run;
+      // He does not start the path at its beginning: he is already a quarter of the way across
+      // his first tile, because that is where he landed. Starting from zero would jerk him back
+      // to the tile's leading edge on the frame he sets off.
+      const u = running ? CINE_RUN_U0 + (t - CINE.run) * CINE_RUN_SPD : 0;
+      // Path cell (0,0) is laid exactly where the plinth is, so the tile he landed on IS the
+      // first tile of the path and the handover costs no movement at all.
+      const m = { s: s0, x0: cx - s0/2, row0Y: groundY - s0/2 };
+      const i0 = Math.floor(u), fr = u - i0;
+
+      // The tile he lands on, springing in under his feet at the last moment.
       if (t >= CINE.plinth && !running) {
         const k = cineC01((t - CINE.plinth)/420), e = easeOutBack(k);
         ctx.save();
         ctx.translate(cx, groundY); ctx.scale(e, e); ctx.translate(-cx, -groundY);
-        introDrawPlatform(rowAt(0), rowAt(-1), rowAt(1), m);
+        introDrawPlatform(introCellAt(0), introCellAt(-1), introCellAt(1), m);
         ctx.restore();
+        laidFlashAt(introCellAt(0), m, (t - CINE.plinth)/LAID_FLASH_MS);
       }
-      // ...and once he sets off, the same three-tile queue the player cycles: two on the
-      // ground and one arcing over his head from the back to the front. That is the game's
-      // whole premise, and it is what stops him running off the end into the void.
       if (running) {
-        const i0 = Math.floor(u), f = u - i0;
+        // Two, and only two, spring in ahead of him as he sets off — enough of a road to be
+        // going on with. Each is dropped once the queue has caught up to it, because from then
+        // on it is the queue's tile to draw.
+        for (const n2 of [1, 2]) {
+          if (n2 <= i0 + 1) continue;                       // the cycle owns it now
+          const at = CINE.run + (n2 - 1)*CINE_LAY;
+          const k = cineC01((t - at)/300);
+          if (k <= 0) continue;
+          const e = easeOutBack(k), C2 = introCenter(introCellAt(n2), m);
+          ctx.save();
+          ctx.translate(C2.x, C2.y); ctx.scale(e, e); ctx.translate(-C2.x, -C2.y);
+          introDrawPlatform(introCellAt(n2), introCellAt(n2-1), introCellAt(n2+1), m);
+          ctx.restore();
+          laidFlashAt(introCellAt(n2), m, (t - at)/LAID_FLASH_MS);
+        }
+        // ...and the title screen's cycle: two tiles under and ahead of him, and a third in the
+        // air on its way from the back of the queue to the front.
         for (let k = 0; k < TITLE_QUEUE - 1; k++)
-          introDrawPlatform(rowAt(i0 + k), rowAt(i0 + k - 1), rowAt(i0 + k + 1), m);
-        // i0+1 is the front of the queue: the tile that landed as this flight started.
-        laidFlashAt(rowAt(i0 + 1), m, f / (CINE_RUN_SPD * LAID_FLASH_MS));
-        dragPlatform(rowAt, i0 - 1, i0 - 1 + TITLE_QUEUE, f, m, ts);
+          introDrawPlatform(introCellAt(i0+k), introCellAt(i0+k-1), introCellAt(i0+k+1), m);
+        // The flight only starts once he has actually LEFT a tile. Run it from the first frame
+        // and it lifts a tile from index -1 — a tile behind him, on ground the story never laid,
+        // which gives away that this is a loop caught mid-cycle rather than a world beginning.
+        // From i0 = 1 the tile it carries is the one he has just stepped off, as it should be.
+        // The flight itself starts as soon as he has left a tile. Its FLASH does not: the flash
+        // marks the tile that landed when the current flight set off, and on the very first
+        // cycle no flight has set off yet — tile two was put there by hand a moment ago and
+        // flashed then. Firing it again is a tile lighting up for a delivery that never
+        // happened. From the second cycle on there is a real landing behind it.
+        if (i0 >= 2)
+          laidFlashAt(introCellAt(i0 + 1), m, fr / (CINE_RUN_SPD * LAID_FLASH_MS));
+        if (i0 >= 1)
+          dragPlatform(introCellAt, i0 - 1, i0 - 1 + TITLE_QUEUE, fr, m, ts);
       }
 
-      // He falls in from off the top of the frame, accelerating, and is solid by the time he
-      // lands — a character who fades up as he arrives reads as one who failed to.
+      // He forms at the gathering point, drops out of it, and then runs — moving across the
+      // frame himself rather than holding the middle while the world slides, because the beat
+      // ends with him LEAVING, and a runner pinned to the centre never leaves anything.
+      const formK = cineC01((t - (CINE.gather[1] - 300)) / 300);
       const fk = cineC01((t - CINE.fall[0]) / (CINE.fall[1] - CINE.fall[0]));
-      const rise = (1 - fk*fk) * viewH*0.85;
-      const rx = cx;
-      const phase = running ? u*Math.PI*3 : 0;
-      ctx.globalAlpha = Math.min(1, fk*3.5);
-      paintRunner(rx, groundY - rise, s, phase, 0, running, ts, 0);
+      ctx.globalAlpha = formK;
+      if (running) {
+        // On the path proper: he follows the winding surface, tilting through its rises, dips
+        // and corners, and his stride is driven by ground covered rather than by the clock.
+        const surf = introSurface(introCellAt(i0), introCellAt(i0-1), introCellAt(i0+1), m);
+        const pos = samplePolyline(surf, fr);
+        const pa = samplePolyline(surf, Math.max(0, fr-0.07)), pb = samplePolyline(surf, Math.min(1, fr+0.07));
+        paintRunner(pos.x, pos.y, s0, u*Math.PI*3, Math.atan2(pb.y-pa.y, pb.x-pa.x), true, ts, 0);
+      } else {
+        paintRunner(FB.spawnX, cineMix(spawnY, groundY, fk*fk), s0, 0, 0, false, ts, 0);
+      }
       ctx.globalAlpha = 1;
 
       // the landing, as a ring of dust rather than another white flash
@@ -11032,8 +11612,8 @@
       if (lk > 0 && lk < 1) {
         ctx.save();
         ctx.globalAlpha = (1 - lk)*0.5; ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = Math.max(1, s*0.03*(1 - lk));
-        ctx.beginPath(); ctx.ellipse(cx, groundY, s*(0.12 + lk*0.30), s*(0.04 + lk*0.11), 0, 0, Math.PI*2);
+        ctx.lineWidth = Math.max(1, s0*0.03*(1 - lk));
+        ctx.beginPath(); ctx.ellipse(FB.spawnX, groundY, s0*(0.12 + lk*0.30), s0*(0.04 + lk*0.11), 0, 0, Math.PI*2);
         ctx.stroke(); ctx.restore();
       }
     }
@@ -11351,7 +11931,32 @@
   // same proportions as the in-game runner (see drawRunner)
 
   loadLevel(0);
-  startTitle();
+
+  // ---------- the editor's TEST button ------------------------------------
+  // level-editor.html parks the level it wants played in localStorage and opens the game with
+  // ?test=<n>. What it hands over is the DRAFT — the board you are looking at in the editor —
+  // so a level can be tried without being saved to levels.js first. We skip the title, the
+  // creation myth and the Tileverse and drop straight onto it.
+  //
+  // Everything here fails soft: no flag, no payload, malformed JSON or a board with no walls
+  // array all fall through to the ordinary title screen. A stale bookmark can then never strand
+  // anyone on a blank level, and the flag is quietly dropped once used so a refresh doesn't
+  // replay a board the editor has since moved on from.
+  function bootTest(){
+    let q; try { q = new URLSearchParams(location.search); } catch(_) { return false; }
+    if (!q.has("test")) return false;
+    let L = null;
+    try { const raw = localStorage.getItem("tilerunner:test");
+          if (raw) L = JSON.parse(raw); } catch(_) {}
+    if (!L || !L.start || !Array.isArray(L.walls)) return false;
+    titleActive = false;
+    const pf = document.getElementById("pauseFloat"); if (pf) pf.style.display = "";
+    // The label is the theme seed, so passing the level's own number gets the palette the
+    // level would really wear rather than a demo one.
+    beginLevel(L, String(L.n || q.get("test") || 1));
+    return true;
+  }
+  if (!bootTest()) startTitle();
   requestAnimationFrame(frame);
 })();
 </script>
