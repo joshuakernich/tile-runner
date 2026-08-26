@@ -80,18 +80,31 @@
      the whole pattern sat 3px in from the top-left corner. A conic gradient makes the 2x2
      itself, so there is one layer, no offset, and the corner square starts exactly at the
      corner. background-origin is spelled out for the same reason. */
-  :root { --chq: 30px; }
+  :root { --chq: 15px; }
+  /* ...and the REPEAT is twice that, because one conic gradient paints a 2x2 of squares inside
+     its tile. background-size is the tile, not the square. Set to --chq it drew 7.5px squares
+     on a 15px grid — every square half the size it was supposed to be, and the pattern landing
+     on half-grid lines that nothing else in the interface uses. */
+  :root { --chq2: calc(var(--chq) * 2); }
   /* A Tileverse tile. It was the button height exactly, which made the cloud tidy and far too
      small to read as a place — each tile is a window onto a level's own colours and there was
      not enough of it to see. It went to twice that, which put a whole campaign well past the
      edges of the screen; this is the middle ground. Everything measured in tiles — the overshoot
-     around the cloud, the grid itself — follows it without being touched. */
-  :root { --tv-tile: var(--btn-h); }
+     around the cloud, the grid itself — follows it without being touched.
+     It was written as the button height, and rode it up when the button grew to two whole grid
+     squares. It is its own measure now: a Tileverse tile is a window onto a level, not a
+     control, and it does not want to change size every time a button does. */
+  :root { --tv-tile: 45px; }
   /* Every button in the game is this tall, and so is every square of the Tileverse. It is a
      min-height rather than a padding sum so that WHAT IS IN a button — text, an arrow chip, a
      coin icon — cannot change how tall it comes out: the pause menu's RESUME used to measure
-     46 against its neighbours' 45 purely because it carries an 18px canvas. */
-  :root { --btn-h: 45px; }
+     46 against its neighbours' 45 purely because it carries an 18px canvas.
+     It is a WHOLE NUMBER OF GRID SQUARES, and written as one. It was 45px against a 30px
+     chequer, so the pattern cut every button off at one and a half squares and the half never
+     landed the same way twice as the button's own width changed. THREE squares to a button, and
+     one square between any two of them: that is the whole rule the menus are built on, and
+     everything below reads it rather than restating a pixel figure. */
+  :root { --btn-h: calc(var(--chq) * 3); }
   #hud {
     display:flex; gap:12px; align-items:center; justify-content:center;
     margin-top:8px; font-size:var(--body); letter-spacing:2px; text-transform:uppercase; color:var(--dim);
@@ -238,17 +251,31 @@
   #ready { color:var(--free); }
   #board-wrap { flex:1; width:100%; display:flex; align-items:stretch; justify-content:center; min-height:0; overflow:hidden; }
   canvas { image-rendering:pixelated; touch-action:none; display:block; }
-  footer { padding:10px 0 16px; display:flex; gap:12px; }
+  footer { padding:10px 0 16px; display:flex; gap:var(--chq); }
   /* No outline. The shadow sits DIRECTLY below rather than down-and-right: an offset to the
      corner implies a light source the rest of the game does not have, where a shadow straight
      underneath just says the button is standing off the page. The border is kept and made
      transparent so the states that colour it (.danger, .on) do not shift anything by 3px. */
   button {
     font-family:inherit; font-weight:900; text-transform:uppercase; letter-spacing:2px; font-size:var(--btn);
-    color:var(--ink); background:var(--panel); border:3px solid transparent;
+    color:var(--ink); border:3px solid transparent;
     /* the shadow is the button's OWN colour darkened, the rule the gold and amber ones follow */
     box-shadow:0 4px 0 var(--panel-lo); padding:11px 16px; cursor:pointer; touch-action:manipulation;
     min-height:var(--btn-h);
+    /* EVERY button is chequered, not the handful that used to be. It was the mark of the
+       special ones — the end-screen pair, the gold, the talismans — which meant most of the
+       game's buttons were plain slabs and the chequer read as decoration on a few rather than
+       as what a button IS here. The board is squares; so is everything you press on it.
+       Faint, because it is a texture and not a pattern: one conic gradient makes the 2x2 in a
+       single layer, so the corner square starts exactly at the corner, and background-origin is
+       spelled out so the border box and the pattern agree on where that corner is. */
+    background-color:var(--panel);
+    background-image:
+      conic-gradient(transparent 0 25%, rgba(255,255,255,0.05) 0 50%,
+                     transparent 0 75%, rgba(255,255,255,0.05) 0);
+    background-size:var(--chq2) var(--chq2);
+    background-position:0 0;
+    background-origin:border-box;
   }
   /* Anything that is a full-width action centres its contents in that height. The grid cells
      that happen to be buttons — shop stock, shop tabs, Tileverse squares — set their own
@@ -308,20 +335,21 @@
     background-image:
       conic-gradient(transparent 0 25%, rgba(255,255,255,0.03) 0 50%,
                      transparent 0 75%, rgba(255,255,255,0.03) 0);
-    background-size:var(--chq) var(--chq);
+    background-size:var(--chq2) var(--chq2);
     background-position:0 0;
     background-origin:border-box;
   }
   /* The same finish-line chequer on the gold, cut in a darker gold so it reads at all — white
      over #e0aa1e is nearly invisible, where a shade of the button's own colour is not. */
   #ov-shop, #menu-body button.gold, #menu-body button.amber, #menu-body button.void,
-  .tal-grid .tal.locked.preview, .tal-grid .tal.on, #menu-body .shop-buy {
+  .tal-grid .tal.locked.preview, .tal-grid .tal.on, #menu-body .shop-buy,
+  #menu-body .shop-tabs button.on {
     /* WHITE squares, not brown ones: the chequer should lift the colour it sits on rather than
        dirty it. On the gold it reads as a sheen; on the green it reads as the same sheen. */
     background-image:
       conic-gradient(transparent 0 25%, rgba(255,255,255,0.13) 0 50%,
                      transparent 0 75%, rgba(255,255,255,0.13) 0);
-    background-size:var(--chq) var(--chq);
+    background-size:var(--chq2) var(--chq2);
     background-position:0 0;
     background-origin:border-box;
   }
@@ -414,7 +442,10 @@
       1px 1px 0 #a87b18, 2px 2px 0 #a87b18, 3px 4px 0 #a87b18, 4px 5px 0 #a87b18,
       5px 6px 0 #a87b18, 6px 7px 0 #a87b18;
   }
-  #menu-body { display:flex; flex-direction:column; gap:9px; }
+  /* Every gap BETWEEN buttons is one grid square — the same square the chequer on them is
+     drawn at — so the space between two buttons reads as one missing tile rather than as an
+     arbitrary margin. Gaps INSIDE a button (icon to label) are not this; they are typography. */
+  #menu-body { display:flex; flex-direction:column; gap:var(--chq); }
   #menu-body button { width:100%; }
   /* The one button in the menu that is about money, in the colour of the money. A deeper
      gold than the loot tile itself, so the tile sitting on it still reads as an object rather
@@ -451,19 +482,42 @@
   #menu-body button.danger { border-color:#ff6d6d; color:#ff9d9d; box-shadow:0 0 0 2px #ff6d6d inset; }
   .menu-sub { font-size:var(--btn); font-weight:900; letter-spacing:2px; text-transform:uppercase; color:var(--dim);
     margin:10px 0 2px; }
+  /* A toggle is a DIV rather than a button, but it stands in the same stack, you press it the
+     same way, and it looked it — except for the two things that now mark a button here. It was
+     43 tall against its neighbours' 45 (padding, not a stated height) and it was the one plain
+     slab in a column of chequered ones. Same height, same chequer; only the markup differs. */
   .toggle { display:flex; justify-content:space-between; align-items:center;
-    border:3px solid transparent; background:var(--panel); box-shadow:0 4px 0 #0b0918;
-    padding:10px 14px; font-family:inherit; font-weight:900; text-transform:uppercase;
-    letter-spacing:2px; font-size:var(--btn); color:var(--ink); cursor:pointer; }
+    border:3px solid transparent; box-shadow:0 4px 0 #0b0918;
+    height:var(--btn-h); padding:0 14px; font-family:inherit; font-weight:900; text-transform:uppercase;
+    letter-spacing:2px; font-size:var(--btn); color:var(--ink); cursor:pointer;
+    background-color:var(--panel);
+    background-image:
+      conic-gradient(transparent 0 25%, rgba(255,255,255,0.05) 0 50%,
+                     transparent 0 75%, rgba(255,255,255,0.05) 0);
+    background-size:var(--chq2) var(--chq2);
+    background-position:0 0;
+    background-origin:border-box; }
   .toggle .val { color:var(--track); }
   .toggle.off .val { color:var(--dim); }
-  .lvl-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
+  .lvl-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--chq); }
   .lvl-grid button { display:flex; flex-direction:column; gap:3px; padding:12px 0; line-height:1.1; }
-  .tal-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
-  /* Stock is a square of glass, not a button: no outline, no offset plate, just a 5% white
-     wash. A shop item is a thing on a shelf — fifteen bevelled plates read as a wall of
-     controls. The border is kept and made transparent so .on and .nope can still colour it
-     without shifting anything by 3px. The swatch is the item, so it gets the room. */
+  /* max-content, not a share of the parent: three eleven-space columns and two one-space gaps
+     come to 525, the rack it sits in was 520, and a grid asked to fit squeezed every column by
+     a pixel and a half — so the items measured 163 wide against 165 tall. Sized to its contents
+     and centred by auto margins, the columns are the width they were told to be. */
+  .tal-grid { display:grid; grid-template-columns:repeat(3, calc(var(--chq) * 11));
+    gap:var(--chq); width:max-content; margin-inline:auto; }
+  /* Eleven grid spaces square. It used to be padding plus whatever the swatch and its label
+     happened to measure — 167 tall by whatever a third of the card came to, a shape nothing else
+     in the game agreed with. */
+  .tal-grid .tal { width:calc(var(--chq) * 11); height:calc(var(--chq) * 11); min-height:0; }
+  /* Stock wears the same blue plate every other button in the game does. It used to be a 5%
+     white wash — "a thing on a shelf, not a control" — which read as a hole in the card rather
+     than as an object on it, and made the shop the one screen where a pressable square did not
+     look like the pressable squares everywhere else. The states that mean something (equipped,
+     affordable, locked) colour it from there, and they read as states BECAUSE there is now a
+     resting colour for them to differ from. The border is kept and made transparent so .on and
+     .nope can still colour it without shifting anything by 3px. */
   /* Stacked from the top rather than centred, so the three parts sit at fixed heights instead
      of drifting with whatever the tallest one happens to be. The name is pulled up tight under
      the icon — they are one object, and a gap between them read as two. */
@@ -472,11 +526,17 @@
      would still sit it off-centre by however much the two labels differed in height. */
   .tal-grid .tal { display:flex; flex-direction:column; align-items:center; justify-content:center;
     gap:0; padding:3px 3px; overflow:hidden;
-    background:rgba(255,255,255,0.05); border-color:transparent; color:#fff;
-    box-shadow:0 4px 0 rgba(5,4,13,0.45); }
+    border-color:transparent; color:#fff;
+    background-color:var(--panel);
+    background-image:
+      conic-gradient(transparent 0 25%, rgba(255,255,255,0.05) 0 50%,
+                     transparent 0 75%, rgba(255,255,255,0.05) 0);
+    background-size:var(--chq2) var(--chq2);
+    background-position:0 0;
+    background-origin:border-box;
+    box-shadow:0 4px 0 var(--panel-lo); }
   /* ...and presses the same way the buttons do, since it is one */
-  .tal-grid .tal:active { transform:translateY(4px); box-shadow:none;
-    background:rgba(255,255,255,0.14); }
+  .tal-grid .tal:active { transform:translateY(4px); box-shadow:none; }
   /* display:block is doing the real work here. An inline canvas sits on a text baseline, and
      the descender space under it was leaving an 8px gap that no negative margin could explain
      — the name was tucked under the LINE BOX, not under the icon. */
@@ -501,9 +561,13 @@
   /* Stock you do not own is GREY. It used to wear a wash of the gold that buys it, which read
      as "this one is special" rather than "this one is not yours yet" — and put a third gold on
      a screen that already has the purse and the buy banner arguing over the colour. */
-  .tal-grid .tal.locked { background:rgba(150,156,172,0.15);
-                          box-shadow:0 4px 0 rgba(20,22,32,0.55); }
-  .tal-grid .tal.locked:active { background:rgba(150,156,172,0.26); }
+  /* Not yet bought is the RESTING state of nearly every square in the shop, so it keeps the
+     ordinary blue plate rather than being greyed out — it used to replace the plate with a grey
+     wash, which made twelve of thirteen items look disabled and the shop look mostly broken.
+     What marks an item as unowned is the price on it, and what marks the one you are looking at
+     is going gold. Only `box-shadow` is touched here; `background` would wipe the chequer, which
+     is the trap the gold rule below carries a note about. */
+  .tal-grid .tal.locked { box-shadow:0 4px 0 var(--panel-lo); }
   /* The one you have tried on goes fully gold — the colour of the money it wants — and its
      price row grows the word PURCHASE in front of the number. No banner, nothing added to the
      cell: the row was already there, so nothing moves and the grid cannot twitch as you browse. */
@@ -581,16 +645,30 @@
   /* Six tabs, six equal columns, square. `repeat(7,1fr)` was left over from when there were
      seven and left a column's worth of dead space at the end; the squares came from letting the
      content set the height, which made them shorter than they were wide. */
-  .shop-tabs { display:grid; grid-template-columns:repeat(6,1fr); gap:6px; margin-bottom:8px; }
-  #menu-body .shop-tabs button { width:100%; aspect-ratio:1; padding:4px 0; font-size:8px;
+  /* Fixed squares on the grid, not six fractions of whatever the card measures: a tab is five
+     grid spaces each way with one space between, and the strip is centred in the space it has. */
+  .shop-tabs { display:grid; grid-template-columns:repeat(6, calc(var(--chq) * 5));
+  /* No margin under it. The strip and the rack are siblings in `#menu-body`, which is a flex
+     column with `gap: var(--chq)` — so the one grid space between them is ALREADY there, and a
+     margin on top of it made the gap two spaces while every other gap in the shop was one. */
+    gap:var(--chq); width:max-content; margin-inline:auto; margin-bottom:0; }
+  /* Five grid spaces square. `min-height:0` because the base button rule would otherwise hold it
+     at the menu button's three spaces — height loses to min-height, every time. */
+  #menu-body .shop-tabs button { width:calc(var(--chq) * 5); min-height:0; height:calc(var(--chq) * 5);
+    padding:4px 0; font-size:8px;
     letter-spacing:0.2px; border-width:2px; box-shadow:0 3px 0 #0b0918;
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
     line-height:1; }
   #menu-body .shop-tabs button canvas { width:60%; height:auto; aspect-ratio:1; display:block; }
   /* The chosen tab is lit from within. A ring on a square that already has a border was two
      outlines arguing, and at this size the inner one ate the icon. */
-  #menu-body .shop-tabs button.on { background:rgba(125,255,107,0.20); border-color:transparent;
-    color:#dcffd4; box-shadow:none; }
+  /* The chosen tab goes the SAME green as the equipped item, not a 20% wash of one — "this is
+     the one that is on" should look identical wherever the shop says it. background-COLOR, so
+     the chequer survives; the shorthand would wipe it. It keeps its plate and its shadow too:
+     losing them made the selected tab read as a hole rather than as the raised one. */
+  #menu-body .shop-tabs button.on { background-color:#5fd44e; border-color:transparent;
+    color:#000; box-shadow:0 3px 0 #2b7a22; }
+  #menu-body .shop-tabs button.on:active { background-color:#78e468; }
   #menu-body .shop-tabs button:active { transform:translateY(3px); box-shadow:none; }
   /* the rack scrolls on its own, so the runner and the tabs stay put while you browse */
   /* max-height is set in JS by fitScrollRack(), because the only honest answer is "however
@@ -599,8 +677,11 @@
   /* No padding on the SIDES. It was 2px all round, which inset the stock by two pixels from
      the tabs above it and the button below — small enough to look like a mistake rather than a
      margin, which is exactly what it was. Vertical padding stays: that end scrolls. */
+  /* No padding at the TOP: the strip above already stands one grid space clear, and two more
+     pixels here made the gap 17 — close enough to look like a mistake, which is what it was.
+     The bottom pad stays; that end scrolls. */
   .shop-rack { overflow-y:auto; overscroll-behavior:contain;
-    -webkit-overflow-scrolling:touch; padding:2px 0; margin-bottom:10px; }
+    -webkit-overflow-scrolling:touch; padding:0 0 2px; margin-bottom:10px; }
   /* The pane you drag reaches the edges of the screen even though the stock in it does not:
      a thumb landing in the margin beside the shelf should still scroll the shelf. The card is
      capped and centred, so the rack breaks out of it to the viewport and the grid is centred
@@ -675,6 +756,10 @@
   /* Tied to the tile rather than set in pixels, so the two can never drift apart again: at the
      shipped tile size this is the 13px that halving the old 26 gives, and it stays right through
      any future resize of the square it sits in. */
+  /* ...and it is not held to the button height. `.stop` IS a button, so `min-height` applied
+     and the cloud could never be smaller than a control — which is how the tiles rode from 45
+     up to 60 the moment a button became two grid squares. */
+  .lvl-map.blob .stop { min-height:0; height:var(--tv-tile); }
   .lvl-map.blob .stop > span { position:relative; font-size:calc(var(--tv-tile) * 0.289);
                                font-weight:900; color:#fff; }
   /* Open levels are shown as they ARE — full strength, no wash over them, cleared or not.
@@ -2422,7 +2507,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v8.9";                    // shown on the title & pause screens
+  const VERSION = "v9.0";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -2750,18 +2835,21 @@
     gd.addColorStop(0.80, mid);  gd.addColorStop(1.00, dark);
     return gd;
   };
-  // A highlight travelling across the body on a loop — the thing that separates polished from
-  // merely shiny. A metal gradient alone is a photograph of a reflection; what tells you a
-  // surface is glossy is the reflection MOVING while the object does not.
+  // A fixed highlight across the body — the band that separates polished from merely matte.
   //
-  // It sweeps along the body's own +x, which is the runner's direction of travel, so the glint
-  // runs front to back the way a light he is passing under would. It starts before the leading
-  // edge and finishes past the trailing one, so the band is never seen to appear or vanish
-  // mid-body. The phase is offset a third of a turn so a STILL of it — the shop swatch, drawn
-  // at ts 0 — catches the band on the body rather than parked off the end of it.
-  const glint = (col, ms, wide, alpha) => (g, x, y, w, h, ts) => {
-    const u = (((ts || 0) % ms) / ms + 0.33) % 1;
-    const cx0 = x - w*0.35 + w*1.7*u;
+  // It USED to travel on a loop, which is the honest way to say "this surface is glossy": a
+  // reflection that moves while the object does not. It is parked now. The runner is a small
+  // thing in constant motion and a second animation running inside him at his own scale reads
+  // as flicker rather than as gloss, and it competed with the one thing on him that should
+  // hold your eye, which is his stride.
+  //
+  // `ms` is kept in the signature and ignored: it is what each skin's line still says about how
+  // fast it wanted to be, and setting one moving again is a one-line change here rather than an
+  // edit to every skin. The pose is the third of a turn the shop swatch was already drawn at,
+  // so every skin now looks exactly like the swatch that sold it.
+  const GLINT_AT = 0.33;
+  const glint = (col, ms, wide, alpha) => (g, x, y, w, h) => {
+    const cx0 = x - w*0.35 + w*1.7*GLINT_AT;
     const k = Math.max(1, w*wide);
     // slanted: the two ends of the gradient sit at opposite corners, so the band leans the way
     // a highlight on a rounded body does rather than standing up like a bar
@@ -2772,10 +2860,12 @@
     g.fillStyle = gd; g.fillRect(x, y, w, h);
   };
   const gemGlint = glint("#ffffff", 2200, 0.14, 0.85);
-  // A hue wheel laid across the body. `speed` is ms per full turn of the wheel.
-  const spectrum = (speed, sat, lum, spread) => (g, x, y, w, h, ts) => {
+  // A hue wheel laid across the body. It used to TURN — `speed` was ms per revolution — and is
+  // now held at the top of the wheel, for the same reason the glint is parked. `speed` is kept
+  // and ignored, as above.
+  const spectrum = (speed, sat, lum, spread) => (g, x, y, w, h) => {
     const gd = g.createLinearGradient(x, y + h, x + w, y);
-    const base = (ts / speed) * 360;
+    const base = 0;
     for (let k = 0; k <= 6; k++) gd.addColorStop(k/6, `hsl(${(base + k*spread) % 360} ${sat}% ${lum}%)`);
     return gd;
   };
@@ -2799,7 +2889,7 @@
         gd.addColorStop(1.00, "#d6f0ff");
         return gd; },
       // hard-edged facet cuts: what separates a gem from a shiny pebble is straight lines
-      sheen(g, x, y, w, h, ts){
+      sheen(g, x, y, w, h){
         g.strokeStyle = "rgba(255,255,255,0.62)"; g.lineWidth = Math.max(1, w*0.05); g.lineCap = "round";
         g.beginPath();
         g.moveTo(x + w*0.06, y + h*0.66); g.lineTo(x + w*0.46, y + h*0.10);
@@ -2807,9 +2897,9 @@
         g.stroke();
         g.strokeStyle = "rgba(30,90,130,0.30)"; g.lineWidth = Math.max(1, w*0.028);
         g.beginPath(); g.moveTo(x, y + h*0.30); g.lineTo(x + w, y + h*0.74); g.stroke();
-        // ...and a hard glint crossing the cuts. The facets are what make it a gem; the glint
-        // travelling over them is what makes it a gem in the light.
-        gemGlint(g, x, y, w, h, ts); } },
+        // ...and a hard glint crossing the cuts. The facets are what make it a gem; the band
+        // sitting across them is what makes it a gem in the light. It used to travel.
+        gemGlint(g, x, y, w, h); } },
     { id:"polychrome", name:"Polychrome", cost:25, body:"#ffc2e6", ink:"#2a1240",
       paint: spectrum(9000, 90, 72, 60),
       // the hue wheel already turns underneath; the gloss on top is what makes it lacquer
@@ -3102,31 +3192,94 @@
       }
     }; });
 
+  // Twelve designs for the track. Each is a RAIL — the bright line the runner's feet are on —
+  // over an EARTH, which is the pieced ground under it: squares a quarter of a tile across,
+  // laid out by `earthMode` (see EARTH_LAYOUT). Three of them bring one of the older drawn
+  // patterns instead of a colour set, so those are not lost.
+  //
+  // The first is the default and costs nothing. It is no longer the level's own generated hue:
+  // the track is the one thing on the board that is the same in every level, and it reads far
+  // better as a fixed thing the runner brings with him than as one more colour the level picks.
+  const TRACK_DEFAULT = { id:"classic", name:"Classic", cost:0,
+                          earth:["#e8912a","#f6c445"] };
   const TRACKS = [
-    { id:"ember",  name:"Ember",   cost:5, track:"#ff7043", rail:"#ffd0b8" },
-    { id:"orchid", name:"Orchid",  cost:5, track:"#b56cff", rail:"#efdcff" },
-    { id:"ice",    name:"Ice",     cost:10, track:"#7fd8ff", rail:"#e6faff" },
-    { id:"rose",   name:"Rosewood",cost:10, track:"#c9506b", rail:"#ffd9e2" },
-    { id:"level", name:"Level", cost:0, track:null, rail:null,
-      swatch:(g,S)=>{ rr2(g,S*0.18,S*0.30,S*0.64,S*0.40,S*0.05); g.fillStyle="#8d86c9"; g.fill();
-        g.fillStyle="#ffcf4d"; g.fillRect(S*0.18,S*0.52,S*0.64,S*0.18);
-        g.fillStyle="#fff2c4"; g.fillRect(S*0.18,S*0.50,S*0.64,S*0.035); } },
-    { id:"sun",   name:"Sunbeam", cost:15, track:"#ffcf4d", rail:"#fff2c4" },
-    { id:"mint",  name:"Mint",    cost:15, track:"#54d6a4", rail:"#c8ffe8" },
-    { id:"berry", name:"Berry",   cost:20, track:"#e0559a", rail:"#ffd0e6" },
-    { id:"steel", name:"Steel",   cost:20, track:"#9aa7bd", rail:"#e6edf9" },
-    // ...and three that bring a ground pattern with them, not just a colour
-    { id:"bold",   name:"Bold",       cost:25, track:"#ff8a5c", rail:"#ffd9c4", pattern:"stripe" },
-    { id:"cobble", name:"Cobbles",    cost:25, track:"#9fb3c9", rail:"#e8f1ff", pattern:"cobble" },
-    { id:"timber", name:"Timber",     cost:30, track:"#d9a45c", rail:"#f6dfb4", pattern:"grain"  },
+    TRACK_DEFAULT,
+    // Black on black. The rail is barely a shade off its ground — you can see where to run,
+    // and only just, which is the whole joke of it.
+    { id:"midnight", name:"Midnight", cost:15, earth:["#09080e","#181628"] },
+    // ...and its opposite, which is harder to read and worse for you.
+    { id:"bone",   name:"Bone",      cost:15, earth:["#e2e0ec","#fcfbff"] },
+    { id:"blood",  name:"Blood",     cost:20, earth:["#4a0a0f","#7d1219"] },
+    // Neon: tube colours scattered over a night-black ground. Black takes half the entries, so
+    // it wins half the squares and the bright ones stay sparse — a sign lit against the dark,
+    // rather than a bright floor with some black in it. Scattered rather than checked, because
+    // a neon sign is not a tiled pattern.
+    { id:"neon",   name:"Neon",      cost:30, earthMode:"scatter",
+      earth:["#0b0b14","#0b0b14","#0b0b14","#0b0b14",
+             "#ff2fd0","#2fe8ff","#c6ff2f","#8b2fff"] },
+    // Every colour it can find, one to a square, fixed per place on the board so the ground
+    // does not shimmer as the camera moves.
+    { id:"poly",   name:"Polychrome", cost:30, earthMode:"scatter",
+      earth:["#ff4d4d","#ff9f1c","#ffe14d","#3ddc84","#3db4ff","#8f6cff","#ff5fd2","#20e3c0"] },
+    // The same colours, but ordered and by COLUMN, so the spectrum runs across the ground
+    // rather than being scattered through it.
+    { id:"rainbow", name:"Rainbow",  cost:30, earthMode:"bands",
+      earth:["#ff4d4d","#ff9f1c","#ffe14d","#3ddc84","#3db4ff","#8f6cff"] },
+    { id:"picnic", name:"Picnic",    cost:25, earth:["#d92b2b","#fdf6ec"] },
+    // Vertical stripes: `bands` colours by COLUMN alone, so a colour runs the full height of
+    // the level in an unbroken line rather than alternating down the way a check does. Two
+    // tones, one square each, so a stripe is a quarter of a tile — the same measure as
+    // everything else on the ground.
+    { id:"lawn",   name:"Lawn",      cost:20, earthMode:"bands",
+      earth:["#2a6642","#3d8f5c"] },
+    // Striped like the Lawn, but the stripes GRADE rather than alternate: blue walking to
+    // green a step at a time. The ramp is a ring — up through the middle tones and back down
+    // the same ones — so the last column meets the first without a seam where the cycle wraps,
+    // which a plain blue-to-green list would give you every eighth column. Eight of them, so
+    // the whole cycle is two tiles wide.
+    { id:"water",  name:"Water",     cost:25, earthMode:"bands",
+      earth:["#2f6fd0","#2f82bf","#2f94ad","#2fa79c","#2fb98a","#2fa79c","#2f94ad","#2f82bf"] },
+    { id:"mint",   name:"Mint",      cost:10, earth:["#2fae86","#54d6a4"] },
+    // Gold. Four tones scattered rather than two checked, so it reads as beaten metal catching
+    // the light at different angles rather than as a tiled floor that happens to be yellow —
+    // and the rail is the palest of them, so the line he runs on is the shine on it.
+    { id:"gold",   name:"Gold",      cost:30, earthMode:"scatter",
+      earth:["#b8860b","#d4a017","#f0c33c","#a8760a"] },
   ];
-  TRACKS.forEach(t => { if (!t.track) return;
-    t.swatch = (g,S) => { rr2(g,S*0.18,S*0.30,S*0.64,S*0.40,S*0.05); g.fillStyle="#8d86c9"; g.fill();
-      const pat = GROUND_PATTERNS[t.pattern];
-      if (pat) { g.save(); rr2(g,S*0.18,S*0.30,S*0.64,S*0.40,S*0.05); g.clip();
-                 pat(g, S*0.18, S*0.30, S*0.64, 0, 0); g.restore(); }
-      g.fillStyle=t.track; g.fillRect(S*0.18,S*0.52,S*0.64,S*0.18);
-      g.fillStyle=t.rail;  g.fillRect(S*0.18,S*0.50,S*0.64,S*0.035); }; });
+  // The rail takes its colour FROM the earth it runs over: the brightest of that design's
+  // squares, drained a little and lifted toward white. A hand-picked rail per design drifts the
+  // moment the earth is retuned — Gold's rail was still Timber's cream after Timber became Gold
+  // — and the rail is not an independent colour anyway. It is the light catching the top edge
+  // of whatever the ground is made of, so it should be that colour and brighter.
+  const RAIL_LIFT = 70;                          // lightness added, out of 255
+  const lumOf = h => { const n = parseInt(h.slice(1), 16);
+                       return (n>>16 & 255)*0.299 + (n>>8 & 255)*0.587 + (n & 255)*0.114; };
+  const railFrom = cols => {
+    let best = cols[0];
+    for (const c of cols) if (lumOf(c) > lumOf(best)) best = c;
+    return tintHex(best, 0, 0.85, RAIL_LIFT);
+  };
+  TRACKS.forEach(t => { if (t.earth) t.rail = railFrom(t.earth); });
+
+  // One swatch routine for all twelve: the pane, the earth as this design lays it out, and the
+  // rail across it. Drawn from the SAME fields the board draws from, so a swatch can never show
+  // a design the game does not paint.
+  TRACKS.forEach(t => {
+    t.swatch = (g,S) => {
+      const x = S*0.18, y = S*0.30, w = S*0.64, h = S*0.40;
+      rr2(g,x,y,w,h,S*0.05); g.fillStyle="#8d86c9"; g.fill();
+      g.save(); rr2(g,x,y,w,h,S*0.05); g.clip();
+      const cols = t.earth || TRACK_DEFAULT.earth;
+      const lay = EARTH_LAYOUT[t.earthMode || "check"] || EARTH_LAYOUT.check;
+      const n = 4, q = w/n, rows = Math.max(1, Math.round(h*0.45/q));
+      for (let j = 0; j < rows; j++) for (let i = 0; i < n; i++) {
+        g.fillStyle = lay(cols, i, j);
+        g.fillRect(x + i*q, y + h*0.55 + j*q, q + 1, q + 1);
+      }
+      g.restore();
+      g.fillStyle = t.rail; g.fillRect(x, y + h*0.55 - S*0.018, w, S*0.030);
+    };
+  });
 
   // one table so the shop, the save format and the drawing all agree on what exists
   // A picture per category for the shop's tab strip. Six tabs across a phone leaves about
@@ -3213,15 +3366,9 @@
     const to=x=>Math.round(x*255).toString(16).padStart(2,"0");
     return "#"+to(f(0))+to(f(8))+to(f(4));
   }
-  // per-level platform colour: a vivid beam + a light running-surface highlight
-  function genTrackPal(seed){
-    const rnd=mulberry32((seed^0x2545f491)>>>0 || 5);
-    const h=Math.floor(rnd()*360), s=80+Math.floor(rnd()*15);
-    return { track: hslHex(h, s, 58), rail: hslHex(h, Math.min(96, s+8), 83) };
-  }
   // A worn track skin overrides the level's generated palette; "Level" keeps it.
-  const curTrack = () => lookItem("track").track || (state && state.trackPal && state.trackPal.track) || getVar("--track");
-  const curRail  = () => lookItem("track").rail  || (state && state.trackPal && state.trackPal.rail)  || getVar("--rail");
+  const curTrack = () => lookItem("track").track || (lookItem("track").earth || TRACK_DEFAULT.earth)[0];
+  const curRail  = () => lookItem("track").rail  || TRACK_DEFAULT.rail;
 
   function loadLevel(i) { endCeremony();                            // no ceremony survives a load
                          Sound.warp(false); Sound.ambient(null);   // the tiles drive the music now
@@ -3427,7 +3574,6 @@
     overlay.className = "";
     const seed = hashSeed(label);
     state.bgTheme = genTheme(seed);          // per-level background theme
-    state.trackPal = genTrackPal(seed);      // per-level platform colour
     Sound.setMusic(L.music);                 // this level's music block, over the defaults
     Sound.setSong(seed);                     // per-level melody
     Sound.resetMelody();
@@ -7441,102 +7587,39 @@
   // earth rather than as more track. The paper grain then goes over both, as before.
   function groundColour(fill) { return tintHex(fill, TILE.underHue, TILE.underSat, TILE.underShade); }
   // ---- ground patterns ---------------------------------------------------------------
-  // What a track skin lays under the beam instead of the stock bedding lines. Each is handed
-  // the cell's box and its grid position, and is already clipped to the platform body.
-  //
-  // The rule that matters: everything must be keyed off WORLD coordinates or off values that
-  // repeat exactly per cell. Anything keyed off the screen slides as the camera moves, and
-  // anything that repeats per cell but shouldn't (a brick course, a diagonal band) shows a
-  // seam at every tile join. Both mistakes look fine in a screenshot and awful in motion.
-  const GROUND_PATTERNS = {
-    // Broad diagonal bands. The band index comes from x+y in world space, so a band runs
-    // straight on across a join rather than restarting inside each cell.
-    stripe(g, x, y, s) {
-      const p = s*0.62;                                  // one band plus one gap
-      g.save(); g.globalAlpha = 0.20; g.fillStyle = "#05040d";
-      for (let i = Math.floor((x + y)/p) - 1; i <= Math.ceil((x + y + 2*s)/p); i++) {
-        const d = i*p, w = p*0.5;
-        g.beginPath();                                   // the strip between x+y=d and x+y=d+w
-        g.moveTo(d - y, y);         g.lineTo(d + w - y, y);
-        g.lineTo(d + w - (y+s), y+s); g.lineTo(d - (y+s), y+s);
-        g.closePath(); g.fill();
-      }
-      g.restore();
-    },
-    // Staggered courses. Two stones to a cell across and three down, so the joints line up
-    // column to column; the half-stone stagger is driven by the world row, so it alternates
-    // course by course all the way down a level instead of resetting at every cell.
-    cobble(g, x, y, s, c, r) {
-      const rows = 3, bw = s/2, bh = s/rows;
-      g.save();
-      g.lineWidth = Math.max(1, s*0.016); g.lineCap = "butt";
-      g.strokeStyle = "rgba(5,4,13,0.34)";
-      g.beginPath();
-      for (let k = 0; k <= rows; k++) { const yy = y + k*bh; g.moveTo(x, yy); g.lineTo(x + s, yy); }
-      for (let k = 0; k < rows; k++) {
-        const yy = y + k*bh, stag = (((r*rows + k) % 2) ? bw/2 : 0);
-        for (let j = -1; j <= 2; j++) {
-          const xx = x + stag + j*bw;
-          if (xx > x - 0.01 && xx < x + s + 0.01) { g.moveTo(xx, yy); g.lineTo(xx, yy + bh); }
-        }
-      }
-      g.stroke();
-      g.strokeStyle = "rgba(255,255,255,0.10)";          // a lit top edge, so they read as blocks
-      g.beginPath();
-      for (let k = 0; k < rows; k++) { const yy = y + k*bh + g.lineWidth; g.moveTo(x, yy); g.lineTo(x + s, yy); }
-      g.stroke();
-      g.restore();
-    },
-    // Long grain with the odd knot. The waviness is a function of world x, so the grain of
-    // one plank carries on into the next tile along.
-    grain(g, x, y, s, c, r) {
-      const n = 7;
-      g.save(); g.lineWidth = Math.max(1, s*0.013); g.lineCap = "round";
-      for (let k = 0; k < n; k++) {
-        const yy = y + (k + 0.5)*s/n;
-        g.strokeStyle = (k % 3 === 0) ? "rgba(5,4,13,0.26)" : "rgba(5,4,13,0.13)";
-        g.beginPath();
-        for (let j = 0; j <= 6; j++) {
-          const xx = x + j*s/6;
-          g.lineTo(xx, yy + Math.sin(xx/s*1.7 + k*2.1)*s*0.020);
-        }
-        g.stroke();
-      }
-      const h = _sHash(c*13 + 5, r*29 + 3);
-      if (h % 3 === 0) {                                 // a knot on roughly a third of them
-        const kx = x + (h % 100)/100*s*0.7 + s*0.15, ky = y + ((h >> 7) % 100)/100*s*0.7 + s*0.15;
-        g.strokeStyle = "rgba(5,4,13,0.30)";
-        for (let i = 1; i <= 2; i++) {
-          g.beginPath(); g.ellipse(kx, ky, s*0.030*i, s*0.052*i, 0, 0, Math.PI*2); g.stroke();
-        }
-      }
-      g.restore();
-    },
-  };
   // Bedding by default; a skin that brings a pattern gets that instead.
   function drawGround(x, y, s, c, r) {
-    const pat = GROUND_PATTERNS[lookItem("track").pattern];
-    if (pat) { ctx.save(); pat(ctx, x, y, s, c || 0, r || 0); ctx.restore(); }
-    else drawGroundStrata(x, y, s);
+    ctx.save(); drawGroundQuilt(x, y, s, c || 0, r || 0); ctx.restore();
   }
-  function drawGroundStrata(x, y0v, s) {
-    if (!(TILE.strata > 0) || !(TILE.strataN > 0)) return;
-    const y0 = y0v, step = s / TILE.strataN;
-    ctx.save();
-    ctx.globalAlpha = TILE.strata;
-    ctx.fillStyle = "#05040d";
-    // Bedding runs level, and its spacing is keyed off the CELL rather than the screen, so
-    // the lines meet across a join instead of sliding past one another.
-    for (let k = 1; k < TILE.strataN; k++) {
-      const y = y0 + k*step, h = Math.max(1, s*0.012);
-      ctx.fillRect(x, y, s, h);
-      if (k % 2 === 0) {                                       // a broken seam between them
-        ctx.globalAlpha = TILE.strata * 0.5;
-        ctx.fillRect(x + s*0.18, y + step*0.42, s*0.42, h);
-        ctx.globalAlpha = TILE.strata;
-      }
+  // The ground is PIECED rather than bedded: a grid of squares a quarter of a cell across,
+  // each one a step lighter or darker than the ground's own colour. It reads as something laid
+  // rather than something cut, and it is the same measure as everything else in the game — four
+  // to a tile across, so a square of ground is a quarter of a square of track.
+  //
+  // Keyed off the WORLD sub-cell, not the screen and not the tile: the grid runs on across a
+  // join instead of restarting inside every cell, and it does not slide when the camera moves.
+  // `strataN` is how many to a side and `strata` is how far their shades run apart; both come
+  // off the TILE block so the lab still tunes them.
+  // How a design lays its colours out over the earth's grid.
+  //   check    the two-colour board — colour by (column + row), so it alternates both ways
+  //   scatter  one of the set at random per square, fixed per place in the world
+  //   bands    by COLUMN, so a long set runs across the ground as a spectrum
+  const EARTH_LAYOUT = {
+    check:   (cols, gi, gj) => cols[(gi + gj) & 1],
+    scatter: (cols, gi, gj) => cols[bgHash(gi, gj) % cols.length],
+    bands:   (cols, gi, gj) => cols[((gi % cols.length) + cols.length) % cols.length],
+  };
+  function drawGroundQuilt(x, y, s, c, r) {
+    const N = Math.max(1, Math.round(TILE.strataN)), it = lookItem("track");
+    const cols = it.earth || TRACK_DEFAULT.earth;
+    const lay = EARTH_LAYOUT[it.earthMode || "check"] || EARTH_LAYOUT.check;
+    const q = s/N;
+    ctx.globalAlpha = Math.max(0, Math.min(1, TILE.strata));   // how far the piecing shows
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      ctx.fillStyle = lay(cols, c*N + i, r*N + j);
+      ctx.fillRect(x + i*q, y + j*q, q + 1, q + 1);            // +1: no hairlines between them
     }
-    ctx.restore();
+    ctx.globalAlpha = 1;
   }
   function drawPlatformBody(n, S, fill) {
     ctx.save();
@@ -7544,7 +7627,7 @@
     ctx.beginPath(); bodyPath(S, nodeCenter(n)); ctx.clip();   // everything below stays in the slab
     ctx.fillStyle = groundColour(fill);                        // the ground, in its own colour
     ctx.fillRect(cx(n.c), cy(n.r), cell, cell);
-    drawGround(cx(n.c), cy(n.r), cell, n.c, n.r);              // bedding, or the skin's pattern
+    drawGround(cx(n.c), cy(n.r), cell, n.c, n.r);              // ...and the design's own grid on it
     ctx.lineJoin = "round"; ctx.lineCap = "butt";
     // The beam's shadow first, as a WIDER stroke on the same line: the beam is then laid
     // over the top of it, and what is left showing below is exactly shadowW deep. Drawing
@@ -8943,12 +9026,12 @@
     glassGrain: 1.00,    // paper grain over the pane
     bodyGrain:  1.00,    // paper grain over a laid platform body
     railW:      0.075,   // running-surface rail thickness, fraction of a cell
-    pathW:      0.150,   // the beam directly under the rail, in the track colour
+    pathW:      0.000,   // the beam directly under the rail, in the track colour
     underShade: -50,     // how much darker the ground beneath it is
     underHue:   -26,     // ...and how far its hue is turned from the track's, in degrees
     underSat:   0.42,    // ...and how much of the track's saturation it keeps (1 = all of it)
-    strata:     0.16,    // the ground's own bedding lines: their strength, 0 = bare
-    strataN:    5,       // how many of them per cell
+    strata:     1.000,   // how far the earth's piecing shows, 0 = a flat slab
+    strataN:    4,       // how many squares to a side — 4 makes each a quarter of a tile
     shadowW:    0.015,   // the shadow the beam casts onto the ground
     shadowShade: -16,    // ...how much darker again that shadow is
   };  const tileR = s => s * TILE.radius;
@@ -9013,14 +9096,18 @@
     ctx.globalAlpha = 1;
   }
 
-  // nine small dots (3x3) centred in the tile, signalling it can be dragged
+  // Nine small SQUARES (3x3) centred in the tile, signalling it can be dragged. Squares because
+  // everything in this game is one — the tiles, the rivets, the pulses, the stars over the
+  // Tileverse — and nine little circles were the last round things left on a square board.
+  //
+  // One routine serves all four things that carry them: the free tile, the movable block, the
+  // wall plate, and the tile going down the Singularity.
   function drawDragDots(fx, fy, s) {
-    const gap = s*0.16, rad = Math.max(1.5, s*0.035);
+    const gap = s*0.16, rad = Math.max(1.5, s*0.035), d = rad*2;
     ctx.fillStyle = getVar("--shadow");
     for (let gy = -1; gy <= 1; gy++)
-      for (let gx = -1; gx <= 1; gx++) {
-        ctx.beginPath(); ctx.arc(fx + gx*gap, fy + gy*gap, rad, 0, Math.PI*2); ctx.fill();
-      }
+      for (let gx = -1; gx <= 1; gx++)
+        ctx.fillRect(fx + gx*gap - rad, fy + gy*gap - rad, d, d);
   }
 
   // Ghost of the single cell the dragged tile will snap to (nearest empty cell).

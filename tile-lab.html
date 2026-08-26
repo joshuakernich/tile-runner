@@ -92,12 +92,12 @@ const SHIPPED = {
   glassGrain: 1.00,
   bodyGrain:  1.00,
   railW:      0.075,
-  pathW:      0.150,
+  pathW:      0.000,
   underShade: -50,
   underHue:   -26,
   underSat:   0.42,
-  strata:     0.16,
-  strataN:    5,
+  strata:     1.000,
+  strataN:    4,
   shadowW:    0.015,
   shadowShade: -16,
 };
@@ -232,24 +232,22 @@ function drawGlass(x,y,s){
 // darker copy of the beam — and its own marking: flat bedding lines, which read as cut
 // earth rather than as more track. The paper grain then goes over both, as before.
 function groundColour(fill) { return tintHex(fill, T.underHue, T.underSat, T.underShade); }
-function drawGroundStrata(x, y0v, s) {
-  if (!(T.strata > 0) || !(T.strataN > 0)) return;
-  const y0 = y0v, step = s / T.strataN;
-  ctx.save();
-  ctx.globalAlpha = T.strata;
-  ctx.fillStyle = "#05040d";
-  // Bedding runs level, and its spacing is keyed off the CELL rather than the screen, so
-  // the lines meet across a join instead of sliding past one another.
-  for (let k = 1; k < T.strataN; k++) {
-    const y = y0 + k*step, h = Math.max(1, s*0.012);
-    ctx.fillRect(x, y, s, h);
-    if (k % 2 === 0) {                                       // a broken seam between them
-      ctx.globalAlpha = T.strata * 0.5;
-      ctx.fillRect(x + s*0.18, y + step*0.42, s*0.42, h);
-      ctx.globalAlpha = T.strata;
-    }
+// The same hash the game keys its ground quilt off, so the lab pieces it identically.
+function tileHash(i, j) {
+  let n = (Math.imul(i, 73856093) ^ Math.imul(j, 19349663)) >>> 0;
+  n = Math.imul(n ^ (n >>> 13), 1274126177) >>> 0;
+  return n;
+}
+function drawGroundQuilt(x, y, s, c, r, fill) {
+  const N = Math.max(1, Math.round(T.strataN));
+  if (!(T.strata > 0)) return;
+  const q = s/N, spread = T.strata * 70;
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const step = ((tileHash(c*N + i, r*N + j) % 5) - 2) / 2;
+    if (!step) continue;
+    ctx.fillStyle = tintHex(fill, T.underHue, T.underSat, T.underShade + step*spread);
+    ctx.fillRect(x + i*q, y + j*q, q + 1, q + 1);
   }
-  ctx.restore();
 }
 function drawPlatformTile(n,prev,next){
   const S=tileSurface(n,prev,next);
@@ -259,7 +257,7 @@ function drawPlatformTile(n,prev,next){
   ctx.beginPath(); bodyPath(S, nodeCenter(n)); ctx.clip();
   ctx.fillStyle = groundColour(curTrack());          // the ground has its own colour...
   ctx.fillRect(cx(n.c),cy(n.r),cell,cell);
-  drawGroundStrata(cx(n.c), cy(n.r), cell);                                // ...and its own bedding
+  drawGroundQuilt(cx(n.c), cy(n.r), cell, n.c, n.r, curTrack());           // ...and its own piecing
   ctx.lineJoin="round"; ctx.lineCap="butt";
   // shadow first as a wider stroke, beam laid over it — what shows below is shadowW deep
   if (T.pathW > 0 && T.shadowW > 0){
@@ -373,10 +371,10 @@ function drawJunction(n, prev){
   }
 }
 function drawDragDots(fx,fy,s){
-  const gap=s*0.16, rad=Math.max(1.5,s*0.035);
+  const gap=s*0.16, rad=Math.max(1.5,s*0.035), d=rad*2;
   ctx.fillStyle="#05040d";
-  for(let gy=-1;gy<=1;gy++) for(let gx=-1;gx<=1;gx++){
-    ctx.beginPath(); ctx.arc(fx+gx*gap,fy+gy*gap,rad,0,Math.PI*2); ctx.fill(); } }
+  for(let gy=-1;gy<=1;gy++) for(let gx=-1;gx<=1;gx++)
+    ctx.fillRect(fx+gx*gap-rad, fy+gy*gap-rad, d, d); }
 function drawWallPlate(c,r){
   const x=cx(c),y=cy(r),s=cell,rad=tileR(s);
   const g=ctx.createLinearGradient(x,y,x,y+s);

@@ -100,12 +100,12 @@ const TILE = {
   glassGrain: 1.00,
   bodyGrain:  1.00,
   railW:      0.075,
-  pathW:      0.150,
+  pathW:      0.000,
   underShade: -50,
   underHue:   -26,
   underSat:   0.42,
-  strata:     0.16,
-  strataN:    5,
+  strata:     1.000,
+  strataN:    4,
   shadowW:    0.015,
   shadowShade: -16,
 };
@@ -264,24 +264,22 @@ function drawGlass(x,y,s){
 // darker copy of the beam — and its own marking: flat bedding lines, which read as cut
 // earth rather than as more track. The paper grain then goes over both, as before.
 function groundColour(fill) { return tintHex(fill, TILE.underHue, TILE.underSat, TILE.underShade); }
-function drawGroundStrata(x, y0v, s) {
-  if (!(TILE.strata > 0) || !(TILE.strataN > 0)) return;
-  const y0 = y0v, step = s / TILE.strataN;
-  ctx.save();
-  ctx.globalAlpha = TILE.strata;
-  ctx.fillStyle = "#05040d";
-  // Bedding runs level, and its spacing is keyed off the CELL rather than the screen, so
-  // the lines meet across a join instead of sliding past one another.
-  for (let k = 1; k < TILE.strataN; k++) {
-    const y = y0 + k*step, h = Math.max(1, s*0.012);
-    ctx.fillRect(x, y, s, h);
-    if (k % 2 === 0) {                                       // a broken seam between them
-      ctx.globalAlpha = TILE.strata * 0.5;
-      ctx.fillRect(x + s*0.18, y + step*0.42, s*0.42, h);
-      ctx.globalAlpha = TILE.strata;
-    }
+// The same hash the game keys its ground quilt off, so the lab pieces it identically.
+function tileHash(i, j) {
+  let n = (Math.imul(i, 73856093) ^ Math.imul(j, 19349663)) >>> 0;
+  n = Math.imul(n ^ (n >>> 13), 1274126177) >>> 0;
+  return n;
+}
+function drawGroundQuilt(x, y, s, c, r, fill) {
+  const N = Math.max(1, Math.round(TILE.strataN));
+  if (!(TILE.strata > 0)) return;
+  const q = s/N, spread = TILE.strata * 70;
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const step = ((tileHash(c*N + i, r*N + j) % 5) - 2) / 2;
+    if (!step) continue;
+    ctx.fillStyle = tintHex(fill, TILE.underHue, TILE.underSat, TILE.underShade + step*spread);
+    ctx.fillRect(x + i*q, y + j*q, q + 1, q + 1);
   }
-  ctx.restore();
 }
 function drawLaid(n, prev, next){
   drawGlass(cx(n.c), cy(n.r), cell);
@@ -292,7 +290,7 @@ function drawLaid(n, prev, next){
   ctx.beginPath(); bodyPath(S, nodeCenter(n)); ctx.clip();
   ctx.fillStyle = groundColour(fill);                               // the ground, its own colour
   ctx.fillRect(cx(n.c), cy(n.r), cell, cell);
-  drawGroundStrata(cx(n.c), cy(n.r), cell);                                              // ...and its own bedding
+  drawGroundQuilt(cx(n.c), cy(n.r), cell, n.c, n.r, curTrack());                         // ...and its own piecing
   ctx.lineJoin="round"; ctx.lineCap="butt";
   if (TILE.pathW > 0 && TILE.shadowW > 0){
     ctx.strokeStyle = tintHex(fill, TILE.underHue, TILE.underSat, TILE.underShade + TILE.shadowShade);
