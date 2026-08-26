@@ -18,7 +18,7 @@
   /* Three rails: the running order down the left, the map in the middle, the palette on the
      right. The map is the only thing that should ever be the reason to scroll, so the two
      rails stick and scroll inside themselves. */
-  .app{display:grid;grid-template-columns:196px minmax(0,1fr) 244px;gap:14px;padding:14px;align-items:start;}
+  .app{display:grid;grid-template-columns:196px 232px minmax(0,1fr) 244px;gap:14px;padding:14px;align-items:start;}
   .rail{position:sticky;top:14px;max-height:calc(100vh - 28px);overflow:auto;display:flex;flex-direction:column;gap:8px;}
   .rail h2{font-size:11px;letter-spacing:1px;opacity:.55;margin:0 0 2px;font-weight:700;text-transform:uppercase;}
   .stage{display:flex;flex-direction:column;gap:10px;align-items:center;min-width:0;}
@@ -55,6 +55,27 @@
   #toolopts{display:flex;flex-direction:column;gap:6px;background:#0d0b22;border:1px solid var(--line);
             border-radius:8px;padding:9px 10px;}
   #toolopts[hidden]{display:none;}
+  /* The level column's slabs. Same material as the tool options — this is all one kind of
+     surface: a few controls, grouped by what they are about. */
+  .card{display:flex;flex-direction:column;gap:7px;background:#0d0b22;border:1px solid var(--line);
+        border-radius:8px;padding:9px 10px;}
+  .card h2{margin:0 0 1px;}
+  .card .opt input{width:88px;}
+  .card .opt input[type=text]{width:118px;}
+  .card input[readonly]{opacity:.55;}
+  .rowbtns{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+  .rowbtns .act{padding:6px 0;font-size:11px;}
+
+  /* The inspector: what is SELECTED on the board, and its settings. Same slab as the tool
+     options above it, because it is the same kind of thing — a few controls for the thing you
+     are working on. The difference is that these edit an object that already exists rather
+     than the next one you place. */
+  #inspect{display:flex;flex-direction:column;gap:6px;background:#0d0b22;
+           border:1px solid var(--accent);border-radius:8px;padding:9px 10px;}
+  #inspect[hidden]{display:none;}
+  #inspect h2{color:var(--accent);opacity:.85;}
+  #inspect .who{font-size:11px;opacity:.7;margin:-2px 0 3px;}
+  #inspect .act{padding:5px 8px;font-size:11px;}
   .opts{display:flex;flex-direction:column;gap:7px;align-items:stretch;min-height:1px;}
   .opt{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;}
   .opts select{flex:1;min-width:0;} .opts input[type=number]{width:60px;}
@@ -78,18 +99,14 @@
   .hint{font-size:11px;opacity:.7;line-height:1.5;}
   .pill{font-size:11px;background:#0d0b22;border:1px solid var(--line);border-radius:20px;padding:3px 9px;}
   .warn{color:#ffb454;}
-  @media (max-width:1100px){ .app{grid-template-columns:1fr;} .rail{position:static;max-height:none;} }
+  /* Four fixed rails plus the map. The breakpoint was 1100 when there were three; at that width
+     a fourth leaves the map about 360px, which is not a map. Below this everything stacks. */
+  @media (max-width:1320px){ .app{grid-template-columns:1fr;} .rail{position:static;max-height:none;} }
 </style>
 </head>
 <body>
 <header>
   <h1>TILE RUNNER · LEVEL EDITOR</h1>
-  <label>n <input type="number" id="nIn" min="1" value="1"></label>
-  <label>name <input type="text" id="nameIn" placeholder="untitled" maxlength="40" style="width:170px"></label>
-  <label>cols <input type="number" id="colsIn" min="3" max="40" value="5"></label>
-  <label>rows <input type="number" id="rowsIn" min="3" max="40" value="8"></label>
-  <label>intro <input type="text" id="introBox" placeholder="wall,block …"></label>
-  <label>speed <input type="number" id="cpsIn" value="0.8" step="0.01" min="0.3" max="3"> tiles/s</label>
   <span class="pill" id="shipped">levels.js: …</span>
   <span class="pill" id="auto">autosave: on</span>
   <span class="pill" id="status">ready</span>
@@ -102,14 +119,29 @@
     <h2>Tileverse order</h2>
     <div class="lvlist" id="lvlist"></div>
     <button class="act" id="newLvl">+ New blank</button>
-    <button class="act" id="dupLvl">+ Duplicate open level</button>
-    <button class="act danger" id="delLvl">− Delete open level</button>
     <div class="hint">Click to open. Drag a level up or down to change where it falls in the
       game — everything renumbers to match, because the running order <i>is</i> the order in
-      <code>levels.js</code>. <b>Duplicate</b> drops a copy of the level you have open into the
-      very next slot and opens it, so a variant starts from the thing it varies. <b>Delete</b>
-      takes it out of the run and renumbers what is left; it lands in <code>levels.js</code>
-      the next time you save.</div>
+      <code>levels.js</code>.</div>
+  </aside>
+
+  <!-- ---------- everything about the level you have open ---------- -->
+  <aside class="rail">
+    <h2>Level</h2>
+    <div class="card">
+      <label class="opt">n <input type="number" id="nIn" min="1" value="1" readonly></label>
+      <label class="opt">name <input type="text" id="nameIn" placeholder="untitled" maxlength="40"></label>
+      <label class="opt">cols <input type="number" id="colsIn" min="3" max="40" value="5"></label>
+      <label class="opt">rows <input type="number" id="rowsIn" min="3" max="40" value="8"></label>
+      <label class="opt">speed <input type="number" id="cpsIn" value="0.8" step="0.01" min="0.3" max="3"></label>
+      <label class="opt">intro <input type="text" id="introBox" placeholder="wall,block …"></label>
+    </div>
+
+    <div class="card">
+      <h2>This level</h2>
+      <button class="act" id="dupLvl">Duplicate</button>
+      <button class="act" id="copyOne2">Copy JSON</button>
+      <button class="act danger" id="delLvl">Delete</button>
+    </div>
   </aside>
 
   <!-- ---------- middle: the map ---------- -->
@@ -184,7 +216,6 @@
       <div class="row">
         <button class="act prim" id="saveFs">Save to levels.js</button>
         <button class="act" id="pickFs">Choose file…</button>
-        <button class="act" id="copyOne">Copy this level</button>
         <button class="act" id="copyAll">Copy full levels.js</button>
         <button class="act" id="dlAll">Download</button>
         <span class="pill" id="solve">—</span>
@@ -215,7 +246,6 @@
       <div class="tool" data-tool="tile">Tile</div>
       <div class="tool" data-tool="goal">Goal</div>
       <div class="tool" data-tool="block">Block</div>
-      <div class="tool" data-tool="saw">Saw</div>
       <div class="tool" data-tool="monster">Monster</div>
       <div class="tool" data-tool="stone">Stone</div>
       <div class="tool" data-tool="platform">Platform</div>
@@ -231,9 +261,7 @@
       <h2>Options</h2>
       <div class="opts" id="opts">
         <span class="opt" data-for="key door"><span class="swab" id="swab"></span></span>
-        <label class="opt" data-for="saw">saw speed <input type="number" id="sawSpeed" value="4000" step="200" min="800"></label>
-        <label class="opt" data-for="saw">saw phase <input type="number" id="sawPhase" value="0" step="0.05" min="0" max="0.95"></label>
-        <label class="opt" data-for="monster">monster speed <input type="number" id="monSpeed" value="2200" step="100" min="400"></label>
+        <label class="opt" data-for="monster">sec / tile <input type="number" id="monSpeed" value="0.8" step="0.05" min="0.05"></label>
         <label class="opt" data-for="monster">monster <select id="monPick">
           <option value="hrail">Horizontal rail</option>
           <option value="vrail">Vertical rail</option>
@@ -265,6 +293,13 @@
           <option value="wn">┘ elbow W–N</option>
         </select></label>
       </div>
+    </div>
+
+    <div id="inspect" hidden>
+      <h2>Selected</h2>
+      <div class="who" id="inspWho">nothing</div>
+      <div class="opts" id="inspOpts"></div>
+      <button class="act danger" id="inspDel">Delete</button>
     </div>
   </aside>
 
@@ -348,8 +383,16 @@ function toStored(w){
   if(w.goal) o.goal = w.goal.slice();          // omitted entirely on a level with no exit
   o.walls = [...w.walls].map(s=>s.split(",").map(Number)).sort((a,b)=>a[1]-b[1]||a[0]-b[0]);
   if(w.blocks.length)  o.blocks  = w.blocks.map(b=>({...b}));
-  if(w.hazards.length) o.hazards = w.hazards.map(h => {      // phase is a saw idea; monsters have none
-    const x = {...h}; if(isMon(x)) delete x.phase; return x; });
+  // `phase` was stripped from every monster on the belief that it was a saw idea — but the game
+  // reads it for RAILS (it is their whole start position, direction included) and for TRAPS (it
+  // staggers the snap). Stripping it meant a rail's start could be set in the editor and never
+  // survive the save. Only the kinds that genuinely have no use for it lose it.
+  const USES_PHASE = new Set(["hrail", "vrail", "trap"]);
+  if(w.hazards.length) o.hazards = w.hazards.map(h => {
+    const x = {...h};
+    if(isMon(x) && !USES_PHASE.has(monVariant(x))) delete x.phase;
+    if(isMon(x) && !x.phase) delete x.phase;                 // ...and a zero is the default
+    return x; });
   if(w.doors.length)   o.doors   = w.doors.map(d=>d.slice());
   if(w.keys.length)    o.keys    = w.keys.map(k=>k.slice());
   if((w.stone||[]).length) o.stone = w.stone.map(s=>s.slice());
@@ -370,6 +413,7 @@ function loadLevel(n){
     {n, start:[2,7],init:[[2,6],[2,5]],goal:[2,0],cols:5,rows:8,intro:[],walls:[],cps:lastCps};   // a new level continues the speed ramp
   L = toWorking(src);
   undoStack = [];
+  sel = null; buildInspector();     // the old level's selection belongs to the old level
   $("nIn").value = L.n; $("colsIn").value = L.cols; $("rowsIn").value = L.rows;
   $("introBox").value = (L.intro||[]).join(",");
   $("nameIn").value = L.name || "";
@@ -515,7 +559,7 @@ function finishMonster(loop){
   if(!monDraft) return;
   if(monDraft.path.length < 2){ monDraft=null; setStatus("monster needs at least two waypoints — draft dropped"); return; }
   const h = { kind:'monster', variant:'patrol', path: monDraft.path.map(p=>p.slice()),
-              speed: +$("monSpeed").value||2200 };
+              speed: Math.round((+$("monSpeed").value || 0.8) * 1000) };   // seconds -> ms per tile
   if(loop) h.loop = true;
   if(monBlocked(h)){ monDraft = null; draw(); return; }
   pushUndo();
@@ -526,7 +570,7 @@ function finishMonster(loop){
 }
 function placeMonster(c,r){
   const kind = $("monPick").value || "hrail";
-  const speed = +$("monSpeed").value||2200;
+  const speed = Math.round((+$("monSpeed").value || 0.8) * 1000);   // the field is SECONDS per tile
   if (kind !== "patrol" && !monDraft){
     const hit = L.hazards.find(h=>h.kind==="monster" && monCells(h).some(x=>x[0]===c&&x[1]===r));
     if (hit){ hit.variant = kind; hit.speed = speed; setStatus("monster -> "+kind); return; }
@@ -611,7 +655,6 @@ function applyTool(c,r,isDrag){
     case "coin":     pushUndo(); paintCoin(c,r); break;
     case "singularity": pushUndo(); paintSingularity(c,r); break;
     case "block": pushUndo(); placeBlock(c,r); break;
-    case "saw":   pushUndo(); placeSaw(c,r); break;
     case "monster": placeMonster(c,r); break;   // pushes its own undo when it finishes
   }
   commit(); draw(); refreshOut();
@@ -693,21 +736,10 @@ function placeBlock(c,r){
   L.blocks.push(defaultRail(c,r));
   setStatus("block placed — drag its ends to reshape the rail");
 }
-// One click drops a saw on a 3-cell rail too. Same handles; the saw has no pos0, so its
-// end-drag pivots on the OPPOSITE end rather than on a block cell.
-function placeSaw(c,r){
-  const hit = L.hazards.find(h=>sawCells(h).some(p=>p[0]===c&&p[1]===r));
-  if(hit){                                     // clicking an existing saw re-applies the boxes
-    hit.speed = +$("sawSpeed").value||4000;
-    hit.phase = clamp(+$("sawPhase").value||0, 0, 0.95);
-    setStatus("saw updated — speed "+hit.speed+"ms, phase "+hit.phase);
-    return;
-  }
-  const d = defaultRail(c,r); delete d.pos0;
-  L.hazards.push({kind:'saw', ...d, speed:+$("sawSpeed").value||4000,
-                  phase: clamp(+$("sawPhase").value||0, 0, 0.95)});
-  setStatus("saw placed — drag the blade along its rail to set its start");
-}
+// The saw is gone from the palette — no level uses one and none can be placed any more. What
+// stays is the READING of them: sawCells, sawEnds and the saw branches in draggableAt and the
+// inspector, so a saw in old level data can still be selected, moved and deleted rather than
+// being stranded on a board with no way to touch it.
 // the two rail-end cells of a block, as {c,r,end:'lo'|'hi'}
 function blockEnds(b){
   const h=(b.axis!=='v');
@@ -863,7 +895,6 @@ function draw(){
       ctx.fillStyle="#7dd0ff"; dot(ex,ey,2.6);
     }
     const st=sawStart(h), [gx,gy]=centerOf(st.c,st.r);
-    gear(gx,gy);                                  // drawn where the saw begins, so phase is visible
     if(h.phase){ ctx.fillStyle="#ffd24a"; ctx.font="bold 9px monospace"; ctx.textAlign="center";
       ctx.fillText(String(h.phase), gx, gy+CELL*0.42); } });
   // monsters — the patrol drawn as a polyline with a numbered dot at every waypoint,
@@ -877,7 +908,6 @@ function draw(){
       for(const e of sawEnds(h)){ const [ex,ey]=centerOf(e.c,e.r);
         ctx.fillStyle="#12102a"; dot(ex,ey,7);
         ctx.strokeStyle=col; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(ex,ey,7,0,7); ctx.stroke(); }
-      monsterIcon(x1,y1,col,"#12102a");
     } else if (v==="square"){
       const w=h.w||2, hh=h.h||2;
       drawPatrol([[h.c,h.r],[h.c+w,h.r],[h.c+w,h.r+hh],[h.c,h.r+hh]], true, col, "#12102a");
@@ -895,6 +925,22 @@ function draw(){
     } else {
       drawPatrol(h.path, h.loop, col, "#12102a");
     }
+  });
+  // Where each one begins, as a grab handle sitting on its route.
+  L.hazards.filter(isMon).forEach(h=>{
+    const sp = monStartPos(h); if(!sp) return;
+    if(monPath(h).length < 2) return;                 // hunters and traps have nowhere to start
+    const [x,y] = cellXY(0,0);
+    const px = x + (sp.c + 0.5)*CELL, py = y + (sp.r + 0.5)*CELL;
+    ctx.save();
+    ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(px, py, CELL*0.30, 0, 7); ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,0.22)";
+    ctx.beginPath(); ctx.arc(px, py, CELL*0.30, 0, 7); ctx.fill();
+    ctx.fillStyle = "#12102a"; ctx.font = "bold 9px monospace";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("S", px, py+0.5);
+    ctx.restore();
   });
   if(monDraft) drawPatrol(monDraft.path, false, "#ffd24a", "#12102a", true);
   // doors + keys
@@ -944,7 +990,6 @@ function rr(x,y,w,h,rad,fill){ ctx.beginPath(); ctx.moveTo(x+rad,y); ctx.arcTo(x
 function dot(x,y,r){ ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill(); }
 function line(x1,y1,x2,y2,col,w,al){ ctx.globalAlpha=al; ctx.strokeStyle=col; ctx.lineWidth=w; ctx.lineCap="round"; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); ctx.globalAlpha=1; }
 function arrow(cx,cy){ ctx.strokeStyle="#eaf0fb"; ctx.lineWidth=2.5; ctx.lineCap="round"; ctx.lineJoin="round"; ctx.beginPath(); ctx.moveTo(cx-9,cy); ctx.lineTo(cx+9,cy); ctx.moveTo(cx+3,cy-5); ctx.lineTo(cx+9,cy); ctx.lineTo(cx+3,cy+5); ctx.stroke(); }
-function gear(cx,cy){ const R=CELL*0.32; ctx.beginPath(); for(let k=0;k<16;k++){ const a=k/16*Math.PI*2, rr2=(k%2?R:R*.6); const X=cx+Math.cos(a)*rr2, Y=cy+Math.sin(a)*rr2; k?ctx.lineTo(X,Y):ctx.moveTo(X,Y); } ctx.closePath(); ctx.fillStyle="#ff4d6d"; ctx.fill(); ctx.beginPath(); ctx.arc(cx,cy,R*.28,0,7); ctx.fillStyle="#12102a"; ctx.fill(); }
 function padlock(x,y){ const lx=x+CELL*.5, ly=y+CELL*.55, bw=CELL*.3, bh=CELL*.24; ctx.fillStyle="#2a1c00"; ctx.fillRect(lx-bw/2,ly-bh/2,bw,bh); ctx.strokeStyle="#2a1c00"; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(lx,ly-bh/2,bw*0.34,Math.PI,0); ctx.stroke(); }
 function keyIcon(x,y,co){ const kx=x+CELL*.42, ky=y+CELL*.4; ctx.strokeStyle=co; ctx.lineWidth=3.4; ctx.beginPath(); ctx.arc(kx,ky,CELL*.15,0,7); ctx.stroke(); ctx.beginPath(); ctx.moveTo(kx+CELL*.1,ky+CELL*.07); ctx.lineTo(x+CELL*.72,y+CELL*.72); ctx.moveTo(x+CELL*.6,y+CELL*.64); ctx.lineTo(x+CELL*.72,y+CELL*.54); ctx.stroke(); }
 // Which of the level's tiles are actually LAID when the level opens.
@@ -1006,7 +1051,9 @@ function drawPatrol(path, loop, col, tip, draft){
     ctx.fillText(String(i+1), x, y+0.5);
   });
   ctx.textBaseline="alphabetic";
-  monsterIcon(pts[0][0], pts[0][1], col, tip);   // it starts on waypoint 1
+  // No creature drawn on the route. It used to sit on waypoint one, which stopped being true
+  // the moment the start became draggable — the S marker is what says where it begins, and a
+  // second, wrong answer beside it was worse than none.
   ctx.restore();
 }
 // the creature: a rounded body with two eyes and a wing each side, at cell scale
@@ -1156,6 +1203,10 @@ function draggableAt(c,r){                        // topmost movable element und
   for(const h of L.hazards){
     if(!isMon(h)) continue;
     const v=monVariant(h);
+    // The start marker first: it sits ON the route, so the body would otherwise always win it.
+    const sp = monStartPos(h);
+    if(sp && Math.round(sp.c)===c && Math.round(sp.r)===r)
+      return {type:'monStart', ref:h, orig:JSON.parse(JSON.stringify(h))};
     if(v==='hrail' || v==='vrail'){
       const e=sawEnds(h).find(p=>p.c===c&&p.r===r);
       if(e) return {type:'monEnd', ref:h, orig:{...h}, end:e.end};
@@ -1212,6 +1263,33 @@ function applyDrag(c,r){
     const busy=cellTaken(c,r,null);
     if(busy){ setStatus("can't drop the wall there — "+busy+" is in the way"); return; }
     L.walls.delete(keyOf(d.at.c,d.at.r)); L.walls.add(keyOf(c,r)); d.at={c,r};
+  }
+  // Sliding a monster's start along its own route. The cursor is projected onto the nearest
+  // leg rather than snapped to a waypoint, so it can be set to any point on the path.
+  else if(d.type==='monStart'){
+    const hit = monNearestOnPath(d.ref, c, r);
+    if(!hit) return;
+    // Snapped to whole tiles either way. A thrust IS one tile, so a start between two of them
+    // is a start the game cannot honour — it rounds to the nearest anyway, and a marker showing
+    // something the game will not do is a marker that lies.
+    const P = monPath(d.ref);
+    if(monIsRail(d.ref)){
+      const span = Math.max(1, Math.abs(d.ref.hi - d.ref.lo));
+      const step = clamp(Math.round(hit.t*span), 0, span);
+      // Keep whichever way it was already going: the outbound half of the cycle if it was
+      // outbound, the return half if it was not.
+      const back = railT(d.ref) !== 0 && (((+d.ref.phase||0)%1)+1)%1 > 0.5;
+      const t = step/span;
+      const ph = back ? 1 - t/2 : t/2;
+      if(ph) d.ref.phase = Math.round(ph*10000)/10000; else delete d.ref.phase;
+    } else {
+      const A = P[hit.seg], B = P[(hit.seg+1) % P.length];
+      const legTiles = Math.max(1, Math.abs(B[0]-A[0]) + Math.abs(B[1]-A[1]));
+      const step = clamp(Math.round(hit.t*legTiles), 0, legTiles-1);
+      if(hit.seg) d.ref.seg0 = hit.seg; else delete d.ref.seg0;
+      const t = step/legTiles;
+      if(t) d.ref.segT0 = Math.round(t*10000)/10000; else delete d.ref.segT0;
+    }
   }
   // A rail monster reshaped by one of its ends, anchored on the opposite one — the same
   // gesture a saw's end handle uses, except what it writes back is still a monster.
@@ -1315,6 +1393,246 @@ function applyDrag(c,r){
   }
 }
 
+// ---------- where a monster begins on its own route ----------
+// Rails, square loops and drawn patrols are all the same thing underneath: a list of waypoints
+// walked in order. Where the creature STARTS on that list used to be waypoint one for every one
+// of them, so two monsters sharing a route moved as one and a rail could only ever begin at an
+// end. `seg0` is the leg it starts on and `segT0` how far along that leg — and both are set by
+// dragging a marker, because "a third of the way down the left side" is a thing you point at,
+// not a pair of numbers you work out.
+function monPath(h){
+  const v = monVariant(h);
+  if (v === "hrail" || v === "vrail")
+    return (h.axis||"h") === "h" ? [[h.lo,h.r],[h.hi,h.r]] : [[h.c,h.lo],[h.c,h.hi]];
+  if (v === "square") { const w=h.w||2, hh=h.h||2;
+    return [[h.c,h.r],[h.c+w,h.r],[h.c+w,h.r+hh],[h.c,h.r+hh]]; }
+  return (h.path||[]).map(p=>p.slice());
+}
+const monLoops = h => monVariant(h) === "square" ? true : !!h.loop;
+// A rail is not a path-walker. It ping-pongs, and its start is `phase` — one number covering
+// the WHOLE there-and-back cycle, so it carries the direction as well as the position: 0 is at
+// `lo` heading for `hi`, 0.5 is at `hi` heading back. Writing seg0/segT0 at one would have been
+// a second mechanism the game never reads.
+const monIsRail = h => { const v = monVariant(h); return v === "hrail" || v === "vrail"; };
+// how far along lo->hi it stands, 0..1, whichever way it happens to be going
+function railT(h){
+  const ph = (((+h.phase || 0) % 1) + 1) % 1, u = ph*2;
+  return u <= 1 ? u : 2 - u;
+}
+// A monster's start, in board coordinates — fractional, because it can stand mid-leg.
+function monStartPos(h){
+  const P = monPath(h); if (!P.length) return null;
+  if (monIsRail(h)) {
+    const span = Math.max(1, Math.abs(h.hi - h.lo)), A = P[0], B = P[1];
+    const step = clamp(Math.round(railT(h)*span), 0, span);
+    return { c: A[0] + (B[0]-A[0])*step/span, r: A[1] + (B[1]-A[1])*step/span };
+  }
+  const s0 = clamp(h.seg0|0, 0, P.length-1);
+  const n0 = monLoops(h) ? (s0+1) % P.length : clamp(s0+1, 0, P.length-1);
+  const A = P[s0], B = P[n0];
+  // Snapped exactly as the game snaps it, so the marker shows where the monster will really
+  // stand rather than a rounded echo of it. A thrust is one tile; a start is a whole number
+  // of them along the leg.
+  const legTiles = Math.max(1, Math.abs(B[0]-A[0]) + Math.abs(B[1]-A[1]));
+  const step = clamp(Math.round(clamp(+h.segT0 || 0, 0, 0.999) * legTiles), 0, legTiles-1);
+  return { c: A[0] + (B[0]-A[0])*step/legTiles, r: A[1] + (B[1]-A[1])*step/legTiles };
+}
+// ...and the reverse: the point on the route nearest a cell, as a leg plus a fraction.
+function monNearestOnPath(h, c, r){
+  const P = monPath(h); if (P.length < 2) return null;
+  const loop = monLoops(h), legs = loop ? P.length : P.length - 1;
+  let best = null;
+  for (let i = 0; i < legs; i++) {
+    const A = P[i], B = P[(i+1) % P.length];
+    const dx = B[0]-A[0], dy = B[1]-A[1], len2 = dx*dx + dy*dy;
+    let t = len2 ? ((c-A[0])*dx + (r-A[1])*dy) / len2 : 0;
+    t = clamp(t, 0, 0.999);
+    const px = A[0] + dx*t, py = A[1] + dy*t;
+    const d = (px-c)*(px-c) + (py-r)*(py-r);
+    if (!best || d < best.d) best = { d, seg:i, t };
+  }
+  return best;
+}
+
+// ---------- selection + inspector ----------
+// Dragging moves a thing; CLICKING one selects it, and everything it carries beyond its
+// position — a stone's hardness, a door's colour, which way a platform is bent, how fast a
+// monster goes and where on its route it starts — becomes editable. Those settings could only
+// be chosen at the moment of placing before, so changing one meant deleting the thing and
+// putting it back.
+let sel = null, dragMoved = false;
+// Is the selected thing still on the board? A ref can be spliced out from under us by an
+// erase, an undo, or a level load, and a panel editing a detached object is a panel that
+// silently does nothing.
+function selAlive(){
+  if (!sel) return false;
+  // Not everything is held by reference. A wall is a key in a Set, a pre-laid tile is an INDEX
+  // into L.init, and the start and the flag are single slots on the level — only the rest are
+  // objects we can look for.
+  if (sel.type === "wall")  return L.walls.has(keyOf(sel.at.c, sel.at.r));
+  if (sel.type === "start") return !!L.start;
+  if (sel.type === "goal")  return !!L.goal;
+  if (sel.type === "init")  return sel.i >= 0 && sel.i < L.init.length;
+  const lists = [L.keys, L.doors, L.stone||[], L.platforms||[], L.talismans||[],
+                 L.coins||[], L.singularity||[], L.blocks, L.hazards];
+  return lists.some(a => a.indexOf(sel.ref) >= 0);
+}
+function selectAt(hit){ sel = hit || null; buildInspector(); draw(); }
+function clearSel(){ if (sel) { sel = null; buildInspector(); draw(); } }
+
+// The cells the selection covers, for the highlight.
+function selCells(){
+  if (!sel) return [];
+  if (sel.type === "wall") return [[sel.at.c, sel.at.r]];
+  if (sel.type === "start") return [L.start];
+  if (sel.type === "goal")  return L.goal ? [L.goal] : [];
+  if (sel.type === "init")  { const p = L.init[sel.i]; return p ? [p] : []; }
+  if (sel.type === "mon" || sel.type === "monEnd") return monCells(sel.ref);
+  if (sel.type === "block" || sel.type === "blockEnd") return blockCells(sel.ref);
+  if (sel.type === "saw" || sel.type === "sawEnd" || sel.type === "sawBlade") return sawCells(sel.ref);
+  return [[sel.ref[0], sel.ref[1]]];
+}
+function drawSelection(){
+  if (!selAlive()) { if (sel) { sel = null; buildInspector(); } return; }
+  ctx.save();
+  ctx.strokeStyle = "#7dd0ff"; ctx.lineWidth = 2.5;
+  ctx.setLineDash([6, 4]); ctx.lineDashOffset = (Date.now()/70) % 10;
+  for (const [c, r] of selCells()) {
+    const [x, y] = cellXY(c, r);
+    ctx.strokeRect(x + 2, y + 2, CELL - 4, CELL - 4);
+  }
+  ctx.restore();
+}
+
+// ---- the fields, per kind of thing ----
+const INSP_NAME = { wall:"Wall", start:"Start", goal:"Flag", init:"Tile", key:"Key", door:"Door",
+                    block:"Slider block", blockEnd:"Slider block", saw:"Saw", sawEnd:"Saw",
+                    sawBlade:"Saw", mon:"Monster", monEnd:"Monster" };
+function inspRow(label, el){
+  const w = document.createElement("label"); w.className = "opt";
+  w.appendChild(document.createTextNode(label)); w.appendChild(el); return w;
+}
+function inspNum(val, min, max, step, on){
+  const i = document.createElement("input"); i.type = "number";
+  i.value = val; i.min = min; i.max = max; i.step = step; i.style.width = "68px";
+  i.addEventListener("change", () => { pushUndo(); on(+i.value); commit(); draw(); refreshOut(); });
+  return i;
+}
+function inspSel(opts, val, on){
+  const s2 = document.createElement("select");
+  opts.forEach(([v, t]) => { const o = document.createElement("option");
+    o.value = v; o.textContent = t; s2.appendChild(o); });
+  s2.value = val;
+  s2.addEventListener("change", () => { pushUndo(); on(s2.value); commit(); draw(); refreshOut(); });
+  return s2;
+}
+function inspBool(val, on){
+  const i = document.createElement("input"); i.type = "checkbox"; i.checked = !!val;
+  i.addEventListener("change", () => { pushUndo(); on(i.checked); commit(); draw(); refreshOut(); });
+  return i;
+}
+function buildInspector(){
+  const box = $("inspect"), who = $("inspWho"), opts = $("inspOpts");
+  opts.innerHTML = "";
+  if (!sel || !selAlive()) { box.hidden = true; return; }
+  box.hidden = false;
+  const t = sel.type, ref = sel.ref;
+
+  if (t === "cellItem") {
+    who.textContent = sel.what + " at " + ref[0] + "," + ref[1];
+    if (sel.what === "stone")
+      opts.appendChild(inspRow("hardness", inspNum(ref[2] || 2, 1, 5, 1, v => ref[2] = clamp(v,1,5))));
+    if (sel.what === "platform")
+      opts.appendChild(inspRow("shape", inspSel(
+        [["ns","│ N–S"],["ew","─ E–W"],["ne","└ N–E"],["es","┌ E–S"],["sw","┐ S–W"],["wn","┘ W–N"]],
+        ref[2] || "ns", v => ref[2] = v)));
+    if (sel.what === "talisman")
+      opts.appendChild(inspRow("charm", inspSel(TAL_IDS.map(i => [i, i]), ref[2] || TAL_IDS[0],
+        v => ref[2] = v)));
+    if (sel.what === "coin" || sel.what === "singularity")
+      opts.appendChild(Object.assign(document.createElement("div"),
+        { className:"hint", textContent:"Nothing to set — drag it to move it." }));
+  }
+  else if (t === "key" || t === "door") {
+    who.textContent = INSP_NAME[t] + " at " + ref[0] + "," + ref[1];
+    opts.appendChild(inspRow("colour", inspSel(COLORS.map(c => [c, c]), ref[2] || COLORS[0],
+      v => ref[2] = v)));
+  }
+  else if (t === "saw" || t === "sawEnd" || t === "sawBlade") {
+    who.textContent = "Saw on a " + ((ref.axis||"h") === "h" ? "horizontal" : "vertical") + " rail";
+    opts.appendChild(inspRow("speed", inspNum(ref.speed || 4000, 800, 20000, 200, v => ref.speed = v)));
+    opts.appendChild(inspRow("start phase", inspNum(ref.phase || 0, 0, 0.95, 0.05, v => ref.phase = v)));
+  }
+  else if (t === "mon" || t === "monEnd") {
+    const v = monVariant(ref);
+    who.textContent = v + " monster";
+    opts.appendChild(inspRow("kind", inspSel(
+      [["hrail","Horizontal rail"],["vrail","Vertical rail"],["patrol","Patrol"],
+       ["square","Square loop"],["hunter","Hunter"],["trap","Trap"],["stealth","Stealth"]],
+      v, nv => { retypeMonster(ref, nv); selectAt(sel); })));
+    // Seconds per TILE — the pace, not the trip. It used to be milliseconds, and for a rail it
+    // meant the whole traverse, so the same number was a different speed on a different length
+    // of rail and two monsters set to "4000" did not move alike.
+    opts.appendChild(inspRow("sec / tile", inspNum(((ref.speed || 2200)/1000).toFixed(2), 0.05, 20, 0.05,
+      x => ref.speed = Math.max(50, Math.round(x*1000)))));
+    if (v === "hrail" || v === "vrail") {
+      opts.appendChild(inspRow("start phase", inspNum(ref.phase || 0, 0, 0.99, 0.05, x => ref.phase = x)));
+      opts.appendChild(Object.assign(document.createElement("div"),
+        { className:"hint", textContent:"Or drag the S marker along the rail. Phase runs over the "
+          + "whole there-and-back: under 0.5 is heading one way, over 0.5 the other." }));
+    }
+    if (v === "square") {
+      opts.appendChild(inspRow("width",  inspNum(ref.w || 2, 1, 12, 1, x => ref.w = Math.max(1,x))));
+      opts.appendChild(inspRow("height", inspNum(ref.h || 2, 1, 12, 1, x => ref.h = Math.max(1,x))));
+    }
+    if (v === "patrol" || v === "square") {
+      const n = monPath(ref).length;
+      if (v === "patrol")
+        opts.appendChild(inspRow("loops", inspBool(ref.loop, x => { if (x) ref.loop = true; else delete ref.loop; })));
+      // Where on its own route it sets off. Every path monster used to begin on waypoint one,
+      // so two on the same route moved as one and a rail could only ever start at an end.
+      opts.appendChild(inspRow("starts at #", inspNum((ref.seg0 | 0) + 1, 1, Math.max(1, n), 1,
+        x => { const i = clamp(Math.round(x) - 1, 0, Math.max(0, n - 1));
+               if (i) ref.seg0 = i; else delete ref.seg0;
+               delete ref.segT0;              // naming a waypoint means ON it, not past it
+             })));
+      opts.appendChild(Object.assign(document.createElement("div"),
+        { className:"hint", textContent:"Or drag the S marker anywhere along its route — it can "
+          + "start part-way down a leg, not only on a corner. " + n + " waypoints." }));
+    }
+  }
+  else if (t === "block" || t === "blockEnd") {
+    who.textContent = "Slider block on a " + ((ref.axis||"h") === "h" ? "horizontal" : "vertical") + " rail";
+    opts.appendChild(Object.assign(document.createElement("div"),
+      { className:"hint", textContent:"Drag its body along the rail, or an end to reshape it." }));
+  }
+  else {
+    who.textContent = INSP_NAME[t] || t;
+    opts.appendChild(Object.assign(document.createElement("div"),
+      { className:"hint", textContent:"Nothing to set — drag it to move it." }));
+  }
+}
+// Changing a monster's kind has to rebuild the SHAPE, not just the word: a hunter has c/r, a
+// rail has axis/lo/hi, a square has w/h and a patrol has a path. Keeping the old fields around
+// left monCells reading a rail's lo/hi off something that was now a point.
+function retypeMonster(h, kind){
+  const cells = monCells(h), a = cells[0] || [0,0];
+  const c = a[0], r = a[1], speed = h.speed || 2200;
+  for (const k of Object.keys(h)) delete h[k];
+  h.kind = "monster"; h.variant = kind; h.speed = speed;
+  if (kind === "hrail" || kind === "vrail") {
+    const hz = kind === "hrail";
+    h.axis = hz ? "h" : "v"; h.phase = 0;
+    if (hz) { h.r = r; h.lo = Math.max(0, c-1); h.hi = Math.min(L.cols-1, h.lo+2); h.lo = Math.max(0, h.hi-2); }
+    else    { h.c = c; h.lo = Math.max(0, r-1); h.hi = Math.min(L.rows-1, h.lo+2); h.lo = Math.max(0, h.hi-2); }
+  } else if (kind === "square") {
+    h.c = c; h.r = r; h.w = Math.max(1, Math.min(2, L.cols-1-c)); h.h = Math.max(1, Math.min(2, L.rows-1-r));
+  } else if (kind === "patrol") {
+    h.path = cells.length > 1 ? cells.map(p => p.slice())
+                              : [[c,r],[Math.min(L.cols-1, c+2), r]];
+  } else { h.c = c; h.r = r; }
+}
+
 // ---------- events ----------
 let paintMode=null;                              // 'paint' | 'erase' during a wall drag
 function paintWall(c,r){ const k=keyOf(c,r); if(paintMode==="erase"){ L.walls.delete(k); } else if(!L.walls.has(k)){ L.walls.add(k); eraseNonWallAt(c,r); } }
@@ -1367,7 +1685,7 @@ function drawEdgeHandles(){
   ctx.stroke();
 }
 const _drawBase = draw;
-draw = function(){ _drawBase(); drawEdgeHandles(); };
+draw = function(){ _drawBase(); drawEdgeHandles(); drawSelection(); };
 
 cv.addEventListener("contextmenu", e=>e.preventDefault());   // allow right-drag erase
 cv.addEventListener("mousedown", e=>{
@@ -1377,7 +1695,11 @@ cv.addEventListener("mousedown", e=>{
     cv.style.cursor=EDGE_CURSOR[side]; return; }
   mouseDown=true; const c=cellFromEvent(e); if(!c) return;
   // grab an existing element and drag it (any tool except erase / right-click)
-  if(tool!=="erase" && e.button!==2){ const hit=draggableAt(c.c,c.r); if(hit){ pushUndo(); dragEl={...hit, grab:{c:c.c,r:c.r}}; lastCell=c; cv.style.cursor="grabbing"; return; } }
+  if(tool!=="erase" && e.button!==2){ const hit=draggableAt(c.c,c.r);
+    if(hit){ pushUndo(); dragEl={...hit, grab:{c:c.c,r:c.r}}; dragMoved=false;
+             lastCell=c; cv.style.cursor="grabbing"; return; } }
+  // ...and a press on bare board puts the inspector away
+  if(e.button!==2) clearSel();
   if(tool==="wall"){ paintMode = (e.button===2 || L.walls.has(keyOf(c.c,c.r))) ? "erase" : "paint"; pushUndo(); paintWall(c.c,c.r); lastCell=c; commit(); draw(); refreshOut(); return; }
   if(tool==="stone"){ paintMode = (e.button===2 || hasStone(c.c,c.r)) ? "erase" : "paint"; pushUndo(); paintStone(c.c,c.r); lastCell=c; commit(); draw(); refreshOut(); return; }
   if(tool==="erase"){ paintMode="erase"; pushUndo(); eraseAt(c.c,c.r); lastCell=c; commit(); draw(); refreshOut(); return; }
@@ -1399,7 +1721,7 @@ cv.addEventListener("mousemove", e=>{
     cv.style.cursor = side ? EDGE_CURSOR[side]
                      : (c && tool!=="erase" && draggableAt(c.c,c.r)) ? "grab" : "crosshair"; return; }
   if(!c) return;
-  if(dragEl){ applyDrag(c.c,c.r); lastCell=c; commit(); draw(); refreshOut(); return; }
+  if(dragEl){ dragMoved=true; applyDrag(c.c,c.r); lastCell=c; commit(); draw(); refreshOut(); return; }
   if(tool!=="wall" && tool!=="erase" && tool!=="stone") return;
   if(lastCell && c.c===lastCell.c && c.r===lastCell.r) return;
   const path = lastCell ? cellsBetween(lastCell,c) : [c];
@@ -1408,7 +1730,12 @@ cv.addEventListener("mousemove", e=>{
 });
 window.addEventListener("mouseup", ()=>{ mouseDown=false; lastCell=null; paintMode=null;
   if(edgeDrag){ edgeDrag=null; cropToBoard(); commit(); draw(); refreshOut(); }   // crop once, at the end
-  if(dragEl){ dragEl=null; commit(); refreshOut(); } cv.style.cursor="crosshair"; });
+  if(dragEl){
+    // Pressed and released without ever leaving the square: that was a click, and a click
+    // selects rather than moves.
+    if(!dragMoved) selectAt(dragEl);
+    dragEl=null; commit(); refreshOut();
+  } cv.style.cursor="crosshair"; });
 function cellFromEvent(e){ const rect=cv.getBoundingClientRect(); const x=e.clientX-rect.left-PAD, y=e.clientY-rect.top-PAD; const c=Math.floor(x/CELL), r=Math.floor(y/CELL); if(c<0||r<0||c>=L.cols||r>=L.rows)return null; return {c,r}; }
 
 // ---------- palette icons ----------
@@ -1499,7 +1826,11 @@ document.querySelectorAll(".tool").forEach(t=> t.addEventListener("click", ()=>s
 // Only the tool in hand shows its settings and its instructions. Everything carries a
 // data-for list of the tools it belongs to; nothing else is on screen to read past.
 function selTool(t){ tool=t; document.querySelectorAll(".tool").forEach(el=>el.classList.toggle("sel",el.dataset.tool===t));
-  document.querySelectorAll(".opt,.tip").forEach(el=>{
+  // Scoped to the panels these belong to. This used to reach every `.opt` in the DOCUMENT and
+  // hide any without a matching data-for — which was harmless while the tool options were the
+  // only thing wearing that class, and quietly fatal the moment anything else did. The level
+  // column and the selection inspector both do; picking a tool blanked them.
+  document.querySelectorAll("#opts .opt, #tips .tip").forEach(el=>{
     el.hidden = !(el.dataset.for||"").split(/\s+/).includes(t); });
   $("toolopts").hidden = !document.querySelector("#opts .opt:not([hidden])");
   draw(); }
@@ -1512,6 +1843,13 @@ $("nIn").addEventListener("change",()=>{ refreshOut(); });
 $("introBox").addEventListener("input",()=>{ refreshOut(); });
 $("nameIn").addEventListener("input",()=>{ L.name = $("nameIn").value; commit(); rebuildLevelList(); refreshOut(); });
 $("cpsIn").addEventListener("input",()=>{ refreshOut(); });
+$("inspDel").onclick=()=>{
+  if(!sel || !selAlive()) return;
+  pushUndo();
+  if(sel.type==="wall") L.walls.delete(keyOf(sel.at.c, sel.at.r));
+  else { const [c,r] = selCells()[0] || []; if(c!=null) eraseAt(c,r); }
+  clearSel(); commit(); draw(); refreshOut();
+};
 $("undo").onclick=doUndo; $("clearBtn").onclick=()=>{ pushUndo(); L.walls.clear(); L.blocks=[]; L.hazards=[]; L.doors=[]; L.keys=[]; L.stone=[]; L.platforms=[]; commit(); draw(); refreshOut(); };
 function doUndo(){ if(!undoStack.length)return; const prev=undoStack.pop(); L=toWorking(prev); syncSize(); commit(); draw(); refreshOut(); setStatus("undo"); }
 window.addEventListener("keydown",e=>{ if(e.key==="z"&&(e.ctrlKey||e.metaKey||true)&&document.activeElement.tagName!=="INPUT"&&document.activeElement.tagName!=="TEXTAREA"){ doUndo(); }
@@ -1520,7 +1858,7 @@ window.addEventListener("keydown",e=>{ if(e.key==="z"&&(e.ctrlKey||e.metaKey||tr
     if(e.key==="l"||e.key==="L"){ finishMonster(true); return; }
     if(e.key==="Escape"){ monDraft=null; setStatus("monster draft dropped"); draw(); return; }
   }
-  const map={"0":"erase","1":"wall","2":"start","3":"tile","5":"goal","6":"block","7":"saw",
+  const map={"0":"erase","1":"wall","2":"start","3":"tile","5":"goal","6":"block",
              "8":"key","9":"door","s":"stone","p":"platform","t":"talisman","c":"coin","m":"monster"};
   if(map[e.key]&&document.activeElement.tagName!=="INPUT") selTool(map[e.key]); });
 
@@ -1694,7 +2032,7 @@ if(!FS_OK){ $("saveFs").textContent="Download levels.js"; $("pickFs").disabled=t
 // picker — some browsers only honour a picker call while the gesture is still live.
 idbGet("levelsHandle").then(h=>{ if(h){ fsHandle=h; $("saveFs").title="writes over "+h.name; } });
 
-$("copyOne").onclick=()=>{ commit(); copy($("out").value); setStatus("level JSON copied"); };
+$("copyOne2").onclick=()=>{ commit(); copy($("out").value); setStatus("level JSON copied"); };
 $("copyAll").onclick=()=>{ commit(); copy(fullArray()); setStatus("full levels.js copied"); };
 $("dlAll").onclick=()=>{ commit(); dlAll(); setStatus("downloaded levels.js"); };
 function copy(t){ navigator.clipboard&&navigator.clipboard.writeText(t).catch(()=>{}); const ta=$("out"); ta.value=t; ta.select(); try{document.execCommand("copy");}catch(e){} }

@@ -81,6 +81,10 @@
      itself, so there is one layer, no offset, and the corner square starts exactly at the
      corner. background-origin is spelled out for the same reason. */
   :root { --chq: 30px; }
+  /* A Tileverse tile. It was the button height exactly, which made the cloud tidy and far too
+     small to read as a place — each tile is a window onto a level's own colours and there was
+     not enough of it to see. Twice that, and the numbers with it. */
+  :root { --tv-tile: calc(var(--btn-h) * 2); }
   /* Every button in the game is this tall, and so is every square of the Tileverse. It is a
      min-height rather than a padding sum so that WHAT IS IN a button — text, an arrow chip, a
      coin icon — cannot change how tall it comes out: the pause menu's RESUME used to measure
@@ -630,29 +634,50 @@
      the panel happens to be. A cloud that resized itself with the window meant the campaign
      looked bigger on a wide phone than a narrow one, and it means a fifty-level cloud and a
      twelve-level one draw their tiles at different sizes. Now a tile is a tile. */
+  /* The Tileverse pane IS the screen. It used to stop above the pinned button and start below
+     the title, which on a cloud bigger than the viewport meant two dead bands you could not
+     drag through. Now it runs edge to edge and the chrome floats over it — the cloud passes
+     underneath, which is also what makes it read as a place rather than a list in a box. */
+  #menu.wide .lvl-rack { position:fixed; inset:0; margin:0; max-height:none;
+    overflow:auto; overscroll-behavior:contain; z-index:1; }
+  /* ...so the title and the way out have to sit above it. */
+  #menu.wide.top #menu-title, #menu.wide #menu-body .shop-go { z-index:3; }
+  #menu.wide.top #menu-title { position:relative; }
   .lvl-map.blob { display:grid; gap:0; box-sizing:border-box;
-    padding:64px 40px; justify-content:center;
-    grid-template-columns:repeat(var(--cols, 9), var(--btn-h));
-    grid-auto-rows:var(--btn-h); }
+    /* Sized to its own contents and centred by auto margins, rather than filling the pane and
+       centring the columns inside it. Two reasons, both about scrolling:
+       - a scroll container drops the END padding of an overflowing grid, so `padding-right` was
+         simply not there to scroll into. Making the map as wide as padding+columns puts it back,
+         because now it is the map's own box that overflows;
+       - and auto margins collapse to zero the moment there is no free space, which centres the
+         cloud while it fits and pins it to the start when it does not — without `center`
+         pushing half the overflow to a negative offset nothing can reach. */
+    width:max-content; margin-inline:auto;
+    /* Room to overshoot the cloud by a tile and a half on every side, plus enough on the top
+       and bottom to clear the title and the button now that the pane runs underneath them. A
+       cloud you can only just reach the edge of feels pinned; one you can pull past feels like
+       it is floating in something. */
+    padding:calc(var(--tv-tile) * 1.5 + 76px) calc(var(--tv-tile) * 1.5)
+            calc(var(--tv-tile) * 1.5 + 72px);
+    grid-template-columns:repeat(var(--cols, 9), var(--tv-tile));
+    grid-auto-rows:var(--tv-tile); }
   #menu-body .lvl-map.blob .stop { position:relative; transform:none; width:auto; height:auto;
     aspect-ratio:1; padding:0; overflow:hidden;
     background:transparent; border:0; box-shadow:none; }
   /* the level's own backdrop, nine squares of it, filling the tile */
   .lvl-map.blob .stop .swatch { position:absolute; inset:0; width:100%; height:100%;
     display:block; image-rendering:pixelated; }
-  /* the number rides on top, dark-rimmed so it reads over any palette underneath */
-  .lvl-map.blob .stop > span { position:relative; font-size:15px; font-weight:900; color:#fff;
-    text-shadow:0 1px 0 rgba(5,4,13,0.9), 0 -1px 0 rgba(5,4,13,0.9),
-                1px 0 0 rgba(5,4,13,0.9), -1px 0 0 rgba(5,4,13,0.9); }
+  /* The number rides on top, plain. It used to carry a dark rim on all four sides so it could
+     be read over any palette; at twice the size it has the weight to do that on its own, and
+     the rim only made it look like a sticker on the tile rather than part of it. */
+  .lvl-map.blob .stop > span { position:relative; font-size:26px; font-weight:900; color:#fff; }
   /* Open levels are shown as they ARE — full strength, no wash over them, cleared or not.
      Clearing a level does not change how it looks; it is the same place either way, and a green
      film over half the cloud was hiding the very palettes the tiles exist to show. */
   /* ...and everything past where you have got is drained: the colour is what tells you a level
      is somewhere you have been let into. */
   .lvl-map.blob .stop.shut .swatch { filter:grayscale(1) brightness(0.55); }
-  .lvl-map.blob .stop.shut > span { color:#8b90a3;
-    text-shadow:0 1px 0 rgba(5,4,13,0.9), 0 -1px 0 rgba(5,4,13,0.9),
-                1px 0 0 rgba(5,4,13,0.9), -1px 0 0 rgba(5,4,13,0.9); }
+  .lvl-map.blob .stop.shut > span { color:#8b90a3; }
   #menu-body .lvl-map.blob .stop.done { background:transparent; }
   .lvl-map.blob .stop:active .swatch { filter:brightness(1.35); }
   .lvl-map.blob .stop.shut:active .swatch { filter:grayscale(1) brightness(0.85); }
@@ -1382,6 +1407,73 @@
     // One-shot impact for smashing a stone: a gritty noise burst swept downward
     // through a bandpass (the "crunch") plus a short low thud for weight. Kept
     // off the musical scale and dry so it reads as an impact, not a note.
+    // The Hammer's shout. Not a crash — a THROAT: a low sawtooth pair detuned against each
+    // other and dragged down a fifth, opened by a bandpass that sweeps like a mouth, with a
+    // noise bed under it for breath. The crunch of the stones themselves comes separately, on
+    // top, from smash().
+    function roar(kind) {
+      if (muted || !ac || ac.state !== "running") return;
+      // Two voices. The Hammer growls from the chest; the BELL shrieks — the same shape of
+      // sound an octave and a half up, with the partials pulled off the harmonic series so it
+      // rings rather than buzzes, and a shimmer of beating highs over the top. One is a thing
+      // hitting rock, the other is a thing being unmade, and they should not sound alike.
+      const bell = kind === "pulse";
+      const t = ac.currentTime, D = 1.55;      // it holds; a shout that is over in a beat is a bark
+      const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = bell ? 0.8 : 1.1;
+      bp.frequency.setValueAtTime(bell ? 1000 : 220, t);
+      bp.frequency.exponentialRampToValueAtTime(bell ? 4600 : 1250, t + 0.16);   // the mouth opening
+      bp.frequency.setValueAtTime(bell ? 4600 : 1250, t + D*0.55);               // ...and staying open
+      bp.frequency.exponentialRampToValueAtTime(bell ? 900 : 180, t + D);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.85, t + 0.07);
+      g.gain.setValueAtTime(0.85, t + D*0.62);    // most of it is the sustain, not the decay
+      g.gain.exponentialRampToValueAtTime(0.0006, t + D);
+      bp.connect(g); g.connect(master);
+      // The body of it. The Hammer stacks a sawtooth on its own octave; the Bell uses
+      // INHARMONIC partials — 1, 2.76, 5.4, the ratios a struck bar actually rings at — on
+      // triangles, which is what makes it read as metal rather than as a voice.
+      const base = bell ? 415 : 96;            // the Bell shrieks; the Hammer growls
+      const parts = bell ? [[1, -6, 0.34], [2.76, 5, 0.20], [5.40, -3, 0.11]]
+                         : [[1, -7, 0.32], [1, 9, 0.32], [0.5, 0, 0.50]];
+      for (const [mul, det, vol] of parts) {
+        const o = ac.createOscillator(); o.type = bell ? "triangle" : "sawtooth";
+        o.detune.value = det;
+        o.frequency.setValueAtTime(base*mul, t);
+        o.frequency.setValueAtTime(base*mul, t + D*0.5);           // held, then falls at the end
+        o.frequency.exponentialRampToValueAtTime(base*mul*(bell ? 0.86 : 0.667), t + D);
+        const og = ac.createGain(); og.gain.value = vol;
+        o.connect(og); og.connect(bp); o.start(t); o.stop(t + D + 0.05);
+      }
+      // ...and the shimmer: two high sines a few cents apart, beating against each other so the
+      // tail glitters instead of sitting still. Bell only — on the Hammer it would sound like
+      // something ringing that has no business ringing.
+      if (bell) {
+        const sg = ac.createGain();
+        sg.gain.setValueAtTime(0.0001, t);
+        sg.gain.exponentialRampToValueAtTime(0.16, t + 0.12);
+        sg.gain.setValueAtTime(0.16, t + D*0.55);
+        sg.gain.exponentialRampToValueAtTime(0.0006, t + D);
+        sg.connect(master);
+        for (const det of [-9, 11, 27]) {
+          const o = ac.createOscillator(); o.type = "sine";
+          o.frequency.value = 3100; o.detune.value = det;
+          const g3 = ac.createGain(); g3.gain.value = 0.34;
+          o.connect(g3); g3.connect(sg); o.start(t); o.stop(t + D + 0.05);
+        }
+      }
+      const nz = ac.createBufferSource(); nz.buffer = noiseBuf;
+      nz.playbackRate.value = bell ? 1.9 : 0.6;                    // breath, or a hiss of silver
+      // ...and the struck bell itself — the sound that used to fire the moment the charm was
+      // pressed. It belongs HERE, on the shout, not on the button: a button is a button.
+      if (bell) power("pulse");
+      const ng = ac.createGain();
+      ng.gain.setValueAtTime(0.0001, t);
+      ng.gain.exponentialRampToValueAtTime(0.30, t + 0.09);
+      ng.gain.setValueAtTime(0.30, t + D*0.6);
+      ng.gain.exponentialRampToValueAtTime(0.0006, t + D*0.95);
+      nz.connect(ng); ng.connect(bp); nz.start(t); nz.stop(t + D);
+    }
     function smash() {
       if (muted || !ac || ac.state !== "running") return;
       const t = ac.currentTime;
@@ -2213,7 +2305,7 @@
       musicBus.gain.setTargetAtTime(target, ac.currentTime, 0.12);
     }
     function isMuted() { return muted; }
-    return { unlock, clearTile, smash, win, lose, fall, death, boost, slow, coin, key, doorOpen,
+    return { unlock, clearTile, smash, roar, win, lose, fall, death, boost, slow, coin, key, doorOpen,
              slide, clack, tap, tapBig, power, warp, vortex, crunch, growl,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck,
              ambient,
@@ -2243,7 +2335,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v8.6";                    // shown on the title & pause screens
+  const VERSION = "v8.7";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -3158,8 +3250,15 @@
             // ms whatever the rail's length, ping-ponging, with `phase` staggering the start.
             // Keeping the maths identical is what lets the tuned saw levels survive the swap.
             const ph = (((h.phase || 0) % 1) + 1) % 1, u = ph * 2;
-            const t = u <= 1 ? u : 2 - u, dir = u <= 1 ? 1 : -1;
-            const p0 = h.lo + (h.hi - h.lo) * t, cell0 = Math.round(p0);
+            const raw = u <= 1 ? u : 2 - u, dir = u <= 1 ? 1 : -1;
+            // Snapped to a whole tile. A thrust is one tile, so a rail that BEGINS half a tile
+            // along can never land on one: every leg from that start is a fractional number of
+            // tiles, and the thrusts get stretched to fit it. Starting on a tile centre is what
+            // makes "one thrust, one tile" true for the first leg as well as the rest.
+            const span0 = Math.max(1, Math.abs(h.hi - h.lo));
+            const cell0 = Math.round(h.lo + (h.hi - h.lo) * raw);
+            const t = Math.abs(cell0 - h.lo) / span0;
+            const p0 = cell0;
             return { ...base, axis:ax, lo:h.lo, hi:h.hi, c:h.c, r:h.r, t, dir, pos:p0,
                      rowT:0, rowP:0, legN:null,   // the leg is laid out on the first tick
                      cc: ax==="h"?cell0:h.c, cr: ax==="h"?h.r:cell0,
@@ -3180,10 +3279,30 @@
               ? (() => { const w = (h.w||2), hh = (h.h||2), c0 = h.c, r0 = h.r;
                          return [[c0,r0],[c0+w,r0],[c0+w,r0+hh],[c0,r0+hh]]; })()
               : (ax==="h" ? [[h.lo,h.r],[h.hi,h.r]] : [[h.c,h.lo],[h.c,h.hi]]);
-          const A = path[0];
-          return { ...base, path, loop: variant === "square" ? true : !!h.loop,
-                   seg:0, segT:0, mdir:1, pause:0,
-                   wx:(A[0]+0.5)*CW, wy:(A[1]+0.5)*CW, cc:A[0], cr:A[1] };
+          // Where on its own route it sets off — the leg it begins on, and how far along that
+          // leg. Every path monster used to begin at waypoint one, so two sharing a route moved
+          // as one and a rail could only ever start at an end. Both are clamped, because a route
+          // can be redrawn shorter than the numbers saved against it.
+          const loop0 = variant === "square" ? true : !!h.loop;
+          const s0 = Math.max(0, Math.min(path.length - 1, h.seg0 | 0));
+          const n0 = loop0 ? (s0 + 1) % path.length
+                           : Math.max(0, Math.min(path.length - 1, s0 + 1));
+          const A = path[s0], B = path[n0];
+          // Snapped to a whole tile along the leg, for the same reason a rail's start is: a
+          // thrust is one tile, so beginning part-way through one leaves every thrust of that
+          // leg landing between squares.
+          const legTiles = Math.max(1, Math.abs(B[0]-A[0]) + Math.abs(B[1]-A[1]));
+          const step0 = Math.max(0, Math.min(legTiles - 1,
+                          Math.round(Math.max(0, Math.min(0.999, +h.segT0 || 0)) * legTiles)));
+          const t0 = step0 / legTiles;
+          const ax0 = A[0] + (B[0] - A[0])*t0, ay0 = A[1] + (B[1] - A[1])*t0;
+          // A rail-looking walker positions itself from a STROKE CLOCK, which starts at zero and
+          // would have thrown this start away on the very first tick. Seeding the clock with the
+          // whole thrusts already behind it is what makes the start survive.
+          return { ...base, path, loop: loop0,
+                   seg:s0, segT:t0, mdir:1, pause:0,
+                   rowT: step0 * Math.max(1, base.speed), rowP: 0,
+                   wx:(ax0+0.5)*CW, wy:(ay0+0.5)*CW, cc:Math.round(ax0), cr:Math.round(ay0) };
         }
         // `phase` (0..1) is how far into the full ping-pong cycle this saw starts:
         // 0 = parked at lo heading for hi, 0.5 = at hi heading back. Without it, every saw
@@ -4482,8 +4601,10 @@
     const grace = s && s.status === "falling" && s.ankhGrace > 0;
     if (!s || (s.status !== "play" && !grace) || !def || s.power.used.has(def.id)) return false;
     s.power.used.add(def.id);
-    spawnPop(runnerCell().c, runnerCell().r, def.col);
-    Sound.power(def.id);
+    // Every charm marks itself with a pulse on the runner's cell — except the Hammer, whose
+    // whole statement is the circle.
+    if (def.id !== "finger") spawnPop(runnerCell().c, runnerCell().r, def.col);
+    Sound.tap();                            // pressing it is a press; the charm speaks for itself
     haptic([10, 30, 14]);
 
     // Charms that do their work on the spot and let go. These deliberately do not touch the
@@ -4499,8 +4620,8 @@
     // The Hammer stopped being a thing you aim and became a thing you set off: it used to wait,
     // armed, for you to tap a laid tile and lift it. A charm that does its work the moment you
     // press it is one fewer rule to hold, and breaking rock is what a sledge was always for.
-    if (def.id === "finger") { smashStones(HAMMER_TILES);      s.hold = BLAST_HOLD_MS; return true; }
-    if (def.id === "pulse")  { unmakeMonsters(PULSE_TILES, def.col); s.hold = BLAST_HOLD_MS; return true; }
+    if (def.id === "finger") { startRoar("finger"); return true; }   // the smash happens mid-shout
+    if (def.id === "pulse")  { startRoar("pulse");  return true; }   // the unmaking happens mid-shout
     // The Ankh does nothing at all when pressed. It latches, and `startFall` spends it. Its own
     // flag, not the effect slot, so pressing anything else afterwards leaves it waiting.
     // Caught in the air, it does its work now. Pressed while running, it waits for the fall
@@ -4524,13 +4645,92 @@
     return true;
   }
   const powerActive = id => state && state.power.kind === id && state.power.t > 0;
-  const PULSE_TILES = 2;                   // how far the Bell reaches, in cells
-  const HAMMER_TILES = 2;                  // ...and the Hammer, which breaks rock instead
-  // Both of those go off AROUND the runner, and he was running out of the blast while it was
-  // still happening — you pressed the Bell and watched the monsters come apart somewhere behind
-  // you. Holding him still for half a second lets the thing you asked for happen where you can
-  // see it, and reads as the charm taking a moment rather than as the game stalling.
-  const BLAST_HOLD_MS = 500;
+  const PULSE_TILES = 1;                   // how far the Bell reaches, in cells
+  const HAMMER_TILES = 1;                  // ...and the Hammer, which breaks rock instead
+  // The Hammer is not a button, it is a MOMENT. He stops, straightens, leans back, and shouts
+  // the rock apart. Three beats: the draw of breath, the shout itself, and a beat of quiet
+  // afterwards before he runs on — without that last one the run resumes on the same frame the
+  // sound ends and the whole thing reads as a stutter rather than as an act.
+  const ROAR_LEAN = 0.34;                  // radians thrown back from the waist, about 19 degrees
+  const ROAR = { wind: 220, blast: 950, settle: 260 };
+  const ROAR_MS = ROAR.wind + ROAR.blast + ROAR.settle;
+  // The two shouting charms. They are the same MOMENT — the same freeze, lean, shake and
+  // circle — and differ only in what they unmake and what colour they do it in. The Hammer
+  // takes rock and wears the rock's own colour; the Bell takes monsters and is black, because
+  // what it does is subtract something from the world.
+  const ROAR_KIND = {
+    finger: { fill: "#574d38", mid: "rgba(198,184,146,",  rim: "rgba(226,214,182," },
+    pulse:  { fill: "#05040c", mid: "rgba(12,10,24,",     rim: "rgba(0,0,0," },
+  };
+  function startRoar(kind){
+    const s = state;
+    s.roar = { t: 0, fired: false, kind };
+    s.hold = ROAR_MS;                       // he is not going anywhere until it is done
+  }
+  function tickRoar(dt){
+    const s = state, R = s.roar; if (!R) return;
+    R.t += dt;
+    if (!R.fired && R.t >= ROAR.wind) {     // the shout, and whatever goes with it
+      R.fired = true;
+      if (R.kind === "pulse") unmakeMonsters(PULSE_TILES, "#c9b6ff");
+      else                    smashStones(HAMMER_TILES);
+      try { Sound.roar && Sound.roar(R.kind); } catch(_){}
+      haptic([12, 26, 60]);
+    }
+    // the ground goes while he is shouting, and settles as he does
+    if (R.fired && R.t < ROAR.wind + ROAR.blast) {
+      const k = 1 - (R.t - ROAR.wind) / ROAR.blast;
+      s.shake = Math.max(s.shake, cell * 0.09 * k);
+    }
+    if (R.t >= ROAR_MS) s.roar = null;
+  }
+  // 0 while he runs, 1 at the top of the shout — drives both his lean and the ring.
+  function roarK(){
+    const R = state && state.roar; if (!R) return 0;
+    if (R.t < ROAR.wind) return R.t / ROAR.wind;                       // drawing breath
+    if (R.t < ROAR.wind + ROAR.blast) return 1;                        // held
+    return Math.max(0, 1 - (R.t - ROAR.wind - ROAR.blast) / ROAR.settle);
+  }
+  // The circle of influence, in the stone's own colour. It does not grow: it appears and goes
+  // at EXACTLY the radius the Hammer reaches, because that is the one thing it is for. An
+  // expanding ring says "a wave is travelling outward" and invites you to watch where it gets
+  // to; the Hammer does not work like that. smashStones takes every stone whose centre lies
+  // within HAMMER_TILES cells of him, measured straight — so this is that circle, drawn.
+  function drawRoarRing(){
+    const R = state && state.roar; if (!R || !R.fired) return;
+    const u = Math.min(1, (R.t - ROAR.wind) / ROAR.blast);
+    const p = visualAt(state.runIdx + state.runT);
+    // quick to arrive, slower to leave
+    const a = u < 0.12 ? u/0.12 : Math.pow(Math.max(0, 1 - (u - 0.12)/0.88), 1.5);
+    if (a <= 0.004) return;
+    const C = ROAR_KIND[R.kind] || ROAR_KIND.finger;
+    const R2 = (R.kind === "pulse" ? PULSE_TILES : HAMMER_TILES) * cell;
+    ctx.save();
+    // The flat disc: the reach itself, stated plainly and at one size.
+    ctx.globalAlpha = 0.45 * a;
+    ctx.fillStyle = C.fill;
+    ctx.beginPath(); ctx.arc(p.x, p.y, R2, 0, Math.PI*2); ctx.fill();
+    // ...and over it, the blast RUNNING OUT to that edge. It races the whole way in the first
+    // fifth of the shout and then holds — so it reads as something arriving at the boundary
+    // rather than as a wave still travelling when the stones have already gone.
+    //
+    // Clear in the middle and solid at the rim: the force is at the FRONT of the thing, and he
+    // is standing in the quiet at its centre. Bright at him instead would have put the loudest
+    // part of the picture on the one spot nothing happens, and hidden him behind it.
+    const grow = Math.min(1, u / 0.20);
+    const rad = R2 * (1 - Math.pow(1 - grow, 3));
+    if (rad > 1) {
+      const g2 = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rad);
+      g2.addColorStop(0,    C.mid + "0)");
+      g2.addColorStop(0.55, C.mid + (0.22*a).toFixed(3) + ")");
+      g2.addColorStop(0.88, C.rim + (0.72*a).toFixed(3) + ")");
+      g2.addColorStop(1,    C.rim + a.toFixed(3) + ")");
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = g2;
+      ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
   // One more tile in the hand, dropped as close to the middle of the board as there is room
   // for. It goes down LOOSE, exactly as if you had dragged it there yourself: it is a fourth
   // tile to cycle, not a piece of track laid for you.
@@ -4567,19 +4767,29 @@
   }
   // Every stone inside the ring comes apart at once, however much hit-point it had left.
   // Measured the way the Bell measures monsters — his real position against the stone's real
-  // centre — so the two charms cannot disagree about what "within two tiles" means.
+  // centre — so the two charms cannot disagree about what "within range" means. They no longer
+  // reach the same distance: the Bell takes two tiles, the Hammer one.
   function smashStones(tiles) {
+    // No burst of light and no ring per stone. The Hammer says what it does with ONE shape —
+    // the filled circle of its reach — and every extra pulse thrown on top argued with it,
+    // expanding past an edge the circle had just drawn. The stones still throw their shards,
+    // because that is the rock coming apart rather than an effect about the rock.
     const s = state, rp = visualAt(s.runIdx + s.runT), reach = tiles * cell;
-    spawnLight(runnerCell().c, runnerCell().r, tiles / 1.55, 520);
     const doomed = [];
     for (const sk of s.stones.keys()) {
       const i = sk.indexOf(","), c = +sk.slice(0, i), r = +sk.slice(i+1);
-      if (Math.hypot((c+0.5)*cell - rp.x, (r+0.5)*cell - rp.y) <= reach) doomed.push([sk, c, r]);
+      // TOUCHING is enough: the circle takes any stone it overlaps at all, rather than only
+      // those whose CENTRE it reaches. Measuring to centres meant the drawn circle could lie
+      // visibly across a stone and leave it standing — and at a one-tile reach the stone in the
+      // very next square sits at exactly that distance, so whether it broke came down to
+      // floating point. Nearest point on the stone's square to him, against the radius.
+      const nx = Math.max(c*cell, Math.min(rp.x, (c+1)*cell));
+      const ny = Math.max(r*cell, Math.min(rp.y, (r+1)*cell));
+      if (Math.hypot(nx - rp.x, ny - rp.y) <= reach) doomed.push([sk, c, r]);
     }
     for (const [sk, c, r] of doomed) {
       s.stones.delete(sk);
       const wx = (c+0.5)*cell, wy = (r+0.5)*cell;
-      spawnPop(c, r, "#cfc7b4");
       for (let i = 0; i < 12; i++) {
         const a = (i/12)*Math.PI*2 + (i%5)*0.29, sp = cell*0.0015;
         s.shards.push({ x:wx, y:wy, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - cell*0.0007,
@@ -4596,18 +4806,25 @@
   // Measured from his own position rather than his cell, and against each monster's world
   // position rather than its cell, so a thing halfway between two squares is judged on where it
   // actually IS. Rounding both to cells first made the reach lopsided — a monster a whisker
-  // inside two tiles could round out of range while one further off rounded in.
+  // inside the reach could round out of range while one further off rounded in.
   function unmakeMonsters(tiles, col) {
+    // No burst of light: the Bell states its reach with the one circle, the same way the
+    // Hammer does, and a second expanding ring on top only argued with it.
     const s = state, rp = visualAt(s.runIdx + s.runT), reach = tiles * cell;
-    // The ring the player sees ends exactly ON the reach: spawnLight's radius runs out to
-    // 1.55 cells at full scale, so this is the scale that puts its edge at `tiles`.
-    spawnLight(runnerCell().c, runnerCell().r, tiles / 1.55, 520);
-    const doomed = s.hazards.filter(h => h.kind === "monster" &&
-                                    Math.hypot(h.wx - rp.x, h.wy - rp.y) <= reach);
-    if (!doomed.length) { Sound.power("pulse"); return 0; }
+    // TOUCHING is enough, as with the Hammer. A monster is a cell-sized body about its own
+    // position, so this is the nearest point of THAT square against the radius — a monster the
+    // circle visibly lies across comes apart, rather than surviving because its middle was a
+    // few pixels outside.
+    const h2 = cell/2;
+    const doomed = s.hazards.filter(h => {
+      if (h.kind !== "monster") return false;
+      const nx = Math.max(h.wx - h2, Math.min(rp.x, h.wx + h2));
+      const ny = Math.max(h.wy - h2, Math.min(rp.y, h.wy + h2));
+      return Math.hypot(nx - rp.x, ny - rp.y) <= reach;
+    });
+    if (!doomed.length) return 0;           // the shout already rang; nothing to add
     for (const h of doomed) {
       const body = (monKind(h).body) || col;
-      spawnPop(h.cc, h.cr, body);
       for (let i = 0; i < 14; i++) {                   // it comes apart the way a stone does
         const a = (i / 14) * Math.PI * 2 + (i % 5) * 0.31, sp = cell * 0.0016;
         s.shards.push({ x:h.wx, y:h.wy, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - cell*0.0007,
@@ -4617,7 +4834,6 @@
     s.hazards = s.hazards.filter(h => !doomed.includes(h));
     markOccDirty();                     // a blocking monster gone means the cell opens up
     s.shake = Math.max(s.shake, cell * 0.20);
-    Sound.power("pulse");
     Sound.smash();
     return doomed.length;
   }
@@ -6121,11 +6337,10 @@
     // quick power stroke with the teeth out and driving backwards, then a longer recovery
     // where they feather in and slide forward to catch again. Same idea as an oar, and the
     // asymmetry is the whole thing: equal halves read as a wobble, not as propulsion.
-    railStrokeMs: 780,  // TARGET length of one stroke. The actual length is stretched or
-                        // squeezed a little per leg so a whole number of strokes spans the
-                        // rail exactly — see railLegSetup. A rail is not a multiple of 780ms,
-                        // and a monster that reached the end halfway through a thrust stopped
-                        // dead mid-heave and reversed, which read as a stumble.
+    railStrokeMs: 780,  // No longer sets the stroke LENGTH — a thrust is one tile now, and how
+                        // long it takes is the monster's own ms-per-tile. Kept in the block so a
+                        // pasted MONSTER still fits, and because the shape of the stroke (drive
+                        // and coast, below) is still what a thrust looks like.
     railDrive:  0.34,   // fraction of that spent driving; the rest is the recovery
     railSweep:  0.085,  // how far round the rim a tooth travels in a stroke, in TURNS
     railFeather:0.34,   // how far the teeth pull in on the recovery (1 = not at all)
@@ -6236,9 +6451,18 @@
       if (h.legSpan > 1e-6) break;
       h.dir = -h.dir;                          // already at that end — turn and try the other way
     }
-    const full = Math.max(1, Math.round(h.speed / MONSTER.railStrokeMs));   // strokes per whole rail
-    h.legN  = Math.max(1, Math.round(full * h.legSpan));
-    h.legSd = (h.speed * h.legSpan) / h.legN;  // this leg's stroke, ms
+    // ONE THRUST, ONE TILE. The count used to be derived from the monster's speed against a
+    // target stroke length, which meant a thrust covered whatever fraction of the rail happened
+    // to fall out of that division — a long rail and a short one at the same speed swam in
+    // strokes of different size, and neither lined up with the grid they were crossing.
+    const span = Math.max(1, Math.abs((h.hi ?? 0) - (h.lo ?? 0)));   // tiles across the whole rail
+    h.legN  = Math.max(1, Math.round(span * h.legSpan));             // ...so this many thrusts
+    // And the leg is made to BE that many tiles, rather than that many thrusts stretched over
+    // whatever was left. Rounding the count and keeping the old distance is what put a monster
+    // between two tiles for a whole leg; this puts the two back in step by moving the distance
+    // onto the thrust, which is the thing that is meant to be exactly one tile.
+    h.legSpan = h.legN / span;
+    h.legSd = Math.max(1, h.speed);                                  // each taking one tile's time
     h.rowT  = 0;
   }
   function railRate(P) {
@@ -7545,8 +7769,19 @@
       ctx.beginPath(); ctx.arc(sx, sy - s*0.2, s*0.42, 0, Math.PI*2); ctx.fill();
       ctx.restore();
     }
+    // Mid-shout he is not running. He STANDS — upright on his own platform, keeping whatever
+    // tilt the track under him has, and throws back from there. Straightening him against the
+    // WORLD instead would tip him off a sloped tile, which reads as him losing his footing at
+    // the exact moment he is supposed to look immovable. Legs still, because a stride under a
+    // roar reads as him being blown over rather than doing the blowing.
+    const rk = roarK();
+    if (rk > 0) {
+      angle -= ROAR_LEAN * rk;
+      moving = false;
+    }
     paintRunner(sx, sy, s, phase, angle, moving, ts, (state.status === "squash") ? squashK() : 0,
                 state.status !== "falling");
+    drawRoarRing();
   }
   // A roll has to ACCUMULATE rather than be read off the clock, so that standing still stops
   // it dead and starting again picks it up from where it stopped — a ball that keeps spinning
@@ -8868,6 +9103,7 @@
       tickLover(dt);
       tickEaten(dt);
       tickCeremony(dt);
+      if (state.roar) tickRoar(dt);
       if (state.status === "falling") {
         if (state.ankhGrace > 0) state.ankhGrace -= dt;    // the window to reach for the Ankh
         tickFall(dt);
@@ -8980,9 +9216,14 @@
           h.rowP = k - done;
           const prog = (done + railProgress(h.rowP)) / h.legN;
           if (prog >= 1) {                          // that was the last stroke of the leg
+            // Carry the overshoot into the new leg instead of dropping it. The old code reset
+            // the stroke clock to zero at every turn, so each one quietly ate up to a frame —
+            // the monster fell a little further behind its own beat on every length of the rail.
+            const over = h.rowT - h.legN * h.legSd;
             h.t = h.dir > 0 ? 1 : 0;
             h.dir = -h.dir;
             railLegSetup(h);
+            h.rowT = Math.max(0, Math.min(over, h.legSd*0.5));
           } else {
             h.t = h.legFrom + (h.dir > 0 ? 1 : -1) * h.legSpan * prog;
           }
@@ -9026,8 +9267,8 @@
           // One hop is a whole number of thrusts, and the position across it is DERIVED from
           // the stroke clock exactly as a rail monster's leg is — so it surges into each cell
           // and arrives coasting, instead of sliding across at a constant rate.
-          const hopN = Math.max(1, Math.round(Math.max(1, h.speed) / MONSTER.railStrokeMs));
-          const hopSd = Math.max(1, h.speed) / hopN;
+          // A hop IS one tile, so it is one thrust — see railLegSetup.
+          const hopN = 1, hopSd = Math.max(1, h.speed);
           h.rowT = (h.rowT || 0) + dt;
           const hk = h.rowT / hopSd, hdone = Math.floor(hk);
           h.rowP = hk - hdone;
@@ -9087,9 +9328,8 @@
           // A rower crosses a leg in a whole number of thrusts, positioned from its stroke
           // clock; anything else slides along at a constant rate as it always did.
           if (PK && PK.look === "rail") {
-            const legMs = Math.max(1, h.speed * segCells);
-            const segN = Math.max(1, Math.round(legMs / MONSTER.railStrokeMs));
-            const segSd = legMs / segN;
+            const segN = Math.max(1, segCells);        // one thrust per tile of the leg
+            const segSd = Math.max(1, h.speed);          // each taking one tile's time
             h.rowT = (h.rowT || 0) + dt;
             const sk = h.rowT / segSd, sdone = Math.floor(sk);
             h.rowP = sk - sdone;
@@ -9456,6 +9696,9 @@
   function fitScrollRack() {
     const rack = menuBody.querySelector(".shop-rack"), go = menuBody.querySelector(".shop-go");
     if (!rack || !go) return;
+    // The Tileverse pane sizes itself: it is the whole screen, with the chrome floating over
+    // it. Measuring a floor for it would put the bottom band back.
+    if (rack.classList.contains("lvl-rack")) return;
     const gap = 12;
     // Whichever pinned button is highest is the floor the rack has to stop above — the buy
     // button appears above CARRY ON when something is being tried on, and measuring against
@@ -10147,11 +10390,12 @@
     titleActive = false;
     const pf = document.getElementById("pauseFloat"); if (pf) pf.style.display = "";
     Sound.unlock();
-    // Level one opens with the cinematic; it loads the level itself when it ends. Resuming
-    // further in skips straight to the board — the creation myth only fits in front of the
-    // first level, not in front of level 14.
-    if (levelIdx === 0) startCine("level");   // the cinematic picks the theme up from here
-    else loadLevel(levelIdx);            // start the level fresh (with its own intro + any tutorial pop)
+    // The creation myth plays ONCE, for someone who has never seen it — it loads level one
+    // itself when it ends. Everybody else lands in the Tileverse and picks where to go, which
+    // is what a returning player wanted anyway: the old rule keyed off the level you were on,
+    // so anyone still on level one sat through the whole opening every single launch.
+    if (!cineSeen()) startCine("level");      // the cinematic picks the theme up from here
+    else openMenu("world");                   // the map, opened on the level you are up to
   }
 
   // ---------- BIG MAN LITTLE ----------------------------------------------
