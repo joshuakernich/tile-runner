@@ -173,7 +173,8 @@
         loads (drawn solid, with the front ringed), and any tile left elsewhere stays <b>loose</b>
         (drawn hollow) until the player drags it into place. Scatter them around the level if you
         want them found rather than given. Four tiles including the start is the norm.</div>
-      <div class="tip" data-for="goal"><b>Goal</b>: click the flag's own cell to <i>remove</i> it — a
+      <div class="tip" data-for="goal"><b>Goal</b>: click the flag's own cell to <i>remove</i> it, or
+        rub it out with the eraser — a
         level with no flag never ends, so the run only stops when the runner falls. A talisman maze
         uses the charm as its exit and carries no flag at all.</div>
       <div class="tip" data-for="block"><b>Slider block</b>: one click drops the block on a 3-cell rail,
@@ -474,6 +475,11 @@ function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
 function eraseAt(c,r){
   const k = keyOf(c,r); let hit=false;
   if(L.walls.delete(k)) hit=true;
+  // The flag comes off with everything else. It was the one thing the eraser walked past, so
+  // the only way to be rid of it was to pick the Goal tool and click it — and the inspector's
+  // own DELETE button, which routes through here, did nothing at all on a selected flag.
+  // Safe to null: a level with no exit is a supported shape, both here and in the game.
+  if(L.goal && L.goal[0]===c && L.goal[1]===r){ L.goal=null; hit=true; }
   const bBefore=L.blocks.length; L.blocks = L.blocks.filter(b=>!blockCells(b).some(x=>x[0]===c&&x[1]===r)); if(L.blocks.length!==bBefore)hit=true;
   const hBefore=L.hazards.length;
   L.hazards = L.hazards.filter(h => isMon(h) ? !monCells(h).some(x=>x[0]===c&&x[1]===r)
@@ -1688,7 +1694,9 @@ cv.addEventListener("mousedown", e=>{
   const side=edgeAt(e);
   if(side && e.button!==2){ pushUndo(); mouseDown=true;
     edgeDrag={side, x0:e.clientX, y0:e.clientY, cols0:L.cols, rows0:L.rows, dc:0, dr:0};
-    cv.style.cursor=EDGE_CURSOR[side]; return; }
+    // On the BODY as well: the drag carries the pointer off the canvas, and a cursor set on
+    // the canvas stops applying the moment it leaves.
+    cv.style.cursor=EDGE_CURSOR[side]; document.body.style.cursor=EDGE_CURSOR[side]; return; }
   mouseDown=true; const c=cellFromEvent(e); if(!c) return;
   // grab an existing element and drag it (any tool except erase / right-click)
   if(tool!=="erase" && e.button!==2){ const hit=draggableAt(c.c,c.r);
@@ -1711,7 +1719,7 @@ cv.addEventListener("mousedown", e=>{
   lastCell=c; applyTool(c.c,c.r,false);
 });
 cv.addEventListener("mousemove", e=>{
-  if(edgeDrag){ dragExtent(e); return; }
+  if(edgeDrag) return;                       // the window handler below has the wheel
   const c=cellFromEvent(e);
   if(!mouseDown){ const side=edgeAt(e);
     cv.style.cursor = side ? EDGE_CURSOR[side]
@@ -1724,8 +1732,14 @@ cv.addEventListener("mousemove", e=>{
   path.forEach(p=>{ if(p.c<0||p.r<0||p.c>=L.cols||p.r>=L.rows) return; if(tool==="wall") paintWall(p.c,p.r); else if(tool==="stone") paintStone(p.c,p.r); else eraseAt(p.c,p.r); });
   lastCell=c; commit(); draw(); refreshOut();
 });
+// An edge drag is followed on the WINDOW, not on the canvas. Growing the map means dragging
+// AWAY from it: the pad is 18px and a column is 40, so the pointer is outside the canvas a good
+// 2px before the first new column is due — and a canvas that has stopped hearing about the
+// mouse cannot grow. It could only ever shrink, which is a drag toward the middle and stays
+// over the board the whole way. Shrinking never needed this and never noticed.
+window.addEventListener("mousemove", e=>{ if(edgeDrag) dragExtent(e); });
 window.addEventListener("mouseup", ()=>{ mouseDown=false; lastCell=null; paintMode=null;
-  if(edgeDrag){ edgeDrag=null; cropToBoard(); commit(); draw(); refreshOut(); }   // crop once, at the end
+  if(edgeDrag){ edgeDrag=null; document.body.style.cursor=""; cropToBoard(); commit(); draw(); refreshOut(); }   // crop once, at the end
   if(dragEl){
     // Pressed and released without ever leaving the square: that was a click, and a click
     // selects rather than moves.

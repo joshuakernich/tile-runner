@@ -1,6 +1,6 @@
 // Tile Runner service worker — NETWORK-FIRST so the newest deploy always wins,
 // with an offline fallback to the last cached copy.
-const CACHE = "tile-runner-v98";
+const CACHE = "tile-runner-v99";
 const ASSETS = [
   "./",
   "./index.html",
