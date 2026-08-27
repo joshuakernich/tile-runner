@@ -2634,7 +2634,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v9.8";                    // shown on the title & pause screens
+  const VERSION = "v9.9";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -2987,11 +2987,16 @@
   // a little runner bust, used as the backdrop of most swatches
   // `body` may be a flat colour OR a finish { paint, sheen } — the same pair paintRunner
   // uses — so a swatch shows the actual material rather than a flat stand-in for it.
-  function swatchBust(g, S, body, ink, fin, ts){
+  // `rad` is the corner, in fractions of S. It defaults to the runner's own rounding, because
+  // most of these cards are selling something you wear ON him and want to look like him. The
+  // DRIP cards pass 0: a finish is a material, and a material is best shown as a plain square
+  // of itself — a rounded plaque puts a shape between you and the paint you are buying.
+  function swatchBust(g, S, body, ink, fin, ts, rad){
     const w = S*0.42, h = S*0.42, x = S/2 - w/2, y = S*0.30;
+    const R = S*(rad == null ? 0.07 : rad);
     g.fillStyle = (fin && fin.paint) ? fin.paint(g, x, y, w, h, ts||0) : body;
-    rr2(g, x, y, w, h, S*0.07); g.fill();
-    if (fin && fin.sheen) { g.save(); rr2(g, x, y, w, h, S*0.07); g.clip(); fin.sheen(g, x, y, w, h, ts||0); g.restore(); }
+    rr2(g, x, y, w, h, R); g.fill();
+    if (fin && fin.sheen) { g.save(); rr2(g, x, y, w, h, R); g.clip(); fin.sheen(g, x, y, w, h, ts||0); g.restore(); }
     g.fillStyle = ink;
     g.beginPath(); g.arc(S/2 - w*0.16, y + h*0.40, S*0.035, 0, 7); g.fill();
     g.beginPath(); g.arc(S/2 + w*0.20, y + h*0.40, S*0.035, 0, 7); g.fill();
@@ -3100,7 +3105,7 @@
     { id:"opal",     name:"Opal",     cost:30, body:"#f2e6ff", ink:"#3a2f4a",
       paint: spectrum(22000, 62, 87, 34) }
   );
-  SKIN_COLOURS.forEach(c => c.swatch = (g,S) => swatchBust(g, S, c.body, c.ink, c, 0));
+  SKIN_COLOURS.forEach(c => c.swatch = (g,S) => swatchBust(g, S, c.body, c.ink, c, 0, 0));
 
   // Hats draw in the runner's local frame: +x is travel, the body spans byTop..byTop+bodyH.
   const HATS = [
@@ -3313,75 +3318,191 @@
 
   // KICKS — drawn at each foot, in the runner's local frame, +x being travel. The foot
   // itself is the anchor, so they follow the stride and the lift for free.
+  // WHERE THE GROUND IS, for anything worn on a foot. The runner's local y=0 is the track's
+  // own surface, and a leg is stroked with a ROUND cap — so the end of it already bulges half
+  // a leg-width past the foot, 0.025 of a cell. A sole drawn any shallower than that has the
+  // leg's own curve hanging below it, which is exactly what makes a flat-bottomed boot look
+  // round. Every kick's sole belongs on this line.
+  const KICK_SOLE = 0.026;
+  // Two shapes every kick is built from, so the whole family stands on one ground and is cut
+  // to one set of proportions. `bootBody` is the upper: a rounded box whose BOTTOM is always
+  // the sole line, however tall its top. `soleSlab` is what it stands on.
+  const bootBody = (g,s,back,top,front,rad,bottom) =>
+    rr2(g, s*back, s*top, s*(front-back),
+        s*((bottom==null?KICK_SOLE:bottom) - top), s*(rad==null?0.014:rad));
+  const soleSlab = (g,s,back,front,thick,rad) =>
+    rr2(g, s*back, s*(KICK_SOLE-thick), s*(front-back), s*thick, s*(rad==null?0.006:rad));
+  // The bare foot itself, as a path — heel on the sole line, one straight underneath, the toe
+  // and the heel curving up off it and never into it. Shared, because anything that shows the
+  // foot rather than enclosing it needs the same silhouette.
+  function footPath(g,s){
+    const SOLE = s*KICK_SOLE;
+    g.beginPath();
+    g.moveTo(-s*0.020, -s*0.014);                                  // the ankle, at the back
+    g.quadraticCurveTo(-s*0.030,  s*0.006, -s*0.028, SOLE);        // down the back of the heel
+    g.lineTo( s*0.050, SOLE);                                      // THE SOLE — one straight
+    g.quadraticCurveTo( s*0.056,  s*0.016,  s*0.046,  s*0.004);    // the toe, rounded off
+    g.quadraticCurveTo( s*0.032, -s*0.008,  s*0.012, -s*0.016);    // ...and back up the instep
+    g.closePath();
+  }
+  // Every kick is TWO things: `cover`, a fraction of the leg from the foot back that gets
+  // restroked in `legCol` — the sock, the upper, the shaft — and `draw`, the shape that stands
+  // on the ground. A thigh boot is mostly cover; a croc is all shape and almost none.
   const KICKS = [
-    { id:"none", name:"Barefoot", cost:0, draw:null, swatch:(g,S)=>swatchBust(g,S,"#bfe6ff","#17263f") },
-    { id:"sneaker", name:"Sneakers", cost:5, col:"#f2f4ff",
-      draw(g,s,col){ g.fillStyle = col;
-        rr2(g, -s*0.030, -s*0.026, s*0.085, s*0.045, s*0.018); g.fill();
-        g.fillStyle = "rgba(23,38,63,0.35)"; g.fillRect(-s*0.030, s*0.007, s*0.085, s*0.012); } },
-    { id:"boot", name:"Boots", cost:5, col:"#7a4a22",
-      draw(g,s,col){ g.fillStyle = col;
-        rr2(g, -s*0.032, -s*0.055, s*0.070, s*0.075, s*0.014); g.fill();
-        g.fillStyle = "#2c1a0b"; g.fillRect(-s*0.036, s*0.010, s*0.090, s*0.014); } },
-    { id:"skate", name:"Skates", cost:10, col:"#e8506b",
-      draw(g,s,col){ g.fillStyle = col;
-        rr2(g, -s*0.030, -s*0.048, s*0.078, s*0.058, s*0.016); g.fill();
-        g.fillStyle = "#d9dfe8"; g.fillRect(-s*0.034, s*0.012, s*0.088, s*0.008);
-        g.beginPath(); g.arc(-s*0.014, s*0.028, s*0.016, 0, 7);
-        g.arc( s*0.032, s*0.028, s*0.016, 0, 7); g.fill(); } },
-    { id:"glow", name:"Glowsteps", cost:10, col:"#c6ff2e",
-      draw(g,s,col){ g.fillStyle = "#2b2740";
-        rr2(g, -s*0.030, -s*0.030, s*0.082, s*0.050, s*0.016); g.fill();
-        g.fillStyle = col; g.fillRect(-s*0.034, s*0.012, s*0.090, s*0.016);
-        g.globalAlpha = 0.35; g.fillRect(-s*0.048, s*0.024, s*0.118, s*0.020); g.globalAlpha = 1; } },
-    // Six more. The foot is tiny at this size, so each is one silhouette and one detail —
-    // a sole, a strap, a cuff — rather than a shoe drawn in miniature.
-    { id:"sandal", name:"Sandals", cost:15, col:"#d9b27a",
-      draw(g,s,col){ g.fillStyle = col; g.fillRect(-s*0.032, s*0.006, s*0.086, s*0.014);
-        g.fillStyle = "#6b4a20"; g.fillRect(-s*0.010, -s*0.024, s*0.012, s*0.032);
-        g.fillRect(-s*0.026, -s*0.014, s*0.056, s*0.010); } },
-    { id:"welly", name:"Wellies", cost:15, col:"#3f8f5a",
-      draw(g,s,col){ g.fillStyle = col;
-        rr2(g, -s*0.030, -s*0.078, s*0.064, s*0.096, s*0.016); g.fill();
-        g.fillStyle = "#1e4a2e"; g.fillRect(-s*0.034, s*0.008, s*0.082, s*0.014); } },
-    { id:"hover", name:"Hoverpads", cost:20, col:"#7fd8ff",
-      draw(g,s,col){ g.fillStyle = "#2b2740";
-        rr2(g, -s*0.030, -s*0.026, s*0.082, s*0.038, s*0.014); g.fill();
-        g.fillStyle = col; g.globalAlpha = 0.55;
-        g.beginPath(); g.ellipse(s*0.010, s*0.030, s*0.056, s*0.014, 0, 0, 7); g.fill();
+    // Barefoot is not "no kick": it is a FOOT, in whatever colour he happens to be, covering no
+    // leg because a foot is where the leg stops.
+    { id:"none", name:"Barefoot", cost:0, cover:0, col:null,
+      draw(g,s,col){ g.fillStyle = col; footPath(g,s); g.fill(); } },
+
+    // A sock is the FOOT in fabric — no sole, no shape of its own, the leg simply carried on
+    // over the toes. The two bands at the ankle are the whole reason it does not read as a
+    // pale foot, and they are clipped to the sock so neither runs off the back of the heel.
+    { id:"socks", name:"Socks", cost:5, col:"#f4f6ff", cover:0.30, legCol:"#f4f6ff",
+      draw(g,s,col){
+        g.fillStyle = col; footPath(g,s); g.fill();
+        g.save(); footPath(g,s); g.clip();
+        g.fillStyle = "#e8506b"; g.fillRect(-s*0.05, -s*0.015, s*0.12, s*0.007);
+        g.fillStyle = "#4dc9ff"; g.fillRect(-s*0.05, -s*0.004, s*0.12, s*0.007);
+        g.restore(); } },
+
+    { id:"sneaker", name:"Sneakers", cost:5, col:"#f2f4ff", cover:0.13, legCol:"#f2f4ff",
+      draw(g,s,col){                                    // a low shoe on a rubber sole
+        g.fillStyle = col; bootBody(g,s,-0.030,-0.016,0.054,0.016); g.fill();
+        g.fillStyle = "rgba(23,38,63,0.38)"; soleSlab(g,s,-0.034,0.058,0.012); g.fill(); } },
+
+    // Dark upper on purpose: the whole point is the strip of light under it, and a neon shin
+    // as well would make him a torch rather than a runner in loud shoes.
+    { id:"neon", name:"Neon", cost:10, col:"#c6ff2e", cover:0.17, legCol:"#2b2740",
+      draw(g,s,col){
+        g.fillStyle = "#2b2740"; bootBody(g,s,-0.030,-0.020,0.052,0.014); g.fill();
+        g.fillStyle = col; soleSlab(g,s,-0.034,0.056,0.014); g.fill();
+        g.globalAlpha = 0.30; soleSlab(g,s,-0.050,0.072,0.006,0.003); g.fill();   // spill
         g.globalAlpha = 1; } },
-    { id:"cleat", name:"Cleats", cost:20, col:"#eef2ff",
-      draw(g,s,col){ g.fillStyle = col;
-        rr2(g, -s*0.030, -s*0.034, s*0.080, s*0.048, s*0.012); g.fill();
-        g.fillStyle = "#3a4256";
-        for (let k=0;k<3;k++) g.fillRect(-s*0.022 + k*s*0.030, s*0.014, s*0.012, s*0.016); } },
-    { id:"platform", name:"Rails", cost:25, col:"#ff8fc8",
-      draw(g,s,col){ g.fillStyle = col;
-        rr2(g, -s*0.028, -s*0.036, s*0.074, s*0.040, s*0.012); g.fill();
-        g.fillStyle = "#f2f4ff"; rr2(g, -s*0.036, s*0.004, s*0.092, s*0.030, s*0.010); g.fill(); } },
-    { id:"talon", name:"Talons", cost:25, col:"#f0c25c",
-      draw(g,s,col){ g.fillStyle = col;
-        for (let k=-1;k<=1;k++){ g.beginPath();
-          g.moveTo(s*0.012 + k*s*0.026, -s*0.010);
-          g.lineTo(s*0.030 + k*s*0.026, s*0.034);
-          g.lineTo(s*0.000 + k*s*0.026, s*0.020);
-          g.closePath(); g.fill(); } } },
-    { id:"gilded", name:"Gilded", cost:30, col:"#ffd24a",
-      draw(g,s,col){ g.fillStyle = col;
-        rr2(g, -s*0.032, -s*0.034, s*0.086, s*0.056, s*0.018); g.fill();
-        g.fillStyle = "rgba(255,255,255,0.65)"; g.fillRect(-s*0.026, -s*0.026, s*0.070, s*0.010); } },
+
+    // Both of these are one colour on itself, so the SOLE is the only thing separating shoe
+    // from shoe — a half-step of the same tone, which is the joke.
+    { id:"blackout", name:"Black on Black", cost:10, col:"#15151c", cover:0.28, legCol:"#15151c",
+      draw(g,s,col){
+        g.fillStyle = col; bootBody(g,s,-0.030,-0.024,0.054,0.014); g.fill();
+        g.fillStyle = "#2c2c38"; soleSlab(g,s,-0.034,0.058,0.012); g.fill(); } },
+
+    { id:"whiteout", name:"White on White", cost:15, col:"#f4f4f7", cover:0.28, legCol:"#f4f4f7",
+      draw(g,s,col){
+        g.fillStyle = col; bootBody(g,s,-0.030,-0.024,0.054,0.014); g.fill();
+        g.fillStyle = "#d3d3dd"; soleSlab(g,s,-0.034,0.058,0.012); g.fill(); } },
+
+    // Black leather, yellow sole — and the yellow WELT above it, which is the detail everyone
+    // actually recognises these by.
+    { id:"docs", name:"Docs", cost:15, col:"#17161c", cover:0.40, legCol:"#17161c",
+      draw(g,s,col){
+        g.fillStyle = col; bootBody(g,s,-0.032,-0.034,0.050,0.010); g.fill();
+        g.fillStyle = "#f0c25c"; soleSlab(g,s,-0.038,0.056,0.015,0.005); g.fill();
+        g.fillRect(-s*0.034, s*(KICK_SOLE-0.021), s*0.088, s*0.004); } },
+
+    // One blunt lump with holes in it. It covers almost no leg — that is what a clog is — so
+    // nearly all of this shoe is the shape.
+    { id:"crocs", name:"Crocs", cost:20, col:"#5bbf7a", cover:0.06, legCol:"#5bbf7a",
+      draw(g,s,col){
+        g.fillStyle = col; bootBody(g,s,-0.026,-0.020,0.058,0.022); g.fill();
+        g.fillStyle = "rgba(16,52,30,0.45)";
+        for (let k=0;k<3;k++){ g.beginPath(); g.arc(s*(0.010+k*0.015), -s*0.009, s*0.005, 0, 7); g.fill(); }
+        g.fillStyle = col; g.fillRect(-s*0.034, -s*0.012, s*0.009, s*0.030); } },   // the strap
+
+    // Bigger wheels than the boot has any business carrying, which is the look. The boot STOPS
+    // above them — bottom is passed explicitly — so it is riding the wheels rather than
+    // standing on the ground with two circles stuck to it.
+    { id:"skate", name:"Skates", cost:20, col:"#e8506b", cover:0.34, legCol:"#e8506b",
+      draw(g,s,col){
+        g.fillStyle = col; bootBody(g,s,-0.028,-0.034,0.048,0.014, KICK_SOLE-0.032); g.fill();
+        g.fillStyle = "#d9dfe8";
+        rr2(g, -s*0.032, s*(KICK_SOLE-0.044), s*0.086, s*0.012, s*0.005); g.fill();  // the plate
+        for (const x of [-0.010, 0.034]) {
+          g.fillStyle = "#2b2740";
+          g.beginPath(); g.arc(s*x, s*(KICK_SOLE-0.019), s*0.019, 0, 7); g.fill();
+          g.fillStyle = "#8f96a8";                                                    // the hub
+          g.beginPath(); g.arc(s*x, s*(KICK_SOLE-0.019), s*0.007, 0, 7); g.fill(); } } },
+
+    { id:"welly", name:"Wellies", cost:25, col:"#3f8f5a", cover:0.62, legCol:"#3f8f5a",
+      draw(g,s,col){                                    // tall, wide, and blunt at the toe
+        g.fillStyle = col; bootBody(g,s,-0.032,-0.046,0.046,0.012); g.fill();
+        g.fillStyle = "#1e4a2e"; soleSlab(g,s,-0.038,0.052,0.014,0.004); g.fill(); } },
+
+    // Twice the length of any other shoe here and blunt at the end of it. The measurements are
+    // the joke, so they are deliberately absurd rather than merely large.
+    { id:"clown", name:"Clown", cost:25, col:"#e8506b", cover:0.20, legCol:"#f0c25c",
+      draw(g,s,col){
+        const top = -0.016, h = s*(KICK_SOLE - top);
+        g.fillStyle = col; rr2(g, -s*0.038, s*top, s*0.148, h, s*0.020); g.fill();
+        g.save(); rr2(g, -s*0.038, s*top, s*0.148, h, s*0.020); g.clip();
+        g.fillStyle = "#f4f6ff"; g.fillRect(s*0.074, s*(top-0.01), s*0.040, h + s*0.02);
+        g.restore();
+        g.fillStyle = "#4dc9ff"; soleSlab(g,s,-0.042,0.114,0.008,0.004); g.fill(); } },
+
+    // A heel is an ARCH: the ball of the foot on the ground at the front, a spike at the back,
+    // and nothing at all in between. All one red, shaft included — no sole in a second colour,
+    // no black — so the shape is the only thing saying what it is, and the shape had better be
+    // a POINT. The toe runs a good half-cell past where any other shoe here stops.
+    { id:"kink", name:"Kink", cost:30, col:"#d61f3e", cover:0.55, legCol:"#d61f3e",
+      draw(g,s,col){
+        const SOLE = s*KICK_SOLE;
+        g.fillStyle = col;
+        g.beginPath();                                   // the arch, drawn out to a sharp toe
+        g.moveTo(-s*0.018, -s*0.016);
+        g.lineTo( s*0.030, -s*0.012);
+        g.quadraticCurveTo( s*0.070, -s*0.002, s*0.086, s*0.019);   // the taper
+        g.lineTo( s*0.088, SOLE);                                    // ...to a point on the floor
+        g.lineTo(-s*0.004, SOLE);
+        g.quadraticCurveTo(-s*0.014, s*0.004, -s*0.018, -s*0.016);
+        g.closePath(); g.fill();
+        g.beginPath();                                   // ...and the spike behind it
+        g.moveTo(-s*0.022, -s*0.012);
+        g.lineTo(-s*0.006,  s*0.006);
+        g.lineTo(-s*0.008, SOLE);
+        g.lineTo(-s*0.020, SOLE);
+        g.closePath(); g.fill(); } },
   ];
+  // The kicks rack shows LEGS AND SHOES and nothing else — no body, no eyes. Every other
+  // category needs the bust because it is selling something you wear on it; a shoe is sold on
+  // the foot, and a runner drawn small enough to fit above two feet left the shoes too small
+  // to tell apart, which is the only job this card has.
+  //
+  // The pair faces OUTWARD, one mirrored, so the shape is read from both sides at once — and
+  // so a long shoe (the clown's is a third of the card) has somewhere to go instead of the two
+  // of them running into each other.
   KICKS.forEach(sh => { if (!sh.draw) return;
-    sh.swatch = (g,S) => { const b = swatchBust(g,S,"#bfe6ff","#17263f");
-      g.strokeStyle = "#bfe6ff"; g.lineWidth = S*0.05; g.lineCap = "round";
+    sh.swatch = (g,S) => {
+      const skin = "#bfe6ff";
+      const s = S*2.2;                        // the runner size these shoes are cut for
+      const GROUND = S*0.80, footY = GROUND - s*KICK_SOLE;
+      // Straight down and cut square at the top: a card is a diagram, not a pose. Splayed
+      // legs with domed ends read as a little figure with its body cropped off, which put the
+      // eye on the crop instead of on the shoe.
+      const hipY = S*0.22, footX = S*0.115;
+      const legs = [[-footX, -footX], [footX, footX]];
+      g.lineWidth = s*RUNNER.legWidth; g.lineJoin = "round";
+      g.lineCap = "butt"; g.strokeStyle = skin;
       g.beginPath();
-      g.moveTo(S/2 - b.w*0.20, b.y + b.h); g.lineTo(S/2 - b.w*0.24, b.y + b.h + S*0.10);
-      g.moveTo(S/2 + b.w*0.20, b.y + b.h); g.lineTo(S/2 + b.w*0.24, b.y + b.h + S*0.10);
+      for (const [hx,fx] of legs) { g.moveTo(S/2+hx, hipY); g.lineTo(S/2+fx, footY); }
       g.stroke();
-      for (const fx of [-b.w*0.24, b.w*0.24]) {
-        g.save(); g.translate(S/2 + fx, b.y + b.h + S*0.10); g.scale(2.3, 2.3);
-        sh.draw(g, S, sh.col); g.restore();
+      // the kick's own length of leg over it, cut square at the top exactly as in play
+      if (sh.cover > 0 && sh.legCol) {
+        g.strokeStyle = sh.legCol; g.lineCap = "butt";
+        g.beginPath();
+        for (const [hx,fx] of legs) {
+          g.moveTo(S/2 + hx + (fx-hx)*(1-sh.cover), hipY + (footY-hipY)*(1-sh.cover));
+          g.lineTo(S/2 + fx, footY);
+        }
+        g.stroke();
+        g.fillStyle = sh.legCol;              // ...and the round foot end back
+        for (const [,fx] of legs) {
+          g.beginPath(); g.arc(S/2+fx, footY, s*RUNNER.legWidth/2, 0, 7); g.fill(); }
       }
+      legs.forEach(([,fx], i) => {
+        g.save(); g.translate(S/2+fx, footY);
+        if (i === 0) g.scale(-1, 1);          // the left one turns to face out
+        sh.draw(g, s, sh.col || skin, skin);
+        g.restore();
+      });
     }; });
 
   // Twelve designs for the track. Each is a RAIL — the bright line the runner's feet are on —
@@ -3457,19 +3578,29 @@
   // rail across it. Drawn from the SAME fields the board draws from, so a swatch can never show
   // a design the game does not paint.
   TRACKS.forEach(t => {
+    // A track card is the DESIGN and nothing else: a plain rectangle of earth with the rail
+    // across it. It used to be a rounded plaque floating on a lilac plate, which sold the
+    // plaque rather than the pattern — and rounded corners cut the very grid you are buying.
+    // Square, edge to edge, so the quarter-tile squares run off all four sides the way they
+    // do on the board.
     t.swatch = (g,S) => {
-      const x = S*0.18, y = S*0.30, w = S*0.64, h = S*0.40;
-      rr2(g,x,y,w,h,S*0.05); g.fillStyle="#8d86c9"; g.fill();
-      g.save(); rr2(g,x,y,w,h,S*0.05); g.clip();
       const cols = t.earth || TRACK_DEFAULT.earth;
       const lay = EARTH_LAYOUT[t.earthMode || "check"] || EARTH_LAYOUT.check;
-      const n = 4, q = w/n, rows = Math.max(1, Math.round(h*0.45/q));
-      for (let j = 0; j < rows; j++) for (let i = 0; i < n; i++) {
+      // Sized from the SQUARES out, not the card in: four across is a tile's own quarter-grid,
+      // and the height is the rail plus exactly TWO whole rows of them. It used to be a fixed
+      // rectangle with the rail 38% down it, which left a quarter of the card empty above the
+      // rail and cut the second row of earth off halfway — so a design whose pattern repeats
+      // every two rows (every one of them does) could not show its repeat.
+      const n = 4, ROWS = 2;
+      const w = S*0.88, q = w/n, railH = Math.max(2, Math.round(S*0.085));
+      const h = railH + ROWS*q, x = (S-w)/2, y = (S-h)/2;
+      g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip();
+      for (let j = 0; j < ROWS; j++) for (let i = 0; i < n; i++) {
         g.fillStyle = lay(cols, i, j);
-        g.fillRect(x + i*q, y + h*0.55 + j*q, q + 1, q + 1);
+        g.fillRect(x + i*q, y + railH + j*q, q + 1, q + 1);
       }
       g.restore();
-      g.fillStyle = t.rail; g.fillRect(x, y + h*0.55 - S*0.018, w, S*0.030);
+      g.fillStyle = t.rail; g.fillRect(x, y, w, railH);   // the rail, straight across the top
     };
   });
 
@@ -4008,12 +4139,10 @@
     flag:   { name:"The Exit", desc:"Lay a tile on the flag to finish the level." },
     wall:   { name:"Wall Entity", desc:"Passive entities whose noble purpose is simply to get in the way" },
     stone:  { name:"Stone Block", desc:"Tap to smash it, then build through the gap." },
-    coin:   { name:"Loot Tile", desc:"Run over one and its tile is yours to spend in the shop." },
     boost:  { name:"Boost", desc:"Grab it for a short burst of speed. Keep those tiles flowing!" },
     singularity:{ name:"Singularity", desc:"A vortex in the floor. Crossing it swallows that tile for good — spend wisely." },
     slow:   { name:"Slow", desc:"Grab it and the runner drags for a few seconds — plan around it." },
     switch: { name:"Buttons & Doors", desc:"Tap the arcade buttons to slide their door open. Follow the wires — some doors need EVERY linked button pressed." },
-    saw:    { name:"Saw Blade", desc:"A hazard sliding on a rail. Never let the runner touch it!" },
     monster:{ name:"Flying Menace", desc:"A little monster flitting to and fro. Time your run so the runner never touches it!" },
     hunter: { name:"The Hunter", desc:"A malevolent tile entity. It is coming for you. Keep moving." },
     slider: { name:"Sliding Platform", desc:"The wall only opens where this platform sits. Drag it along its rail to line up the crossing, then build across it." },
@@ -4040,7 +4169,6 @@
     if (L.keys || L.key) m.push("key");                 // coloured keys only appear on door levels now
     if (L.walls && L.walls.length) m.push("wall");
     if (L.stone && L.stone.length) m.push("stone");
-    if (L.coins && L.coins.length) m.push("coin");
     if (L.boost && L.boost.length) m.push("boost");
     if (L.singularity && L.singularity.length) m.push("singularity");
     if (L.slow && L.slow.length) m.push("slow");
@@ -4048,7 +4176,6 @@
     if (L.blocks && L.blocks.length) m.push("block");
     if (L.platforms && L.platforms.length) m.push("platform");
     if (L.mdoors && L.mdoors.length) m.push("mdoor");
-    if (L.hazards && L.hazards.some(h=>(h.kind||"saw")==="saw")) m.push("saw");
     if (L.hazards && L.hazards.some(h=>h.kind==="monster")) m.push("monster");
     return m.filter(known);
   }
@@ -4118,9 +4245,6 @@
     if (type==="turn")     {   // a laid elbow — the same corner surface the runner rides
       real(() => { drawGlass(0, 0, cell); drawPlatformTile(N0, { c:-1, r:0 }, { c:0, r:1 }); }); return;
     }
-    // The loot tile is a TILE, not a coin — so the card shows the thing that is on the board
-    // rather than a token that appears nowhere in the game.
-    if (type==="coin")     { real(() => coinGlyph(cell*0.5, cell*0.5, cell*0.74)); return; }
     if (type==="wall")     { real(() => drawWall(0, 0)); return; }
     if (type==="stone")    { real(() => drawStone(0, 0, 0, { hp:2, vi:0 })); return; }
     if (type==="platform") { real(() => drawPlatform({ c:0, r:0, dirs:["n","e"], lit:0.55 }, 0)); return; }
@@ -4138,14 +4262,6 @@
     if (type==="singularity") { real(() => drawSingularity(0, 0, false, 0)); return; }
     // The pickup token itself, boost or slow, exactly as it floats on the board.
     if (type==="boost" || type==="slow") { real(() => drawFxPickup(0, 0, 0, type)); return; }
-    if (type==="saw")      {
-      real(() => {                                  // the rail it sweeps, then the blade
-        ctx.strokeStyle = "rgba(150,156,172,0.85)"; ctx.lineWidth = cell*0.05; ctx.lineCap = "round";
-        ctx.beginPath(); ctx.moveTo(cell*0.04, cell*0.5); ctx.lineTo(cell*0.96, cell*0.5); ctx.stroke();
-        drawSaw(cell*0.5, cell*0.5, 0);
-      });
-      return;
-    }
     // Both animals, drawn by the animal's own routine, caught mid-stroke and facing down out
     // of the card — which is the angle you meet them at.
     if (type==="monster")  { real(() => drawMonster(cell/2, cell/2, 0, 1, 0.35, { ...MONSTER_KINDS.patrol, split:"v" })); return; }
@@ -4647,7 +4763,16 @@
       // (2) nothing alongside live track AHEAD of him. Strictly ahead: his OWN cell is not
       //     "ahead", and treating it as such was what made a ring impossible — every cell of
       //     a 2x2 ring is beside the one before it, so closing one always looked like a fork.
-      if (strict && i > on && !n.exited && !underfoot &&
+      //
+      //     LAID TILES ONLY. A fixed platform is not track you laid, it is ground the level
+      //     came with, and a tile beside one cannot fork anything: leaving a platform is
+      //     governed by its drawn ends (see trackConnects), so a cell it does not open onto is
+      //     simply floor. Counting them made a rail of two or more cells give this rule two or
+      //     three nodes to object to instead of one, and the cell beside the far end of a
+      //     U-turn pair — which is exactly where the track wants to go next — sat parked until
+      //     the runner had cleared the whole rail. That is the "first tile works, the rest wait
+      //     to lock on" of a two-cell rail: nothing was refused, only delayed, which is worse.
+      if (strict && i > on && !n.exited && !underfoot && n.kind !== "platform" &&
           Math.abs(n.c - c) + Math.abs(n.r - r) === 1) return true;
     }
     return false;
@@ -8309,6 +8434,29 @@
   // parameter because paintRunner is called from eight places — the board, the title, the
   // cinematic, the shop swatches — and seven of them have no idea what a Lodestone is.
   let _restFold = 0;
+  // Stroke the last `frac` of a limb, walking BACK from the foot along its bones — hip to
+  // knee to foot, or hip straight to foot on a runner with no knees. The pen is whatever the
+  // caller set, so this lays the kick's colour into the leg's own line rather than beside it.
+  function strokeLimbTail(pts, frac) {
+    const seg = []; let total = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const d = Math.hypot(pts[i+1][0] - pts[i][0], pts[i+1][1] - pts[i][1]);
+      seg.push(d); total += d;
+    }
+    let want = total * Math.max(0, Math.min(1, frac));
+    const out = [pts[pts.length - 1]];
+    for (let i = seg.length - 1; i >= 0 && want > 0; i--) {
+      if (want >= seg[i]) { out.push(pts[i]); want -= seg[i]; continue; }
+      const t = seg[i] ? want / seg[i] : 0;                      // part way up this bone
+      out.push([pts[i+1][0] + (pts[i][0] - pts[i+1][0])*t,
+                pts[i+1][1] + (pts[i][1] - pts[i+1][1])*t]);
+      want = 0;
+    }
+    if (out.length < 2) return;
+    ctx.beginPath(); ctx.moveTo(out[0][0], out[0][1]);
+    for (let i = 1; i < out.length; i++) ctx.lineTo(out[i][0], out[i][1]);
+    ctx.stroke();
+  }
   function paintRunner(sx, sy, s, phase, angle, moving, ts, sq, grounded, as) {
     // SWAGGER rides on top of the stock stride rather than replacing it — every field is a
     // multiplier or an addition, so the numbers in RUNNER still drive all five styles.
@@ -8444,10 +8592,36 @@
       }
       feet.push([fx, fy]);
     }
-    // shoes ride on the feet, so the stride and the foot lift carry them for free
+    // ---- kicks -----------------------------------------------------------------------
+    // A kick is TWO things. First a length of the leg, measured back from the foot, restroked
+    // in the kick's own colour with the same pen the leg was drawn with — the sock, the upper,
+    // the cuff. Painting the limb rather than covering it is what makes a boot part of the leg
+    // instead of a lump pushed onto the end of a stick. Second the shape on the ground: the
+    // sole, the blade, the pad.
     const shoe = lookItem("kicks");
+    if (shoe.cover > 0 && shoe.legCol) {
+      const lw = Math.max(3, s*RUNNER.legWidth);
+      ctx.strokeStyle = shoe.legCol;
+      // BUTT, not round: the top of an upper is a cut edge — a hem, a cuff, the lip of a boot —
+      // and a round cap put a dome on the end of every one of them. The foot end wants its
+      // round back, so it is filled in afterwards rather than left squared off inside the shoe.
+      ctx.lineCap = "butt";
+      for (const [hx, kx, ky, fx, fy] of limbs)
+        strokeLimbTail(kx != null ? [[hx, hipY], [kx, ky], [fx, fy]] : [[hx, hipY], [fx, fy]],
+                       shoe.cover);
+      ctx.fillStyle = shoe.legCol;
+      for (const [fx, fy] of feet) { ctx.beginPath(); ctx.arc(fx, fy, lw/2, 0, Math.PI*2); ctx.fill(); }
+      ctx.lineCap = "round";
+    }
+    // ...and the shape itself, held FLAT TO THE GROUND while he runs. The swagger leans the
+    // whole body about the feet, and a boot that leans with it points at the sky on every
+    // stride — a foot stays level with the track it is running on. Standing still it can lean:
+    // that is a pose, and a pose is meant to read as one.
     if (shoe.draw) for (const [fx, fy] of feet) {
-      ctx.save(); ctx.translate(fx, fy); shoe.draw(ctx, s, shoe.col); ctx.restore();
+      ctx.save(); ctx.translate(fx, fy);
+      if (moving && w.lean) ctx.rotate(-w.lean);
+      shoe.draw(ctx, s, shoe.col || finish, finish);
+      ctx.restore();
     }
     // body — no outline. The corner comes from RUNNER, like every other measurement of him:
     // this was a hardcoded 0.07 while both labs read R.bodyR, so the lab's corner slider moved
@@ -11053,19 +11227,12 @@
   // ---------- Title / attract screen -------------------------------------
   const TITLE_WORDS = ["TILE", "RUNNER"];
   const TITLE_TILE_DX = 0.13;            // how far left TILE sits, as a fraction of its size
-  // The title wears a LEVEL's backdrop rather than one of its own. Levels seed their theme
-  // off their own number (see beginLevel: hashSeed(String(levelIdx + 1))), so borrowing the
-  // seed is all it takes — no colours are copied and nothing has to be kept in step. Change
-  // the number and the title changes with it.
-  const TITLE_BG_LEVEL = 22;
   const TITLE = { t: 0, u: 0 };
-  let titleTheme = null;
   function easeOutBack(p){ const c1 = 1.70158, c3 = c1 + 1; return 1 + c3*Math.pow(p-1,3) + c1*Math.pow(p-1,2); }
 
   function startTitle(){
     titleActive = true;
     TITLE.t = 0; TITLE.u = 0;
-    titleTheme = genTheme(themeSeed(String(TITLE_BG_LEVEL)));
     const pf = document.getElementById("pauseFloat"); if (pf) pf.style.display = "none";
     Sound.ambient("title");
   }
@@ -12370,11 +12537,13 @@
 
   function drawTitle(ts){
     const first = firstLaunch();
-    // Before the opening has ever run, the title is the cosmos itself — the place the game is
-    // about to be made in. After that it is a level's quilt with him running across it, which
-    // is what the game turned out to be.
-    if (first) drawVoid(ts);
-    else drawBackground(ts, titleTheme, false, "drift");       // same look as the in-game backdrop
+    // ALWAYS the cosmos. The title used to borrow level 22's quilt once the opening had been
+    // seen — the idea being that the game turns out to be a level rather than the void it
+    // starts in — but that made the front page a level you had not chosen, in colours that
+    // meant nothing here, and the one screen that is outside every level was the only one
+    // dressed as one. The Tileverse, the opening and the title are all the place the levels
+    // hang IN; they wear the same sky.
+    drawVoid(ts);
     ctx.fillStyle = "rgba(8,6,20,0.12)"; ctx.fillRect(0,0,viewW,viewH);   // very light darken for legibility
 
     const size = Math.min(viewW*0.195, viewH*0.14);
