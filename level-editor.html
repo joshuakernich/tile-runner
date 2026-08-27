@@ -195,11 +195,11 @@
         him, around walls rather than into them, and re-thinks it at every cell; a <i>trap</i>
         sits still, yawns open wide enough to run
         through, then snaps shut on whatever is in it. Clicking the square a monster is <i>standing on</i>
-        re-applies the kind and speed boxes; clicking anywhere else on its route drops a new monster
+        re-applies the kind box; clicking anywhere else on its route drops a new monster
         there, so routes may cross and overlap freely. Only <i>patrol</i> is drawn by hand: click each cell of its route in turn — the
         first click starts the path, every click after adds a waypoint. <b>Enter</b> finishes it as a
         there-and-back patrol; <b>L</b> closes it into a loop; <b>Esc</b> throws the draft away. It moves
-        at the speed box's ms per cell and pauses briefly at each waypoint, and touching it is fatal.</div>
+        at the runner's own pace and pauses briefly at each waypoint, and touching it is fatal.</div>
       <div class="tip" data-for="stone"><b>Stone</b>: drag to paint breakable stone blocks (the <i>hp</i>
         box sets how many taps to smash). Right-drag or drag over a stone to remove.</div>
       <div class="tip" data-for="platform"><b>Rail</b>: fixed free track cast into a wall. Click an
@@ -262,7 +262,6 @@
       <h2>Options</h2>
       <div class="opts" id="opts">
         <span class="opt" data-for="key door"><span class="swab" id="swab"></span></span>
-        <label class="opt" data-for="monster">sec / tile <input type="number" id="monSpeed" value="0.8" step="0.05" min="0.05"></label>
         <label class="opt" data-for="monster">monster <select id="monPick">
           <option value="hrail">Horizontal rail</option>
           <option value="vrail">Vertical rail</option>
@@ -549,8 +548,7 @@ let monDraft = null;
 function finishMonster(loop){
   if(!monDraft) return;
   if(monDraft.path.length < 2){ monDraft=null; setStatus("monster needs at least two waypoints — draft dropped"); return; }
-  const h = { kind:'monster', variant:'patrol', path: monDraft.path.map(p=>p.slice()),
-              speed: Math.round((+$("monSpeed").value || 0.8) * 1000) };   // seconds -> ms per tile
+  const h = { kind:'monster', variant:'patrol', path: monDraft.path.map(p=>p.slice()) };
   if(loop) h.loop = true;
   pushUndo();
   L.hazards.push(h);
@@ -560,7 +558,6 @@ function finishMonster(loop){
 }
 function placeMonster(c,r){
   const kind = $("monPick").value || "hrail";
-  const speed = Math.round((+$("monSpeed").value || 0.8) * 1000);   // the field is SECONDS per tile
   if (kind !== "patrol" && !monDraft){
     // Clicking an existing monster still re-applies the kind and speed boxes — but only on the
     // square the monster is actually STANDING on, not anywhere along its route. Every cell of a
@@ -572,7 +569,7 @@ function placeMonster(c,r){
       const p = monStartPos(h);
       return p && Math.round(p.c)===c && Math.round(p.r)===r;
     });
-    if (hit){ hit.variant = kind; hit.speed = speed; setStatus("monster -> "+kind); return; }
+    if (hit){ hit.variant = kind; setStatus("monster -> "+kind); return; }
     // Built first, tested, and only then pushed — the refusal has to know the shape of the
     // thing, and a rail or a ring is several cells wide.
     let cand;
@@ -583,12 +580,12 @@ function placeMonster(c,r){
         d.lo = Math.max(0, r-1); d.hi = Math.min(L.rows-1, d.lo+2); d.lo = Math.max(0, d.hi-2); }
       if (d.axis === "h" && d.c != null){ d.r = r; delete d.c;
         d.lo = Math.max(0, c-1); d.hi = Math.min(L.cols-1, d.lo+2); d.lo = Math.max(0, d.hi-2); }
-      cand = {kind:"monster", variant:kind, ...d, speed, phase:0};
+      cand = {kind:"monster", variant:kind, ...d, phase:0};
     } else if (kind === "square"){
       const w = Math.min(2, L.cols-1-c), hh = Math.min(2, L.rows-1-r);
-      cand = {kind:"monster", variant:"square", c, r, w:Math.max(1,w), h:Math.max(1,hh), speed};
+      cand = {kind:"monster", variant:"square", c, r, w:Math.max(1,w), h:Math.max(1,hh)};
     } else {
-      cand = {kind:"monster", variant:kind, c, r, speed};
+      cand = {kind:"monster", variant:kind, c, r};
     }
     pushUndo(); L.walls.delete(keyOf(c,r));
     L.hazards.push(cand);
@@ -607,9 +604,8 @@ function placeMonster(c,r){
   }
   const hit = L.hazards.find(h=>isMon(h) && monCells(h).some(x=>x[0]===c&&x[1]===r));
   if(hit){                                       // clicking an existing one retunes it
-    hit.speed = speed;
     hit.loop = !hit.loop; if(!hit.loop) delete hit.loop;
-    setStatus("monster updated — speed "+hit.speed+"ms, "+(hit.loop?"looping":"there and back"));
+    setStatus("monster updated — "+(hit.loop?"looping":"there and back"));
     return;
   }
   L.walls.delete(keyOf(c,r));
@@ -1571,11 +1567,10 @@ function buildInspector(){
       [["hrail","Horizontal rail"],["vrail","Vertical rail"],["patrol","Patrol"],
        ["square","Square loop"],["hunter","Hunter"],["trap","Trap"],["stealth","Stealth"]],
       v, nv => { retypeMonster(ref, nv); selectAt(sel); })));
-    // Seconds per TILE — the pace, not the trip. It used to be milliseconds, and for a rail it
-    // meant the whole traverse, so the same number was a different speed on a different length
-    // of rail and two monsters set to "4000" did not move alike.
-    opts.appendChild(inspRow("sec / tile", inspNum(((ref.speed || 2200)/1000).toFixed(2), 0.05, 20, 0.05,
-      x => ref.speed = Math.max(50, Math.round(x*1000)))));
+    // No pace to set. Every monster crosses a tile in exactly the time the RUNNER does and
+    // rides his ramp with him, so the level's cps is the only speed on the board.
+    opts.appendChild(Object.assign(document.createElement("div"),
+      { className:"hint", textContent:"Pace follows the runner — one tile in the time he takes one." }));
     if (v === "hrail" || v === "vrail") {
       opts.appendChild(inspRow("start phase", inspNum(ref.phase || 0, 0, 0.99, 0.05, x => ref.phase = x)));
       opts.appendChild(Object.assign(document.createElement("div"),

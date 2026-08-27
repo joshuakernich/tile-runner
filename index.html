@@ -396,7 +396,19 @@
   /* background-COLOR, not the shorthand: `background:` resets background-image, which would
      wipe the chequer set above it. */
   #menu-body button.gold { background-color:#e0aa1e; border-color:transparent;
-    color:#38270a; box-shadow:0 4px 0 #8a6410; }
+    color:#38270a; box-shadow:0 4px 0 #8a6410;
+    /* Its own gold, quilted — the same 45-degree weave and the same patch size the TILEVERSE
+       plate wears, so the three coloured buttons are plainly one material. The chequer stays
+       on top of it, in the order every other button uses. Re-declared in full here because a
+       later `background-image` replaces the shared one above rather than adding to it. */
+    background-image:
+      conic-gradient(transparent 0 25%, var(--chq-lift) 0 50%,
+                     transparent 0 75%, var(--chq-lift) 0),
+      var(--gold-bg);
+    background-size:var(--chq2) var(--chq2), var(--gold-bg-size) var(--gold-bg-size);
+    background-position:0 0, 0 0;
+    background-origin:border-box;
+    image-rendering:pixelated; }
   /* The way into the campaign is the colour of the space it hangs in: black, same chequer,
      which on this one reads as the faint grid of a thing seen from very far away. */
   /* ...and the same on the end screens: these are the SAME buttons, so scoping their colour to
@@ -421,7 +433,15 @@
      own metal: orange rather than gold, same chequer, same shadow rule — the button's own
      colour darkened — so the pair read as a set without reading as the same button. */
   #menu-body button.amber { background-color:#e07a1e; border-color:transparent;
-    color:#3a1d05; box-shadow:0 4px 0 #8a4610; }
+    color:#3a1d05; box-shadow:0 4px 0 #8a4610;
+    background-image:
+      conic-gradient(transparent 0 25%, var(--chq-lift) 0 50%,
+                     transparent 0 75%, var(--chq-lift) 0),
+      var(--amber-bg);
+    background-size:var(--chq2) var(--chq2), var(--amber-bg-size) var(--amber-bg-size);
+    background-position:0 0, 0 0;
+    background-origin:border-box;
+    image-rendering:pixelated; }
   #menu-body button.gold:active,
   #menu-body button.amber:active,
   #menu-body button.void:active { transform:translateY(4px); box-shadow:none; }
@@ -562,18 +582,34 @@
   /* The talisman shelf. Deliberately NOT buttons: no border, no plate, no shadow — a talisman
      is a thing you found, and dressing it in the same chrome as RESUME made it stock. What
      marks the worn one is a soft halo of its own colour, not a pressed-in frame. */
-  .relic-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:4px 0; margin:2px 0 10px; }
+  /* SIX CHARMS, two across and three down. Three across fitted them into the width and made
+     each one a thumbnail; there is a screen's worth of room under them and nothing else asking
+     for it, so the charms take it. Gap is the interface's own grid square, as everywhere else.
+     The size is capped in pixels and again against the VIEWPORT: three rows of charm plus
+     label have to clear the pinned heading above and the pinned DONE below, and on a short
+     phone a fixed 150 would push the bottom row under the button. */
+  :root { --relic: min(150px, 16vh); }
+  .relic-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:var(--chq); margin:2px 0 10px; }
   .relic { display:flex; flex-direction:column; align-items:center; gap:1px;
     background:none; border:0; padding:0; cursor:pointer; }
-  .relic canvas { width:96px; height:96px; display:block; }
+  /* Each hangs at its own slight angle, set per charm in JS from the same TAL_TILT the
+     in-level rack uses — six identical uprights read as a chart of stock, a few degrees apart
+     reads as things you have collected. The CANVAS turns, not the whole cell: the names and
+     blurbs under them stay level and stay in their column. The drawn charm is about 63% of its
+     box, so there is room to turn inside it without clipping a corner. */
+  .relic canvas { width:var(--relic); height:var(--relic); display:block;
+    transform:rotate(var(--tilt, 0deg)); }
   .relic span { font-size:10px; letter-spacing:0.4px; line-height:1.15; text-align:center;
     text-transform:uppercase; font-weight:900; color:var(--ink); }
   .relic i { font-size:9px; letter-spacing:0.2px; line-height:1.1; font-style:normal;
     font-weight:700; color:var(--track); text-align:center; }
   .relic.locked { cursor:default; }
   .relic.locked span { color:var(--dim); }
-  .relic.on canvas { filter:drop-shadow(0 0 7px var(--goal)); }
-  .relic.on span { color:var(--goal); }
+  /* No selection effect. The equipped charm used to wear a green halo and a green name — the
+     same marking the shop puts on what you are wearing — which made this page read as a rack
+     of stock with one item ticked. It is a display of the six charms; nothing here is picked
+     out from the rest. The `on` class is still set, so anything that wants it later can have
+     it back without rebuilding the screen. */
   /* THE menu heading. Every screen gets this — the size, the -4 degree tilt, and the layered
      shaded extrusion built from the heading's own colour, which is what makes it read as carved
      out of the word rather than as a shadow behind it. Gold is the default because gold is the
@@ -2035,36 +2071,23 @@
       if (muted || !ac || ac.state !== "running") return;
       tileThud(0.85);
     }
-    // ...and it became track. A SNARE, not a landing. This was a full thud with a rising
-    // two-note ding on top, which for the commonest event in the game — a tile goes down
-    // every second or two, all level — is a fanfare, and a fanfare you hear a hundred times
-    // stops being a reward and becomes the sound the game makes. A snare says "yes, that"
-    // inside 90ms and leaves nothing ringing: a band of noise, a soft body under it, and no
-    // pitched tail to sit against whatever the music is doing.
+    // ...and it became track. The thud plus a rising fifth-to-tonic, as it was before v9.5
+    // briefly made it a snare: the snare was quieter but it was also anonymous, and this is
+    // the one sound in the game that means "yes, that worked".
     function tileLaid() {
       if (muted || !ac || ac.state !== "running") return;
-      const t = ac.currentTime;
-      // the body — a short low knock, well under the rattle rather than beside it
-      const o = ac.createOscillator(), g = ac.createGain();
-      o.type = "triangle";
-      o.frequency.setValueAtTime(210, t); o.frequency.exponentialRampToValueAtTime(120, t + 0.045);
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.085, t + 0.004);
-      g.gain.exponentialRampToValueAtTime(0.0006, t + 0.075);
-      o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.09);
-      if (!noiseBuf) return;
-      // the rattle — a band of noise opening and shutting inside 85ms, high-passed so none of
-      // it doubles the body
-      const src = ac.createBufferSource(); src.buffer = noiseBuf;
-      const hp = ac.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 700;
-      const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 0.9;
-      bp.frequency.setValueAtTime(2400, t); bp.frequency.exponentialRampToValueAtTime(1500, t + 0.07);
-      const ng = ac.createGain();
-      ng.gain.setValueAtTime(0.0001, t); ng.gain.exponentialRampToValueAtTime(0.11, t + 0.003);
-      ng.gain.exponentialRampToValueAtTime(0.0006, t + 0.085);
-      src.connect(hp); hp.connect(bp); bp.connect(ng); ng.connect(master);
-      // A whisper into the echo, so it still happened on the board rather than in the UI.
-      const sg = ac.createGain(); sg.gain.value = 0.25; ng.connect(sg); sg.connect(sendBus);
-      src.start(t); src.stop(t + 0.10);
+      const t0 = tileThud(1);
+      // Fifth, then the tonic above it: it arrives somewhere rather than merely rising. This
+      // half DOES go to the echo, so the confirmation sits out in the world the track is in.
+      [19, 24].forEach((semi, i) => {
+        const t = t0 + 0.025 + i*0.055;
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "triangle"; o.frequency.setValueAtTime(BASE * Math.pow(2, semi/12), t);
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.20, t + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.0006, t + 0.20);
+        o.connect(g); g.connect(master); g.connect(sendBus);
+        o.start(t); o.stop(t + 0.24);
+      });
     }
     // ---- UI ----------------------------------------------------------------------
     // Every button in the game makes this noise. Short, dry, no reverb send: it is a
@@ -2150,6 +2173,49 @@
       g.gain.exponentialRampToValueAtTime(0.0006, t + 0.28);
       src.connect(bp); bp.connect(g); g.connect(master);
       src.start(t); src.stop(t + 0.34);
+      // ...and the animal making it. A stroke is EFFORT — a thing heaving itself forward —
+      // and noise alone reads as machinery. A short voiced grunt falling under the swish is
+      // what makes it a creature: low, brief, and pitched a little differently each time so a
+      // rank of them never rows in one voice.
+      const o = ac.createOscillator(), og = ac.createGain();
+      const hz = 96 + Math.random()*26;
+      o.type = "sawtooth";
+      o.frequency.setValueAtTime(hz, t); o.frequency.exponentialRampToValueAtTime(hz*0.62, t + 0.13);
+      const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.Q.value = 4;
+      lp.frequency.setValueAtTime(760, t); lp.frequency.exponentialRampToValueAtTime(240, t + 0.13);
+      og.gain.setValueAtTime(0.0001, t);
+      og.gain.exponentialRampToValueAtTime(Math.max(0.0004, vol*0.13), t + 0.012);
+      og.gain.exponentialRampToValueAtTime(0.0004, t + 0.15);
+      o.connect(lp); lp.connect(og); og.connect(master);
+      o.start(t); o.stop(t + 0.17);
+    }
+    // A trap winding up to bite: a whine climbing over the whole tremble, so the warning is
+    // something you can hear coming rather than something you had to be looking at. It ends
+    // exactly where the crunch starts, and it is filtered rather than loud — a trap you can
+    // hear from across the board would give the whole level away.
+    function trapWind(vol, secs) {
+      if (muted || !ac || ac.state !== "running") return;
+      const t = ac.currentTime, D = Math.max(0.15, secs || 0.6), v = Math.max(0, Math.min(1, vol));
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = "sawtooth";
+      o.frequency.setValueAtTime(70, t); o.frequency.exponentialRampToValueAtTime(210, t + D);
+      const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 6;
+      bp.frequency.setValueAtTime(340, t); bp.frequency.exponentialRampToValueAtTime(1250, t + D);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0004, v*0.045), t + D*0.55);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0004, v*0.16),  t + D*0.97);
+      g.gain.exponentialRampToValueAtTime(0.0004, t + D);            // hands straight over to the bite
+      o.connect(bp); bp.connect(g); g.connect(master);
+      o.start(t); o.stop(t + D + 0.02);
+      if (!noiseBuf) return;                                          // a rattle of strain under it
+      const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+      const hp = ac.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 1400;
+      const ng = ac.createGain();
+      ng.gain.setValueAtTime(0.0001, t);
+      ng.gain.exponentialRampToValueAtTime(Math.max(0.0004, v*0.05), t + D*0.94);
+      ng.gain.exponentialRampToValueAtTime(0.0004, t + D);
+      src.connect(hp); hp.connect(ng); ng.connect(master);
+      src.start(t); src.stop(t + D + 0.02);
     }
     // the heavier version, for a button that commits to something (buy, start, continue)
     function tapBig(){
@@ -2384,27 +2450,47 @@
     // One bite. A short band of noise for the splintering, under a fast falling thud for the
     // weight of the two halves meeting. Dry — no reverb send: it is happening on the board,
     // not in a hall.
+    // The bite. BIGGER than it was, and with the animal in it: the wind-up before it has been
+    // promising something for the best part of a second, and what used to land was a short dry
+    // click that the build-up wrote a cheque for. Three parts now — the grit, a low body twice
+    // as deep as it was, and a voiced grunt of effort on top, which is the part that makes it
+    // a mouth rather than a mechanism. It also goes to the echo, so the bite is out on the
+    // board with you rather than flat against the glass.
     function crunch(vol){
       if (muted || !ac || ac.state !== "running" || !noiseBuf) return;
       const t = ac.currentTime, v = Math.max(0, Math.min(1, vol));
       const src = ac.createBufferSource(); src.buffer = noiseBuf;
       src.playbackRate.value = 0.7 + Math.random()*0.5;           // never quite the same bite twice
       const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 0.9;
-      bp.frequency.setValueAtTime(1900, t);
-      bp.frequency.exponentialRampToValueAtTime(620, t + 0.09);
+      bp.frequency.setValueAtTime(2300, t);
+      bp.frequency.exponentialRampToValueAtTime(480, t + 0.16);   // longer, and it closes further
       const g = ac.createGain();
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.95*v, t + 0.004);
-      g.gain.exponentialRampToValueAtTime(0.0004, t + 0.13);
+      g.gain.exponentialRampToValueAtTime(1.0*v, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0004, t + 0.22);
       src.connect(bp); bp.connect(g); g.connect(master);
-      src.start(t); src.stop(t + 0.16);
+      const gs = ac.createGain(); gs.gain.value = 0.35; g.connect(gs); gs.connect(sendBus);
+      src.start(t); src.stop(t + 0.26);
       const o = ac.createOscillator(), og = ac.createGain();      // the two halves meeting
       o.type = "triangle";
-      o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(52, t + 0.09);
+      o.frequency.setValueAtTime(190, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.17);
       og.gain.setValueAtTime(0.0001, t);
-      og.gain.exponentialRampToValueAtTime(0.60*v, t + 0.005);
-      og.gain.exponentialRampToValueAtTime(0.0004, t + 0.14);
-      o.connect(og); og.connect(master); o.start(t); o.stop(t + 0.17);
+      og.gain.exponentialRampToValueAtTime(0.85*v, t + 0.005);
+      og.gain.exponentialRampToValueAtTime(0.0004, t + 0.26);
+      o.connect(og); og.connect(master); o.start(t); o.stop(t + 0.29);
+      // ...and the effort of it. The same voice the rowing stroke grunts in, an octave down
+      // and held longer, so a bite and a thrust plainly come from the same animal.
+      const gr = ac.createOscillator(), grg = ac.createGain();
+      const hz = 84 + Math.random()*22;
+      gr.type = "sawtooth";
+      gr.frequency.setValueAtTime(hz*1.35, t); gr.frequency.exponentialRampToValueAtTime(hz*0.55, t + 0.24);
+      const glp = ac.createBiquadFilter(); glp.type = "lowpass"; glp.Q.value = 5;
+      glp.frequency.setValueAtTime(900, t); glp.frequency.exponentialRampToValueAtTime(220, t + 0.24);
+      grg.gain.setValueAtTime(0.0001, t);
+      grg.gain.exponentialRampToValueAtTime(Math.max(0.0004, 0.30*v), t + 0.02);
+      grg.gain.exponentialRampToValueAtTime(0.0004, t + 0.27);
+      gr.connect(glp); glp.connect(grg); grg.connect(master);
+      gr.start(t); gr.stop(t + 0.30);
     }
     // The idle noise between bites — a low throaty rumble, wobbled so it sounds like breath
     // through something rather than a held note. Longer and softer than the crunch, and heard
@@ -2484,7 +2570,7 @@
     }
     function isMuted() { return muted; }
     return { unlock, clearTile, smash, roar, win, lose, fall, death, boost, slow, coin, key, doorOpen,
-             slide, clack, tap, tapBig, power, warp, vortex, crunch, growl,
+             slide, clack, tap, tapBig, power, warp, vortex, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck,
              ambient,
              swish, introGather, introFlash, rumble, flap, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
@@ -2513,7 +2599,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v9.5";                    // shown on the title & pause screens
+  const VERSION = "v9.6";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -2588,20 +2674,43 @@
         g.moveTo(x-r*0.68, y-r*0.74); g.lineTo(x+r*0.62, y-r*0.60);
         g.lineTo(x+r*0.62, y-r*0.14); g.lineTo(x-r*0.68, y-r*0.00);
         g.closePath(); g.fill();
-        rr(x-r*0.13, y-r*0.30, r*0.26, r*1.00, r*0.10); } },
+        // The haft runs THROUGH the head rather than stopping under it: a stub of it shows
+        // above the top edge, which is the notch every real sledge has where the handle is
+        // wedged home. Same rectangle as before, started higher — nothing is added, so the
+        // two still fill as one silhouette and there is no join to come apart. The head's top
+        // is sloped, so what shows is a small wedge rather than a flat tab, which is exactly
+        // what you would see looking at one head-on.
+        rr(x-r*0.13, y-r*0.80, r*0.26, r*1.50, r*0.10); } },
 
     { id:"brake", name:"Millstone", col:"#9aa3b8", ms:REST_MS,
       face:"#8b95ab", edge:"#3a4152",
-      blurb:"Slows the heart and body, if only for a moment.",
+      blurb:"Slows the heart and body",
       etch:(g,x,y,r)=>{
-        g.lineCap="butt"; g.lineWidth=r*0.12;
-        g.beginPath(); g.arc(x, y, r*0.66, 0, 7); g.stroke();      // the wheel
-        for (let k=0;k<4;k++){ const a2=k/4*Math.PI*2 + Math.PI/4;  // the dressing grooves
-          g.beginPath();
-          g.moveTo(x+Math.cos(a2)*r*0.26, y+Math.sin(a2)*r*0.26);
-          g.lineTo(x+Math.cos(a2)*r*0.64, y+Math.sin(a2)*r*0.64); g.stroke(); }
-        g.beginPath();                                             // the square eye through it
-        g.rect(x - r*0.17, y - r*0.17, r*0.34, r*0.34); g.fill(); } },
+        // A SILHOUETTE: one solid stone with its eye and its dressing grooves cut OUT of it,
+        // rather than a thin ring with spokes laid across it and a solid square in the middle
+        // where the hole should be. Everything else on the shelf is a filled shape — the
+        // sledge, the bell, the cap of the mushroom — and a 0.12r stroke is the first thing to
+        // go at badge size.
+        //
+        // ONE path, filled even-odd: inside the eye or a groove the count is two, so it reads
+        // as a hole. That is also why the grooves stop short of the rim — run past it and the
+        // part outside the stone is crossed once, which fills instead of cutting.
+        // The outer radius matches what the ring measured with its stroke, so the motif keeps
+        // exactly the footprint it had.
+        const R = r*0.72, eye = r*0.17, w = r*0.085, i0 = r*0.30, i1 = r*0.62;
+        g.beginPath();
+        g.arc(x, y, R, 0, Math.PI*2);                       // the stone
+        g.rect(x - eye, y - eye, eye*2, eye*2);             // ...its square eye, punched through
+        for (let k = 0; k < 4; k++) {                       // ...and four dressing grooves
+          const a2 = k/4*Math.PI*2 + Math.PI/4;
+          const ux = Math.cos(a2), uy = Math.sin(a2), px = -uy, py = ux;
+          g.moveTo(x + ux*i0 + px*w, y + uy*i0 + py*w);
+          g.lineTo(x + ux*i1 + px*w, y + uy*i1 + py*w);
+          g.lineTo(x + ux*i1 - px*w, y + uy*i1 - py*w);
+          g.lineTo(x + ux*i0 - px*w, y + uy*i0 - py*w);
+          g.closePath();
+        }
+        g.fill("evenodd"); } },
 
     // The one charm you do not choose the moment for. Pressing it ARMS it — like the Hammer,
     // which also waits for something to happen rather than running on a clock — and it is
@@ -2611,24 +2720,58 @@
       face:"#63cbb1", edge:"#1f5f50",
       blurb:"A second chance to die",
       etch:(g,x,y,r)=>{
-        g.lineCap="round"; g.lineWidth=r*0.16;
-        g.beginPath(); g.arc(x, y - r*0.42, r*0.28, Math.PI*0.72, Math.PI*0.28); g.stroke();  // the loop
+        // A SILHOUETTE, like the sledge and the stone: filled, not traced. Three shapes wound
+        // the same way and one wound the other, filled NON-ZERO — so where the shaft runs up
+        // into the ring they merge into one solid object, and only the counter-wound circle
+        // punches a hole. Even-odd would have cancelled every overlap into a hole instead.
+        //
+        // The loop stays ROUND; everything below it is square. That is the shape an ankh is,
+        // and the one curve on the shelf earns its place by being the thing that names it.
+        const CY = y - r*0.46, RO = r*0.34, RI = r*0.17;   // the loop, and its eye
+        const AX = r*0.60, C0 = y - r*0.02, C1 = y + r*0.24;   // the arms
+        const SW = r*0.15, ST = y - r*0.26, SY = y + r*0.86;   // the shaft
         g.beginPath();
-        g.moveTo(x, y - r*0.16); g.lineTo(x, y + r*0.78);            // the shaft
-        g.moveTo(x - r*0.46, y + r*0.10); g.lineTo(x + r*0.46, y + r*0.10);   // the arms
-        g.stroke(); } },
+        g.arc(x, CY, RO, 0, Math.PI*2);                   // the loop
+        g.rect(x - AX, C0, AX*2, C1 - C0);                // the arms
+        g.rect(x - SW, ST, SW*2, SY - ST);                // the shaft, tucked up into the ring
+        // Counter-wound, so it subtracts. It stops short of the shaft's head — a hole the
+        // shaft reached into would be wound twice and fill straight back in.
+        g.arc(x, CY, RI, 0, Math.PI*2, true);
+        g.fill(); } },
 
     { id:"pulse", name:"Bell of Unmaking", col:"#c9b6ff", ms:0,
       face:"#b49df5", edge:"#4a3080",
       blurb:"A mighty scream to unmake monsters",
       etch:(g,x,y,r)=>{
-        // three rings going out and a struck centre — the shape of the thing it does
-        g.lineCap="round";
-        [0.34, 0.58, 0.82].forEach((rr, i) => {
-          g.lineWidth = r*(0.13 - i*0.028);
-          g.beginPath(); g.arc(x, y, r*rr, -Math.PI*0.78, Math.PI*0.78); g.stroke();
-        });
-        g.beginPath(); g.arc(x, y, r*0.15, 0, 7); g.fill(); } },     // ...and the haft
+        // A BELL. It used to be three rings going out from a struck centre — the shape of the
+        // thing it does rather than the thing itself, which is the better rule in general, but
+        // concentric arcs are also what "sound" looks like everywhere, so it read as a speaker
+        // rather than as the object the charm is named for.
+        //
+        // Four parts, all solid: crown, body, lip, clapper. The body is ONE filled path — a
+        // dome whose sides flare out to the lip — because at badge size an outlined bell fills
+        // in anyway and a stroke only costs you the shape of the flare.
+        //
+        // A size down on the rest of the family: a bell is WIDE at the lip, and drawn to the
+        // same radius as the ankh's arms or the magnet's legs it came out the biggest motif on
+        // the shelf. Scaling the radius shrinks the whole thing about the badge's centre, so
+        // every proportion below is left alone.
+        r *= 0.86;
+        const top = y - r*0.62, lipY = y + r*0.40, halfW = r*0.62;
+        g.beginPath(); g.arc(x, top - r*0.10, r*0.13, 0, 7); g.fill();       // the crown loop
+        g.beginPath();                                                        // the body
+        g.moveTo(x - halfW, lipY);
+        // Up the left side: out to the shoulder, then in to the crown. Two curves rather than
+        // one, so the waist is a waist — a single quadratic gives a plain cone.
+        g.quadraticCurveTo(x - r*0.52, y - r*0.14, x - r*0.30, top);
+        g.quadraticCurveTo(x - r*0.16, top - r*0.13, x, top - r*0.13);
+        g.quadraticCurveTo(x + r*0.16, top - r*0.13, x + r*0.30, top);
+        g.quadraticCurveTo(x + r*0.52, y - r*0.14, x + halfW, lipY);
+        g.closePath(); g.fill();
+        // The lip: a straight bar a shade wider than the body, which is what stops a bell
+        // reading as a hood.
+        g.beginPath(); g.rect(x - r*0.72, lipY, r*1.44, r*0.17); g.fill();
+        g.beginPath(); g.arc(x, lipY + r*0.34, r*0.15, 0, 7); g.fill(); } },  // the clapper
 
     { id:"mush", name:"Mushroom", col:"#ff8fc8", ms:0,
       face:"#ff7fb8", edge:"#9e2a60",
@@ -3503,7 +3646,7 @@
           // only carried a path still means what it always did.
           const variant = h.variant || (h.path ? "patrol" : ax === "v" ? "vrail" : "hrail");
           const K = MONSTER_KINDS[variant] || MONSTER_KINDS.patrol;
-          const base = { kind, variant, speed:h.speed||4600, faceX:1, chompT:0 };
+          const base = { kind, variant, faceX:1, chompT:0 };   // pace comes from monPace()
           if (K.move === "rail") {
             // Rail monsters move EXACTLY as the saws they replace: one traverse takes `speed`
             // ms whatever the rail's length, ping-ponging, with `phase` staggering the start.
@@ -3560,7 +3703,7 @@
           // whole thrusts already behind it is what makes the start survive.
           return { ...base, path, loop: loop0,
                    seg:s0, segT:t0, mdir:1, pause:0,
-                   rowT: step0 * Math.max(1, base.speed), rowP: 0,
+                   rowT: step0 * effSpeed, rowP: 0,
                    wx:(ax0+0.5)*CW, wy:(ay0+0.5)*CW, cc:Math.round(ax0), cr:Math.round(ay0) };
         }
         // `phase` (0..1) is how far into the full ping-pong cycle this saw starts:
@@ -5545,8 +5688,10 @@
   // square each would be a 630px canvas to hold a 42-colour repeat. At a pixel a patch it is
   // 42x42, and `image-rendering: pixelated` puts the squares back at exactly --chq — so the
   // scale is the interface's grid, not the cosmos's own.
-  function voidTileURL(){
-    const T = VOID_THEME, P = 2*(T.colors.length - 1) * T.stripeW;
+  // Any theme, a pixel a patch. One routine, because the cosmos is not the only plate that
+  // wants a quilt on it now.
+  function patchTileURL(T){
+    const P = 2*(T.colors.length - 1) * T.stripeW;
     const c = document.createElement("canvas"); c.width = c.height = P;
     const g = c.getContext("2d");
     for (let j = 0; j < P; j++) for (let i = 0; i < P; i++) {
@@ -5554,10 +5699,24 @@
     }
     return { url: c.toDataURL(), patches: P };
   }
+  // A quilt in ONE colour: the plate's own hue walked up and down a few steps of lightness,
+  // on the same 45-degree ping-pong and at the same patch size the cosmos uses. That is what
+  // makes TILE SHOP and HOLY TALISMANS read as the same material as TILEVERSE rather than as
+  // two flat slabs beside a textured one — and `spread` is small on purpose: the cosmos is
+  // near-black on near-black and barely there, and gold on gold has to be quieter still or it
+  // stops being a finish and starts being a pattern.
+  const PLATE_SPREAD = 9;                 // lightness either side of the base, 0-255
+  const plateTheme = hex => ({
+    colors: [-1.5, -0.5, 0.5, 1.5].map(k => tintHex(hex, 0, 1, Math.round(k * PLATE_SPREAD))),
+    patchW: 0.55, drift: 0.5, dir: 1, stripeW: 3 });
   {
-    const V = voidTileURL(), r = document.documentElement.style;
-    r.setProperty("--void-bg", "url(" + V.url + ")");
-    r.setProperty("--void-bg-size", "calc(var(--chq) * " + V.patches + ")");
+    const r = document.documentElement.style;
+    const set = (name, T) => { const V = patchTileURL(T);
+      r.setProperty("--" + name + "-bg", "url(" + V.url + ")");
+      r.setProperty("--" + name + "-bg-size", "calc(var(--chq) * " + V.patches + ")"); };
+    set("void",  VOID_THEME);
+    set("gold",  plateTheme("#e0aa1e"));   // ...the same two colours the rules below fill with
+    set("amber", plateTheme("#e07a1e"));
   }
   function ceremonyTheme(def) {
     const n = parseInt((def.col || "#ffd24a").replace("#",""), 16);
@@ -5704,13 +5863,16 @@
         ctx.save();
         ctx.globalAlpha = wK;
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.font = "900 " + nameSz + "px " + UI_FONT;
         const ny = fy + cell*0.92;
-        // the same flat extrusion the card headings wear, so it reads as one game
-        ctx.fillStyle = "#6b4d0c";
-        for (let k = 1; k <= 4; k++) ctx.fillText(cere.def.name.toUpperCase(), fx + k, ny + k);
-        ctx.fillStyle = "#ffd24a";
-        ctx.fillText(cere.def.name.toUpperCase(), fx, ny);
+        // A MENU HEADING, drawn by the routine that draws them: the shaded five-step
+        // extrusion and the four-degree tilt, rather than the flat four-step stack it used to
+        // carry. This is the one moment the game names something, and it should be named in
+        // the same lettering everything else in the game is titled with.
+        ctx.save();
+        ctx.translate(fx, ny); ctx.rotate(-4 * Math.PI/180);
+        draw3DText(cere.def.name.toUpperCase(), 0, 0, nameSz);
+        ctx.restore();
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
         // the blurb, wrapped to the screen rather than to a guess
         ctx.font = "700 " + blurbSz + "px " + UI_FONT;
         ctx.fillStyle = "rgba(226,222,255,0.86)";
@@ -6699,6 +6861,26 @@
   // It was the "wanderer" until it learned to hunt. Old level data still says so.
   MONSTER_KINDS.wander = MONSTER_KINDS.hunter;
   const monKind = h => MONSTER_KINDS[h.variant] || MONSTER_KINDS.patrol;
+  // ONE pace for the whole board. Every monster crosses a tile in exactly the time the runner
+  // does, and rides his ramp with him — a level that speeds up speeds the animals up too, so
+  // the gap you can slip through stays the same gap all the way down. Per-monster `speed` in
+  // the level data is ignored; a board where each animal had its own clock meant the timing of
+  // every crossing had to be tuned by hand and re-tuned whenever the pace moved.
+  // Read live, not latched: `msPerCell` moves by RAMP_PER_TILE (half a percent) per cleared
+  // tile, which is far too small a step to see mid-stroke.
+  const monPace = () => Math.max(90, (state && state.msPerCell) || 1000);
+  // How far off a thrust carries. Deliberately short: on a board with four rowers, one you can
+  // hear from three tiles away is a wall of noise carrying no information about any of them.
+  const SWISH_HEAR = 1.5;
+  // One swish per thrust, wherever the thrust came from — a rail leg, a hunter's hop, a walker
+  // crossing a leg of its route. It used to be the rail monsters alone, so the animals that
+  // swim in exactly the same strokes made no sound at all.
+  function monsterStroke(h, done) {
+    if (h.rowDone === done) return;
+    h.rowDone = done;
+    const v = Math.max(0, 1 - monsterNear(h) / SWISH_HEAR);
+    if (v > 0.02) Sound.swish(v);
+  }
   // The trap's cycle, in ms: shut, yawning open, held wide (safe to run through), then the snap.
   const TRAP = { rest: 1500, open: 620, hold: 2600, snap: 150, warn: 620 };
   function trapPhase(t) {
@@ -6719,6 +6901,7 @@
     return       { open: 1 - (u - c)/T.snap, lethal: true, wide: false, shake: 0, u };
   }
   const TRAP_SNAP_AT = TRAP.rest + TRAP.open + TRAP.hold;   // the instant the jaws start closing
+  const TRAP_WARN_AT = TRAP_SNAP_AT - TRAP.warn;            // ...and the instant it starts to tremble
   const TRAP_CYCLE = TRAP.rest + TRAP.open + TRAP.hold + TRAP.snap;
   // `phase` is 0..1 through one bite, kept on the hazard so the sound and the picture cannot
   // drift apart. Without one it falls back to the wall clock, which is what the mechanic
@@ -6763,7 +6946,7 @@
     // between two tiles for a whole leg; this puts the two back in step by moving the distance
     // onto the thrust, which is the thing that is meant to be exactly one tile.
     h.legSpan = h.legN / span;
-    h.legSd = Math.max(1, h.speed);                                  // each taking one tile's time
+    h.legSd = monPace();                                             // each taking one tile's time
     h.rowT  = 0;
   }
   function railRate(P) {
@@ -7090,7 +7273,7 @@
   function talHook(g, x, y, r, def) {
     const CE = r / 0.26;
     g.save();
-    g.strokeStyle = def.face || "#e8dcc0";
+    g.strokeStyle = talFace(def);
     g.lineWidth = Math.max(0.5, CE*TAL.loopW);
     g.lineCap = "round";
     g.beginPath();
@@ -7098,14 +7281,30 @@
     g.stroke();
     g.restore();
   }
+  // The side of a badge is the charm's OWN colour, taken down a little. Slightly, so it reads
+  // as a wall of the same material catching less light — the raw colour was as bright as the
+  // face and the two ran together, and a near-black stood the badge on a slab of something
+  // else entirely. extrude() shades it further as it falls away, so this is the NEAR step and
+  // the far one is another EXTRUDE_SHADE below it.
+  const TAL_SIDE_SHADE = 30;
+  // The charm's TRUE colour — the one it is known by, the one its name is printed in and the
+  // one the ceremony's quilt is mixed from. Every badge used to be painted in a separate
+  // `face`, a shade or two off the real thing, so the object never quite matched the colour
+  // the rest of the game used for it. One source now: the metal, its wall and its raised icon
+  // are all this, and only the wall is darkened.
+  const talFace = def => def.col || def.face || "#e8dcc0";
+  const talSide = def => tintHex(talFace(def), 0, 1, -TAL_SIDE_SHADE);
   function talBadge(g, x, y, r, def) {
     const s2 = r*1.9, h = s2/2, rad = s2*TILE.radius;
     const rr = (X, Y, W, H, R) => { g.beginPath(); g.moveTo(X+R,Y);
       g.arcTo(X+W,Y,X+W,Y+H,R); g.arcTo(X+W,Y+H,X,Y+H,R);
       g.arcTo(X,Y+H,X,Y,R); g.arcTo(X,Y,X+W,Y,R); g.closePath(); };
     g.save();
-    extrude(g, s2, def.edge || "#8d7c58", (dx, dy) => { rr(x-h+dx, y-h+dy, s2, s2, rad); g.fill(); });
-    rr(x-h, y-h, s2, s2, rad); g.fillStyle = def.face || "#e8dcc0"; g.fill();
+    // ...shaded away by extrude(), the same treatment the headings, the title and the coins
+    // wear. It used to be a hand-picked near-black `edge` per charm: six rules where the rest
+    // of the game has one.
+    extrude(g, s2, talSide(def), (dx, dy) => { rr(x-h+dx, y-h+dy, s2, s2, rad); g.fill(); });
+    rr(x-h, y-h, s2, s2, rad); g.fillStyle = talFace(def); g.fill();
     g.save(); rr(x-h, y-h, s2, s2, rad); g.clip();
     // The same paper the board, the walls and the monsters are printed on. Under the panel,
     // as on a monster, so the panel reads as a recess in the paper rather than a sticker.
@@ -7131,7 +7330,7 @@
       const d = TAL.lift > 0 ? Math.max(0.6, r*TAL.lift) : 0;
       g.lineJoin = "round";
       if (d > 0) { g.fillStyle = g.strokeStyle = "rgba(9,6,20,0.38)"; def.etch(g, x + d, y + d, r*0.80); }
-      g.fillStyle = g.strokeStyle = def.face || "#e8dcc0";    def.etch(g, x,     y,     r*0.80);
+      g.fillStyle = g.strokeStyle = talFace(def);              def.etch(g, x,     y,     r*0.80);
     }
     // No diagonal gloss and no lit top edge: a talisman is flat colour. It borrowed both from
     // the coin, which left it looking like currency — the one thing on the board it must not
@@ -9558,11 +9757,7 @@
           h.wy = (h.axis === "h" ? h.r : p)*cell + cell/2;
           // One swish per stroke, keyed off the stroke counter the motion already keeps, so the
           // sound lands exactly on the push rather than on a clock of its own.
-          if (h.rowDone !== done) {
-            h.rowDone = done;
-            const v = Math.max(0, 1 - monsterNear(h) / MONSTER.hear);
-            if (v > 0.02) Sound.swish(v);
-          }
+          monsterStroke(h, done);
           continue;
         }
         if (K.move === "trap") {                    // sits still, yawns, then snaps
@@ -9573,6 +9768,14 @@
           // snap boundary rather than by "are we snapping now", because the snap lasts 150ms
           // and at 60fps that is nine frames — nine crunches, which is a machine gun.
           const now = h.trapT % TRAP_CYCLE;
+          // The tremble now has a voice. It is the ONLY warning the trap gives, and it was a
+          // silent one — you had to be looking straight at the thing to read it. A rising
+          // whine over the whole warn window says "this is about to shut" without needing your
+          // eyes, and it ends exactly where the crunch begins.
+          if (was < TRAP_WARN_AT && (now >= TRAP_WARN_AT || now < was)) {
+            const v = Math.max(0, 1 - monsterNear(h) / MONSTER.hear);
+            if (v > 0.02) Sound.trapWind(v, TRAP.warn / 1000);
+          }
           if (was < TRAP_SNAP_AT && (now >= TRAP_SNAP_AT || now < was)) {
             const v = Math.max(0, 1 - monsterNear(h) / MONSTER.hear);
             if (v > 0.02) Sound.crunch(v);
@@ -9591,11 +9794,12 @@
           // the stroke clock exactly as a rail monster's leg is — so it surges into each cell
           // and arrives coasting, instead of sliding across at a constant rate.
           // A hop IS one tile, so it is one thrust — see railLegSetup.
-          const hopN = 1, hopSd = Math.max(1, h.speed);
+          const hopN = 1, hopSd = monPace();
           h.rowT = (h.rowT || 0) + dt;
           const hk = h.rowT / hopSd, hdone = Math.floor(hk);
           h.rowP = hk - hdone;
           h.segT = (hdone + railProgress(h.rowP)) / hopN;
+          monsterStroke(h, hdone);
           // It is built with from === to and no destination yet. segT used to be seeded at 1
           // to force the first pick on the opening tick; now that segT is DERIVED from the
           // stroke clock that seed is overwritten, so ask the question directly instead. A
@@ -9652,13 +9856,14 @@
           // clock; anything else slides along at a constant rate as it always did.
           if (PK && PK.look === "rail") {
             const segN = Math.max(1, segCells);        // one thrust per tile of the leg
-            const segSd = Math.max(1, h.speed);          // each taking one tile's time
+            const segSd = monPace();                     // each taking one tile's time
             h.rowT = (h.rowT || 0) + dt;
             const sk = h.rowT / segSd, sdone = Math.floor(sk);
             h.rowP = sk - sdone;
             h.segT = (sdone + railProgress(h.rowP)) / segN;
+            monsterStroke(h, sdone);
           } else {
-            h.segT += dt / (h.speed * segCells);
+            h.segT += dt / (monPace() * segCells);
           }
           if (h.segT >= 1) {
             h.segT = 0; h.rowT = 0; h.rowP = 0;
@@ -10117,7 +10322,7 @@
   // BACK to the beginning, and wear the loop. There were five DONEs and three of them had no
   // arrow, which is exactly the kind of thing that goes unnoticed until they are side by side.
   const BTN_GLYPH = [
-    [/^(done|resume|next|level select)/i, labelWithArrow],
+    [/^(done|resume|next|level select|skip)/i, labelWithArrow],
     [/^(restart|retry)/i,                 labelWithRestart],
   ];
   function btn(label, fn, big) {
@@ -10427,7 +10632,10 @@
     }
     // ---- Holy Talismans: found, never bought, and shown as objects rather than as stock ----
     if (screen === "talismans") {
-      title.textContent = "Holy Talismans"; title.className = "shop big amber";
+      // Two lines. It is the longest heading in the game and at 46px it ran the whole width of
+      // a phone with its tilt carrying the last letters off the edge; stacked, it sits inside
+      // the screen and matches TILE RUNNER's own two-line treatment on the pause menu.
+      title.innerHTML = "Holy<br>Talismans"; title.className = "shop big amber";
       const worn = settings.talisman;
       const grid = document.createElement("div"); grid.className = "relic-grid";
       TALISMANS.filter(talLive).forEach((t, i) => {
@@ -10435,6 +10643,7 @@
         const el = document.createElement("div");
         el.className = "relic" + (on ? " on" : "") + (got ? "" : " locked");
         const c = document.createElement("canvas"); c.width = 150; c.height = 150;
+        c.style.setProperty("--tilt", TAL_TILT[i % TAL_TILT.length] + "deg");
         const g = c.getContext("2d");
         // Each hangs on its own bob, offset so the five drift out of step with one another —
         // a row of them rising and falling together reads as one object, not five.
@@ -10568,13 +10777,19 @@
         // seed is the level number, which is all beginLevel gives genTheme, so this is the
         // actual palette you will be looking at rather than a stand-in for it — every tile in
         // the cloud is a little window onto its level.
+        // ONE PIXEL PER COLOUR, blown up by `image-rendering: pixelated` — the same trick the
+        // TILEVERSE button's cosmos uses. It used to rasterise each colour as a 16px block, so
+        // the bitmap came out 48 wide inside a 45px tile: a 0.94 DOWNSCALE, which on any screen
+        // that is not 2x device pixels the browser resamples — and every colour bled a pixel
+        // into its neighbour. At a pixel a colour the scale is a whole number on every device
+        // (15x at dpr 1, 30x at dpr 2) and there is nothing to resample.
         const sw = document.createElement("canvas"); sw.className = "swatch";
-        const SQ = 16; sw.width = sw.height = LEVEL_SWATCH * SQ;
+        sw.width = sw.height = LEVEL_SWATCH;
         const g = sw.getContext("2d");
         const cols = genTheme(themeSeed(String(i + 1))).colors;
         for (let k = 0; k < LEVEL_SWATCH*LEVEL_SWATCH; k++) {
           g.fillStyle = cols[k % cols.length];
-          g.fillRect((k % LEVEL_SWATCH) * SQ, Math.floor(k / LEVEL_SWATCH) * SQ, SQ, SQ);
+          g.fillRect(k % LEVEL_SWATCH, Math.floor(k / LEVEL_SWATCH), 1, 1);
         }
         el.appendChild(sw);
         const num = document.createElement("span"); num.textContent = (i + 1);
@@ -10590,11 +10805,11 @@
       intro.style.gridColumn = (introC + 1 + shift); intro.style.gridRow = (cells[0].r + 1);
       intro.title = "How the Tileverse was made";
       const isw = document.createElement("canvas"); isw.className = "swatch";
-      const ISQ = 16; isw.width = isw.height = LEVEL_SWATCH * ISQ;
+      isw.width = isw.height = LEVEL_SWATCH;               // a pixel a colour, as above
       const ig = isw.getContext("2d"), vcol = VOID_THEME.colors;
       for (let k = 0; k < LEVEL_SWATCH*LEVEL_SWATCH; k++) {
         ig.fillStyle = vcol[k % vcol.length];
-        ig.fillRect((k % LEVEL_SWATCH) * ISQ, Math.floor(k / LEVEL_SWATCH) * ISQ, ISQ, ISQ);
+        ig.fillRect(k % LEVEL_SWATCH, Math.floor(k / LEVEL_SWATCH), 1, 1);
       }
       intro.appendChild(isw);
       intro.appendChild(document.createElement("span")).className = "play";
@@ -10673,6 +10888,14 @@
     if (!end || end.kind === "lose")
       menuBody.appendChild(btn(end ? "Retry" : "Restart Level",
                               () => { loadLevel(levelIdx); closeMenu(); }));
+    // ...and a way PAST it. Only where you have just failed, and only where there is a level
+    // to skip to: a run you cannot finish should not be the end of the campaign for you, and
+    // the alternative — hunting through the Tileverse for the next square — makes being stuck
+    // feel like being punished.
+    if (end && end.kind === "lose" && levelIdx < LEVELS.length - 1)
+      menuBody.appendChild(btn("Skip Level", () => {
+        levelIdx = levelIdx + 1; loadLevel(levelIdx); closeMenu();
+      }));
     const worldBtn = btn("Tileverse", () => buildMenu("world"));
     worldBtn.classList.add("void");
     menuBody.appendChild(worldBtn);
