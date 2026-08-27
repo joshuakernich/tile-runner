@@ -1854,6 +1854,28 @@
       m.start(t); m.stop(t + 0.36);
     }
     // Intro: a bright materialise chord when the character forms.
+    // One note per generation of Conway in the opening. Rung and CLEAN — no noise in it at all,
+    // unlike the flap: while Life runs there is nothing else happening on screen, so these are
+    // the music rather than a texture over it. Same minor pentatonic the unfolding climbs, so
+    // the two sequences plainly come from one instrument at two moments of the story.
+    function life(k) {
+      if (muted || !ac || ac.state !== "running") return;
+      const t = ac.currentTime;
+      const deg = FLAP_SCALE[Math.min(FLAP_SCALE.length - 1,
+                              Math.round((k || 0) * (FLAP_SCALE.length - 1)))];
+      const hz = BASE * Math.pow(2, (deg + 12)/12);
+      const ring = (f, vel, dur, type) => {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = type; o.frequency.setValueAtTime(f, t);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(vel, t + 0.012);      // struck softly, not plucked
+        g.gain.exponentialRampToValueAtTime(0.0004, t + dur);
+        o.connect(g); g.connect(master); g.connect(sendBus);      // ...and a tail into the room
+        o.start(t); o.stop(t + dur + 0.02);
+      };
+      ring(hz,        0.13, 0.42, "triangle");
+      ring(hz*2.005,  0.05, 0.30, "sine");   // an octave of shimmer, detuned so it beats slowly
+    }
     function introFlash() {
       if (muted || !ac || ac.state !== "running") return;
       const t0 = ac.currentTime;
@@ -2573,7 +2595,7 @@
              slide, clack, tap, tapBig, power, warp, vortex, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck,
              ambient,
-             swish, introGather, introFlash, rumble, flap, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
+             swish, introGather, introFlash, rumble, flap, life, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
              levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, setMusicGate,
              musicNow: () => ({ ...MU }) };
   })();
@@ -2599,7 +2621,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v9.6";                    // shown on the title & pause screens
+  const VERSION = "v9.7";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -11106,26 +11128,31 @@
     // approached. Pan, then push in.
     dive:   [19000, 20050, 21800],          // begin the pan | begin the zoom | inside it
     pixels: [20050, 22300],                 // the quilt subdivides with the ZOOM, not the pan
-    line5:  [22100, 22600, 24400, 24950],   // ALGORITHMIC EMERGENCE GAVE RISE TO A RUNNER
-    gather: [22300, 23100],                 // every one of those pixels rushes together into him
-    fall:   [23100, 23800],                 // and he drops out of the place he was made
-    plinth: 23800,                          // ...onto a tile that is suddenly under his feet
-    line6:  [25100, 25600, 27400, 27950],   // A BEING WITH ONE SACRED PURPOSE...
-    line7:  [28100, 28600, 33400, 33950],   // TO RUN.
-    run:    28400,                          // track lays itself ahead and he goes
+    line5:  [22100, 22600, 27200, 27750],   // ALGORITHMIC EMERGENCE GAVE RISE TO A RUNNER
+    // Conway, at LENGTH. This was 800ms — fifteen generations at 55ms each, which is a boil
+    // rather than a process: the one moment in the story where something is being computed
+    // went past too fast to read as computation at all. Four and a half times as long, and
+    // each generation held nearly three times as long, so you can see a pattern settle and
+    // die. It is also what makes the note per generation musical rather than a machine gun.
+    gather: [22300, 25900],                 // every one of those pixels rushes together into him
+    fall:   [25900, 26600],                 // and he drops out of the place he was made
+    plinth: 26600,                          // ...onto a tile that is suddenly under his feet
+    line6:  [27900, 28400, 30200, 30750],   // A BEING WITH ONE SACRED PURPOSE...
+    line7:  [30900, 31400, 36200, 36750],   // TO RUN.
+    run:    31200,                          // track lays itself ahead and he goes
     // At 0.8 tiles a second, and on the winding path's average of two thirds of a column per
     // tile, clearing the frame takes him between 4.7s (a narrow phone) and 6.3s (a wide one).
     // The fade waits for the first of those and catches the last mid-stride, which is the right
     // way round: better to fade on a runner still going than to sit on an empty picture.
-    fade:   [34000, 35000],
-    end:    35300
+    fade:   [36800, 37800],
+    end:    38100
   };
   const CINE_LINES = {
     line1: "AT FIRST, THERE WAS NOTHING.",
     line2: "UNTIL THE SACRED TILOID CAME INTO THE VOID.",
     line3: "IT UNFOLDED.",
     line4: "AND THE TILEVERSE WAS CREATED.",
-    line5: "ALGORITHMIC EMERGENCE GAVE RISE TO A RUNNER",
+    line5: "ALGORITHMIC EMERGENCE\nGAVE RISE TO A RUNNER",
     line6: "A BEING WITH ONE SACRED PURPOSE...",
     line7: "TO RUN.",
   };
@@ -11197,6 +11224,7 @@
   // ...and every moment a TRACK tile arrives under or ahead of the runner: the one that catches
   // him, the two that start him off, and each one the queue flies to the front thereafter.
   let cineLays = null, cineLayI = 0;
+  let cineGenI = 0;                 // generations of Life already sung
   // Story time of the last tap-to-skip, or null while the show is running of its own accord.
   // A line whose fade-in the tap landed in front of is drawn at full strength instead of
   // easing up: skipping AHEAD to a chapter and then watching its words wash in is the tap
@@ -11419,8 +11447,31 @@
   // Stepped from the SEED every time the generation goes backwards, so scrubbing the cinematic
   // lands on the same board the natural playback would have — a Life that carried its state
   // forward only would show a different pattern depending on how you got there.
-  const CINE_LIFE_MS = 55;                       // one generation
+  const CINE_LIFE_MS = 150;                      // one generation
   let cineLife = null;
+  // How many generations the run holds. Shared, because the picture steps through them and the
+  // tune plays one note each — two counts that disagreed would drift a note out by the end.
+  const cineGens = () => Math.max(1, Math.round((CINE.gather[1] - CINE.gather[0]) / CINE_LIFE_MS));
+  // What a living cell is painted in: the LIGHTEST colour of the quilt it is living on, lifted
+  // a little further. It was a flat near-white, which read as something switched on over the
+  // top of the ground rather than as the ground itself waking up — and level one's palette is
+  // the one thing on screen at that moment, so borrowing from it is what ties the two together.
+  // Cached: the theme is fixed for the whole run, and this would otherwise parse eleven colours
+  // on every generation.
+  let _lifeInk = null;
+  function cineLifeInk(){
+    if (_lifeInk) return _lifeInk;
+    const cols = genTheme(themeSeed("1")).colors;
+    // Every colour a genTheme palette makes shares ONE saturation and ONE lightness — only the
+    // hue walks — so "the lightest of them" is not a thing a theme has. Take the middle hue,
+    // which is the family's centre, and raise it: light enough to read as alive against a
+    // 24-42% ground, and unmistakably out of the same palette rather than a flat white
+    // switched on over the top of it.
+    const m = /hsl\((\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)%,\s*(\d+(?:\.\d+)?)%\)/.exec(cols[cols.length >> 1]);
+    const h = m ? +m[1] : 210, sat = m ? +m[2] : 40;
+    _lifeInk = "hsla(" + Math.round(h) + "," + Math.round(Math.min(100, sat*1.2)) + "%,84%,0.92)";
+    return _lifeInk;
+  }
   function cineLifeSeed(n){
     const a = new Uint8Array(n*n);
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++)
@@ -11659,6 +11710,7 @@
     if (cineNet) cineSeedGrowth(cineCloud, cineNet.seeds); else cineCloud = null;
     cineFlaps = cineBuildFlaps(); cineFlapI = 0;
     cineLays  = cineBuildLays();  cineLayI  = 0;
+    cineGenI  = 0;
     markCineSeen();                     // whatever happens now, this is no longer a first launch
     const pf = document.getElementById("pauseFloat"); if (pf) pf.style.display = "none";
     // Nothing from before is allowed to play under this. The backing track is CUT rather than
@@ -11746,6 +11798,7 @@
     if (cineFlaps) while (cineFlapI < cineFlaps.length && cineFlaps[cineFlapI] <= t) cineFlapI++;
     cineLayI = 0;
     if (cineLays) while (cineLayI < cineLays.length && cineLays[cineLayI] <= t) cineLayI++;
+    cineGenI = Math.max(0, Math.min(cineGens(), Math.floor((t - CINE.gather[0]) / CINE_LIFE_MS) + 1));
   }
   // One tap, one chapter.
   function cineStep(){
@@ -11789,6 +11842,19 @@
         cineFlapI++;
       }
     }
+    // ...and a note for every generation of Life. Twenty-four steps climbing the same
+    // pentatonic the unfolding climbs, so the one stretch of the story where something is
+    // being COMPUTED has a tune to it rather than a tick. Caught up rather than stacked, like
+    // the flaps: a long frame speaks once and swallows the rest.
+    if (t >= CINE.gather[0]) {
+      const gens = cineGens();
+      const due = Math.min(gens, Math.floor((t - CINE.gather[0]) / CINE_LIFE_MS) + 1);
+      let sung = 0;
+      while (cineGenI < due) {
+        if (sung < 1) { try { Sound.life && Sound.life(cineGenI / Math.max(1, gens - 1)); } catch(_){} sung++; }
+        cineGenI++;
+      }
+    }
     if (t >= CINE.end) endCine();
   }
   // 0 before a, ramps to 1 by b, holds to c, back to 0 by d — except that a line skipped TO
@@ -11806,21 +11872,28 @@
     if (t <= e[2]) return 1;
     return 1 - (t - e[2]) / (e[3] - e[2]);
   }
+  // A line may be several: "\n" breaks it, and the block is centred on `cy` rather than sitting
+  // on it, so a two-line card and a one-line card hang from the same point.
   function cineText(str, cy, alpha, big){
     if (alpha <= 0.001) return;
+    const lines = String(str).split("\n");
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     let fs = Math.min(viewW * (big ? 0.075 : 0.058), viewH * 0.05);
     ctx.font = "900 " + Math.round(fs) + "px " + UI_FONT;
-    const maxW = viewW * 0.84, wpx = ctx.measureText(str).width;
+    // The WIDEST line decides, so breaking a long card in two lets both halves come up at
+    // full size instead of the whole thing being shrunk to fit the longest run of words.
+    const maxW = viewW * 0.84;
+    let wpx = 0; for (const ln of lines) wpx = Math.max(wpx, ctx.measureText(ln).width);
     if (wpx > maxW) { fs = fs * maxW / wpx; ctx.font = "900 " + Math.round(fs) + "px " + UI_FONT; }
-    // The words ride over the cloud once it fills the screen, and white on a bright quilt is
-    // no words at all — so they carry their own shadow rather than relying on the backdrop.
-    ctx.shadowColor = "rgba(0,0,0,0.85)"; ctx.shadowBlur = Math.round(fs*0.5);
+    // No shadow, and painted once. It used to carry a half-em black blur and be drawn twice to
+    // deepen it, on the reasoning that white over a bright quilt is no words at all — which is
+    // true, but what it actually produced was a black rind around every letter.
     ctx.fillStyle = "#ffffff";
-    ctx.fillText(str, viewW/2, cy);
-    ctx.fillText(str, viewW/2, cy);
+    const lead = fs * 1.22;
+    const y0 = cy - lead*(lines.length - 1)/2;
+    lines.forEach((ln, i) => ctx.fillText(ln, viewW/2, y0 + i*lead));
     ctx.restore();
   }
   function drawCine(ts){
@@ -12008,8 +12081,7 @@
       // cell, which is him. The board is the backdrop's own grid, so what is alive is always
       // exactly one background square, lit rather than moved.
       if (t >= CINE.gather[0] && home) {
-        const span = CINE.gather[1] - CINE.gather[0];
-        const gens = Math.max(1, Math.round(span / CINE_LIFE_MS));
+        const gens = cineGens();
         const gen  = Math.min(gens, Math.floor((t - CINE.gather[0]) / CINE_LIFE_MS));
         const rc = (F.spawnX - F.x)/F.q, rr = (F.spawnY - F.y)/F.q;   // whole squares, both
         const radAt = g => cineMix(F.n*1.6, 0.9, cineSmooth(cineC01(g/gens)));
@@ -12019,11 +12091,9 @@
         if (a > 0.004) {
           ctx.save();
           ctx.globalAlpha = a;
+          ctx.fillStyle = cineLifeInk();
           for (let j = 0; j < F.n; j++) for (let i = 0; i < F.n; i++) {
             if (!cells[j*F.n + i]) continue;
-            // Living cells are the quilt's own colour lifted toward white, so the pattern reads
-            // as the ground waking up rather than as something laid on top of it.
-            ctx.fillStyle = "rgba(236,244,255,0.82)";
             ctx.fillRect(F.x + i*F.q, F.y + j*F.q, F.q + 1, F.q + 1);
           }
           ctx.restore();
