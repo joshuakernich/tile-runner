@@ -2634,7 +2634,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.0";                    // shown on the title & pause screens
+  const VERSION = "v10.1";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -8343,6 +8343,9 @@
   // the leading tile renders as a 3-way junction: three real platform pieces
   // oriented to the travel direction — a flat run forward, plus a curve each way
   // (up / down relative to travel) — signalling the path isn't set yet.
+  const MARK_SPIN = 1100;                  // ms for the light to go once round the four corners
+  // the four corners, in the order the light visits them: clockwise from top-left
+  const MARK_QUAD = [{x:-1,y:-1}, {x:1,y:-1}, {x:1,y:1}, {x:-1,y:1}];
   function drawJunction(n, prev, ts) {
     const din = prev ? axisDir(prev, n) : { x:0, y:-1 };   // travel direction into the tile
     const left  = { x:-din.y, y:din.x };
@@ -8373,62 +8376,55 @@
     try {
       ctx.save();
       rrect(X, Y, cell, cell, tileR(cell)); ctx.clip();
-      ctx.save();
-      // The three options are drawn OVER EACH OTHER at a third each rather than unioned into
-      // one shape. Where all three agree — the stub he enters on — the alpha builds to 19/27
-      // and the ground is nearly solid; where two of them run together it reaches 5/9; and an
-      // arm only one route reaches stays at a third. The tile stops being a single blob with
-      // three lobes and starts saying which way it is most sure of.
+      // Each route is a complete tile of its own — ground, worn skin, the beam's shadow, the
+      // beam, grain and the lip along its own top edge — rendered next door, cut to its own
+      // shape, and only then laid down at its weight. Drawing all three into ONE layer and
+      // masking the result at the end was wrong: the lips are drawn at full strength, so
+      // wherever two routes ran together their contours added up and the junction came out
+      // brighter than any single route ever is.
       //
-      // It has to be a MASK rather than three tinted fills: the ground is a quilt with its own
-      // alpha (TILE.strata), and drawing it three times with globalAlpha set would have that
-      // overwritten on every pass. So the ground goes down once, solid, and the stack of thirds
-      // is built next door and applied as one.
+      // Order is faintest to strongest — right, straight, left — so the route the tile is most
+      // sure of is the one on top, and a weaker route never draws over it.
       if (jMask.width !== px) { jMask.width = jMask.height = px; }
       const mg = jMask.getContext("2d");
-      mg.setTransform(1, 0, 0, 1, 0, 0); mg.clearRect(0, 0, px, px);
-      mg.setTransform(dpr, 0, 0, dpr, -DX, -DY);
-      mg.fillStyle = "#ffffff";
       const mix = [JUNCTION.left, JUNCTION.ahead, JUNCTION.right];   // same order as `exits`
-      { const was = ctx; ctx = mg;                       // bodyPath draws into the shared ctx
-        surfaces.forEach((S, i) => {
-          ctx.globalAlpha = Math.max(0, Math.min(1, mix[i]));
-          ctx.beginPath(); bodyPath(S, C); ctx.fill();
-        });
-        ctx = was; }
-      ctx.beginPath(); ctx.rect(X, Y, cell, cell); ctx.clip();
-      ctx.fillStyle = groundColour(track);
-      ctx.fillRect(X, Y, cell, cell);                               // the ground...
-      // ...and whatever the worn skin lays on it. The scratch canvas is set up in the board's
-      // own world coordinates, so a pattern keyed off world x/y — the diagonal bands, the
-      // brick courses — runs straight on from the laid tile behind into this one.
-      drawGround(X, Y, cell, n.c, n.r);
-      if (TILE.pathW > 0 && TILE.shadowW > 0) {
-        ctx.fillStyle = tintHex(track, TILE.underHue, TILE.underSat, TILE.underShade + TILE.shadowShade);
-        ctx.beginPath(); for (const S of surfaces) surfaceBand(S, C, cell*(TILE.pathW + TILE.shadowW)); ctx.fill();
+      for (const i of [2, 1, 0]) {
+        const w = Math.max(0, Math.min(1, mix[i]));
+        if (w <= 0) continue;
+        const S = surfaces[i];
+        mg.setTransform(1, 0, 0, 1, 0, 0); mg.clearRect(0, 0, px, px);
+        mg.setTransform(dpr, 0, 0, dpr, -DX, -DY);       // the board's own world coordinates, so
+        const was = ctx; ctx = mg;                       // a skin keyed off world x/y lines up
+        ctx.fillStyle = groundColour(track);
+        ctx.fillRect(X, Y, cell, cell);                               // the ground...
+        drawGround(X, Y, cell, n.c, n.r);                             // ...and the worn skin on it
+        if (TILE.pathW > 0 && TILE.shadowW > 0) {
+          ctx.fillStyle = tintHex(track, TILE.underHue, TILE.underSat, TILE.underShade + TILE.shadowShade);
+          ctx.beginPath(); surfaceBand(S, C, cell*(TILE.pathW + TILE.shadowW)); ctx.fill();
+        }
+        if (TILE.pathW > 0) {
+          ctx.fillStyle = track;
+          ctx.beginPath(); surfaceBand(S, C, cell*TILE.pathW); ctx.fill();
+        }
+        grainFill(X, Y, cell, cell, JUNCTION.grain);
+        surfaceEdge(X, Y, S, C);
+        // cut the whole thing to this one route. A clip would do it, but the ground carries an
+        // alpha of its own (TILE.strata) and this keeps every pixel of that intact.
+        ctx.globalCompositeOperation = "destination-in";
+        ctx.fillStyle = "#ffffff"; ctx.beginPath(); bodyPath(S, C); ctx.fill();
+        ctx.globalCompositeOperation = "source-over";
+        ctx = was;
+        ctx.globalAlpha = w;
+        ctx.drawImage(jMask, DX/dpr, DY/dpr, px/dpr, px/dpr);
+        ctx.globalAlpha = 1;
       }
-      if (TILE.pathW > 0) {
-        ctx.fillStyle = track;
-        ctx.beginPath(); for (const S of surfaces) surfaceBand(S, C, cell*TILE.pathW); ctx.fill();
-      }
-      grainFill(X, Y, cell, cell, JUNCTION.grain);
-      // Every route gets the same lip along its own surface. Drawn BEFORE the mask, so each
-      // one is attenuated by the weight of the layer it belongs to — the contour on a route
-      // set to 0.10 comes out at a tenth, which is what stops three edges of equal strength
-      // sitting over three routes of wildly different ones.
-      for (const S of surfaces) surfaceEdge(X, Y, S, C);
-      // ...and the stack, cut into it in one pass.
-      ctx.globalCompositeOperation = "destination-in";
-      ctx.drawImage(jMask, DX/dpr, DY/dpr, px/dpr, px/dpr);
-      ctx.globalCompositeOperation = "source-over";
-      ctx.restore();                                                // out of the tile clip
-      // No back-to-front fade any more. It was doing the same job the stack of thirds now does
-      // — saying "this ground has not settled" — and doing it along a different axis, so the two
+      // No back-to-front fade any more. It was doing the same job the weighted stack does —
+      // saying "this ground has not settled" — and doing it along a different axis, so the two
       // fought: the near arm of a turn came out solid at its root and vanished at its tip
       // whichever way the turn went, which is a statement about the TILE rather than about the
-      // three routes across it. What is left is the overlap, which is a statement about the
+      // three routes across it. What is left is the weighting, which is a statement about the
       // routes and nothing else.
-      // ...and the rail is drawn ON TOP of the finished fade, so it stays fully opaque the whole
+      // ...and the rail is drawn ON TOP of the finished stack, so it stays fully opaque the whole
       // way out to each edge. It is the one part of this tile that is a promise rather than a
       // sketch — it says where you MAY go, and a promise should not be drawn in a whisper.
       ctx.save();
@@ -8442,19 +8438,31 @@
     ctx.drawImage(jScratch, DX/dpr, DY/dpr, px/dpr, px/dpr);
 
 
-    // A marker in each cell you can actually build into: a small white square, dead centre.
-    // The arrows it replaces pointed FROM the junction, which put them in the gutter between
-    // two cells and made you read a direction; a square sitting in the middle of a cell just
-    // says "here", which is the thing you are about to tap.
+    // A marker in each cell you can actually build into: four small white squares in a half-tile
+    // block, dead centre, with a light running round them clockwise. The arrows it replaces
+    // pointed FROM the junction, which put them in the gutter between two cells and made you
+    // read a direction; a block sitting in the middle of a cell just says "here", which is the
+    // thing you are about to tap — and the turning light says it is still waiting for you
+    // without ever pointing anywhere, which matters when all three cells are equally valid.
     if (JUNCTION.mark <= 0) return;       // hidden: skip the occupancy scan as well as the fill
-    ctx.fillStyle = "rgba(255,255,255," + JUNCTION.mark + ")";
     const occ = occupiedFor(null);
-    const m = cell/4;                     // exactly a quarter of a tile, per side
+    const head = (ts / MARK_SPIN) * 4;    // the lit corner, continuous, one lap per MARK_SPIN
     for (const d of exits) {
       const tc = n.c + d.x, tr = n.r + d.y;
       // skip the marker if that cell is off-grid, blocked, or would double the runner back
       if (!inBounds(tc, tr) || occ.has(key(tc, tr)) || foldsBack(tc, tr)) continue;
-      ctx.fillRect(C.x + d.x*cell - m/2, C.y + d.y*cell - m/2, m, m);
+      const mx = C.x + d.x*cell, my = C.y + d.y*cell, qs = cell/4;
+      for (let i = 0; i < 4; i++) {
+        const q = MARK_QUAD[i];
+        // how far this corner is BEHIND the light, in corners. The tail runs almost the whole
+        // way round and fades off it in a straight line, so what you see is one light with a
+        // long comet tail rather than four squares taking turns to blink.
+        let lag = (head - i) % 4; if (lag < 0) lag += 4;
+        const w = Math.max(0, 1 - lag/3);
+        ctx.fillStyle = "rgba(255,255,255," + (JUNCTION.mark * (0.34 + 0.66*w)).toFixed(3) + ")";
+        // the four quarters of the half-tile block, edge to edge — a quarter of the hint each
+        ctx.fillRect(mx + (q.x < 0 ? -qs : 0), my + (q.y < 0 ? -qs : 0), qs, qs);
+      }
     }
   }
 

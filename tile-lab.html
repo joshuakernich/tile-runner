@@ -404,10 +404,21 @@ function drawJunction(n, prev){
   } finally { ctx = main; }
   ctx.drawImage(jScratch, DX/dpr, DY/dpr, px/dpr, px/dpr);
 
-  // one white square, a quarter of a tile a side, dead centre of every cell you may build into
-  ctx.fillStyle = "rgba(255,255,255," + JUNCTION.mark + ")";
-  const m = cell/4;
-  for (const d of exits) ctx.fillRect(C.x+d.x*cell-m/2, C.y+d.y*cell-m/2, m, m);
+  // four small white squares in a half-tile block, dead centre of every cell you may build
+  // into, with a light running round them clockwise.
+  // This lab draws one static composition, so the chase is frozen at its first corner.
+  const MARK_SPIN = 1100, MARK_QUAD = [{x:-1,y:-1},{x:1,y:-1},{x:1,y:1},{x:-1,y:1}];
+  const head = (0 / MARK_SPIN) * 4;
+  for (const d of exits){
+    const mx = C.x + d.x*cell, my = C.y + d.y*cell, qs = cell/4;
+    for (let i=0;i<4;i++){
+      const q = MARK_QUAD[i];
+      let lag = (head - i) % 4; if (lag < 0) lag += 4;
+      const w = Math.max(0, 1 - lag/3);
+      ctx.fillStyle = "rgba(255,255,255," + (JUNCTION.mark * (0.34 + 0.66*w)).toFixed(3) + ")";
+      ctx.fillRect(mx + (q.x < 0 ? -qs : 0), my + (q.y < 0 ? -qs : 0), qs, qs);
+    }
+  }
 }
 function drawDragDots(fx,fy,s){
   const gap=s*0.16, rad=Math.max(1.5,s*0.035), d=rad*2;
