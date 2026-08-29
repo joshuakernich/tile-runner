@@ -63,6 +63,16 @@
       <div class="row"><label>rail width</label><input type="range" id="railW" min="0.01" max="0.18" step="0.005"><output></output></div>
     </div>
     <div class="grp">
+      <h2>Surface edge</h2>
+      <div class="row"><label>depth</label><input type="range" id="edgeDepth" min="0" max="0.5" step="0.005"><output></output></div>
+      <div class="row"><label>strength</label><input type="range" id="edgeA" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>white &rarr; black</label><input type="range" id="edgeInk" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>texture</label><input type="range" id="edgeGrain" min="0" max="1" step="0.01"><output></output></div>
+      <p class="hint">A stack of bands hanging off the running surface, each shallower than the
+        last, so the falloff CONTOURS the edge — parallel down a straight, concentric round a
+        corner. Ink is a straight ramp: 1 white, 0 black, and every grey between.</p>
+    </div>
+    <div class="grp">
       <h2>Cross-section</h2>
       <div class="row"><label>beam depth</label><input type="range" id="pathW" min="0" max="0.5" step="0.005"><output></output></div>
       <div class="row"><label>ground shade</label><input type="range" id="underShade" min="-160" max="60" step="2"><output></output></div>
@@ -100,6 +110,10 @@ const SHIPPED = {
   strataN:    4,
   shadowW:    0.015,
   shadowShade: -16,
+  edgeDepth:  0.150,
+  edgeA:      0.300,
+  edgeInk:    1.000,
+  edgeGrain:  1.000,
 };
 const T = Object.assign({}, SHIPPED);
 let HUE = 45, CELL = 130;
@@ -145,9 +159,10 @@ function hexA(hex,a){ const h=hex.replace("#",""), n=parseInt(h,16);
 // Mirror of the game's JUNCTION. The junction is shown here so the cross-section can be
 // judged on it too; its own alphas are tuned in junction-lab.html, not here.
 const JUNCTION = {
-  tileIn:  1.00,
-  tile:    0.00,
-  arrow:   1.00,
+  left:    1.00,
+  ahead:   0.40,
+  right:   0.20,
+  mark:    0.20,
   grain:   0.40,
 };
 const curTrack = () => hslHex(HUE,88,58);
@@ -272,10 +287,40 @@ function drawPlatformTile(n,prev,next){
   }
   grainFill(cx(n.c),cy(n.r),cell,cell,T.bodyGrain);
   ctx.restore();
+  surfaceEdge(cx(n.c), cy(n.r), S, nodeCenter(n));
   ctx.save(); rrect(cx(n.c),cy(n.r),cell,cell,tileR(cell)); ctx.clip();
   ctx.lineJoin="round"; ctx.lineCap="round";
-  ctx.strokeStyle=curRail(); ctx.lineWidth=Math.max(3,cell*T.railW);
-  ctx.beginPath(); railPath(S); ctx.stroke(); ctx.restore(); }
+  ctx.strokeStyle=RAIL_COL; ctx.lineWidth=RAIL_PX;
+  ctx.beginPath(); railPath(S);
+  if (SHOW_RAIL) ctx.stroke();
+  ctx.restore(); }
+// The lip along the running surface — the same construction the game uses. surfaceBand hangs a
+// band off a surface (parallel down a straight, concentric round a corner), so a stack of them
+// at decreasing depth falls off from the edge whichever way it bends. A canvas gradient cannot
+// follow an arc; this can.
+// A HAIRLINE now, not the beam it was: one pixel of dark grey ruled along the running
+// surface, in a fixed grey rather than the track's own rail colour — a line this thin has to
+// read against twelve skins. TILE.railW no longer drives the width.
+const SHOW_RAIL = true;
+const RAIL_COL  = "#555555";
+const RAIL_PX   = 1;
+const EDGE_STEPS = 7;
+function surfaceEdge(X, Y, S, C) {
+  const d = cell * T.edgeDepth, a = T.edgeA;
+  if (!(d > 0) || !(a > 0)) return;
+  const v = Math.round(255 * Math.max(0, Math.min(1, T.edgeInk)));
+  ctx.save();
+  rrect(X, Y, cell, cell, tileR(cell)); ctx.clip();
+  ctx.fillStyle = "rgba(" + v + "," + v + "," + v + "," + (a / EDGE_STEPS).toFixed(4) + ")";
+  for (let k = 0; k < EDGE_STEPS; k++) {
+    ctx.beginPath(); surfaceBand(S, C, d * (1 - k/EDGE_STEPS)); ctx.fill();
+  }
+  if (T.edgeGrain > 0) {
+    ctx.beginPath(); surfaceBand(S, C, d); ctx.clip();
+    grainFill(X, Y, cell, cell, T.edgeGrain * a);
+  }
+  ctx.restore();
+}
 const axisDir2 = (a,b) => ({ x:Math.sign(b.c-a.c), y:Math.sign(b.r-a.r) });
 // The beam and its shadow hang off the surface as BANDS here rather than fat strokes
 // clipped to the body. On a junction the three options' bodies overlap — a turn's body is
@@ -359,16 +404,10 @@ function drawJunction(n, prev){
   } finally { ctx = main; }
   ctx.drawImage(jScratch, DX/dpr, DY/dpr, px/dpr, px/dpr);
 
-  ctx.fillStyle = hexA(curRail(), JUNCTION.arrow);
-  const gap=cell*0.12, len=cell*0.11, w=cell*0.09;
-  for (const d of exits){
-    const tx=C.x+d.x*(h+gap+len), ty=C.y+d.y*(h+gap+len);
-    const bx=C.x+d.x*(h+gap),     by=C.y+d.y*(h+gap);
-    const px=-d.y, py=d.x;
-    ctx.beginPath(); ctx.moveTo(tx,ty);
-    ctx.lineTo(bx+px*w,by+py*w); ctx.lineTo(bx-px*w,by-py*w);
-    ctx.closePath(); ctx.fill();
-  }
+  // one white square, a quarter of a tile a side, dead centre of every cell you may build into
+  ctx.fillStyle = "rgba(255,255,255," + JUNCTION.mark + ")";
+  const m = cell/4;
+  for (const d of exits) ctx.fillRect(C.x+d.x*cell-m/2, C.y+d.y*cell-m/2, m, m);
 }
 function drawDragDots(fx,fy,s){
   const gap=s*0.16, rad=Math.max(1.5,s*0.035), d=rad*2;
@@ -414,8 +453,10 @@ function render(){
 }
 
 // ---- wiring -------------------------------------------------------------------------
-const KEYS = ["radius","glassA","glassGrain","bodyGrain","railW","pathW","underShade","shadowW","shadowShade"];
-const DP = { radius:3, glassA:2, glassGrain:2, bodyGrain:2, railW:3, pathW:3, underShade:0, shadowW:3, shadowShade:0 };
+const KEYS = ["radius","glassA","glassGrain","bodyGrain","railW","pathW","underShade","shadowW","shadowShade",
+              "edgeDepth","edgeA","edgeInk","edgeGrain"];
+const DP = { radius:3, glassA:2, glassGrain:2, bodyGrain:2, railW:3, pathW:3, underShade:0, shadowW:3, shadowShade:0,
+             edgeDepth:3, edgeA:3, edgeInk:3, edgeGrain:3 };
 function sync(){
   for (const k of KEYS){
     const el=document.getElementById(k); el.value=T[k];

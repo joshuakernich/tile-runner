@@ -38,12 +38,14 @@
 <body>
 <header>
   <h1>Junction Lab</h1>
-  <p>The leading tile's 3-way junction. Ground, beam and rail are drawn together at <b>full
-    opacity</b> off-screen, and only the finished tile is faded — one radial gradient from the
-    edge the runner enters through, applied once to the whole thing. Give any layer an alpha of
-    its own and it blends with what's behind the tile instead of with the tile, and every
-    overlap reads as a smudge. Geometry and drawing are lifted from
-    <code>index.html</code>. Tune, then <b>Copy JUNCTION block</b>.</p>
+  <p>The leading tile's 3-way junction: the three routes out of it, <b>stacked rather than
+    unioned</b>. Each is laid down at its own opacity, so where two of them agree the alpha
+    builds and where all three do it builds again — the stub he enters on comes out nearly
+    solid and an arm only one route reaches stays faint. The ground goes down opaque and the
+    stack is applied as a single mask, because the ground carries an alpha of its own that a
+    per-layer <code>globalAlpha</code> would overwrite. The rail is hidden, as it is in the
+    game. Geometry and drawing are lifted from <code>index.html</code>.
+    Tune, then <b>Copy JUNCTION block</b>.</p>
 </header>
 
 <div class="wrap">
@@ -51,13 +53,18 @@
 
   <div class="panel">
     <div class="grp">
-      <h2>Tile opacity</h2>
-      <div class="row"><label>entry edge</label><input type="range" id="tileIn" min="0" max="1" step="0.01"><output></output></div>
-      <div class="row"><label>at the exits</label><input type="range" id="tile" min="0" max="1" step="0.01"><output></output></div>
+      <h2>The three routes</h2>
+      <div class="row"><label>turn left</label><input type="range" id="left" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>straight on</label><input type="range" id="ahead" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>turn right</label><input type="range" id="right" min="0" max="1" step="0.01"><output></output></div>
+      <p class="hint">Each route is laid down separately, so where two of them agree the alpha
+        BUILDS: three at 0.33 gives 0.33 on an arm only one reaches, 0.56 where two run
+        together and 0.70 on the stub all three share. Left and right are mirror images, so
+        setting them apart tilts the tile.</p>
     </div>
     <div class="grp">
       <h2>Shared</h2>
-      <div class="row"><label>arrows</label><input type="range" id="arrow" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>markers</label><input type="range" id="mark" min="0" max="1" step="0.01"><output></output></div>
       <div class="row"><label>grain</label><input type="range" id="grain" min="0" max="1" step="0.01"><output></output></div>
     </div>
     <div class="grp">
@@ -85,9 +92,10 @@
 <script>
 // ---- the shipped defaults (mirror of index.html's JUNCTION) -------------------------
 const SHIPPED = {
-  tileIn: 1.00,
-  tile:   0.00,
-  arrow:  1.00,
+  left:   1.00,
+  ahead:  0.40,
+  right:  0.20,
+  mark:   0.20,
   grain:  0.40,
 };
 // Mirror of the game's TILE block. The junction is a tile: it takes the same corner and the
@@ -108,6 +116,10 @@ const TILE = {
   strataN:    4,
   shadowW:    0.015,
   shadowShade: -16,
+  edgeDepth:  0.150,
+  edgeA:      0.300,
+  edgeInk:    1.000,
+  edgeGrain:  1.000,
 };
 const tileR = s => s * TILE.radius;
 const J = Object.assign({}, SHIPPED);
@@ -117,6 +129,37 @@ const cv = document.getElementById("cv");
 let ctx = cv.getContext("2d");
 const dpr = 1;                                   // the labs draw 1:1
 const jScratch = document.createElement("canvas");   // the junction composites here
+const jMask    = document.createElement("canvas");   // ...and the three routes stack here
+// The running surface is off in the game (SHOW_RAIL there), so it is off here — a lab that
+// shows a rail the board does not is a lab that lies. Every measurement of it stays and the
+// path is still built: turning it back on is this one line in both places.
+// A HAIRLINE now, not the beam it was: one pixel of dark grey ruled along the running
+// surface, in a fixed grey rather than the track's own rail colour — a line this thin has to
+// read against twelve skins. TILE.railW no longer drives the width.
+const SHOW_RAIL = true;
+const RAIL_COL  = "#555555";
+const RAIL_PX   = 1;
+// The lip along a running surface — the game's own construction. surfaceBand hangs a band off
+// a surface (parallel down a straight, concentric round a corner), so a stack of them at
+// decreasing depth falls off from the edge whichever way it bends. On the junction it is drawn
+// for EVERY route, before the mask, so each contour is attenuated by its own layer's weight.
+const EDGE_STEPS = 7;
+function surfaceEdge(X, Y, S, C) {
+  const d = cell * TILE.edgeDepth, a = TILE.edgeA;
+  if (!(d > 0) || !(a > 0)) return;
+  const v = Math.round(255 * Math.max(0, Math.min(1, TILE.edgeInk)));
+  ctx.save();
+  rrect(X, Y, cell, cell, tileR(cell)); ctx.clip();
+  ctx.fillStyle = "rgba(" + v + "," + v + "," + v + "," + (a / EDGE_STEPS).toFixed(4) + ")";
+  for (let k = 0; k < EDGE_STEPS; k++) {
+    ctx.beginPath(); surfaceBand(S, C, d * (1 - k/EDGE_STEPS)); ctx.fill();
+  }
+  if (TILE.edgeGrain > 0) {
+    ctx.beginPath(); surfaceBand(S, C, d); ctx.clip();
+    grainFill(X, Y, cell, cell, TILE.edgeGrain * a);
+  }
+  ctx.restore();
+}
 
 // ---- colours: same construction as the game's genTrackPal -------------------------
 function hslHex(h, s, l){
@@ -308,8 +351,10 @@ function drawLaid(n, prev, next){
   rrect(cx(n.c), cy(n.r), cell, cell, tileR(cell)); ctx.clip();
   ctx.beginPath(); railPath(S);
   ctx.lineJoin="round"; ctx.lineCap="round";
-  ctx.strokeStyle = curRail(); ctx.lineWidth = Math.max(3, cell*TILE.railW); ctx.stroke();
+  ctx.strokeStyle = RAIL_COL; ctx.lineWidth = RAIL_PX;
+  if (SHOW_RAIL) ctx.stroke();
   ctx.restore();
+  surfaceEdge(cx(n.c), cy(n.r), S, nodeCenter(n));
 }
 
 // ---- drawJunction, exactly as index.html now draws it ------------------------------
@@ -346,28 +391,24 @@ function drawJunction(n, prev){
   const din = prev ? axisDir(prev, n) : { x:0, y:-1 };
   const left  = { x:-din.y, y:din.x };
   const right = { x: din.y, y:-din.x };
-  const exits = [din, left, right];
+  const exits = [left, din, right];                    // same order as J.left/ahead/right
   const surfaces = exits.map(d => tileSurface(n, prev, { c:n.c+d.x, r:n.r+d.y }));
   const C = nodeCenter(n), h = cell*0.5;
-
-  // one gradient, from the entry edge outward, applied to the finished tile (see index.html)
-  const E = { x: C.x - din.x*h, y: C.y - din.y*h };
-  const fade = () => {                                 // the mask, white -> transparent
-    const g = ctx.createRadialGradient(E.x, E.y, 0, E.x, E.y, cell);
-    g.addColorStop(0, `rgba(255,255,255,${J.tileIn})`);
-    g.addColorStop(1, `rgba(255,255,255,${J.tile})`);
-    return g;
-  };
   const track = curTrack();
-  // The tile is rendered OPAQUE off-screen and faded by ONE gradient at the very end.
-  // Drawing each layer at its own alpha meant the semi-transparent rail was blending with
-  // the glass pane and the backdrop rather than with the tile it belongs to, and every
-  // overlap read as a smudge. Now the rail only ever mixes with an opaque beam, and the
-  // finished tile fades as a single object.
+  // The ground is rendered OPAQUE off-screen and the three routes are STACKED into a mask
+  // next door, then cut in with one destination-in. It has to be a mask rather than three
+  // tinted fills: the ground carries its own alpha (TILE.strata), which a globalAlpha of ours
+  // would have overwritten on every pass.
   const X = cx(n.c), Y = cy(n.r);
   const DX = Math.floor(X*dpr) - 1, DY = Math.floor(Y*dpr) - 1;   // device-pixel aligned, so
   const px = Math.ceil(cell*dpr) + 3;                             // the blit back is 1:1
   if (jScratch.width !== px) { jScratch.width = jScratch.height = px; }
+  if (jMask.width !== px) { jMask.width = jMask.height = px; }
+  const mg = jMask.getContext("2d");
+  mg.setTransform(1, 0, 0, 1, 0, 0); mg.clearRect(0, 0, px, px);
+  mg.setTransform(dpr, 0, 0, dpr, -DX, -DY);
+  mg.fillStyle = "#ffffff";
+  const mix = [J.left, J.ahead, J.right];
   const g = jScratch.getContext("2d");
   g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, px, px);
   g.setTransform(dpr, 0, 0, dpr, -DX, -DY);                       // same world coords as the board
@@ -375,8 +416,14 @@ function drawJunction(n, prev){
   try {
     ctx.save();
     rrect(X, Y, cell, cell, tileR(cell)); ctx.clip();
+    { const was = ctx; ctx = mg;                       // bodyPath draws into the shared ctx
+      surfaces.forEach((S, i) => {
+        ctx.globalAlpha = Math.max(0, Math.min(1, mix[i]));
+        ctx.beginPath(); bodyPath(S, C); ctx.fill();
+      });
+      ctx = was; }
     ctx.save();
-    ctx.beginPath(); for (const S of surfaces) bodyPath(S, C); ctx.clip();
+    ctx.beginPath(); ctx.rect(X, Y, cell, cell); ctx.clip();
     ctx.fillStyle = groundColour(track);
     ctx.fillRect(X, Y, cell, cell);                               // the ground
     if (TILE.pathW > 0 && TILE.shadowW > 0) {
@@ -388,29 +435,20 @@ function drawJunction(n, prev){
       ctx.beginPath(); for (const S of surfaces) surfaceBand(S, C, cell*TILE.pathW); ctx.fill();
     }
     grainFill(X, Y, cell, cell, J.grain);
-    ctx.restore();                                                // out of the body clip
-    ctx.lineJoin = "round"; ctx.lineCap = "round";                 // the rail rides on top, opaque
-    ctx.strokeStyle = curRail();
-    ctx.lineWidth = Math.max(3, cell*TILE.railW);
-    ctx.beginPath(); for (const S of surfaces) railPath(S); ctx.stroke();
-    ctx.restore();
-    ctx.globalCompositeOperation = "destination-in";               // ...and only now, the fade
-    ctx.fillStyle = fade();
-    ctx.fillRect(X, Y, cell, cell);
+    for (const S of surfaces) surfaceEdge(X, Y, S, C);             // a lip per route, before the mask
+    ctx.globalCompositeOperation = "destination-in";               // the stack of routes, in one pass
+    ctx.drawImage(jMask, DX/dpr, DY/dpr, px/dpr, px/dpr);
     ctx.globalCompositeOperation = "source-over";
+    ctx.restore();
+    // The rail is HIDDEN in the game (SHOW_RAIL), so it is hidden here. The path is still
+    // built above, so turning it back on is the same one line in both places.
   } finally { ctx = main; }
   ctx.drawImage(jScratch, DX/dpr, DY/dpr, px/dpr, px/dpr);
 
-  ctx.fillStyle = hexA(curRail(), J.arrow);
-  const gap = cell*0.12, len = cell*0.11, w = cell*0.09;
-  for (const d of exits){
-    const tx = C.x + d.x*(h+gap+len), ty = C.y + d.y*(h+gap+len);
-    const bx = C.x + d.x*(h+gap),     by = C.y + d.y*(h+gap);
-    const px = -d.y, py = d.x;
-    ctx.beginPath();
-    ctx.moveTo(tx,ty); ctx.lineTo(bx+px*w, by+py*w); ctx.lineTo(bx-px*w, by-py*w);
-    ctx.closePath(); ctx.fill();
-  }
+  // one white square, a quarter of a tile a side, dead centre of every cell you may build into
+  ctx.fillStyle = "rgba(255,255,255," + J.mark + ")";
+  const m = cell/4;
+  for (const d of exits) ctx.fillRect(C.x + d.x*cell - m/2, C.y + d.y*cell - m/2, m, m);
   if (GUIDES){
     ctx.save();
     ctx.strokeStyle = "rgba(255,120,120,0.85)"; ctx.setLineDash([5,5]); ctx.lineWidth = 1;
@@ -447,7 +485,7 @@ function render(){
 }
 
 // ---- wiring ------------------------------------------------------------------------
-const KEYS = ["tileIn","tile","arrow","grain"];
+const KEYS = ["left","ahead","right","mark","grain"];
 function syncOut(){
   const lines = KEYS.map(k => "    " + (k+":").padEnd(11) + " " + J[k].toFixed(2) + ",");
   document.getElementById("out").value = "  const JUNCTION = {\n" + lines.join("\n") + "\n  };";

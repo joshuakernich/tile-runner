@@ -105,7 +105,7 @@ const RUNNER = {
   legLen:0.12, legWidth:0.05, legSplay:0.22, hipRise:0.06, footLift:0.098, footLiftPow:1,
   knees:1, kneeBend:0.045, kneeSplit:0.5, kneeLead:-0.002, kneeR:0,
   bodyW:0.26, bodyH:0.26, bodyR:0,
-  shadow:0.037, shadowW:0.65, shadowA:0.26, shadowY:0.01, shadowBob:0.48,
+  shadow:0.090, shadowW:1.12, shadowA:0.30, shadowY:0.00, shadowBob:0.48,
   eyeR:0.034, eyeY:0.38, eyeAx:-0.02, eyeBx:0.28,
   glanceMs:5200, glanceX:0.03, glanceY:0.024, blinkMs:3000,
   talCordY:0.77, talHangY:1.01, talR:0.052,
@@ -246,6 +246,10 @@ const TILE = {
   strataN:    4,       // how many squares to a side — 4 makes each a quarter of a tile
   shadowW:    0.015,   // the shadow the beam casts onto the ground
   shadowShade: -16,    // ...how much darker again that shadow is
+  edgeDepth:  0.150,
+  edgeA:      0.300,
+  edgeInk:    1.000,
+  edgeGrain:  1.000,
 };
 
 // Turn a hex colour's hue, drain its saturation and shift its lightness, all at once.
@@ -380,7 +384,18 @@ function paintRunner(g, sx, sy, s, phase, ts, rot, cfg){
   const pale=cfg.body, legL=s*R.legLen, bodyH=s*R.bodyH, bodyW=s*R.bodyW;
   if(cfg.runShadow){ const shk = 1 - R.shadowBob*(bob/Math.max(1e-6, s*R.bob || 1e-6))*0.5;
     g.fillStyle="rgba(5,4,13,"+R.shadowA+")";
-    g.beginPath(); g.ellipse(0,-1+s*R.shadowY,bodyW*R.shadowW*shk,s*R.shadow*shk,0,0,Math.PI*2); g.fill(); }
+  g.save();
+  const rx=bodyW*R.shadowW*shk, ry=s*R.shadow*shk;                  // matches the game: a radial
+  g.translate(0, s*R.shadowY);                                      // falloff centred on the surface
+  if(rx>0.01 && ry>0.01){
+    g.scale(1, ry/rx);
+    const gd=g.createRadialGradient(0,0,0,0,0,rx);
+    gd.addColorStop(0.00,"rgba(5,4,13,"+R.shadowA+")");
+    gd.addColorStop(0.50,"rgba(5,4,13,"+R.shadowA+")");
+    gd.addColorStop(1.00,"rgba(5,4,13,0)");
+    g.fillStyle=gd; g.beginPath(); g.arc(0,0,rx,0,Math.PI*2); g.fill();
+  }
+  g.restore(); }
   g.strokeStyle=pale; g.lineWidth=Math.max(2,s*R.legWidth); g.lineCap="round"; g.lineJoin="round";
   const hipY=-legL-bob-bodyH*(R.hipRise||0), lead=s*R.kneeLead;
   const lift = ph => -s*R.footLift*Math.pow(Math.max(0,Math.cos(ph)), R.footLiftPow);

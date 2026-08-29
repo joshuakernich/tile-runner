@@ -2634,17 +2634,20 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v9.9";                    // shown on the title & pause screens
+  const VERSION = "v10.0";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
   // DOM text forced the fetch. Everything redraws each frame, so it swaps in on arrival.
   const UI_FONT = "'SquareFont','Fraunces',ui-serif,Georgia,serif";
   if (document.fonts && document.fonts.load) document.fonts.load("900 100px SquareFont");
-  // the runner's starting speed (level 1, no combo, no tier) in tiles/second; the
-  // whole campaign's speeds scale so level 1 begins here.
-  const START_CPS = 0.6;
   const DEFAULT_CPS = 0.8;                    // fallback only — every shipped level sets its own L.cps
+  // The player's own starting pace, which OVERRIDES whatever a level declares. Six steps, and
+  // the middle of them is what every shipped level already runs at, so the default changes
+  // nothing. Literal values rather than an arithmetic ramp: 0.5 + 0.1 is not 0.6 in binary,
+  // and a stepper that compares its stored value against the list has to find it there.
+  const START_CPS = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+  const startCps = () => START_CPS.indexOf(settings.startCps) >= 0 ? settings.startCps : DEFAULT_CPS;
   const GATE_COLORS = ["#7dff6b", "#ff9e4d", "#c77dff"];   // per switch/door group (button, wire, door seam)
   // collected boost / slow pickups apply a time-limited speed effect
   const BOOST_MULT = 1.8, SLOW_MULT = 0.5, BOOST_MS = 3000, SLOW_MS = 2600;
@@ -2657,7 +2660,6 @@
   const REST_SINK  = 0.10;                // how far he settles toward the track, fraction of a cell
   const REVEAL_MS = 5000;                  // how long the Lodestone shows the way      // the Spur and the Millstone, in ms — half a second each
   const REVIVE_HOLD_MS = 3000;     // how long the Ankh stands him still after bringing him back
-  const SPEED_SCALE = (1000 / START_CPS) / (LEVELS[0] ? LEVELS[0].speed : 1250);
   const COIN_BONUS = 5;                      // score value per coin
   const levelAttempts = {};                  // how many times each level has been started this session
   // level score = final combo length + coin bonus − number of attempts
@@ -2994,6 +2996,11 @@
   function swatchBust(g, S, body, ink, fin, ts, rad){
     const w = S*0.42, h = S*0.42, x = S/2 - w/2, y = S*0.30;
     const R = S*(rad == null ? 0.07 : rad);
+    if (fin && fin.glow) {                       // ...and its light, before it, as in play
+      g.save(); g.globalCompositeOperation = "lighter";
+      fin.glow(g, x + w/2, y + h/2, w/RUNNER.bodyW, ts||0);
+      g.restore();
+    }
     g.fillStyle = (fin && fin.paint) ? fin.paint(g, x, y, w, h, ts||0) : body;
     rr2(g, x, y, w, h, R); g.fill();
     if (fin && fin.sheen) { g.save(); rr2(g, x, y, w, h, R); g.clip(); fin.sheen(g, x, y, w, h, ts||0); g.restore(); }
@@ -3005,33 +3012,12 @@
 
   // A wide bench of them. Each is a body colour and the ink its eyes are drawn in — dark
   // eyes on a pale body, pale eyes on a dark one, or the reading falls apart.
-  const SKIN_COLOURS = [
-    // Five flats and the seven finishes pushed in below — twelve in all. It was twenty-six,
-    // and the middle of that list was fifteen pastels nobody could tell apart on a swatch
-    // this size, sitting next to metals that actually do something.
-    { id:"classic",  name:"Classic",  cost:0,   body:"#bfe6ff", ink:"#17263f" },
-    { id:"neon",     name:"Neon",     cost:5, body:"#c6ff2e", ink:"#1b2600" },
-    { id:"blackout", name:"Black on Black", cost:5, body:"#15151c", ink:"#22222c" },
-    { id:"whiteout", name:"White on White", cost:10, body:"#f4f4f7", ink:"#e0e0e6" },
-    { id:"succubus", name:"Succubus", cost:10, body:"#c9202f", ink:"#fff4f4" },
-  ];
-
   // ---- finishes -------------------------------------------------------------------
   // A finish is a colour that isn't one colour. `paint` hands back a fillStyle for a given
   // rect — a gradient, usually — and the optional `sheen` draws over the top of it, clipped
   // to the same shape. Both are handed the rect in whatever frame the runner is drawn in, so
   // a rolling metal ball's highlight rolls with it for free.
   //
-  // Metal is the whole trick behind most of these: not light-to-dark shading, but a bright
-  // band where the sky reflects and a dark one where the floor does, with the flip between
-  // them tight enough to read as polish rather than as a gradient.
-  const metal = (dark, mid, lite, hi) => (g, x, y, w, h) => {
-    const gd = g.createLinearGradient(x, y, x + w*0.35, y + h);
-    gd.addColorStop(0.00, mid);  gd.addColorStop(0.28, lite);
-    gd.addColorStop(0.44, hi);   gd.addColorStop(0.60, lite);
-    gd.addColorStop(0.80, mid);  gd.addColorStop(1.00, dark);
-    return gd;
-  };
   // A fixed highlight across the body — the band that separates polished from merely matte.
   //
   // It USED to travel on a loop, which is the honest way to say "this surface is glossy": a
@@ -3056,7 +3042,6 @@
     gd.addColorStop(1, hexA(col, 0));
     g.fillStyle = gd; g.fillRect(x, y, w, h);
   };
-  const gemGlint = glint("#ffffff", 2200, 0.14, 0.85);
   // A hue wheel laid across the body. It used to TURN — `speed` was ms per revolution — and is
   // now held at the top of the wheel, for the same reason the glint is parked. `speed` is kept
   // and ignored, as above.
@@ -3066,111 +3051,326 @@
     for (let k = 0; k <= 6; k++) gd.addColorStop(k/6, `hsl(${(base + k*spread) % 360} ${sat}% ${lum}%)`);
     return gd;
   };
-  SKIN_COLOURS.push(
-    { id:"sterling", name:"Sterling", cost:15, body:"#c3ccdb", ink:"#22262e",
-      paint: metal("#6f7887", "#aeb8c8", "#dfe6f2", "#ffffff") },
-    { id:"bullion",  name:"Bullion",  cost:15, body:"#f0c25c", ink:"#3b2a05",
-      paint: metal("#8a5f10", "#d9a531", "#ffdd82", "#fff6d0"),
-      sheen: glint("#fff6d0", 2600, 0.26, 0.55) },
-    { id:"forge",    name:"Forge",    cost:20, body:"#d98b4a", ink:"#3d1f06",
-      paint: metal("#6b3410", "#c9743a", "#f0a86c", "#ffd9b4") },
-    { id:"obsidian", name:"Obsidian", cost:20, body:"#26262f", ink:"#dfe4f5",
-      paint: metal("#07070c", "#1d1d28", "#3a3a50", "#9c9cc4"),
-      // narrow and cold: polished stone gives back a hard, thin line, not a warm spread
-      sheen: glint("#b9ccff", 3400, 0.16, 0.60) },
-    { id:"diamond",  name:"Diamond",  cost:25, body:"#dff2ff", ink:"#123a4d",
+  // TWELVE finishes. A skin is a `body` colour and the `ink` its eyes are drawn in — dark eyes
+  // on a pale body, pale eyes on a dark one, or the reading falls apart. Anything more than a
+  // flat colour adds `paint`, which hands back a fillStyle for a given rect, and optionally
+  // `sheen`, drawn over the top and clipped to the same shape. Both get the rect in whatever
+  // frame the runner is drawn in, so a rolling body's markings roll with it for free.
+  const SKIN_COLOURS = [
+    { id:"classic",  name:"Classic",  cost:0,  body:"#bfe6ff", ink:"#17263f" },
+    { id:"blackout", name:"Black on Black", cost:5, body:"#15151c", ink:"#22222c" },
+    { id:"whiteout", name:"White on White", cost:5, body:"#f4f4f7", ink:"#e0e0e6" },
+    // A hard stop, not a blend: the split is what this is, and a gradient between the two
+    // would just be grey. It runs down his TRAVEL axis, so the white half leads.
+    { id:"twoface",  name:"Two Face", cost:10, body:"#8a8a96", ink:"#c9202f",
       paint(g, x, y, w, h){
-        const gd = g.createLinearGradient(x, y, x + w*0.5, y + h);
-        gd.addColorStop(0.00, "#eafaff"); gd.addColorStop(0.34, "#a9d9f2");
-        gd.addColorStop(0.50, "#ffffff"); gd.addColorStop(0.68, "#8cc7e8");
-        gd.addColorStop(1.00, "#d6f0ff");
-        return gd; },
-      // hard-edged facet cuts: what separates a gem from a shiny pebble is straight lines
+        const gd = g.createLinearGradient(x, y, x + w, y);
+        gd.addColorStop(0.00, "#15151c"); gd.addColorStop(0.50, "#15151c");
+        gd.addColorStop(0.50, "#f4f4f7"); gd.addColorStop(1.00, "#f4f4f7");
+        return gd; } },
+    { id:"succubus", name:"Succubus", cost:10, body:"#c9202f", ink:"#fff4f4" },
+    // Lit from inside rather than from a light source: the bright part is the middle of him,
+    // and it falls off to a darker green at the edge. That is what separates glowing from
+    // merely being bright green.
+    { id:"radium",   name:"Radium",   cost:15, body:"#8fff3a", ink:"#123a00",
+      paint(g, x, y, w, h){
+        const gd = g.createRadialGradient(x + w*0.5, y + h*0.5, w*0.05,
+                                          x + w*0.5, y + h*0.5, w*0.80);
+        gd.addColorStop(0.00, "#eaffb8"); gd.addColorStop(0.40, "#8fff3a");
+        gd.addColorStop(1.00, "#3f9e14"); return gd; },
+      glow(g, cx, cy, s, ts){                   // ...and it lights the ground it runs on
+        const R = s*0.66 * (1 + 0.05*Math.sin((ts||0)/470));
+        const gd = g.createRadialGradient(cx, cy, s*0.02, cx, cy, R);
+        gd.addColorStop(0.00, "rgba(233,255,184,0.95)");
+        gd.addColorStop(0.24, "rgba(143,255,58,0.50)");
+        gd.addColorStop(0.56, "rgba(63,158,20,0.18)");
+        gd.addColorStop(1.00, "rgba(63,158,20,0)");
+        g.fillStyle = gd; g.beginPath(); g.arc(cx, cy, R, 0, 7); g.fill(); } },
+    { id:"sun",      name:"The Sun",  cost:15, body:"#ffcf4d", ink:"#6b3f04",
+      paint(g, x, y, w, h){
+        const gd = g.createRadialGradient(x + w*0.5, y + h*0.40, w*0.04,
+                                          x + w*0.5, y + h*0.50, w*0.88);
+        gd.addColorStop(0.00, "#fffbe0"); gd.addColorStop(0.32, "#ffd24a");
+        gd.addColorStop(0.74, "#ff9e2e"); gd.addColorStop(1.00, "#e8531e"); return gd; },
+      sheen(g, x, y, w, h){                     // flares standing off the surface
+        g.globalAlpha = 0.32; g.fillStyle = "#fffbe0";
+        for (const [a2, b2, r] of [[0.24,0.24,0.11],[0.74,0.34,0.07],[0.46,0.78,0.08]]) {
+          g.beginPath(); g.arc(x + w*a2, y + h*b2, w*r, 0, 7); g.fill(); }
+        g.globalAlpha = 1; },
+      // Bigger and whiter than the Radium's: a star does not tint what it lands on, it
+      // bleaches it. The breath is slower too — this is a thing burning, not a thing buzzing.
+      glow(g, cx, cy, s, ts){
+        const R = s*0.86 * (1 + 0.04*Math.sin((ts||0)/760));
+        const gd = g.createRadialGradient(cx, cy, s*0.02, cx, cy, R);
+        gd.addColorStop(0.00, "rgba(255,252,232,1.00)");
+        gd.addColorStop(0.18, "rgba(255,214,90,0.66)");
+        gd.addColorStop(0.48, "rgba(255,120,36,0.26)");
+        gd.addColorStop(1.00, "rgba(232,83,30,0)");
+        g.fillStyle = gd; g.beginPath(); g.arc(cx, cy, R, 0, 7); g.fill(); } },
+    // Stripes off the BACK of the head only, and horizontal. Upright bars across the whole
+    // face read as a flag, and they also sat over his eyes — the front of him is where you
+    // look, so that is the part a marking should leave alone. In his local frame +x is travel,
+    // so the back is the low-x edge: each stripe starts hard against it and tapers forward to
+    // a point, which is what a stripe does and what a bar does not.
+    { id:"tiger",    name:"Tiger",    cost:20, body:"#f59322", ink:"#2a1405",
       sheen(g, x, y, w, h){
-        g.strokeStyle = "rgba(255,255,255,0.62)"; g.lineWidth = Math.max(1, w*0.05); g.lineCap = "round";
-        g.beginPath();
-        g.moveTo(x + w*0.06, y + h*0.66); g.lineTo(x + w*0.46, y + h*0.10);
-        g.moveTo(x + w*0.54, y + h*0.96); g.lineTo(x + w*0.96, y + h*0.36);
+        g.fillStyle = "#241202";
+        // Pushed apart: the top one nearly touches the crown and the bottom one nearly the
+        // chin, so the coat runs the whole depth of him and the bare band at eye level reads
+        // as a gap in a pattern rather than as the space between two clumps.
+        for (const [ty, len, th] of [[0.02,0.52,0.13],[0.32,0.64,0.13],
+                                     [0.60,0.46,0.13],[0.84,0.34,0.12]]) {
+          // Nothing at EYE LEVEL. Worked out from RUNNER.eyeY rather than by deleting the
+          // offending stripe, so the gap goes on following the eyes if they ever move — and
+          // the band stays in the list, which is what keeps the spacing of the other three
+          // reading as a coat with a break in it rather than as three stripes.
+          if (RUNNER.eyeY > ty - 0.03 && RUNNER.eyeY < ty + th + 0.03) continue;
+          const y0 = y + h*ty, hh = h*th, xf = x + w*len;
+          g.beginPath();
+          g.moveTo(x, y0);
+          g.lineTo(xf, y0 + hh*0.34);
+          g.lineTo(xf, y0 + hh*0.66);
+          g.lineTo(x, y0 + hh);
+          g.closePath(); g.fill(); } } },
+    { id:"zombie",   name:"Zombie",   cost:20, body:"#8fae6a", ink:"#f4f6d0",
+      sheen(g, x, y, w, h){
+        g.fillStyle = "rgba(58,78,36,0.55)";    // rot, in patches
+        for (const [a2, b2, r] of [[0.26,0.62,0.16],[0.72,0.30,0.11],[0.52,0.16,0.08]]) {
+          g.beginPath(); g.arc(x + w*a2, y + h*b2, w*r, 0, 7); g.fill(); }
+        g.strokeStyle = "#3a4e24"; g.lineWidth = Math.max(1, w*0.035);   // ...and a seam
+        g.beginPath(); g.moveTo(x + w*0.14, y + h*0.86); g.lineTo(x + w*0.86, y + h*0.72);
         g.stroke();
-        g.strokeStyle = "rgba(30,90,130,0.30)"; g.lineWidth = Math.max(1, w*0.028);
-        g.beginPath(); g.moveTo(x, y + h*0.30); g.lineTo(x + w, y + h*0.74); g.stroke();
-        // ...and a hard glint crossing the cuts. The facets are what make it a gem; the band
-        // sitting across them is what makes it a gem in the light. It used to travel.
-        gemGlint(g, x, y, w, h); } },
-    { id:"polychrome", name:"Polychrome", cost:25, body:"#ffc2e6", ink:"#2a1240",
+        g.lineWidth = Math.max(1, w*0.025);
+        for (let k = 0; k < 4; k++) { const t = 0.2 + k*0.2;
+          const px = x + w*(0.14 + 0.72*t), py = y + h*(0.86 - 0.14*t);
+          g.beginPath(); g.moveTo(px, py - h*0.06); g.lineTo(px, py + h*0.06); g.stroke(); } } },
+    { id:"cheese",   name:"Cheese",   cost:25, body:"#f2c94c", ink:"#6b4a10",
+      sheen(g, x, y, w, h){
+        g.fillStyle = "rgba(150,105,20,0.50)";  // holes, and one of them off the edge
+        for (const [a2, b2, r] of [[0.24,0.32,0.13],[0.68,0.20,0.08],[0.46,0.74,0.10],[0.86,0.62,0.07]]) {
+          g.beginPath(); g.arc(x + w*a2, y + h*b2, w*r, 0, 7); g.fill(); } } },
+    // Transparent, and that is all it is. `paint` hands back nothing to paint with, so the
+    // body AND the legs — which take the same finish — simply are not there. The eyes are
+    // drawn separately in `ink`, so what is left running about the board is a pair of them.
+    // No edge at all. There was a faint one, on the reasoning that you should be able to see
+    // where he is — but a hollow runner with a rim around him is a glass runner, and what this
+    // is meant to be is a pair of eyes with nothing behind them.
+    { id:"hollow",   name:"Hollow",   cost:25, body:"#bfe6ff", ink:"#e8e6ff",
+      paint: () => "rgba(0,0,0,0)" },
+    { id:"polychrome", name:"Polychrome", cost:30, body:"#ffc2e6", ink:"#2a1240",
       paint: spectrum(9000, 90, 72, 60),
       // the hue wheel already turns underneath; the gloss on top is what makes it lacquer
       // rather than a colour cycle
       sheen: glint("#ffffff", 3000, 0.22, 0.42) },
-    { id:"opal",     name:"Opal",     cost:30, body:"#f2e6ff", ink:"#3a2f4a",
-      paint: spectrum(22000, 62, 87, 34) }
-  );
+  ];
+
   SKIN_COLOURS.forEach(c => c.swatch = (g,S) => swatchBust(g, S, c.body, c.ink, c, 0, 0));
 
   // Hats draw in the runner's local frame: +x is travel, the body spans byTop..byTop+bodyH.
+  // HATS. Everything below is measured in `bw` — the head's own width — and nothing in `s`.
+  // That is what makes "exactly as wide as his head" true and keeps it true: the shop's bust
+  // and the runner in play have DIFFERENT ratios of head to body (0.42 of the card against
+  // 0.26 of a cell), so a hat mixing the two came out a different size in the two places it
+  // is seen. His head is square — bodyW and bodyH are both 0.26 — so bw is its height too.
+  //
+  // `byTop` is the crown line. Up is negative. H is half a head, so the widest part of every
+  // hat here runs -H..+H and not a pixel further.
   const HATS = [
-    { id:"none", name:"Bare", cost:0, draw:null, swatch:(g,S)=>swatchBust(g,S,"#bfe6ff","#17263f") },
-    { id:"cap", name:"Cap", cost:5, col:"#e05b4b",
-      draw(g,s,bw,byTop,col){ g.fillStyle=col;
-        g.beginPath(); g.ellipse(0, byTop, bw*0.52, s*0.05, 0, Math.PI, 0); g.fill();
-        g.fillRect(0, byTop - s*0.012, bw*0.62, s*0.024); } },
+    { id:"none", name:"Bare", cost:0, draw:null,
+      swatch:(g,S)=>swatchBust(g,S,"#bfe6ff","#17263f",null,0,0) },   // square, like the rest of the rack
+
     { id:"top", name:"Top Hat", cost:5, col:"#2b2740",
-      draw(g,s,bw,byTop,col){ g.fillStyle=col;
-        g.fillRect(-bw*0.60, byTop - s*0.018, bw*1.20, s*0.026);
-        g.fillRect(-bw*0.30, byTop - s*0.115, bw*0.60, s*0.10); } },
-    { id:"band", name:"Headband", cost:10, col:"#ffd24a",
-      draw(g,s,bw,byTop,col){ g.fillStyle=col;
-        g.fillRect(-bw*0.52, byTop + s*0.012, bw*1.04, s*0.028); } },
-    { id:"crown", name:"Crown", cost:10, col:"#ffd24a",
-      draw(g,s,bw,byTop,col){ g.fillStyle=col; g.beginPath();
-        const w=bw*0.52, t=byTop - s*0.075, b=byTop + s*0.012;
-        g.moveTo(-w,b); g.lineTo(-w,t); g.lineTo(-w*0.5,b*0.55+t*0.45); g.lineTo(0,t);
-        g.lineTo(w*0.5,b*0.55+t*0.45); g.lineTo(w,t); g.lineTo(w,b); g.closePath(); g.fill(); } },
-    { id:"beanie", name:"Beanie", cost:15, col:"#5ac8e0",
-      draw(g,s,bw,byTop,col){ g.fillStyle=col;
-        g.beginPath(); g.ellipse(0, byTop + s*0.004, bw*0.54, s*0.062, 0, Math.PI, 0); g.fill();
-        g.fillRect(-bw*0.56, byTop, bw*1.12, s*0.022);
-        g.beginPath(); g.arc(0, byTop - s*0.062, s*0.022, 0, 7); g.fill(); } },
-    { id:"cowboy", name:"Stetson", cost:15, col:"#a5713c",
-      draw(g,s,bw,byTop,col){ g.fillStyle=col;
-        g.beginPath(); g.ellipse(0, byTop, bw*0.86, s*0.030, 0, 0, Math.PI*2); g.fill();
-        g.beginPath(); g.ellipse(0, byTop - s*0.030, bw*0.40, s*0.048, 0, Math.PI, 0); g.fill();
-        g.fillStyle="rgba(40,24,10,0.5)"; g.fillRect(-bw*0.40, byTop - s*0.026, bw*0.80, s*0.014); } },
-    { id:"halo", name:"Halo", cost:20, col:"#fff3a8",
-      draw(g,s,bw,byTop,col){ g.strokeStyle=col; g.lineWidth=Math.max(1.5, s*0.020);
-        g.beginPath(); g.ellipse(0, byTop - s*0.062, bw*0.46, s*0.020, 0, 0, Math.PI*2); g.stroke(); } },
-    { id:"beret", name:"Beret", cost:20, col:"#c0392b",
-      draw(g,s,bw,byTop,col){ g.fillStyle=col;
-        g.beginPath(); g.ellipse(-bw*0.06, byTop - s*0.008, bw*0.54, s*0.052, -0.16, 0, 7); g.fill();
-        g.beginPath(); g.arc(bw*0.34, byTop - s*0.038, s*0.014, 0, 7); g.fill(); } },
-    { id:"antenna", name:"Antenna", cost:25, col:"#9ad9ff",
-      draw(g,s,bw,byTop,col){ g.strokeStyle=col; g.lineWidth=s*0.016; g.lineCap="round";
-        g.beginPath(); g.moveTo(0, byTop); g.lineTo(bw*0.12, byTop - s*0.105); g.stroke();
-        g.fillStyle="#ff6d6d";
-        g.beginPath(); g.arc(bw*0.12, byTop - s*0.118, s*0.022, 0, 7); g.fill(); } },
-    { id:"laurel", name:"Laurel", cost:25, col:"#7dd07f",
-      draw(g,s,bw,byTop,col){ g.fillStyle=col;
-        for (const side of [-1, 1]) for (let k=0;k<4;k++){
-          const a = 0.5 + k*0.30;
-          g.beginPath();
-          g.ellipse(side*bw*(0.20 + k*0.10), byTop - s*0.004 - k*s*0.016,
-                    s*0.026, s*0.013, side*a, 0, 7);
-          g.fill(); } } },
-    { id:"horns", name:"Horns", cost:30, col:"#f2ead6",
-      draw(g,s,bw,byTop,col){ g.fillStyle=col;
-        for (const side of [-1, 1]) {
-          g.beginPath();
-          g.moveTo(side*bw*0.30, byTop + s*0.010);
-          g.quadraticCurveTo(side*bw*0.62, byTop - s*0.030, side*bw*0.46, byTop - s*0.080);
-          g.quadraticCurveTo(side*bw*0.44, byTop - s*0.026, side*bw*0.16, byTop + s*0.010);
+      draw(g,s,bw,byTop,col){ const H=bw*0.5;
+        g.fillStyle=col;
+        g.fillRect(-H, byTop - bw*0.06, bw, bw*0.09);              // the brim, head-wide
+        g.fillRect(-H*0.66, byTop - bw*0.52, H*1.32, bw*0.46);     // the stack
+        g.fillStyle="#c0392b";
+        g.fillRect(-H*0.66, byTop - bw*0.17, H*1.32, bw*0.09); } },  // the band
+
+    // THREE spikes, and the stone set toward the FRONT — +x is travel, so that is the face of
+    // the band you actually see coming. It used to be two peaks with the rim corners rising
+    // between them, which counts as four points from some angles and two from others.
+    { id:"crown", name:"Crown", cost:5, col:"#ffd24a",
+      draw(g,s,bw,byTop,col){
+        const H = bw*0.5;
+        const b = byTop + bw*0.04;        // the bottom of the band
+        const v = byTop - bw*0.10;        // the valleys, and the rim it all stands on
+        const t = byTop - bw*0.40;        // the spike tips
+        g.fillStyle = col; g.beginPath();
+        g.moveTo(-H, b); g.lineTo(-H, v);
+        g.lineTo(-H*0.66, t); g.lineTo(-H*0.33, v);
+        g.lineTo( 0,       t); g.lineTo( H*0.33, v);
+        g.lineTo( H*0.66,  t); g.lineTo( H,      v);
+        g.lineTo( H, b); g.closePath(); g.fill();
+        // The band, in a darker gold across the foot of it. Same metal, less light on it —
+        // which is what separates the rim a crown sits on from the points standing off it.
+        // The stone is gone: at this size it was three pixels of red on a gold square and it
+        // read as damage rather than as a jewel.
+        g.fillStyle = "#c79418";
+        g.fillRect(-H, v, bw, b - v); } },
+
+    { id:"wizard", name:"Wizard", cost:5, col:"#4a3f9e",
+      draw(g,s,bw,byTop,col){ const H=bw*0.5;
+        g.fillStyle=col;
+        g.beginPath();                                             // a tall cone, leaning back
+        g.moveTo(-H*0.86, byTop+bw*0.02);
+        g.lineTo( H*0.86, byTop+bw*0.02);
+        g.lineTo( H*0.10, byTop-bw*1.10);
+        g.closePath(); g.fill();
+        g.fillRect(-H, byTop - bw*0.02, bw, bw*0.08);              // the brim, head-wide
+        g.fillStyle="#ffd24a";                                     // stars on it
+        for (const [x,y,r] of [[-0.10,-0.34,0.05],[0.06,-0.62,0.038],[-0.02,-0.86,0.03]]) {
+          g.beginPath(); g.arc(bw*x, byTop+bw*y, bw*r, 0, 7); g.fill(); } } },
+
+    { id:"gnome", name:"Gnome", cost:10, col:"#c0392b",
+      draw(g,s,bw,byTop,col){ const H=bw*0.5;
+        g.fillStyle=col;
+        g.beginPath();                                             // short, fat, and flopping
+        g.moveTo(-H, byTop+bw*0.04);
+        g.lineTo( H, byTop+bw*0.04);
+        g.quadraticCurveTo(H*0.9, byTop-bw*0.52, -H*0.20, byTop-bw*0.60);
+        g.quadraticCurveTo(-H*0.55, byTop-bw*0.34, -H, byTop+bw*0.04);
+        g.closePath(); g.fill();
+        g.fillStyle="#f4f6ff";                                     // the bobble on the end
+        g.beginPath(); g.arc(-H*0.24, byTop-bw*0.60, bw*0.09, 0, 7); g.fill(); } },
+
+    // The ears are HIS colour, not a hat's: they are meant to read as part of him, the way a
+    // cat's are, rather than as something strapped on. They take the whole finish, so a metal
+    // or a gradient runs on up into them — a fill lives in user space, so it simply continues.
+    // Wide, not tall: their bases nearly meet across the whole head, which is what makes them
+    // read as ears rather than as horns — height was doing the opposite.
+    { id:"cat", name:"Cat", cost:10, col:"#bfe6ff",
+      draw(g,s,bw,byTop,col,skin){ const H=bw*0.5;
+        for (const d of [-1, 1]) {
+          g.fillStyle = skin || col; g.beginPath();                // ears at the head's corners
+          g.moveTo(d*H,      byTop+bw*0.06);
+          g.lineTo(d*H*0.92, byTop-bw*0.40);
+          g.lineTo(d*H*0.10, byTop+bw*0.02);
           g.closePath(); g.fill();
+          g.fillStyle="#ff8fc8"; g.beginPath();                    // ...and the inside of them
+          g.moveTo(d*H*0.84, byTop+bw*0.00);
+          g.lineTo(d*H*0.79, byTop-bw*0.26);
+          g.lineTo(d*H*0.26, byTop-bw*0.02);
+          g.closePath(); g.fill(); } } },
+
+    // A COWL, not a hat: it comes down over the eyes, which is the only headgear here that
+    // covers his face. Hats are drawn after the eyes, so it simply paints over them and gives
+    // him two slits of its own.
+    { id:"bat", name:"Batman", cost:10, col:"#1b1b2a",
+      draw(g,s,bw,byTop,col){ const H=bw*0.5;
+        g.fillStyle=col;
+        g.fillRect(-H, byTop, bw, bw*0.46);                        // the mask over the top half
+        for (const d of [-1, 1]) { g.beginPath();                  // two long ears
+          g.moveTo(d*H*0.86, byTop+bw*0.02);
+          g.lineTo(d*H*0.62, byTop-bw*0.52);
+          g.lineTo(d*H*0.34, byTop+bw*0.02);
+          g.closePath(); g.fill(); }
+        g.fillStyle="#f4f6ff";                                     // the slits
+        for (const d of [-1, 1]) {
+          g.beginPath();
+          g.moveTo(d*bw*0.10, byTop+bw*0.22); g.lineTo(d*bw*0.34, byTop+bw*0.17);
+          g.lineTo(d*bw*0.34, byTop+bw*0.30); g.lineTo(d*bw*0.10, byTop+bw*0.31);
+          g.closePath(); g.fill(); } } },
+
+    // His own head, on his head — same square, same corner, same eyes, in whatever he happens
+    // to be wearing. It takes the finish and the ink the body was painted with, which is why
+    // `draw` is handed both.
+    { id:"stack", name:"Head on Head", cost:15, col:null,
+      draw(g,s,bw,byTop,col,skin,ink,ts){ const H=bw*0.5;
+        g.fillStyle = skin || "#bfe6ff";
+        rr2(g, -H, byTop - bw, bw, bw, bw*RUNNER.bodyR); g.fill();
+        // The runner size is RECONSTRUCTED from the head, so the copy's eyes come out exactly
+        // the size his do wherever this is drawn. And it takes the clock, so the two heads
+        // blink together — the joke only lands if the copy is doing what he is doing.
+        drawEyes(g, 0, byTop - bw + bw*RUNNER.eyeY, bw/RUNNER.bodyW, ink || "#17263f", 1,
+                 ts == null ? EYES.blinkMs*0.5 : ts, 0); } },
+
+    { id:"horns", name:"Horns", cost:15, col:"#f2ead6",
+      draw(g,s,bw,byTop,col){ const H=bw*0.5;
+        g.fillStyle=col;
+        for (const d of [-1, 1]) { g.beginPath();                  // curling out to the corners
+          g.moveTo(d*H*0.36, byTop+bw*0.04);
+          g.quadraticCurveTo(d*H*1.00, byTop-bw*0.10, d*H*0.94, byTop-bw*0.46);
+          g.quadraticCurveTo(d*H*0.74, byTop-bw*0.20, d*H*0.14, byTop+bw*0.04);
+          g.closePath(); g.fill(); } } },
+
+    { id:"halo", name:"Halo", cost:20, col:"#fff3a8",
+      draw(g,s,bw,byTop,col){ const H=bw*0.5;
+        g.strokeStyle=col; g.lineWidth=bw*0.075;
+        g.beginPath(); g.ellipse(0, byTop-bw*0.30, H, bw*0.10, 0, 0, Math.PI*2); g.stroke(); } },
+
+    // THE COMB, and nothing else. The wattle and the beak were two more small red things on a
+    // head that already had one, and at this size the three of them read as clutter rather
+    // than as a bird. One shape, standing three quarters of a head tall and running the full
+    // width of him: the comb IS the joke, so it gets all the room.
+    { id:"chicken", name:"Chicken", cost:20, col:"#e04141",
+      draw(g,s,bw,byTop,col){
+        const H = bw*0.5, base = byTop + bw*0.03;
+        const LOBES = 4, span = bw/LOBES;
+        g.fillStyle = col;
+        g.beginPath();
+        g.moveTo(-H, base);
+        // Taller in the middle than at the ends, so it arches the way a comb does instead of
+        // coming out as a row of identical bumps.
+        for (let k = 0; k < LOBES; k++) {
+          const x0 = -H + k*span, u = (k + 0.5)/LOBES;
+          const tall = bw*(0.46 + 0.30*Math.sin(u*Math.PI));
+          g.quadraticCurveTo(x0 + span*0.5, byTop - tall, x0 + span, base);
+        }
+        g.closePath(); g.fill(); } },
+
+    // THE HORN, and nothing else. The pink mane under it was the bigger shape of the two and
+    // it sat where a hat's brim goes, so what you saw first was a wig — with the horn reading
+    // as a detail on top of it. One horn is the whole animal.
+    { id:"unicorn", name:"Unicorn", cost:25, col:"#ffd24a",
+      draw(g,s,bw,byTop,col){
+        g.fillStyle = col;
+        g.beginPath();                                             // wider at the root, taller
+        g.moveTo(-bw*0.13, byTop + bw*0.03);
+        g.lineTo( bw*0.13, byTop + bw*0.03);
+        g.lineTo( bw*0.02, byTop - bw*0.86);
+        g.closePath(); g.fill();
+        g.strokeStyle = "#e8a020"; g.lineWidth = bw*0.032;         // the twist up its length
+        g.lineCap = "round";
+        for (let k = 1; k <= 4; k++) {
+          const u = k/5, y = byTop + bw*0.03 - bw*0.89*u, hw = bw*0.12*(1 - u);
+          g.beginPath(); g.moveTo(-hw, y); g.lineTo(hw, y - bw*0.035); g.stroke();
         } } },
+
+    { id:"jelly", name:"Jelly", cost:25, col:"#9ad9ff",
+      draw(g,s,bw,byTop,col){ const H=bw*0.5;
+        g.globalAlpha=0.72; g.fillStyle=col;
+        g.beginPath();                                             // a bell, exactly head-wide
+        g.moveTo(-H, byTop+bw*0.06);
+        g.quadraticCurveTo(-H, byTop-bw*0.58, 0, byTop-bw*0.58);
+        g.quadraticCurveTo( H, byTop-bw*0.58, H, byTop+bw*0.06);
+        g.closePath(); g.fill();
+        g.strokeStyle=col; g.lineWidth=bw*0.055; g.lineCap="round";  // ...and what hangs off it
+        for (const d of [-0.74, -0.26, 0.26, 0.74]) {
+          g.beginPath(); g.moveTo(H*d, byTop+bw*0.04);
+          g.quadraticCurveTo(H*d*1.15, byTop+bw*0.26, H*d*0.72, byTop+bw*0.44); g.stroke(); }
+        g.globalAlpha=1; } },
+
+    { id:"saiyan", name:"Super Saiyan", cost:30, col:"#ffd24a",
+      draw(g,s,bw,byTop,col){ const H=bw*0.5;
+        g.fillStyle=col;
+        // Nine spikes off one base line, tallest in the middle — the flare is the whole look,
+        // so the tips go a long way up while the BASE stays exactly a head across.
+        const tip = [0.34, 0.62, 0.86, 1.10, 1.26, 1.10, 0.86, 0.62, 0.34];
+        const lean = [-0.55, -0.42, -0.28, -0.13, 0, 0.13, 0.28, 0.42, 0.55];
+        for (let k=0;k<9;k++){ const x0 = -H + (k/8)*bw, w = bw*0.075;
+          g.beginPath();
+          g.moveTo(x0 - w*0.5, byTop+bw*0.06);
+          g.lineTo(x0 + w*0.5, byTop+bw*0.06);
+          g.lineTo(x0 + bw*lean[k]*0.5, byTop - bw*tip[k]);
+          g.closePath(); g.fill(); } } },
   ];
   HATS.forEach(h => { if (h.id === "none") return;
-    h.swatch = (g,S) => { const b = swatchBust(g,S,"#bfe6ff","#17263f");
-      g.save(); g.translate(S/2, 0);                       // HAT_SCALE, same as in play
-      g.translate(0, b.y); g.scale(HAT_SCALE, HAT_SCALE); g.translate(0, -b.y);
-      h.draw(g, S, b.w, b.y, h.col); g.restore(); }; });
+    // A square face, like the drip cards: the head is only here to hang the hat on, and a
+    // rounded one puts a shape of its own between you and the thing you are buying.
+    h.swatch = (g,S) => { const b = swatchBust(g,S,"#bfe6ff","#17263f",null,0,0);
+      g.save(); g.translate(S/2, 0);
+      h.draw(g, S, b.w, b.y, h.col, "#bfe6ff", "#17263f", EYES.blinkMs*0.5); g.restore(); }; });
 
   // Nyan-style ribbons: a band of parallel stripes laid along the runner's recent path,
   // exactly as deep as his body. Stored outermost-first; the drawing offsets each stripe
@@ -3213,40 +3413,28 @@
   // is drawn the way it actually draws in play — wobble, taper, dash, particles — and fades
   // out along its length, so the head end is the solid one.
   TRAILS.forEach(t => { if (!t.cols) return;
+    // The REAL ribbon, painted by the game's own routine along a straight run of points, with
+    // him at the head of it — a trail is a wake, and a wake only reads if the thing that left
+    // it is there. Laid tail-first, left to right, so he is travelling the way he does on the
+    // board and the fade falls off behind him exactly as it does in play.
     t.swatch = (g, S) => {
-      const n = t.cols.length, x0 = S*0.05, x1 = S*0.95, mid = S*0.5, band = S*0.42;
-      if (t.style === "dots") {
-        for (let k = 0; k <= 30; k++) {
-          const u = k/30, x = x0 + (x1-x0)*u;
-          const wob = t.wobble ? Math.sin(k*(t.freq||0.5)*1.6) * band*0.55*t.wobble : 0;
-          const r = band*0.30 * (t.grow === false ? 1 : 0.32 + u*0.68);
-          if (r < 0.4) continue;
-          g.globalAlpha = Math.pow(u, t.fade || 1.3);
-          g.fillStyle = t.cols[k % n];
-          g.beginPath(); g.arc(x, mid + wob, r, 0, 7); g.fill();
-        }
-        g.globalAlpha = 1; return;
+      // The REAL ribbon, painted by the game's own routine along a straight run of points laid
+      // tail-first — so the fade, the taper, the wobble and the dashes are the ones on the
+      // board rather than a second set drawn to look like them. withCanvas is what puts it on
+      // THIS canvas: paintTrail draws into the module-wide ctx, like everything else here.
+      const band = S*0.34, cellPx = band / RUNNER.bodyH;
+      const headX = S*1.02, tailX = -S*0.06, y = S*0.50, N = 46;
+      const pts = [];
+      for (let k = 0; k < N; k++) {
+        const u = k/(N-1);
+        pts.push({ x: tailX + (headX-tailX)*u, y,
+                   nx: 0, ny: -1,                    // "up" is straight up along a flat run
+                   w: Math.sin(k*1.7)*0.5 });        // each point's own fixed scatter
       }
-      const sw = band/n, SEG = 44;
-      const wobAt = u => t.wobble ? Math.sin(u*14*(t.freq||0.5)) * band*0.42*t.wobble : 0;
-      const tpAt  = u => t.taper  ? (0.16 + 0.84*u) : 1;
-      for (let i = 0; i < n; i++) {
-        g.fillStyle = t.cols[i];
-        for (let c = 0; c < SEG; c++) {
-          if (t.dash && (c % 2)) continue;
-          const u0 = c/SEG, u1 = (c+1)/SEG;
-          g.globalAlpha = Math.pow(u1, 1.5);
-          const xa = x0+(x1-x0)*u0, xb = x0+(x1-x0)*u1;
-          const a0 = tpAt(u0), a1 = tpAt(u1), w0 = wobAt(u0), w1 = wobAt(u1);
-          g.beginPath();
-          g.moveTo(xa, mid + (i-n/2)*sw*a0 + w0);
-          g.lineTo(xb, mid + (i-n/2)*sw*a1 + w1);
-          g.lineTo(xb, mid + (i-n/2+1)*sw*a1 + w1);
-          g.lineTo(xa, mid + (i-n/2+1)*sw*a0 + w0);
-          g.closePath(); g.fill();
-        }
-      }
-      g.globalAlpha = 1;
+      withCanvas(g, cellPx, 0, 0, () => paintTrail(t, pts, band, 0));
+      // No runner at the head of it. The card is selling the WAKE, and a head sitting on the
+      // end of it is the biggest, brightest thing on a square where the ribbon is the only
+      // thing you came to look at.
     }; });
   // "None" has no trail to show, so it shows the absence of one rather than a runner.
   TRAILS[0].swatch = (g,S) => {
@@ -3538,7 +3726,8 @@
     // rather than being scattered through it.
     { id:"rainbow", name:"Rainbow",  cost:30, earthMode:"bands",
       earth:["#ff4d4d","#ff9f1c","#ffe14d","#3ddc84","#3db4ff","#8f6cff"] },
-    { id:"picnic", name:"Picnic",    cost:25, earth:["#d92b2b","#fdf6ec"] },
+    { id:"picnic", name:"Picnic",    cost:25, earthMode:"gingham",
+      earth:["#c62828","#e28c88","#fdf6ec"] },   // full red, the half tone, and the cloth
     // Vertical stripes: `bands` colours by COLUMN alone, so a colour runs the full height of
     // the level in an unbroken line rather than alternating down the way a check does. Two
     // tones, one square each, so a stripe is a quarter of a tile — the same measure as
@@ -3737,7 +3926,10 @@
     // starting pace, tiles/sec, declared per level. Every shipped level now starts at
     // 0.80; the old 0.80 -> 1.00 ramp across the curriculum arcs is gone. Pace still
     // climbs WITHIN a level via RAMP_PER_TILE.
-    const cps = L.cps || DEFAULT_CPS;
+    // The player's setting wins over the level's own. Since v9.6 every monster crosses a tile
+    // in the time the RUNNER takes one, so slowing the game down slows the whole board with it
+    // — the old warning about a slow runner making a saw level unsolvable no longer applies.
+    const cps = startCps();
     const speedTier = 0, startSpeedMult = 1;
     const effSpeed = Math.max(90, Math.round(1000 / cps));
     state = {
@@ -3755,6 +3947,7 @@
       goal: L.goal ? { c:L.goal[0], r:L.goal[1] } : null,
       keyCollected:false,
       runIdx:0, runT:0, msPerCell:effSpeed, speedMult:1, cpsNow: 1000/effSpeed,
+      cps0: 1000/effSpeed,          // what it STARTED at, so the ramp can survive a retune
       status:"play", drag:null, fall:null, runPhase:0,
       score:0, combo:0, maxCombo:0, coins:0, elapsed:0, flowClears:0,
       purse:0,                     // tiles found this run, unbanked until the flag is reached
@@ -8012,6 +8205,15 @@
     check:   (cols, gi, gj) => cols[(gi + gj) & 1],
     scatter: (cols, gi, gj) => cols[bgHash(gi, gj) % cols.length],
     bands:   (cols, gi, gj) => cols[((gi % cols.length) + cols.length) % cols.length],
+    // GINGHAM is not a check. A check alternates two colours; gingham is two sets of BANDS
+    // laid across each other, and the three tones come out of how they overlap — colour over
+    // colour is the full colour, colour over cloth is a half tone, cloth over cloth is bare
+    // cloth. So it wants three: [full, half, bare]. Bitwise parity, which is right for
+    // negative columns too — the board runs left of the origin as well as right of it.
+    gingham: (cols, gi, gj) => {
+      const a = !(gi & 1), b = !(gj & 1);
+      return a && b ? cols[0] : (a || b) ? cols[1] : cols[2];
+    },
   };
   function drawGroundQuilt(x, y, s, c, r) {
     const N = Math.max(1, Math.round(TILE.strataN)), it = lookItem("track");
@@ -8082,13 +8284,37 @@
     ctx.save();
     rrect(cx(n.c), cy(n.r), cell, cell, tileR(cell)); ctx.clip();
     ctx.lineJoin = "round"; ctx.lineCap = "round";
-    ctx.strokeStyle = curRail(); ctx.lineWidth = Math.max(3, cell*TILE.railW);
-    ctx.beginPath(); railPath(S); ctx.stroke();
+    ctx.strokeStyle = RAIL_COL; ctx.lineWidth = RAIL_PX;
+    ctx.beginPath(); railPath(S); if (SHOW_RAIL) ctx.stroke();
     ctx.restore();
   }
   function drawPlatformSurface(n, S, fill) {
     drawPlatformBody(n, S, fill);
+    surfaceEdge(cx(n.c), cy(n.r), S, nodeCenter(n));
     drawPlatformRail(n, S);
+  }
+  // The lip along the running surface. surfaceBand already knows how to hang a band off one —
+  // a parallel offset for a straight run, a CONCENTRIC arc for a corner — so stacking a few at
+  // decreasing depth gives a falloff that contours the edge whatever direction it takes. A
+  // point at depth x lies inside every band deeper than x, so the alpha it collects is
+  // proportional to (1 - x/depth): a straight ramp from the surface down, on a curve as
+  // readily as on a straight, which is the thing a canvas gradient cannot do.
+  const EDGE_STEPS = 7;
+  function surfaceEdge(X, Y, S, C) {
+    const d = cell * TILE.edgeDepth, a = TILE.edgeA;
+    if (!(d > 0) || !(a > 0)) return;
+    const v = Math.round(255 * Math.max(0, Math.min(1, TILE.edgeInk)));
+    ctx.save();
+    rrect(X, Y, cell, cell, tileR(cell)); ctx.clip();
+    ctx.fillStyle = "rgba(" + v + "," + v + "," + v + "," + (a / EDGE_STEPS).toFixed(4) + ")";
+    for (let k = 0; k < EDGE_STEPS; k++) {
+      ctx.beginPath(); surfaceBand(S, C, d * (1 - k/EDGE_STEPS)); ctx.fill();
+    }
+    if (TILE.edgeGrain > 0) {                    // ...and a tooth to it, cut to the same band
+      ctx.beginPath(); surfaceBand(S, C, d); ctx.clip();
+      grainFill(X, Y, cell, cell, TILE.edgeGrain * a);
+    }
+    ctx.restore();
   }
   function railPath(S) {                                // adds a subpath (caller does beginPath/stroke)
     ctx.moveTo(S[0].x, S[0].y);
@@ -8104,12 +8330,16 @@
   // That is why there is one body alpha and one rail alpha rather than separate entry and
   // exit values — see git history if the split is ever wanted back.
   const JUNCTION = {
-    tileIn:  1.00,   // the earth, solid where it joins the path he is on
-    tile:    0.00,   // ...and gone entirely by the leading edge
-    arrow:   1.00,   // the little direction arrows outside the tile, in the rail's own colour
+    left:    1.00,   // the turn one way   — the three routes are STACKED, not unioned, so where
+    ahead:   0.40,   // straight on          two of them agree the alpha builds and where all
+    right:   0.20,   // the turn the other   three do it builds again. Tune in junction-lab.html.
+    mark:    0.20,   // the white square marking each cell you may build into, its opacity
     grain:   0.40,   // paper grain over the whole tile
   };                 // rail thickness is TILE.railW — the junction IS track, so it matches it
   const jScratch = document.createElement("canvas");   // reused every frame
+  // ...and a second, for the junction's three-way mask. The options are stacked into it rather
+  // than unioned, so the shared trunk builds up and the arms only one route reaches stay faint.
+  const jMask = document.createElement("canvas");
   // the leading tile renders as a 3-way junction: three real platform pieces
   // oriented to the travel direction — a flat run forward, plus a curve each way
   // (up / down relative to travel) — signalling the path isn't set yet.
@@ -8117,26 +8347,15 @@
     const din = prev ? axisDir(prev, n) : { x:0, y:-1 };   // travel direction into the tile
     const left  = { x:-din.y, y:din.x };
     const right = { x: din.y, y:-din.x };
-    const exits = [din, left, right];                       // forward (flat), then the two curves
+    // Laid down as they read across the tile — the turn one way, straight on, the turn the
+    // other — rather than forward-first. They are stacked at a third each and all three carry
+    // the same ground, so the ORDER cannot change what comes out; it is written this way so
+    // that giving any one of them a weight of its own later is an edit to the list and nothing
+    // else.
+    const exits = [left, din, right];
     // draw each option as an actual platform surface (straight for forward, arcs for the turns)
     const surfaces = exits.map(d => tileSurface(n, prev, { c:n.c + d.x, r:n.r + d.y }));
     const C = nodeCenter(n), h = cell*0.5;
-    // The fade is a GRADIENT rather than a flat alpha: solid where he enters, gone by the far
-    // side. LINEAR, straight down the direction of travel — back to front — so the tile reads as
-    // ground laid from the edge he arrived at and running out ahead of him.
-    //
-    // It was radial from the entry point, which faded all three options by distance TRAVELLED.
-    // That is arguably truer to the three routes, but it made the tile a soft disc with a bright
-    // spot rather than something with a back and a front, and the two turns fade by how far
-    // FORWARD they reach now, not how far around.
-    const E = { x: C.x - din.x*h, y: C.y - din.y*h };     // the edge he came in through
-    const F = { x: C.x + din.x*h, y: C.y + din.y*h };     // ...and the one straight ahead
-    const fade = () => {                                 // the mask, white → transparent
-      const g = ctx.createLinearGradient(E.x, E.y, F.x, F.y);
-      g.addColorStop(0, `rgba(255,255,255,${JUNCTION.tileIn})`);
-      g.addColorStop(1, `rgba(255,255,255,${JUNCTION.tile})`);
-      return g;
-    };
     // The same cross-section laid track has — ground, the beam's shadow, then the beam.
     const track = curTrack();
     // Ground, beam and rail are rendered together at FULL opacity off-screen, and only the
@@ -8155,7 +8374,29 @@
       ctx.save();
       rrect(X, Y, cell, cell, tileR(cell)); ctx.clip();
       ctx.save();
-      ctx.beginPath(); for (const S of surfaces) bodyPath(S, C); ctx.clip();
+      // The three options are drawn OVER EACH OTHER at a third each rather than unioned into
+      // one shape. Where all three agree — the stub he enters on — the alpha builds to 19/27
+      // and the ground is nearly solid; where two of them run together it reaches 5/9; and an
+      // arm only one route reaches stays at a third. The tile stops being a single blob with
+      // three lobes and starts saying which way it is most sure of.
+      //
+      // It has to be a MASK rather than three tinted fills: the ground is a quilt with its own
+      // alpha (TILE.strata), and drawing it three times with globalAlpha set would have that
+      // overwritten on every pass. So the ground goes down once, solid, and the stack of thirds
+      // is built next door and applied as one.
+      if (jMask.width !== px) { jMask.width = jMask.height = px; }
+      const mg = jMask.getContext("2d");
+      mg.setTransform(1, 0, 0, 1, 0, 0); mg.clearRect(0, 0, px, px);
+      mg.setTransform(dpr, 0, 0, dpr, -DX, -DY);
+      mg.fillStyle = "#ffffff";
+      const mix = [JUNCTION.left, JUNCTION.ahead, JUNCTION.right];   // same order as `exits`
+      { const was = ctx; ctx = mg;                       // bodyPath draws into the shared ctx
+        surfaces.forEach((S, i) => {
+          ctx.globalAlpha = Math.max(0, Math.min(1, mix[i]));
+          ctx.beginPath(); bodyPath(S, C); ctx.fill();
+        });
+        ctx = was; }
+      ctx.beginPath(); ctx.rect(X, Y, cell, cell); ctx.clip();
       ctx.fillStyle = groundColour(track);
       ctx.fillRect(X, Y, cell, cell);                               // the ground...
       // ...and whatever the worn skin lays on it. The scratch canvas is set up in the board's
@@ -8171,45 +8412,49 @@
         ctx.beginPath(); for (const S of surfaces) surfaceBand(S, C, cell*TILE.pathW); ctx.fill();
       }
       grainFill(X, Y, cell, cell, JUNCTION.grain);
-      ctx.restore();                                                // out of the body clip
-      // The fade goes on the EARTH ALONE, and it goes on now — before the rail is laid. The
-      // ground is solid where it joins the track he is already on and gone by the leading edge,
-      // so the tile reads as ground that has not finished arriving.
+      // Every route gets the same lip along its own surface. Drawn BEFORE the mask, so each
+      // one is attenuated by the weight of the layer it belongs to — the contour on a route
+      // set to 0.10 comes out at a tenth, which is what stops three edges of equal strength
+      // sitting over three routes of wildly different ones.
+      for (const S of surfaces) surfaceEdge(X, Y, S, C);
+      // ...and the stack, cut into it in one pass.
       ctx.globalCompositeOperation = "destination-in";
-      ctx.fillStyle = fade();
-      ctx.fillRect(X, Y, cell, cell);
+      ctx.drawImage(jMask, DX/dpr, DY/dpr, px/dpr, px/dpr);
       ctx.globalCompositeOperation = "source-over";
+      ctx.restore();                                                // out of the tile clip
+      // No back-to-front fade any more. It was doing the same job the stack of thirds now does
+      // — saying "this ground has not settled" — and doing it along a different axis, so the two
+      // fought: the near arm of a turn came out solid at its root and vanished at its tip
+      // whichever way the turn went, which is a statement about the TILE rather than about the
+      // three routes across it. What is left is the overlap, which is a statement about the
+      // routes and nothing else.
       // ...and the rail is drawn ON TOP of the finished fade, so it stays fully opaque the whole
       // way out to each edge. It is the one part of this tile that is a promise rather than a
       // sketch — it says where you MAY go, and a promise should not be drawn in a whisper.
       ctx.save();
       rrect(X, Y, cell, cell, tileR(cell)); ctx.clip();
       ctx.lineJoin = "round"; ctx.lineCap = "round";
-      ctx.strokeStyle = curRail();
-      ctx.lineWidth = Math.max(3, cell*TILE.railW);
-      ctx.beginPath(); for (const S of surfaces) railPath(S); ctx.stroke();
+      ctx.strokeStyle = RAIL_COL; ctx.lineWidth = RAIL_PX;
+      ctx.beginPath(); for (const S of surfaces) railPath(S); if (SHOW_RAIL) ctx.stroke();
       ctx.restore();
       ctx.restore();
     } finally { ctx = main; }
     ctx.drawImage(jScratch, DX/dpr, DY/dpr, px/dpr, px/dpr);
 
 
-    // small direction arrows just OUTSIDE the tile — only for directions you can actually build into
-    ctx.fillStyle = hexA(curRail(), JUNCTION.arrow);
+    // A marker in each cell you can actually build into: a small white square, dead centre.
+    // The arrows it replaces pointed FROM the junction, which put them in the gutter between
+    // two cells and made you read a direction; a square sitting in the middle of a cell just
+    // says "here", which is the thing you are about to tap.
+    if (JUNCTION.mark <= 0) return;       // hidden: skip the occupancy scan as well as the fill
+    ctx.fillStyle = "rgba(255,255,255," + JUNCTION.mark + ")";
     const occ = occupiedFor(null);
-    const gap = cell*0.12, len = cell*0.11, w = cell*0.09;
+    const m = cell/4;                     // exactly a quarter of a tile, per side
     for (const d of exits) {
       const tc = n.c + d.x, tr = n.r + d.y;
-      // skip the arrow if that cell is off-grid, blocked, or would double the runner back
+      // skip the marker if that cell is off-grid, blocked, or would double the runner back
       if (!inBounds(tc, tr) || occ.has(key(tc, tr)) || foldsBack(tc, tr)) continue;
-      const tx = C.x + d.x*(h + gap + len), ty = C.y + d.y*(h + gap + len);   // tip
-      const bx = C.x + d.x*(h + gap),       by = C.y + d.y*(h + gap);         // base (just past the edge)
-      const px = -d.y, py = d.x;
-      ctx.beginPath();
-      ctx.moveTo(tx, ty);
-      ctx.lineTo(bx + px*w, by + py*w);
-      ctx.lineTo(bx - px*w, by - py*w);
-      ctx.closePath(); ctx.fill();
+      ctx.fillRect(C.x + d.x*cell - m/2, C.y + d.y*cell - m/2, m, m);
     }
   }
 
@@ -8321,11 +8566,11 @@
     bodyW:    0.26,
     bodyH:    0.26,
     bodyR:    0,    // corner radius of the body
-    shadow:   0.037,   // ground shadow: vertical RADIUS, so drawn height is twice this —
-                       // 0.074, a shade under the 0.085 rail it sits on
-    shadowW:  0.65,    // ground shadow width, fraction of body width
-    shadowA:  0.26,    // ground shadow opacity
-    shadowY:  0.01,    // shadow offset below the track, fraction of a cell
+    shadow:   0.090,   // ground shadow: vertical RADIUS, so drawn height is twice this. Wide
+                       // and soft rather than tight and hard — it is a radial falloff, so the
+    shadowW:  1.12,    // rim is transparent and only the middle carries the full opacity below
+    shadowA:  0.30,    // ground shadow opacity — held flat out to half the radius, then faded
+    shadowY:  0.00,    // shadow offset below that edge, fraction of a cell — 0 = centred
     shadowBob:0.48,    // how much the shadow shrinks as he rises — 0 keeps it fixed, 1 in proportion to the bob
     eyeR:     0.034,
     eyeY:     0.38,    // down the body from its top, fraction of body height
@@ -8374,6 +8619,24 @@
     }
     const s = cell;
     const phase = state.runPhase;
+    // What his shadow is allowed to land on: the bodies of the live tiles around him, plus the
+    // whole cell of any loose pane he is over — a cleared tile is still something rendered, and
+    // without it the shadow would blink off for the half of every tile he spends on one.
+    runnerShadowClip = () => {
+      const p = state.path;
+      for (let i = Math.max(0, state.runIdx - 1); i <= Math.min(p.length - 1, state.runIdx + 1); i++) {
+        const n = p[i];
+        if (n.kind === "platform") { ctx.rect(cx(n.c), cy(n.r), cell, cell); continue; }
+        if (n.exited) continue;                       // its track is gone; its pane is caught below
+        bodyPath(tileSurface(n, p[i-1], p[i+1]), nodeCenter(n));
+      }
+      for (const t of state.tiles) {
+        if (t.status !== "free" && t.status !== "parked") continue;
+        if (Math.abs(t.c - state.path[Math.min(state.runIdx, state.path.length-1)].c) > 1 ||
+            Math.abs(t.r - state.path[Math.min(state.runIdx, state.path.length-1)].r) > 1) continue;
+        ctx.rect(cx(t.c), cy(t.r), cell, cell);
+      }
+    };
 
     // The Star draws nothing here any more. It had a pulsing disc AND a ring of orbiting
     // sparks stacked on top of a runner who already turns solid gold and sheds a trail of it —
@@ -8407,6 +8670,7 @@
     }
     paintRunner(sx, sy, s, phase, angle, moving, ts, (state.status === "squash") ? squashK() : 0,
                 state.status !== "falling");
+    runnerShadowClip = null;      // every other caller — the lover, the shop, the opening — has no board
     _restFold = 0;
     drawRoarRing();
   }
@@ -8422,7 +8686,6 @@
     if (moving) _rollA = (_rollA + dt*rate) % (Math.PI*2);
     return _rollA;
   }
-  const HAT_SCALE = 1.15;      // hats are drawn at RUNNER's scale, then nudged up about the head
   // The runner himself, at an arbitrary place and size — knees, foot lift, bob, talisman and
   // all. Split out of drawRunner so the title screen and the opening cinematic can draw the
   // real character instead of a lookalike, and so there is only ever one of him to retune.
@@ -8457,6 +8720,10 @@
     for (let i = 1; i < out.length; i++) ctx.lineTo(out[i][0], out[i][1]);
     ctx.stroke();
   }
+  // Set for the duration of one paintRunner call, by the ONE caller that has a board to clip
+  // against. A builder rather than a path, because it is invoked inside the runner's own save()
+  // with the world transform put back — see the shadow block.
+  let runnerShadowClip = null;
   function paintRunner(sx, sy, s, phase, angle, moving, ts, sq, grounded, as) {
     // SWAGGER rides on top of the stock stride rather than replacing it — every field is a
     // multiplier or an addition, so the numbers in RUNNER still drive all five styles.
@@ -8504,16 +8771,49 @@
     if (grounded !== false) {
       const shk = 1 - RUNNER.shadowBob * (bob / Math.max(1e-6, s*RUNNER.bob || 1e-6)) * 0.5;
       ctx.save();
+      // Cut to the GROUND HE IS ACTUALLY OVER. A shadow is cast on something, and his was
+      // falling on whatever happened to be under it — the void past the edge of a tile, and
+      // the blank half of the junction where no route has been drawn. The clip is built in the
+      // BOARD's frame, so it is undone here and put back after: `runnerShadowClip` is handed
+      // the world transform to draw into and the runner's own frame is restored on top of it.
+      const clip = runnerShadowClip;
+      if (clip) {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.translate(-Math.round(camX), -Math.round(camY));
+        ctx.beginPath(); clip(); ctx.clip();
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.translate(-Math.round(camX), -Math.round(camY));
+        ctx.translate(sx, sy); ctx.rotate(angle);
+        if (hover) ctx.translate(0, -hover);
+        if (sink)  ctx.translate(0, sink);
+        if (w.lean) ctx.rotate(w.lean);
+      }
       // The shadow is cast ON THE TRACK, so it must not come along for the ride: undo the
       // swagger's lean and its hover before drawing it. Leaning back tipped the ellipse up
       // on its edge, which read as him dragging a plank rather than casting a shadow.
       if (w.lean) ctx.rotate(-w.lean);
       if (hover) ctx.translate(0, hover);
       if (sink)  ctx.translate(0, -sink);      // he sits down; the shadow he casts does not
-      ctx.fillStyle = "rgba(5,4,13," + RUNNER.shadowA + ")";
-      ctx.beginPath();
-      ctx.ellipse(0, -1 + s*RUNNER.shadowY, bodyW*RUNNER.shadowW*shk, s*RUNNER.shadow*shk, 0, 0, Math.PI*2);
-      ctx.fill();
+      // A radial falloff, not a flat disc. Big and flat reads as a sticker cut to shape; big
+      // and graded reads as light being blocked. Full opacity is HELD to half the radius and
+      // all of the fade happens in the outer half, so it keeps a solid core and only its rim
+      // is soft. The gradient is built as a CIRCLE and the circle is squashed back into the
+      // ellipse, because a radial gradient is round by definition — there is no way to give
+      // it two radii.
+      const rx = bodyW*RUNNER.shadowW*shk, ry = s*RUNNER.shadow*shk;
+      // Dead centre on the surface line. sy is the point on the visual path the runner stands
+      // on — the platform's top edge — so y = 0 in this frame IS that edge, and the ellipse
+      // straddles it half above, half below.
+      ctx.translate(0, s*RUNNER.shadowY);
+      if (rx > 0.01 && ry > 0.01) {
+        ctx.scale(1, ry/rx);
+        const gd = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+        gd.addColorStop(0.00, "rgba(5,4,13," + RUNNER.shadowA + ")");
+        gd.addColorStop(0.50, "rgba(5,4,13," + RUNNER.shadowA + ")");   // flat to the halfway mark
+        gd.addColorStop(1.00, "rgba(5,4,13,0)");                        // then all of the falloff
+        ctx.fillStyle = gd;
+        ctx.beginPath(); ctx.arc(0, 0, rx, 0, Math.PI*2); ctx.fill();
+      }
       ctx.restore();
     }
     const byTop = -(legL + bodyH) - bob;
@@ -8528,6 +8828,16 @@
     // one object covers both and the leg is lit to match the body it hangs off rather than
     // being a flat stripe stuck to a polished ball.
     const finish = (!golden && skin.paint) ? skin.paint(ctx, -bodyW/2, byTop, bodyW, bodyH, ts) : pale;
+    // A GLOW is the one part of a finish that is not clipped to him. `paint` and `sheen` both
+    // live inside his silhouette, which is right for a colour and useless for light — light
+    // leaves him and lands on the board around him. Drawn additively and BEFORE the legs and
+    // the body, so everything he is made of still reads crisply on top of its own glare.
+    if (!golden && skin.glow) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      skin.glow(ctx, 0, byTop + bodyH/2, s, ts);
+      ctx.restore();
+    }
     // legs — same colour as body, no outline
     ctx.strokeStyle = finish; ctx.lineWidth = Math.max(3, s*RUNNER.legWidth); ctx.lineCap = "round"; ctx.lineJoin = "round";
     const hipY = -legL - bob - bodyH*(RUNNER.hipRise||0), kneeLead = s*RUNNER.kneeLead;
@@ -8636,7 +8946,13 @@
       ctx.restore();
     }
     // worn talisman: a cord across the chest with the pendant hanging from it
-    const worn = wornTalisman();
+    // OFF for now. The charm is a busy little object on a body that is 0.26 of a cell, and
+    // with the drip, the hat and the kicks all doing their own work on him it was one thing
+    // too many — most of what you saw of it was a dark smudge across his chest. The whole
+    // block is left standing and switched by one flag, because the mechanic still equips a
+    // talisman and the rack still shows which; only the necklace is hidden.
+    const SHOW_TALISMAN_CORD = false;
+    const worn = SHOW_TALISMAN_CORD && wornTalisman();
     if (worn) {
       const cordY = byTop + bodyH*RUNNER.talCordY, hangY = byTop + bodyH*RUNNER.talHangY;
       const px = bodyW*RUNNER.talX, span = bodyW*RUNNER.talSpan;   // the cord's dip follows the pendant
@@ -8653,11 +8969,14 @@
              _restFold > 0.5 ? EYES.blinkMs*0.02 : ts, 0);
     // last, so it sits on top of everything. Scaled up about the crown of his head — at the
     // shipped size the hats were a few pixels of trim on a small character and read as noise.
+    // No scale-up any more. Hats are cut to the HEAD — every measurement in them is a fraction
+    // of bodyW — so nudging them 15% larger about the crown made "exactly as wide as his head"
+    // exactly 15% wider than his head. They also take the finish and the ink the body was
+    // painted with, so a hat that is a copy of him is a copy of what he is wearing today.
     const hat = as ? (as.hat || { draw:null }) : lookItem("hat");
     if (hat.draw) {
       ctx.save();
-      ctx.translate(0, byTop); ctx.scale(HAT_SCALE, HAT_SCALE); ctx.translate(0, -byTop);
-      hat.draw(ctx, s, bodyW, byTop, hat.col);
+      hat.draw(ctx, s, bodyW, byTop, hat.col, finish, inkCol, ts);
       ctx.restore();
     }
     ctx.restore();
@@ -9556,7 +9875,37 @@
     strataN:    4,       // how many squares to a side — 4 makes each a quarter of a tile
     shadowW:    0.015,   // the shadow the beam casts onto the ground
     shadowShade: -16,    // ...how much darker again that shadow is
+    // The lip along the RUNNING SURFACE, which stands in for the rail that used to sit on it.
+    // Not a stroke and not a linear gradient — neither can follow a corner — but a stack of
+    // bands hanging off the surface, each shallower than the last, so the falloff contours
+    // whichever way the surface bends.
+    edgeDepth:  0.150,   // how far down from the surface it reaches, fraction of a cell
+    edgeA:      0.300,   // ...and how strong it is where it meets the surface
+    edgeInk:    1.000,   // 1 white, 0 black, and every grey between
+    edgeGrain:  1.000,   // paper texture over it, so it reads as a worn edge and not an airbrush
   };  const tileR = s => s * TILE.radius;
+  // The running surface, off. Every measurement of it stays — TILE.railW, railPath, the round
+  // caps, the way the junction lays three of them across one tile — and so does every routine
+  // that draws it; this is the one switch that stops the stroke landing. Kept as a flag rather
+  // than by setting railW to 0 because railW lives in the TILE block, which is pasted whole
+  // between the game and two labs and diffed for parity: zeroing it there would either move
+  // all three or fail the check.
+  //
+  // It covers the LAID track and the junction's arms. The fixed platforms keep theirs — a rail
+  // cast into the level is what that mechanic IS, and it has to stay legible against ground you
+  // may not build on — and so do the sliding platforms, for the same reason.
+  // Back on, but as a HAIRLINE rather than the beam it used to be: one pixel of dark grey
+  // ruled along the running surface. The edge lip (TILE.edge*) is what gives the surface its
+  // weight now, and this is only the line that says exactly where it is.
+  //
+  // A literal pixel, not a fraction of a cell — so it stays a hairline at every zoom instead of
+  // growing into a stripe on a big screen — and a fixed grey rather than the track's own rail
+  // colour, because a line this thin has to read against twelve different skins and the skin's
+  // own light tone disappears on half of them. TILE.railW no longer drives the width; it stays
+  // in the block, which is pasted whole between the game and three labs.
+  const SHOW_RAIL = true;
+  const RAIL_COL  = "#555555";
+  const RAIL_PX   = 1;
   // Direction bits for a tile's connected edges.
   const FN = 1, FE = 2, FS = 4, FW = 8;
   // which of a node's edges lead to something that is actually drawn right now
@@ -10327,15 +10676,22 @@
   function drawTrail() {
     const s = state, tr = lookItem("trail");
     if (!tr.cols || !s || !s.trail || s.trail.length < 2) return;
-    const pts = s.trail, N = pts.length;
+    paintTrail(tr, s.trail, cell * RUNNER.bodyH, performance.now());
+  }
+  // The ribbon itself, given a trail and a run of points laid tail-first. Split out of
+  // drawTrail so the SHOP can show the real thing: the rack used to carry a second copy of
+  // wobble, taper, dash and fade drawn along a straight line, and a copy of a drawing is a
+  // copy that drifts — this one had, in every one of those four.
+  // `band` is how deep the ribbon is (a body, on the board) and `T` the clock the wobble runs
+  // on, both passed rather than read so a still card can ask for a still ribbon.
+  function paintTrail(tr, pts, band, T) {
+    const N = pts.length;
     const nor = pts.map((p, k) => {
       const a = pts[Math.max(0, k-1)], b = pts[Math.min(N-1, k+1)];
       let tx = b.x - a.x, ty = b.y - a.y; const m = Math.hypot(tx, ty) || 1;
       return { x: -ty/m, y: tx/m };
     });
-    const band = cell * RUNNER.bodyH;                 // exactly as deep as he is
     const n = tr.cols.length, sw = band / n;
-    const T = performance.now();
 
     // ---- particles: no ribbon at all, just what he shed, thinning as it ages ----
     if (tr.style === "dots") {
@@ -10540,6 +10896,14 @@
     // ...after the button exists, so the chip can take its computed colour.
     for (const [re, deco] of BTN_GLYPH) if (re.test(label)) { deco(b, label); break; }
     return b;
+  }
+  // A stepper wearing a toggle's clothes: same plate, same height, same chequer — the only
+  // difference is that pressing it moves on through a list rather than flipping a flag, and
+  // the value on the right says where in the list you are.
+  function stepper(label, val, fn) {
+    const d = document.createElement("div"); d.className = "toggle";
+    d.innerHTML = "<span>" + label + "</span><span class='val'>" + val + "</span>";
+    d.onclick = (e) => { Sound.unlock(); Sound.tap(); fn(e); }; return d;
   }
   function toggle(label, on, fn) {
     const d = document.createElement("div"); d.className = "toggle" + (on ? "" : " off");
@@ -10914,6 +11278,22 @@
       menuBody.appendChild(toggle("Colorblind", colorblind,
         () => { colorblind = !colorblind; settings.colorblind = colorblind; saveSettings();
                 applyColorblind(); buildMenu(screen); }));
+      menuBody.appendChild(stepper("Speed", startCps().toFixed(1) + " TILES/S", () => {
+        const was = startCps();
+        settings.startCps = START_CPS[(START_CPS.indexOf(was) + 1) % START_CPS.length];
+        saveSettings();
+        // Live, not on the next load: this is reached from the pause menu mid-level, and a
+        // speed control that does nothing until you die is a speed control you cannot feel.
+        // The RAMP is kept — whatever the run has earned so far rides on top of the new
+        // starting pace rather than being thrown away with it.
+        if (state && state.cps0) {
+          state.cpsNow = Math.max(0.1, startCps() + (state.cpsNow - state.cps0));
+          state.cps0 = startCps();
+          state.msPerCell = 1000 / state.cpsNow;
+          try { Sound.setTempo(state.msPerCell); } catch(_){}
+        }
+        buildMenu(screen);
+      }));
       menuBody.appendChild(btn("Give 100 tiles", () => {
         Sound.unlock(); Sound.coin();
         wallet.tiles += 100; saveWallet();
@@ -12703,8 +13083,9 @@
     }
     grainFill(tx, ty, s, s, TILE.bodyGrain);
     ctx.restore();                                             // out of the body clip
-    ctx.strokeStyle = curRail(); ctx.lineWidth = Math.max(3, s*TILE.railW);
-    ctx.lineCap = "round"; ctx.lineJoin = "round"; line(); ctx.stroke();
+    ctx.strokeStyle = RAIL_COL; ctx.lineWidth = RAIL_PX;
+    ctx.lineCap = "round"; ctx.lineJoin = "round"; line();
+    if (SHOW_RAIL) ctx.stroke();          // the title and the opening lay the same track
     ctx.restore();
   }
   // the beam body polygon: the surface, then a far edge offset to the underside, clipped to the tile
