@@ -2698,7 +2698,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.3";                    // shown on the title & pause screens
+  const VERSION = "v10.4";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -8757,22 +8757,30 @@
     // which is the thing you are working out while you wait for a tile to free up — but they are
     // no longer an invitation to tap, so they drop to a whisper.
     //
-    // Up INSTANTLY, down on an ease. A tile coming free is news: the moment it does, the squares
-    // you can send it to should already be lit, because that is the moment you are deciding.
-    // Spending it is not news in the same way — it is something you just did — so the fade back
-    // is allowed to take its time rather than snapping out from under the tap that caused it.
+    // Up QUICKLY, down slowly. A tile coming free is news — the moment it does, the squares you
+    // can send it to should be there — but arriving in three frames rather than in one is what
+    // makes them read as OPENING rather than as appearing out of nothing, and it is the opening
+    // that says a tile just came back to you. Spending one is not news in the same way; it is
+    // something you just did, so the way back down is allowed to take its time rather than
+    // snapping shut under the tap that caused it.
     const live = (oldestFreeTile() || state.flyTile) ? 1 : 0;
-    markLive = live > markLive ? 1 : markLive + (live - markLive)*0.14;
+    markLive += (live - markLive) * (live > markLive ? 0.42 : 0.14);
     const C = nodeCenter(lead.n);
     const a = MARK_EMPTY + (JUNCTION.mark - MARK_EMPTY)*markLive;
     ctx.fillStyle = "rgba(255,255,255," + a.toFixed(3) + ")";
     for (const e of junctionExits(lead.n, lead.prev)) {
       const mx = C.x + e.d.x*cell, my = C.y + e.d.y*cell;
-      const os = cell*(0.25 + 0.25*markGrow), hs = os - cell/8;      // band inside the square
-      if (hs <= 0) continue;
+      // The SQUARE shrinks as the pool empties — half a tile with something to send, a quarter
+      // with nothing — while the band stays an eighth of a tile throughout. At a quarter the two
+      // outlines meet and there is no middle left, so the hint closes up into a small solid mark
+      // rather than filling in at full size. A ring is a target; this is a note of where the
+      // track can go, which is all it can honestly be while you have nothing to put there.
+      const os = cell*(0.125 + 0.125*markLive + 0.25*markGrow);
+      const hs = Math.max(0, os - cell/8);
+      if (os <= 0) continue;
       ctx.beginPath();
       ctx.rect(mx - os, my - os, os*2, os*2);                        // the half-tile square...
-      ctx.rect(mx - hs, my - hs, hs*2, hs*2);                        // ...less everything but its border
+      if (hs > 0) ctx.rect(mx - hs, my - hs, hs*2, hs*2);            // ...less its middle, if it has one
       ctx.fill("evenodd");
     }
   }
