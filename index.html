@@ -217,6 +217,18 @@
   /* A level's verse, before anything of the level is on screen. Nearly opaque rather than a
      scrim: the point is that there is nothing else to look at, which is what makes it read as
      a page turning rather than as another card over the board. No button — a tap anywhere. */
+  /* The two ways on from a cleared level, sitting at the foot of the map rather than on a card:
+     there is nothing to dismiss, so there is nothing for them to be attached to. */
+  #winui {
+    position:fixed; left:0; right:0; display:none; flex-direction:column; gap:var(--chq);
+    z-index:34; align-items:stretch;
+    padding:0 calc(env(safe-area-inset-left) + var(--chq2)) 
+            calc(env(safe-area-inset-bottom) + var(--chq2)) calc(env(safe-area-inset-right) + var(--chq2));
+    bottom:0; max-width:26rem; margin:0 auto;
+  }
+  #winui.show { display:flex; animation:poem-in 260ms ease-out both; }
+  #winui button { width:100%; display:flex; align-items:center; justify-content:center; gap:10px;
+    height:var(--btn-h); padding-top:0; padding-bottom:0; }
   #poem {
     position:fixed; inset:0; display:none; flex-direction:column;
     align-items:center; justify-content:center; gap:var(--chq2);
@@ -226,6 +238,33 @@
   }
   #poem.show { display:flex; animation:poem-in 420ms ease-out both; }
   @keyframes poem-in { from { opacity:0; } to { opacity:1; } }
+  /* The four lines arrive in order rather than all at once — the number, the verse, whoever
+     said it, and only then the way out. It is a title card, and a title card that lands in one
+     piece is a card you have already finished reading before it has finished appearing. */
+  #poem > p { animation:poem-line 520ms ease-out both; }
+  #poem-n    { animation-delay:60ms; }
+  #poem-text { animation-delay:620ms; }
+  #poem-by   { animation-delay:1180ms; }
+  #poem-tap  { animation-delay:1620ms; }
+  @keyframes poem-line { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+  #poem-n {
+    margin:0; text-align:center;
+    font-size:15px; line-height:1.6; letter-spacing:4px; text-transform:uppercase;
+    color:#ffd24a;
+  }
+  /* ...and it holds the space when there is nothing to say, so a chapter with no verse still
+     puts its number where a chapter with one does rather than in the middle of the screen. */
+  #poem-text:empty { min-height:2rem; }
+  /* Pinned to the foot of the screen rather than sitting under the verse: it is not part of
+     what the chapter has to say, it is the way out of it, and it belongs where every other
+     "carry on" in the game lives. */
+  #poem-tap {
+    position:absolute; left:0; right:0;
+    bottom:calc(env(safe-area-inset-bottom) + var(--chq2) * 2);
+    margin:0; text-align:center;
+    font-size:11px; letter-spacing:2px; text-transform:uppercase;
+    color:#bfc6e0; opacity:0.6;
+  }
   #poem-text {
     margin:0; max-width:22rem; text-align:center; text-wrap:balance;
     font-size:15px; line-height:2; letter-spacing:2px; text-transform:uppercase;
@@ -986,9 +1025,16 @@
   </div>
 </div>
 
+<div id="winui">
+  <button id="win-next">Play Chapter</button>
+  <button id="win-menu">Menu</button>
+</div>
+
 <div id="poem">
+  <p id="poem-n"></p>
   <p id="poem-text"></p>
   <p id="poem-by"></p>
+  <p id="poem-tap">Tap to continue</p>
 </div>
 
 <div id="mechpop">
@@ -2698,7 +2744,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.4";                    // shown on the title & pause screens
+  const VERSION = "v10.5";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -4008,10 +4054,15 @@
     levelIdx = clamp(i, 0, LEVELS.length - 1);
     levelAttempts[levelIdx] = (levelAttempts[levelIdx] || 0) + 1;      // count each start (incl. retries)
     beginLevel(LEVELS[levelIdx], String(levelIdx + 1));
+    state.walked = [{ c: state.path[0].c, r: state.path[0].r }];   // the route starts where he does
     state.attempts = levelAttempts[levelIdx];
     state.score = computeScore(); updateScoreHud();
   }
   function beginLevel(L, label) {
+    // Whatever the last chapter was doing, it is not doing it any more. The victory sequence
+    // owns the frame while it runs, so a chapter loaded out from under it — Skip, the Tileverse,
+    // a demo — would go on being drawn as a map with the new level running invisibly beneath.
+    if (win) winEnd();
     markOccDirty();                            // fresh board — occupancy has to be rebuilt
     // The wall bitmap is one CELL, not the board, so a new level does not invalidate it — only
     // a change of cell size does, and resize() marks it for that.
@@ -4064,6 +4115,8 @@
       // Counts every time a tile leaves the path. "The oldest one you are not using" is the
       // tile with the lowest count, which is the one the runner cleared longest ago.
       freeSeq:0, flyTile:null,
+      walked:[],                  // every cell he has stood on, in order — see update()
+
       score:0, combo:0, maxCombo:0, coins:0, elapsed:0, flowClears:0,
       purse:0,                     // tiles found this run, unbanked until the flag is reached
       par: L.par || 24000,
@@ -4240,34 +4293,41 @@
     Sound.levelMusicStart();      // 0. the backing starts here, not when he does — under the
     state.status = "hold";        //    verse as well, so the level has already begun in the ear
     state.peekT = null;           //    before it begins in the eye
-    // A level may open with a VERSE. It holds everything — the flag, the pan, the cards, him —
-    // until it is dismissed, rather than playing over the top of the opening: the whole of its
-    // effect is that there is nothing else on the screen while you read it.
-    showPoem(L.poem, L.by, () => { state.peekT = FLAG_HOLD_MS; });   // 1. hold on the flag, then pan
+    // Every chapter opens with its CARD. It holds everything — the flag, the pan, the hint
+    // cards, him — until it is dismissed, rather than playing over the top of the opening: the
+    // whole of its effect is that there is nothing else on the screen while you read it.
+    showOpening(label, L.poem, L.by, () => { state.peekT = FLAG_HOLD_MS; });  // 1. the flag, then the pan
   }
-  // Shown once per level per session. A verse is flavour, and a level you are stuck on should
-  // not recite at you on every retry — but a fresh sitting gets it again, because by then it is
-  // the opening of the level rather than an interruption of it.
-  const poemSeen = new Set();
-  let _poemClose = null;                     // the verse currently up, if any
-  function showPoem(text, by, done) {
-    // Whatever was up belongs to a level that is no longer loading. Take it down without
-    // running its continuation — that level's opening is not going to happen now.
+  // The chapter's title card: its number, its verse if it has one, whoever said it, and the way
+  // out — arriving in that order. It opens EVERY chapter, including a retry: the number is the
+  // thing that tells you where you are, and a retry is still a chapter starting.
+  let _poemClose = null;                     // the card currently up, if any
+  let _openedIdx = -1;                       // whose card was last shown — a repeat is a retry
+  function showOpening(label, text, by, done) {
+    // Whatever was up belongs to a chapter that is no longer loading. Take it down without
+    // running its continuation — that chapter's opening is not going to happen now.
     if (_poemClose) _poemClose(false);
     const el = document.getElementById("poem");
     const body = String(text || "").trim();
-    // Nothing to say, said already this sitting, or nobody is looking at the board yet: the
-    // boot loads level one behind the TITLE SCREEN, and a verse recited to a menu is a verse
-    // spent. It waits for the level to be the thing on screen.
-    if (!el || !body || poemSeen.has(body) || titleActive || cineActive) { done(); return; }
-    poemSeen.add(body);
+    // Every chapter gets its card, verse or no verse — it is the chapter's title, and a game
+    // that names some of its chapters and not others is a game that looks like it forgot. Two
+    // exceptions. Nobody is looking yet: the boot loads chapter one behind the TITLE SCREEN,
+    // and a card recited to a menu is a card spent. And a RETRY, which is the same chapter
+    // opening again — you have read it, you died, and being told where you are on the way back
+    // in is the game explaining the joke.
+    if (!el || titleActive || cineActive || levelIdx === _openedIdx) { done(); return; }
+    _openedIdx = levelIdx;
     // The attribution is its own field, and it is set apart rather than left running on because
     // it is not part of the poem. A verse written the old way — "…the line. - Who said it" —
     // still comes out right: the tail after a dash is taken as the attribution when there is no
     // field to say otherwise, so nothing has to be rewritten to keep reading properly.
     const m = by ? null : body.match(/^([\s\S]+?)\s+[-–—]\s*([^\n]{1,60})$/);
+    document.getElementById("poem-n").textContent    = "Chapter " + label;
     document.getElementById("poem-text").textContent = m ? m[1].trim() : body;
     document.getElementById("poem-by").textContent   = by ? String(by).trim() : (m ? m[2].trim() : "");
+    // The lines are on CSS delays, so the animations have to be restarted rather than merely
+    // re-shown: without this a second chapter card would arrive fully formed.
+    for (const q of el.querySelectorAll("p")) { q.style.animation = "none"; void q.offsetWidth; q.style.animation = ""; }
     paused = true;
     el.classList.add("show");
     const close = (go) => {
@@ -4485,7 +4545,7 @@
   const MECHS = {
     tile:   { name:"Track Tiles", desc:"The runner never stops! Drag cleared tiles to lay track ahead." },
     key:    { name:"Colour Key", desc:"Grab a coloured key and every padlock of its colour springs open." },
-    flag:   { name:"The Exit", desc:"Lay a tile on the flag to finish the level." },
+    flag:   { name:"The Exit", desc:"Lay a tile on the flag to finish the chapter." },
     wall:   { name:"Wall Entity", desc:"Passive entities whose noble purpose is simply to get in the way" },
     stone:  { name:"Stone Block", desc:"Tap to smash it, then build through the gap." },
     boost:  { name:"Boost", desc:"Grab it for a short burst of speed. Keep those tiles flowing!" },
@@ -4496,7 +4556,7 @@
     hunter: { name:"The Hunter", desc:"A malevolent tile entity. It is coming for you. Keep moving." },
     slider: { name:"Sliding Platform", desc:"The wall only opens where this platform sits. Drag it along its rail to line up the crossing, then build across it." },
     block:  { name:"Movable Block", desc:"A heavy block plugging the tunnel. Drag it aside along its rail to clear the way, then build through." },
-    platform:{ name:"Fixed Rail", desc:"Rail already bolted to the level. You can't build on it — but run your path into one of its open ends and the runner rides across for FREE, no tile spent. It only connects at its drawn ends." },
+    platform:{ name:"Fixed Rail", desc:"Rail already bolted to the chapter. You can't build on it — but run your path into one of its open ends and the runner rides across for FREE, no tile spent. It only connects at its drawn ends." },
     mdoor:  { name:"Sliding Door", desc:"Slide it open by dragging BOTH panels apart — push each side away from the centre." },
     // ---- tutorial prompts for the hand-built levels ----
     recycle:  { name:"Drag Tiles", desc:"The runner never stops! Drag cleared tiles to lay track ahead." },
@@ -5364,6 +5424,11 @@
       s.runT -= 1;
       s.runIdx++;
       const now = s.path[s.runIdx];
+      // Every cell he has ever stood on, in the order he stood on it. The path itself is only
+      // the LIVE stretch — tiles are recycled out from behind him — so by the time he reaches
+      // the flag there is no record left of how he got there. The win sequence rebuilds the
+      // whole route, so the whole route has to be remembered as it happens.
+      s.walked.push({ c: now.c, r: now.r });
       if (s.goal && now.c === s.goal.c && now.r === s.goal.r) { s.runT = 0; endWin(); return; }
       noticeLoop();
     }
@@ -6172,21 +6237,90 @@
       state.fall = { x:ri.sx, y:ri.sy, angle:ri.angle,
                      vx: -ri.tx*spd*WALL_BOUNCE + ux*spd*WALL_POP,
                      vy: -ri.ty*spd*WALL_BOUNCE + uy*spd*WALL_POP,
-                     va: (ri.tx >= 0 ? -1 : 1) * 0.006, t:0 };
+                     va: (ri.tx >= 0 ? -1 : 1) * 0.006, t:0, cell0: cell, floor: worldH + viewH*PILE_DROP, px: ri.sx };
     } else {
       state.fall = { x:ri.sx, y:ri.sy, angle:ri.angle,
                      vx:ri.tx * spd, vy:ri.ty * spd,  // run off the edge, then gravity takes over
-                     va:(ri.tx >= 0 ? 1 : -1) * 0.004, t:0 };
+                     va:(ri.tx >= 0 ? 1 : -1) * 0.004, t:0, cell0: cell, floor: worldH + viewH*PILE_DROP, px: ri.sx };
     }
+  }
+  // How far below the board the heap sits, and how long he lies in it before the words come.
+  const PILE_DROP = 1.35, PILE_REST = 2200, FALL_ZOOM = 1.35;
+  const WRIGGLE_MS = 1700;                  // how long the legs go on kicking once he is in
+  const LAND_SPRING = 700;                  // ...and how long the impact takes to settle out
+  const pileY = () => (state.fall && state.fall.floor != null) ? state.fall.floor
+                                                               : worldH + viewH*PILE_DROP;
+  // The drop pushes IN on him. Everything on the board is measured in `cell`, so growing it is
+  // the zoom — but the fall is carried in world pixels, and those have to be dragged along with
+  // it or he would be left behind by his own scale. The camera is derived from him each frame
+  // anyway, so it needs no correction of its own.
+  function tickFallZoom(dt) {
+    const f = state.fall; if (!f || !f.cell0) return;
+    const want = f.cell0 * FALL_ZOOM;
+    const nc = cell + (want - cell) * Math.min(1, dt/520);
+    const k = nc / cell;
+    if (!(k > 0) || Math.abs(k - 1) < 1e-7) return;
+    cell = nc; worldW = cell*COLS; worldH = cell*ROWS;
+    f.x *= k; f.y *= k; f.vx *= k; f.vy *= k; f.floor *= k; f.px *= k;
+    camX *= k; camY *= k;
   }
   function tickFall(dt) {
     const f = state.fall;
+    if (f.land != null) {                      // down. Lie there a moment, then say so.
+      f.land += dt;
+      // The zoom is still running under him, and the heap is measured in cells — so its summit
+      // rises while he lies on it. Sit him back on top of it each frame rather than leaving him
+      // at the height it was when he arrived.
+      // His FEET sit above the crest and everything else hangs below it. Drawn behind the heap,
+      // that is what leaves a pair of legs kicking out of the top of a pile that has closed over
+      // the rest of him — level with the crest, the summit row covers the legs too and he goes
+      // missing altogether.
+      const spot = pileLandSpot();
+      f.y = spot.y; f.x += (spot.x - f.x) * Math.min(1, dt/160);
+      // The landing has a bit of give in it: he tips over on impact and springs back to where
+      // he ends up, on a damped wobble rather than a slide, so it reads as him being caught by
+      // something soft rather than being placed there.
+      const k = Math.min(1, f.land/LAND_SPRING);
+      f.angle = f.rest + Math.exp(-k*5.2) * Math.sin(k*Math.PI*2.6) * 0.55;
+      // ...and the legs kick, and give up. The phase advances at a rate that runs down to
+      // nothing over WRIGGLE_MS, so the kicking slows to a halt rather than being switched off
+      // — he stops because he has stopped, not because a timer said so.
+      f.wrig += dt * Math.max(0, 1 - f.land/WRIGGLE_MS);
+      if (f.land >= PILE_REST && !(state.ankhGrace > 0)) showLose();
+      return;
+    }
     f.t += dt; f.vy += FALL_G * dt;
     f.x += f.vx * dt; f.y += f.vy * dt; f.angle += f.va * dt;
-    // ...but not while the Ankh is still on offer. The fall is shorter than the grace, and
+    // The heap. He does not fall forever and he does not vanish either — he lands on everyone
+    // who came before him, which is the joke, and it is only a joke if you see him arrive.
+    // He lands on the SUMMIT, not on the floor the heap is built up from — otherwise he ends
+    // the fall buried in the middle of it with bodies drawn over his head.
+    if (f.y >= pileLandSpot().y) {
+      f.land = 0; f.vy = 0; f.vx *= 0.2; f.va = 0;
+      // HEAD FIRST. Turned all the way over, his feet end up at the anchor and everything else
+      // is drawn below it — so anchoring him at the summit buries the head in the heap and
+      // leaves the legs sticking out of the top of it, which is the whole picture.
+      f.rest = Math.PI + (f.vx >= 0 ? 0.20 : -0.20);
+      f.angle = f.rest;
+      f.wrig = 0;
+      state.shake = Math.max(state.shake || 0, cell*0.18);
+      Sound.thud ? Sound.thud() : Sound.clack();
+      haptic(18);
+      return;
+    }
+    // ...but not while the Ankh is still on offer. The drop is shorter than the grace, and
     // ending the run underneath an offer the player is still reaching for would make the
     // second chance a lie.
-    if (f.t >= FALL_MS && !(state.ankhGrace > 0)) showLose();
+    if (f.t >= FALL_MS*4 && !(state.ankhGrace > 0)) showLose();   // a backstop, nothing more
+  }
+  // A whip pan: the camera goes after him rather than watching him leave, and it is allowed
+  // BELOW the board to do it — the clamp that keeps the level in frame is the one thing that
+  // would stop the fall being followed at all.
+  function tickFallCam(dt) {
+    const f = state.fall; if (!f) return;
+    const want = f.y - viewH*0.58;               // he lands in the lower third, heap and all
+    camY += (want - camY) * Math.min(1, dt/90);
+    camX += (camClampX(f.x) - camX) * Math.min(1, dt/140);
   }
   // Finishing a level earns you a compliment. Sort of. Split by whether you got it
   // first go or wore it down, because the backhand lands differently either way.
@@ -6242,7 +6376,7 @@
     const last = levelIdx >= LEVELS.length - 1;
     // A talisman maze gets its own curtain call: the charm itself, big and turning, its name
     // and what it does. Reaching the end of one of these is the only time the game hands you
-    // a new verb, so it does not share the ordinary "Level Clear" card.
+    // a new verb, so it does not share the ordinary "Chapter Clear" card.
     if (relic) {
       // Finding one of these is the rarest thing in the game, and it used to be a card with a
       // picture on it. It gets a ceremony now: the board goes, he stands alone in the dark, a
@@ -6252,17 +6386,467 @@
       return;
     }
     relicShow = null;
-    // No bespoke card. The end of a run opens the SAME menu the pause button opens; the
-    // heading, the byline and which of resume / retry / next appear are what change. Two
-    // screens with their own layout, their own button sizes and their own way in and out were
-    // two more places for the game's shape to drift from itself.
+    // The ordinary clear plays as a MOVE rather than as a screen — see winStart. The last level
+    // still gets the card, because there is no next square to fly to and the run of the whole
+    // campaign deserves saying out loud rather than being answered with a map.
+    if (!last) { winStart(false); return; }
     state.end = { kind:"win", last,
-      title: last ? "That's All of Them" : "Level Clear",
+      title: last ? "That's All of Them" : "Chapter Clear",
       byline: last
-        ? "All " + LEVELS.length + " levels. You've run out of track — and excuses."
+        ? "All " + LEVELS.length + " chapters. You've run out of track — and excuses."
         : pickQuip(att > 1 ? WIN_QUIPS_RETRY : WIN_QUIPS) };
     openMenu("main");
   }
+  // ---------- The heap ----------------------------------------------------
+  // Everyone who has already fallen off this chapter, lying at the bottom of the drop. It is
+  // the one place the game keeps a tally of your failures, and it keeps it in the only form
+  // that is funny rather than discouraging: a soft landing, made of you.
+  //
+  // Deterministic — the scatter is a hash of the body's index, not a random number — so the
+  // heap does not reshuffle itself every frame, and it is the same heap on the way down as it
+  // is once he is lying in it.
+  const PILE_SKINS = [
+    { body:"#e0844a", ink:"#5a2a10" }, { body:"#bfe6ff", ink:"#17263f" },
+    { body:"#9ad9b0", ink:"#1d4230" }, { body:"#c9b6ff", ink:"#2c1f4a" },
+    { body:"#ffd24a", ink:"#5a3f05" }, { body:"#ff8fc8", ink:"#4a1030" },
+  ];
+  // mulberry32, not a one-line index hash. The first attempt used the latter and every body's
+  // HEIGHT came out correlated with its position across the heap — so instead of filling the
+  // mound they traced its outline, and a pile of thirty runners read as a rainbow.
+  const PILE_SEED = 0x51ed2701;
+  // The heap's geometry, in one place: the tap that lands him on the summit and the drawing
+  // that builds the summit have to agree about where it is.
+  //
+  // The BASE is wide enough to leave the screen on both sides, and the row count follows from
+  // it rather than being chosen — a stack that loses two bodies a row only comes to a POINT if
+  // it has half as many rows as its base is wide. Picking the two independently is what gave
+  // the first version a plateau with the flanks still off-screen.
+  const pileMidX = () => (state.fall && state.fall.px != null) ? state.fall.px : worldW/2;
+  const F0x = () => (state.fall ? state.fall.x : worldW/2);   // where the impact was, this frame
+  // Where he comes down: NOT the apex, but one or two places down the flank of it. Landing
+  // dead on the point is a stunt; landing just off it, on the slope, is a fall. `d` is how many
+  // places out he lands, and the height follows from the heap's own arithmetic — a body `d`
+  // steps from the middle is covered by every row that still has 2d+1 columns in it.
+  function pileLandSpot() {
+    const G = pileGeom();
+    const d = 1 + ((state.attempts || 1) & 1);
+    const side = (state.fall && state.fall.vx < 0) ? -1 : 1;
+    const row = Math.max(0, Math.min(G.rows - 1, G.cols - 2*d - 1));
+    // ...and high enough above that row for the legs to clear the bodies lying on it. He is
+    // drawn BEHIND the heap, so level with the local surface is out of sight entirely.
+    return { x: pileMidX() + side*d*G.stepX - cell*0.22,
+             y: pileY() - row*G.stepY - cell*1.05 };
+  }
+  function pileGeom() {
+    // Squeezed toward the middle: a narrow step across packs the bodies into each other, so the
+    // mountain is a dense mass at the centre of the screen rather than a thin slope spread the
+    // whole way over it. The base still reaches the edges — it is the middle that is crowded.
+    const s = cell, stepX = s*0.22, stepY = s*0.23;
+    // ONE column narrower per row, not two. Losing two made each row half a body narrower on
+    // each side against a row's worth of height — a 45-degree hill. Losing one doubles the
+    // pitch, and it means the base can be half as wide and still come to a point, which is what
+    // puts the whole thing in the middle of the screen instead of across it.
+    const cols = Math.max(9, (Math.round(viewW*0.55 / stepX) | 1) + ((state.attempts || 1) - 1)*2);
+    return { stepX, stepY, cols, rows: Math.min(22, cols) };
+  }
+  function drawFallPile(ts) {
+    if (state.status !== "falling" && state.status !== "lose") return;
+    const y0 = pileY(), s = cell;
+    // BUILT, not scattered. Rows, each one two bodies narrower than the row below it, stacked
+    // and offset half a step like brickwork — so the silhouette is a triangle by construction
+    // rather than by luck. Random placement kept producing a cloud with a vaguely pointed top;
+    // the shape has to be the structure, and the randomness only what stops it looking stamped.
+    const G = pileGeom();
+    const stepX = G.stepX, stepY = G.stepY, rows = G.rows, cols0 = G.cols;
+    const rnd = mulberry32(PILE_SEED);
+    // The impact, still ringing. He lands ON these people, and a heap that takes a body without
+    // moving is a heap made of bricks — so everything near the point of contact is shoved a
+    // little way clear of it and settles back over the next half second. It is a function of
+    // how long ago he landed, so the bodies drift home on their own with nothing to remember.
+    const F = state.fall;
+    const hit = (F && F.land != null) ? Math.exp(-F.land/380) : 0;
+    const REACH = s*3.2;
+    let k = 0;
+    // Top row first, bottom row last: on a heap the bodies nearest you are the ones at the
+    // front of the base, and they overlap everything behind them.
+    for (let r = rows - 1; r >= 0; r--) {
+      const cols = Math.max(1, cols0 - r);
+      for (let c = 0; c < cols; c++, k++) {
+        const j1 = rnd(), j2 = rnd(), j3 = rnd(), j4 = rnd();
+        let x = pileMidX() + (c - (cols - 1)/2)*stepX + (j1 - 0.5)*s*0.10;
+        let y = y0 - r*stepY + (j2 - 0.5)*s*0.08;
+        let shove = 0;
+        if (hit > 0.004) {
+          const dx = x - F.x, dy = y - F.y, dd = Math.hypot(dx, dy) || 1;
+          shove = hit * Math.max(0, 1 - dd/REACH);         // nearest are shifted most
+          x += dx/dd * shove * s*0.30;
+          y += dy/dd * shove * s*0.22;
+        }
+        ctx.save();
+        // Solid, every one of them. The back rows used to sit a shade quieter to give the heap
+        // some depth, but a translucent body lets the one behind it show through its head — and
+        // a pile you can see INTO is a pile of ghosts. The size ramp does the depth now.
+        // Tipped hard, and alternately: a body on a heap is LYING on it. Upright ones a few
+        // degrees off vertical read as a crowd standing in rows, which is a different picture
+        // entirely — and the alternation is what keeps the rows from looking combed.
+        // ...and they turn a little as they are shoved, away from him, which is what stops the
+        // whole thing reading as one sheet sliding rather than as bodies being pushed about.
+        const ang = ((c + r) & 1 ? 1 : -1) * (0.85 + j4*0.55)
+                  + shove * 0.5 * (x >= F0x() ? 1 : -1);
+        // Bigger toward the BOTTOM. Nothing about a heap is in perspective, but a body at the
+        // front of the base being half again the size of one at the peak is the cheapest way to
+        // say that the peak is further away — and it makes the mountain read as one object
+        // rather than as a stack of identical stickers.
+        const depth = rows > 1 ? 1 - r/(rows - 1) : 1;
+        paintRunner(x, y, s*(0.82 + depth*0.46 + j3*0.08), j4*6, ang, false, ts, 0, false,
+                    { skin: PILE_SKINS[k % PILE_SKINS.length], hat: null, dead: true });
+        ctx.restore();
+      }
+    }
+  }
+
+  // ---------- The victory sequence ----------------------------------------
+  // Reaching the flag used to open the pause menu with a different heading on it. It now plays
+  // out as a move of the CAMERA rather than as a screen: the level pulls back until you can see
+  // the whole of it, your route rebuilds itself across it in the order you laid it, and then the
+  // level keeps shrinking until it is one square of the Tileverse — its own square, in its own
+  // place — with the next one lighting up beside it. Nothing cuts. The point of it is that the
+  // level you just played and the dot on the map are shown to be the same object.
+  const WIN = {
+    fit:   700,    // pull back until the whole level is on screen
+    hold:  240,    // ...a beat, so the pull-back lands before anything else starts
+    rest:  560,    // ...and another with the finished route standing there
+    out:  1200,    // the level shrinks into its square on the map
+                   // (LEVEL N COMPLETE has no duration: it waits for a tap — see tickWin)
+    pan:   950,    // over to the next square, which colours up
+    whip:  520,    // and into it, to black
+    fade:  480,    // out of black, into the next level
+    route:1500,    // the rebuild takes this long however long the route is
+  };
+  let win = null;
+  let _mapCells = null;                         // tileverseLayout is a search; do it once
+  const mapCells = () => (_mapCells || (_mapCells = tileverseLayout(LEVELS.length)));
+  const easeOut  = k => 1 - Math.pow(1 - k, 3);
+  const easeIn   = k => k*k*k;
+  const easeBoth = k => k < 0.5 ? 4*k*k*k : 1 - Math.pow(-2*k + 2, 3)/2;
+
+  function winStart(last) {
+    // The route, start included. `walked` records every cell he stood on as he stood on it,
+    // which is the only record of the whole thing: the path itself is recycled out from behind
+    // him as he goes.
+    const route = (state.walked || []).slice();
+    win = { ph: "fit", t: 0, last, idx: levelIdx, next: Math.min(LEVELS.length - 1, levelIdx + 1),
+            route, laid: 0, cell0: cell, black: 0, shine: 0.35 };
+    // Whatever cell size shows the whole board with a tile of air around it.
+    win.cellFit = Math.max(4, Math.min(viewW/(COLS + 2), viewH/(ROWS + 2)));
+    win.stepMs = route.length ? WIN.route / route.length : 40;
+    hideWinUI();
+  }
+  function winEnd() { win = null; hideWinUI(); }
+  // A tap anywhere moves the paused beat on. Returns true when it took the tap, so the board's
+  // own pointer handling can leave it alone.
+  function winTap() {
+    if (!win || win.ph !== "name" || win.t < 700) return false;   // not until it has arrived
+    Sound.unlock(); Sound.tapBig();
+    win.ph = "pan"; win.t = 0;
+    return true;
+  }
+  function showWinUI() {
+    const el = document.getElementById("winui"); if (!el) return;
+    const nx = document.getElementById("win-next");
+    labelWithArrow(nx, "Play Chapter");
+    el.classList.add("show");
+  }
+  function hideWinUI() {
+    const el = document.getElementById("winui"); if (el) el.classList.remove("show");
+  }
+
+  // Where a level's square sits on screen, given the scale and where the camera is looking.
+  // The map is laid out in whole cells; `S` is how many pixels one of them is.
+  function mapRect(i, S, cx0, cy0) {
+    const cells = mapCells(), p = cells[i] || { c: 0, r: 0 };
+    return { x: viewW/2 + (p.c - cx0)*S - S/2, y: viewH/2 + (p.r - cy0)*S - S/2, w: S, h: S };
+  }
+  // The whole map, drawn on the board's own canvas rather than in the menu's DOM: this has to
+  // be something the camera can fly through, and a grid of buttons is not.
+  function drawMap(ts, S, cx0, cy0, opts) {
+    const cells = mapCells(), best = loadBest(), o = opts || {};
+    const isDone = k => { const b = best["L" + k]; return !!(b && (b.done || b.stars)); };
+    let furthest = -1;
+    for (let k = 0; k < LEVELS.length; k++) if (isDone(k)) furthest = k;
+    // No gap between squares. The menu's map spaces them out because it is a list of places you
+    // can press; this one is a PLACE — the cosmos seen close up — and the levels are the ground
+    // of it, so they meet edge to edge with nothing showing between.
+    const r = tileR(S);
+    for (let i = 0; i < cells.length; i++) {
+      const R = mapRect(i, S, cx0, cy0);
+      if (R.x > viewW + S || R.y > viewH + S || R.x + S < -S || R.y + S < -S) continue;   // off screen
+      const x = R.x, y = R.y, w = S;
+      // How much colour this square has. Everything cleared is in colour and everything past
+      // the frontier is grey — and `lit` lets one square be walked from one to the other while
+      // you watch, which is the whole of "the next level comes alive".
+      let lit = (isDone(i) || i <= furthest + 1) ? 1 : 0;
+      if (o.litIdx === i && o.lit != null) lit = o.lit;
+      const cols = genTheme(themeSeed(String(i + 1))).colors;
+      ctx.save();
+      rrect(x, y, w, w, r); ctx.clip();
+      const q = LEVEL_SWATCH, qs = w/q;
+      // Unreached levels keep their own quilt and lose their COLOUR — drained and dimmed, not
+      // blacked out, so the map reads as a cloud of places rather than a handful of lit ones in
+      // a hole. `filter` rather than a per-colour tint, and for a reason: a level's palette is
+      // hsl() strings, which the hex tinting the rest of the game uses cannot read at all — it
+      // was quietly returning black for every square past the frontier. This is also exactly
+      // what the menu's own map does to a locked tile, so the two agree.
+      ctx.save();
+      if (lit < 1) ctx.filter = "grayscale(" + (1 - lit).toFixed(3) + ") brightness(" + (1 - 0.45*(1 - lit)).toFixed(3) + ")";
+      for (let k = 0; k < q*q; k++) {
+        ctx.fillStyle = cols[k % cols.length];
+        ctx.fillRect(x + (k % q)*qs - 0.5, y + Math.floor(k/q)*qs - 0.5, qs + 1, qs + 1);
+      }
+      ctx.restore();
+      ctx.restore();
+      // A cleared level SHINES: a band of light drawn across it, and a rim to lift it off the
+      // cosmos. It is the only thing on the map that is doing anything, so it does not need to
+      // do much.
+      const ga = o.glowA == null ? 1 : o.glowA;
+      if (o.glowIdx === i && o.glow > 0 && ga > 0) {
+        // The shine PASSES rather than sits: a band of light crosses the square and then there
+        // is a beat of nothing before the next one. A permanent white wash bleaches the palette
+        // it is supposed to be showing off.
+        const cyc = o.glow % 1.8;
+        if (cyc < 1) {
+          ctx.save();
+          rrect(x, y, w, w, r); ctx.clip();
+          ctx.globalCompositeOperation = "lighter";
+          const gx = x - w + cyc*w*3;
+          const g = ctx.createLinearGradient(gx, y, gx + w*0.8, y + w);
+          g.addColorStop(0, "rgba(255,255,255,0)");
+          g.addColorStop(0.5, "rgba(255,255,255," + (0.38*ga).toFixed(3) + ")");
+          g.addColorStop(1, "rgba(255,255,255,0)");
+          ctx.fillStyle = g; ctx.fillRect(x, y, w, w);
+          ctx.restore();
+        }
+        // ...and a rim that breathes, which is what says "this one" once the band has gone by
+        const pul = (0.45 + 0.30*Math.sin(o.glow*3.4)) * ga;
+        ctx.strokeStyle = "rgba(255,255,255," + pul.toFixed(3) + ")";
+        ctx.lineWidth = Math.max(1, S*0.03);
+        rrect(x, y, w, w, r); ctx.stroke();
+      }
+      if (o.ringIdx === i && o.ring > 0) {                 // the one being pointed at
+        // Drawn INSIDE its own square now that they touch: a ring hung outside one would be
+        // sitting on its neighbours.
+        const lw = Math.max(1, S*0.045);
+        ctx.strokeStyle = "rgba(255,255,255," + (0.9*o.ring).toFixed(3) + ")";
+        ctx.lineWidth = lw;
+        rrect(x + lw/2, y + lw/2, w - lw, w - lw, Math.max(0, r - lw/2)); ctx.stroke();
+      }
+    }
+  }
+  // The heading, in the same extruded gold the title screen and the menus use.
+  function winHeading(text, y, size, k) {
+    if (k <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, k);
+    ctx.font = "900 " + Math.round(size) + "px " + UI_FONT;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.letterSpacing = Math.round(size*0.14) + "px";
+    extrude(ctx, size, TITLE_SIDE, (dx, dy) => ctx.fillText(text, viewW/2 + dx, y + dy));
+    ctx.fillStyle = "#ffd24a"; ctx.fillText(text, viewW/2, y);
+    ctx.restore();
+  }
+
+  function tickWin(dt) {
+    if (!win) return;
+    win.t += dt;
+    const P = win;
+    const done = (ms) => P.t >= ms;
+    if (P.ph === "fit") {
+      // Ease the camera and the cell size together. cell is what everything on the board is
+      // measured in, so changing it IS the zoom — there is no second scale to keep in step.
+      const k = easeOut(Math.min(1, P.t / WIN.fit));
+      cell = P.cell0 + (P.cellFit - P.cell0)*k;
+      worldW = cell*COLS; worldH = cell*ROWS;
+      camX = (worldW - viewW)/2; camY = (worldH - viewH)/2;   // fits, so it centres
+      if (done(WIN.fit)) { P.ph = "hold"; P.t = 0; }
+    } else if (P.ph === "hold") {
+      if (done(WIN.hold)) { P.ph = "build"; P.t = 0; Sound.tapBig(); }
+    } else if (P.ph === "build") {
+      const want = Math.min(P.route.length, Math.floor(P.t / P.stepMs));
+      while (P.laid < want) {
+        P.laid++;
+        if (P.laid % 2 === 0) Sound.tileLaid();     // every other one: a route is long
+      }
+      if (P.laid >= P.route.length) { P.ph = "rest"; P.t = 0; }
+    } else if (P.ph === "rest") {
+      if (done(WIN.rest)) { P.ph = "out"; P.t = 0; Sound.warp(true); }
+    } else if (P.ph === "out") {
+      if (done(WIN.out)) { P.ph = "name"; P.t = 0; Sound.warp(false); Sound.win(); }
+    } else if (P.ph === "name") {
+      // Holds. The level you just finished is on the screen with its name on it, and moving on
+      // from that is YOUR decision — the sequence has been running on its own long enough by
+      // this point, and a beat you can sit in is what turns a cutscene into a moment.
+    } else if (P.ph === "pan") {
+      if (done(WIN.pan)) { P.ph = "wait"; P.t = 0; showWinUI(); }
+    } else if (P.ph === "whip") {
+      if (done(WIN.whip)) {
+        // ...and out the other side. The level loads under a black screen and comes up out of it.
+        const nx = P.next, was = P.idx;
+        winEnd();
+        levelIdx = nx; loadLevel(nx);
+        win = { ph: "fade", t: 0, idx: was, next: nx, route: [], laid: 0, black: 0 };
+      }
+    } else if (P.ph === "fade") {
+      if (done(WIN.fade)) winEnd();
+    }
+  }
+
+  function drawWin(ts) {
+    const P = win; if (!P) return;
+    // The last beat is the NEXT level playing normally with the black lifting off it.
+    if (P.ph === "fade") {
+      draw(ts);
+      ctx.fillStyle = "rgba(5,4,13," + (1 - easeOut(Math.min(1, P.t / WIN.fade))).toFixed(3) + ")";
+      ctx.fillRect(0, 0, viewW, viewH);
+      return;
+    }
+    // Board beats: the level as it always looks, at whatever the zoom has reached, with the
+    // route being cast back across it.
+    if (P.ph === "fit" || P.ph === "hold" || P.ph === "build" || P.ph === "rest") {
+      draw(ts);
+      drawWinRoute(ts, P.laid, cell, -camX, -camY);
+      return;
+    }
+    // Map beats. Everything from here is drawn from scratch: the cosmos, the map, the level
+    // shrinking into its own square, and the words.
+    const cells = mapCells();
+    const mCols = Math.max(...cells.map(p => p.c)) + 1, mRows = Math.max(...cells.map(p => p.r)) + 1;
+    const Sfit = Math.min(viewW/(mCols + 1), viewH/(mRows + 1));
+    const S0 = Math.max(win.cellFit*COLS, win.cellFit*ROWS);     // one square covering the board
+    const here = cells[P.idx] || { c:0, r:0 }, there = cells[P.next] || here;
+    let S = Sfit, cx0 = here.c, cy0 = here.r, shotK = 0, shotT = 0, litK = 1, glow = 0, glowA = 1, ring = 0;
+    if (P.ph === "out") {
+      const k = easeBoth(Math.min(1, P.t / WIN.out));
+      S = S0 + (Sfit - S0)*k;
+      shotT = k;                                            // ...from the whole screen to a square
+      shotK = 1 - Math.max(0, (k - 0.72)/0.28);             // handing over at the end of it
+    } else if (P.ph === "name") {
+      glow = 0.35 + P.t/900;
+      P.shine = glow;                          // where the shine had got to when you tapped
+    } else if (P.ph === "pan") {
+      const k = easeBoth(Math.min(1, P.t / WIN.pan));
+      cx0 = here.c + (there.c - here.c)*k;
+      cy0 = here.r + (there.r - here.r)*k;
+      // The level you just finished hands over as the camera leaves it. Two squares both lit is
+      // two squares both asking for attention, and by the end of the pan the answer is the one
+      // in front of you — the cleared one has been acknowledged and is now just another place
+      // on the map, which is the whole point of having gone there.
+      glow = P.shine + P.t/900;                // ...carrying on from where the pause left it
+      glowA = 1 - k;                          // ...and it lets go as the camera leaves it
+      litK = k; ring = k;
+    } else if (P.ph === "wait") {
+      cx0 = there.c; cy0 = there.r;
+      litK = 1; ring = 1;
+    } else if (P.ph === "whip") {
+      const k = easeIn(Math.min(1, P.t / WIN.whip));
+      cx0 = there.c; cy0 = there.r;
+      S = Sfit + (S0*2.4 - Sfit)*k;
+      litK = 1; ring = 1 - k;
+      P.black = k;
+    }
+    drawVoid(ts);                                 // the cosmos: what the levels hang in
+    const opts = { glowIdx: P.idx, glow, glowA, ringIdx: P.next, ring };
+    if (P.ph === "pan" || P.ph === "wait" || P.ph === "whip") { opts.litIdx = P.next; opts.lit = litK; }
+    drawMap(ts, S, cx0, cy0, opts);
+    // ...and the level itself, shrinking from the whole screen into that one square. The rect
+    // is walked from one to the other and the picture is drawn to COVER it, so the level never
+    // letterboxes on its way down — it is the same image the whole time, just smaller.
+    if (shotK > 0) {
+      const R = mapRect(P.idx, S, cx0, cy0);
+      const x = R.x, y = R.y, w = S;
+      const rx = 0 + (x - 0)*shotT, ry = 0 + (y - 0)*shotT;
+      const rw = viewW + (w - viewW)*shotT, rh = viewH + (w - viewH)*shotT;
+      ctx.save();
+      ctx.globalAlpha = shotK;
+      rrect(rx, ry, rw, rh, tileR(Math.min(rw, rh))*shotT); ctx.clip();
+      const sc = Math.max(rw/viewW, rh/viewH);              // cover, never letterbox
+      ctx.drawImage(winFrame(ts), rx + (rw - viewW*sc)/2, ry + (rh - viewH*sc)/2, viewW*sc, viewH*sc);
+      ctx.restore();
+    }
+    // The name of what you just did, and — while it is waiting on you — how to leave it. Both
+    // go as the camera starts moving: by then the screen is about the NEXT level, and a heading
+    // naming the last one over the top of it is the sequence talking over itself.
+    // One line at a time, the way the opening card does it. Both lines landing together is a
+    // sign appearing; the number arriving and then the word for what happened to it is the
+    // sequence telling you, which is what it has been doing all the way through.
+    const outK = P.ph === "pan" ? Math.max(0, 1 - P.t/(WIN.pan*0.45)) : (P.ph === "name" ? 1 : 0);
+    if (outK > 0) {
+      const size = Math.min(46, viewW*0.11);
+      const inK = (at) => P.ph === "name" ? Math.min(1, Math.max(0, (P.t - at)/260)) : 1;
+      winHeading("Chapter " + (P.idx + 1), viewH*0.16, size, inK(0)*outK);
+      winHeading("Complete", viewH*0.16 + size*1.15, size, inK(340)*outK);
+    }
+    if (P.ph === "name" && P.t > 900) {                 // ...and last of all, the way out
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, (P.t - 900)/380) * (0.55 + 0.45*Math.sin(P.t/380));
+      ctx.fillStyle = "#bfc6e0";
+      ctx.font = "900 " + Math.round(Math.min(15, viewW*0.036)) + "px " + UI_FONT;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.letterSpacing = "2px";
+      ctx.fillText("TAP TO CONTINUE", viewW/2, viewH*0.86);
+      ctx.restore();
+    }
+    if (P.black > 0) {
+      ctx.fillStyle = "rgba(5,4,13," + P.black.toFixed(3) + ")";
+      ctx.fillRect(0, 0, viewW, viewH);
+    }
+  }
+  // The level, LIVE, on a canvas of its own — the coins still turning, the backdrop still
+  // drifting, him still standing on the flag. It is rendered off-screen and then blitted into
+  // whatever rect the shrink has reached, because draw() paints the whole viewport and the map
+  // is underneath: the level has to be composed somewhere else before it can be made small.
+  let _winFrame = null;
+  function winFrame(ts) {
+    if (!_winFrame || _winFrame.width !== canvas.width || _winFrame.height !== canvas.height) {
+      _winFrame = document.createElement("canvas");
+      _winFrame.width = canvas.width; _winFrame.height = canvas.height;
+    }
+    const g = _winFrame.getContext("2d");
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, _winFrame.width, _winFrame.height);
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const was = ctx; ctx = g;
+    try { draw(ts); drawWinRoute(ts, win ? win.laid : 0, cell, -camX, -camY); }
+    finally { ctx = was; }
+    return _winFrame;
+  }
+  // The route, cast back across the board as fixed track: the same platform surface a level's
+  // own fixed rails are drawn with, so what you are looking at is the shape of your solution in
+  // the game's own material rather than a line drawn over it.
+  function drawWinRoute(ts, n, cw, ox, oy) {
+    const P = win; if (!P || n <= 0) return;
+    const oc = cell; cell = cw;
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.translate(Math.round(ox), Math.round(oy));
+    for (let i = 0; i < n && i < P.route.length; i++) {
+      const nd = P.route[i], prev = P.route[i-1] || null, next = P.route[i+1] || null;
+      drawGlass(cx(nd.c), cy(nd.r), cell);
+      drawPlatformSurface(nd, tileSurface(nd, prev, next), curTrack());
+      // the newest one flashes as it lands, exactly as a laid tile does
+      if (i === n - 1) winRouteFlash(nd);
+    }
+    ctx.restore();
+    cell = oc;
+  }
+  // the newest piece of the route flashes as it lands, the way a laid tile does
+  function winRouteFlash(nd) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = "#fff7d6";
+    rrect(cx(nd.c), cy(nd.r), cell, cell, tileR(cell)); ctx.fill();
+    ctx.restore();
+  }
+
   // ---------- The talisman ceremony ---------------------------------------
   // Five beats, each one waiting on the last rather than on a shared clock, so any of them can
   // be retimed without shifting the rest. The whole thing is drawn on the GAME canvas, not in
@@ -6577,7 +7161,13 @@
     const sh = state.shake || 0;
     const shx = sh ? (Math.random()*2-1)*sh : 0, shy = sh ? (Math.random()*2-1)*sh : 0;
     const menuOpen = menuEl && menuEl.classList.contains("show");
-    const endScreen = state.status === "win" || state.status === "lose";
+    // "win" is the status for the whole victory sequence, and for the first half of it the level
+    // is still the thing on screen — the camera is pulling back off it, not putting a card in
+    // front of it. Treating that as an end screen made draw() paint the level's ground edge to
+    // edge and return before the board, so what pulled back was a backdrop with the rebuilt
+    // route on it rather than the level itself: no runner standing on the flag, no coins, no
+    // loose tiles. It is a screen once the sequence is over, and not before.
+    const endScreen = !win && (state.status === "win" || state.status === "lose");
     // The Tileverse keeps the void, and is checked FIRST for that reason: it is the map of every
     // level, so no one level's ground belongs under it — the cosmos is the thing they all hang
     // in. Every menu AND both end screens stand on the LEVEL YOU ARE ON, edge to edge: not the
@@ -6586,7 +7176,11 @@
     // obviously on the win and lose screens, where the board is gone and its outline was still
     // cut into the backdrop. Drawn "weld", so it is the level's own ground and not a second,
     // drifting one.
-    if (worldOpen()) drawVoid(ts);
+    // The Tileverse keeps the void — and so does a FAILED run. Dying puts you back outside the
+    // level rather than inside it: the ground you were standing on is the thing you just fell
+    // off, and leaving it spread edge to edge behind the words reads as though you were still
+    // on it. The cosmos is where you are between levels, and a fall is between levels.
+    if (worldOpen() || (endScreen && state.end && state.end.kind === "lose")) drawVoid(ts);
     else if (menuOpen || endScreen)
       // ...and it DRIFTS, on menus as well as on the end screens. The argument for welding a
       // menu was that the level is still there underneath and should sit where you left it —
@@ -6597,6 +7191,16 @@
     else drawBoardBackdrop(ts, shx, shy);     // the level's quilt, bounded by the level
     // pause / win / death: show ONLY the level background (a clean replica) behind the card
     if (endScreen || menuOpen) {
+      // A FALL keeps its heap. The menu that comes up after one is standing over the place he
+      // landed, and cutting to an empty cosmos throws away the only thing on the screen that
+      // says what just happened — and the joke it was building.
+      // (the lose screen IS a menu — openMenu opens it — so this must not exclude menuOpen)
+      if (state.end && state.end.kind === "lose" && state.fall) {
+        ctx.save();
+        ctx.translate(-Math.round(camX), -Math.round(camY));
+        drawRunner(ts); drawFallPile(ts);
+        ctx.restore();
+      }
       // ...except the ceremony, which is not a card on a background — it IS the screen, and it
       // stays lit under its own card once the words arrive.
       if (cere && !menuOpen) drawCeremony(ts);
@@ -6667,7 +7271,10 @@
     drawLover(ts);                                // she runs her own track, beside his
     if (state.status === "intro") drawIntro(ts);
     else if (state.status === "campan" || state.status === "hold") { /* not formed yet */ }
-    else drawRunner(ts);                          // "cue" included: standing, about to go
+    // HIM first, the heap over the top of him: he goes into it head first, and a body that
+    // lands ON a pile is a body sitting on it. Drawn behind, the heap closes over his head and
+    // only the legs are left out in the air, which is the picture.
+    else { drawRunner(ts); drawFallPile(ts); }    // "cue" included: standing, about to go
     drawHazards(ts);
     // Coins last of everything on the board. They hover off the surface, so a saw or a
     // block passing over one used to swallow it and the player would never know it was there.
@@ -8852,6 +9459,26 @@
   // is the clock, `off` staggers the blink so a row of walls never shutters as one. `nx`/`ny`
   // nudge the PUPILS (not the sockets) toward something the face is watching — it has to happen
   // in here, on top of the glance, or the caller ends up painting a second pair beside this one.
+  // The same two eyes, struck out. Same places, same size, same ink — a cross where the dot
+  // was — so it reads as the same face with something having happened to it.
+  function drawDeadEyes(g, cx0, cy0, s, col) {
+    // Small, and pushed over to one side of the face — the same way the living eyes carry a
+    // bias toward the direction of travel, only further, because a face with both eyes off
+    // centre reads as a face that has stopped deciding where to look.
+    // Small, but the stroke has to come down with the size or the two arms meet in the middle
+    // and the cross fills in — at 0.80 of the eye's radius on arms half that long it was a blob.
+    const R = s*EYES.r*0.50, gap = s*EYES.gap*0.86, bias = s*EYES.bias*2.2;
+    g.save();
+    g.globalAlpha = 1;                       // full strength whatever is drawing them
+    g.strokeStyle = col; g.lineWidth = Math.max(1, s*EYES.r*0.54); g.lineCap = "round";
+    for (const x of [cx0 + bias - gap/2, cx0 + bias + gap/2]) {
+      g.beginPath();
+      g.moveTo(x - R, cy0 - R); g.lineTo(x + R, cy0 + R);
+      g.moveTo(x + R, cy0 - R); g.lineTo(x - R, cy0 + R);
+      g.stroke();
+    }
+    g.restore();
+  }
   function drawEyes(g, cx0, cy0, s, col, face, t, off, nx, ny) {
     const R = s*EYES.r, gap = s*EYES.gap, bias = s*EYES.bias*(face || 0);
     const G = EYES.glanceMs, gt = (t + (off||0)) % G;
@@ -8941,15 +9568,28 @@
 
   function drawRunner(ts) {
     let sx, sy, angle, moving;
-    if (state.status === "falling") {
-      sx = state.fall.x; sy = state.fall.y; angle = state.fall.angle; moving = false;
+    let phaseOver = null;
+    // "lose" as well as "falling": the words come up over the heap he is lying in, so he has to
+    // go on being drawn where he landed rather than being teleported back onto a track that is
+    // no longer under him.
+    if (state.fall && (state.status === "falling" || state.status === "lose")) {
+      const f = state.fall;
+      sx = f.x; sy = f.y; angle = f.angle; moving = false;
+      // Buried head first, kicking. The stride is what draws a kick, so he is "moving" — on a
+      // phase of his own that winds down to a stop rather than on the level's, which stopped
+      // with him.
+      if (f.land != null && f.wrig != null) {
+        moving = f.land < WRIGGLE_MS; phaseOver = f.wrig/95;   // slow, small strokes
+        _scurry = moving ? 1 : 0;
+        _deadEyes = 1;                       // he has joined the heap; he gets the heap's face
+      }
       resetLeap();                                   // he is not leaping, he is going down
     } else {
       const ri = runnerInfo(); sx = ri.sx; sy = ri.sy; angle = ri.angle;   // sets the leap flags
       moving = state.status === "play";      // the runner is always moving now
     }
     const s = cell;
-    const phase = state.runPhase;
+    const phase = phaseOver != null ? phaseOver : state.runPhase;
     // What his shadow is allowed to land on: the bodies of the live tiles around him, plus the
     // whole cell of any loose pane he is over — a cleared tile is still something rendered, and
     // without it the shadow would blink off for the half of every tile he spends on one.
@@ -9002,7 +9642,7 @@
     paintRunner(sx, sy, s, phase, angle, moving, ts, (state.status === "squash") ? squashK() : 0,
                 state.status !== "falling");
     runnerShadowClip = null;      // every other caller — the lover, the shop, the opening — has no board
-    _restFold = 0;
+    _restFold = 0; _scurry = 0; _deadEyes = 0;
     resetLeap();
     drawRoarRing();
   }
@@ -9026,6 +9666,16 @@
   // parameter because paintRunner is called from eight places — the board, the title, the
   // cinematic, the shop swatches — and seven of them have no idea what a Millstone is.
   let _restFold = 0;
+  // Set while he is buried in the heap kicking his legs. It replaces the swagger for the one
+  // frame it is up: whatever he runs like, being upside down in a pile of himself is a scurry —
+  // short, fast strokes with the knees coming right up, which is what legs do when they are
+  // trying to get somewhere and have nothing to push against.
+  let _scurry = 0;
+  // ...and whether the runner being drawn has crosses for eyes. The heap sets it through `as`;
+  // the player's own runner sets it the moment he lands in the heap, because at that point he
+  // is one of them.
+  let _deadEyes = 0;
+  const SCURRY = { swing: 0.10, lift: 0.75, bob: 0.04, hop: 0, lean: 0, hover: 0 };
   // ...and how far a leaping swagger has him off the track, 0..1. Same reasoning: paintRunner
   // is called from places that have no path to leap along.
   let _leapLift = 0, _leapPose = 0, _leapFoot = 1, _leapAir = 0;
@@ -9061,7 +9711,9 @@
     // multiplier or an addition, so the numbers in RUNNER still drive all five styles.
     // Sitting down overrides whatever he was wearing: the lotus fold IS the sit, and a hover or
     // a hop underneath it would have him meditating in mid-air.
-    const w = _restFold > 0.5 ? { pose: "lotus", swing: 0, lift: 0, bob: 0 } : lookItem("swagger");
+    const w = _restFold > 0.5 ? { pose: "lotus", swing: 0, lift: 0, bob: 0 }
+            : _scurry > 0.5 ? SCURRY
+            : as ? (as.swagger || {}) : lookItem("swagger");
     const mul = (v, d) => (v == null ? d : v);
     const swing = moving ? Math.sin(phase) * s*RUNNER.swing * mul(w.swing, 1) : 0;
     let   bob   = moving ? Math.abs(Math.sin(phase)) * s*RUNNER.bob * mul(w.bob, 1) : 0;
@@ -9306,7 +9958,9 @@
     // the cuff. Painting the limb rather than covering it is what makes a boot part of the leg
     // instead of a lump pushed onto the end of a stick. Second the shape on the ground: the
     // sole, the blade, the pad.
-    const shoe = lookItem("kicks");
+    // Somebody who is not the player wears their own kit or nothing: the heap at the bottom of
+    // a fall is a crowd, and a crowd in your shoes is a crowd of you.
+    const shoe = as ? (as.kicks || { id:"none" }) : lookItem("kicks");
     if (shoe.cover > 0 && shoe.legCol) {
       const lw = Math.max(3, s*RUNNER.legWidth);
       ctx.strokeStyle = shoe.legCol;
@@ -9363,8 +10017,12 @@
     // the shared eyes, facing +x = the way he is travelling
     // Eyes shut once he is down. drawEyes blinks off the clock, so it is handed a time that
     // parks it inside a blink and keeps it there for as long as he is folded.
-    drawEyes(ctx, 0, byTop + bodyH*RUNNER.eyeY, s, inkCol, 1,
-             _restFold > 0.5 ? EYES.blinkMs*0.02 : ts, 0);
+    // ...or two little crosses, for somebody who is not getting up. It is the one drawing in
+    // the game that says a runner is FINISHED rather than resting, and it is why the heap at
+    // the bottom of a fall reads as a heap rather than as a crowd having a lie down.
+    if ((as && as.dead) || _deadEyes) drawDeadEyes(ctx, 0, byTop + bodyH*RUNNER.eyeY, s, inkCol);
+    else drawEyes(ctx, 0, byTop + bodyH*RUNNER.eyeY, s, inkCol, 1,
+                  _restFold > 0.5 ? EYES.blinkMs*0.02 : ts, 0);
     // last, so it sits on top of everything. Scaled up about the crown of his head — at the
     // shipped size the hats were a few pixels of trim on a small character and read as noise.
     // No scale-up any more. Hats are cut to the HEAD — every measurement in them is a fraction
@@ -10431,6 +11089,7 @@
 
   canvas.addEventListener("pointerdown", (e) => {
     e.preventDefault();
+    if (winTap()) return;               // the victory sequence is waiting to be let on
     Sound.unlock();                     // first touch unlocks audio (iOS autoplay policy)
     if (cineActive)  { cineStep(); return; }    // tap anywhere to skip ahead one chapter
     if (titleActive) { leaveTitle(); return; }
@@ -10575,6 +11234,9 @@
     if (dt > 100) dt = 100;
     if (cineActive)  { tickCine(dt);  drawCine(ts);  requestAnimationFrame(frame); return; }
     if (titleActive) { tickTitle(dt); drawTitle(ts); requestAnimationFrame(frame); return; }
+    // The victory sequence owns the frame outright: it is a camera move over a board that has
+    // stopped, so nothing of the level's own update has any business running under it.
+    if (win) { tickWin(dt); drawWin(ts); updatePauseBtn(); requestAnimationFrame(frame); return; }
     if (!paused) {
       if (state.status === "hold") tickHold(dt);
       else if (state.status === "campan") tickCamPan(dt);
@@ -10591,7 +11253,9 @@
       if (state.rest) tickRest(dt);
       if (state.status === "falling") {
         if (state.ankhGrace > 0) state.ankhGrace -= dt;    // the window to reach for the Ankh
+        tickFallZoom(dt);
         tickFall(dt);
+        tickFallCam(dt);
       }
       updateShards(dt);
       tickStarDust(dt);
@@ -11264,6 +11928,18 @@
     el.appendChild(arrowChip(11, getComputedStyle(el).color || "#e8e6ff"));
   }
   document.getElementById("pauseFloat").addEventListener("click", () => { Sound.unlock(); Sound.tap(); openMenu("main"); });
+  document.getElementById("win-next").addEventListener("click", () => {
+    if (!win || win.ph !== "wait") return;
+    Sound.unlock(); Sound.tapBig(); Sound.warp(true);
+    hideWinUI(); win.ph = "whip"; win.t = 0;
+  });
+  document.getElementById("win-menu").addEventListener("click", () => {
+    if (!win) return;
+    Sound.unlock(); Sound.tapBig();
+    // Out of the sequence and onto the real map — the same one it has been flying over.
+    const nx = win.next; winEnd();
+    levelIdx = nx; loadLevel(nx); openMenu("world");
+  });
   document.getElementById("mech-ok").addEventListener("click", () => { Sound.unlock(); Sound.tapBig(); mechQueue.shift(); showNextMech(); });
 
   const menuEl = document.getElementById("menu");
@@ -11344,7 +12020,7 @@
   // BACK to the beginning, and wear the loop. There were five DONEs and three of them had no
   // arrow, which is exactly the kind of thing that goes unnoticed until they are side by side.
   const BTN_GLYPH = [
-    [/^(done|resume|next|level select|skip)/i, labelWithArrow],
+    [/^(done|resume|next|chapter select|skip)/i, labelWithArrow],
     [/^(restart|retry)/i,                 labelWithRestart],
   ];
   function btn(label, fn, big) {
@@ -11861,7 +12537,7 @@
         el.appendChild(sw);
         const num = document.createElement("span"); num.textContent = (i + 1);
         el.appendChild(num);
-        el.title = (LEVELS[i] && LEVELS[i].name) || ("Level " + (i + 1));
+        el.title = (LEVELS[i] && LEVELS[i].name) || ("Chapter " + (i + 1));
         el.onclick = () => { levelIdx = i; loadLevel(i); closeMenu(); };
         map.appendChild(el);
       });
@@ -11901,7 +12577,7 @@
     if (screen === "levels") {
       // Laid out like the shop: the header stays under the notch at the top, the grid scrolls
       // on its own, and BACK is pinned to the viewport instead of trailing 33 cells down.
-      title.textContent = "Levels"; title.className = "shop big gilt";
+      title.textContent = "Chapters"; title.className = "shop big gilt";
       menuBody.appendChild(btn("Intro", () => { closeMenu(); startCine("menu"); }));   // first item
       const rack = document.createElement("div"); rack.className = "shop-rack lvl-rack";
       const grid = document.createElement("div"); grid.className = "lvl-grid";
@@ -11945,7 +12621,7 @@
     if (!end) menuBody.appendChild(btn("Resume", closeMenu));
     // NEXT only on a clear. The last level has nowhere to go on to, so it hands you the map.
     if (end && end.kind === "win")
-      menuBody.appendChild(btn(end.last ? "Level Select" : "Next Level", () => {
+      menuBody.appendChild(btn(end.last ? "Chapter Select" : "Next Chapter", () => {
         endCeremony();
         if (end.last) { buildMenu("world"); return; }
         levelIdx = levelIdx + 1; loadLevel(levelIdx); closeMenu();
@@ -11953,14 +12629,14 @@
     // RETRY everywhere but a clear — starting again is what a fall leaves you, and what a
     // pause offers; on a level you have just finished it is not what you came for.
     if (!end || end.kind === "lose")
-      menuBody.appendChild(btn(end ? "Retry" : "Restart Level",
+      menuBody.appendChild(btn(end ? "Retry" : "Restart Chapter",
                               () => { loadLevel(levelIdx); closeMenu(); }));
     // ...and a way PAST it. Only where you have just failed, and only where there is a level
     // to skip to: a run you cannot finish should not be the end of the campaign for you, and
     // the alternative — hunting through the Tileverse for the next square — makes being stuck
     // feel like being punished.
     if (end && end.kind === "lose" && levelIdx < LEVELS.length - 1) {
-      const skipBtn = btn("Skip Level", () => {
+      const skipBtn = btn("Skip Chapter", () => {
         levelIdx = levelIdx + 1; loadLevel(levelIdx); closeMenu();
       });
       skipBtn.classList.add("rust");
