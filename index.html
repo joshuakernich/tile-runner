@@ -214,6 +214,32 @@
      and no score furniture — this screen is about the object, not the run. */
   /* The ceremony fills the screen and its card is only the way out of it, so the card goes to
      the FOOT rather than the middle — centred, it landed square on the charm's name. */
+  /* A level's verse, before anything of the level is on screen. Nearly opaque rather than a
+     scrim: the point is that there is nothing else to look at, which is what makes it read as
+     a page turning rather than as another card over the board. No button — a tap anywhere. */
+  #poem {
+    position:fixed; inset:0; display:none; flex-direction:column;
+    align-items:center; justify-content:center; gap:var(--chq2);
+    background:rgba(5,4,13,0.94); z-index:36; cursor:pointer;
+    padding:calc(env(safe-area-inset-top) + var(--chq2)) calc(env(safe-area-inset-right) + var(--chq2))
+            calc(env(safe-area-inset-bottom) + var(--chq2)) calc(env(safe-area-inset-left) + var(--chq2));
+  }
+  #poem.show { display:flex; animation:poem-in 420ms ease-out both; }
+  @keyframes poem-in { from { opacity:0; } to { opacity:1; } }
+  #poem-text {
+    margin:0; max-width:22rem; text-align:center; text-wrap:balance;
+    font-size:15px; line-height:2; letter-spacing:2px; text-transform:uppercase;
+    color:var(--ink);
+  }
+  /* Whoever said it, quieter and in the runner's own gold — the same relationship the byline
+     on an end screen has to its heading. */
+  #poem-by {
+    margin:0; max-width:22rem; text-align:center;
+    font-size:11px; line-height:1.8; letter-spacing:2px; text-transform:uppercase;
+    color:#ffd24a; opacity:0.75;
+  }
+  #poem-by:empty { display:none; }
+  body.menu-open #poem { display:none !important; }
   #mechpop {
     position:fixed; inset:0; display:none; align-items:center; justify-content:center;
     background:rgba(5,4,13,0.32); z-index:35;
@@ -438,8 +464,26 @@
     background-position:0 0, 0 0;
     background-origin:border-box;
     image-rendering:pixelated; }
+  /* SKIP LEVEL, and nothing else. It is the one button that gives up on the run you are
+     looking at, so it should not sit in the same dark plate as RETRY — the two are not the
+     same kind of answer. Dark red with white on it: the only plate in the menu whose label is
+     white, which is the whole point of it, and dark enough that it reads as a way out rather
+     than as the thing to press. */
+  #menu-body button.rust { background-color:#8f2a1c; border-color:transparent;
+    color:#ffffff; box-shadow:0 4px 0 #4c150e;
+    /* Flat, with the faint chequer every plain button wears — the gold, amber and sky plates
+       carry a woven quilt on top of theirs because they are places you go, and this is not one.
+       chq-void rather than chq-ink: the same near-nothing white, at the strength the dark plates
+       need to still show it once there is a colour underneath. */
+    background-image:
+      conic-gradient(transparent 0 25%, var(--chq-void) 0 50%,
+                     transparent 0 75%, var(--chq-void) 0);
+    background-size:var(--chq2) var(--chq2);
+    background-position:0 0;
+    background-origin:border-box; }
   #menu-body button.gold:active,
   #menu-body button.amber:active,
+  #menu-body button.rust:active,
   #menu-body button.void:active { transform:translateY(4px); box-shadow:none; }
   /* label · coin · count, on one line and centred as a group.
      `> button` matters: a shop item also contains a canvas.wallet — the tile in its price row —
@@ -471,6 +515,21 @@
     background-position:0 0;
     background-origin:border-box; }
   .toggle .val { color:var(--track); }
+  /* A PICKER: a label with the choices laid out beside it as one strip of segments, so the
+     range is a thing you can see rather than a number you have to cycle to. Same plate, same
+     height and same chequer as a toggle — it is the same row, with the value opened out. */
+  .picker { display:flex; align-items:center; gap:var(--chq); }
+  .picker > span { flex:0 0 auto; }
+  .picker .track { display:flex; flex:1; min-width:0; gap:2px; }
+  /* Each segment is a plain slab that carries the value; the CHOSEN one lights in the track's
+     own colour, which is the same colour a toggle's value is written in. */
+  .picker .seg {
+    flex:1 1 0; min-width:0; text-align:center;
+    font-size:11px; letter-spacing:1px; line-height:calc(var(--btn-h) - 20px);
+    height:calc(var(--btn-h) - 20px);
+    color:var(--dim); background:rgba(5,4,13,0.45); cursor:pointer;
+    font-variant-numeric:tabular-nums; }
+  .picker .seg.on { color:#0b0918; background:var(--track); }
   .toggle.off .val { color:var(--dim); }
   .lvl-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--chq); }
   .lvl-grid button { display:flex; flex-direction:column; gap:3px; padding:12px 0; line-height:1.1; }
@@ -925,6 +984,11 @@
     <button id="a2hs-install" style="display:none">Install</button>
     <button id="a2hs-close" class="a2hs-x">Not now</button>
   </div>
+</div>
+
+<div id="poem">
+  <p id="poem-text"></p>
+  <p id="poem-by"></p>
 </div>
 
 <div id="mechpop">
@@ -2634,7 +2698,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.2";                    // shown on the title & pause screens
+  const VERSION = "v10.3";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -4173,9 +4237,50 @@
     // so a pop-up can take as long as it likes without the rest playing out behind it.
     if (!goalOnScreen && g) { const fc = camForPoint(gx, gy); camX = fc.x; camY = fc.y; }
     else { camX = startCam.x; camY = startCam.y; }
-    Sound.levelMusicStart();      // 1. the backing starts here, not when he does
-    state.status = "hold";
-    state.peekT = FLAG_HOLD_MS;   // 2. hold on the flag, then pan
+    Sound.levelMusicStart();      // 0. the backing starts here, not when he does — under the
+    state.status = "hold";        //    verse as well, so the level has already begun in the ear
+    state.peekT = null;           //    before it begins in the eye
+    // A level may open with a VERSE. It holds everything — the flag, the pan, the cards, him —
+    // until it is dismissed, rather than playing over the top of the opening: the whole of its
+    // effect is that there is nothing else on the screen while you read it.
+    showPoem(L.poem, L.by, () => { state.peekT = FLAG_HOLD_MS; });   // 1. hold on the flag, then pan
+  }
+  // Shown once per level per session. A verse is flavour, and a level you are stuck on should
+  // not recite at you on every retry — but a fresh sitting gets it again, because by then it is
+  // the opening of the level rather than an interruption of it.
+  const poemSeen = new Set();
+  let _poemClose = null;                     // the verse currently up, if any
+  function showPoem(text, by, done) {
+    // Whatever was up belongs to a level that is no longer loading. Take it down without
+    // running its continuation — that level's opening is not going to happen now.
+    if (_poemClose) _poemClose(false);
+    const el = document.getElementById("poem");
+    const body = String(text || "").trim();
+    // Nothing to say, said already this sitting, or nobody is looking at the board yet: the
+    // boot loads level one behind the TITLE SCREEN, and a verse recited to a menu is a verse
+    // spent. It waits for the level to be the thing on screen.
+    if (!el || !body || poemSeen.has(body) || titleActive || cineActive) { done(); return; }
+    poemSeen.add(body);
+    // The attribution is its own field, and it is set apart rather than left running on because
+    // it is not part of the poem. A verse written the old way — "…the line. - Who said it" —
+    // still comes out right: the tail after a dash is taken as the attribution when there is no
+    // field to say otherwise, so nothing has to be rewritten to keep reading properly.
+    const m = by ? null : body.match(/^([\s\S]+?)\s+[-–—]\s*([^\n]{1,60})$/);
+    document.getElementById("poem-text").textContent = m ? m[1].trim() : body;
+    document.getElementById("poem-by").textContent   = by ? String(by).trim() : (m ? m[2].trim() : "");
+    paused = true;
+    el.classList.add("show");
+    const close = (go) => {
+      el.removeEventListener("pointerdown", close);
+      el.classList.remove("show");
+      _poemClose = null;
+      paused = false;
+      if (go === false) return;              // torn down by a new level, not by a reader
+      Sound.tapBig();
+      done();
+    };
+    _poemClose = close;
+    el.addEventListener("pointerdown", close);
   }
   const FLAG_HOLD_MS = 900;       // how long the flag is held before the camera pulls back
   // Counts out the hold on the flag. Runs on "hold", where update() is already inert, so the
@@ -5008,16 +5113,22 @@
   // and the one your hand would have reached for anyway. Returns false if (c,r) is not a hint
   // square, so the tap can go on to mean whatever else it might have meant.
   const FLY_MS = 190;
+  // The tile a tap would fetch: the oldest one not currently part of the track — parked counts,
+  // it is still yours. Null when you have none, which is also what dims the hints, so what they
+  // show and what a tap would do can never disagree.
+  function oldestFreeTile() {
+    let tile = null;
+    for (const t of state.tiles)
+      if ((t.status === "free" || t.status === "parked") &&
+          (!tile || (t.freedAt || 0) < (tile.freedAt || 0))) tile = t;
+    return tile;
+  }
   function sendTileTo(c, r) {
     if (state.status !== "play" || state.flyTile) return false;
     const lead = leadNode();
     if (!lead) return false;
     if (!junctionExits(lead.n, lead.prev).some(e => e.c === c && e.r === r)) return false;
-    // the oldest tile not currently part of the track — parked counts, it is still yours
-    let tile = null;
-    for (const t of state.tiles)
-      if ((t.status === "free" || t.status === "parked") &&
-          (!tile || (t.freedAt || 0) < (tile.freedAt || 0))) tile = t;
+    const tile = oldestFreeTile();
     if (!tile) return false;
     state.flyTile = { tile, c, r, t: 0,
                       x0: cx(tile.c), y0: cy(tile.r), x1: cx(c), y1: cy(r) };
@@ -6547,6 +6658,7 @@
     drawLaidFlash();                              // over the tile it belongs to, nothing else
 
     drawPickups(ts);
+    drawJunctionMarks(ts);                        // over the coins: it is the thing you aim at
     drawShards();
     drawPops();
     drawLights();
@@ -8497,6 +8609,9 @@
   // place it could go bloom rather than just sitting there. Eased so it reads as the board
   // reacting to the pickup, not as two different drawings swapped over.
   let markGrow = 0;
+  // ...and how much of the hint's own opacity it is allowed, 0 when you have no tile to send.
+  let markLive = 1;
+  const MARK_EMPTY = 0.10;                 // what a hint fades to with nothing in hand
   const jScratch = document.createElement("canvas");   // reused every frame
   // ...and a second, for the junction's three-way mask. The options are stacked into it rather
   // than unioned, so the shared trunk builds up and the arms only one route reaches stay faint.
@@ -8620,18 +8735,38 @@
       ctx.restore();
     } finally { ctx = main; }
     ctx.drawImage(jScratch, DX/dpr, DY/dpr, px/dpr, px/dpr);
+  }
 
-
-    // A marker in each cell you can actually build into: a square ring — a half-tile square
-    // with everything but its border punched out, so the band is an eighth of a tile thick and
-    // lies INSIDE the square, which keeps the hint the same size whatever the band does. The arrows it replaces pointed FROM
-    // the junction, which put them in the gutter between two cells and made you read a
-    // direction; a ring drawn on the cell itself just says "here" — and leaving the middle
-    // open means whatever is already in that cell still reads through it.
-    if (JUNCTION.mark <= 0) return;       // hidden: skip the occupancy scan as well as the fill
-    markGrow += ((state.drag ? 1 : 0) - markGrow) * 0.22;            // one leading tile a frame
-    ctx.fillStyle = "rgba(255,255,255," + JUNCTION.mark + ")";
-    for (const e of junctionExits(n, prev)) {
+  // A marker in each cell you can actually build into: a square ring — a half-tile square with
+  // everything but its border punched out, so the band is an eighth of a tile thick and lies
+  // INSIDE the square, which keeps the hint the same size whatever the band does. The arrows it
+  // replaces pointed FROM the junction, which put them in the gutter between two cells and made
+  // you read a direction; a ring drawn on the cell itself just says "here" — and leaving the
+  // middle open means whatever is already in that cell still reads through it.
+  //
+  // Drawn as its own pass, ON TOP of the pickups, rather than as the tail of the junction tile.
+  // It is a thing you AIM AT — a tap on it fetches a tile — and it was going down under the
+  // coins, so the one square the game was asking you to hit could be the one square with a
+  // great gold tile floating over it.
+  function drawJunctionMarks(ts) {
+    if (JUNCTION.mark <= 0) return;
+    const lead = leadNode();
+    if (!lead) return;
+    markGrow += ((state.drag ? 1 : 0) - markGrow) * 0.22;
+    // With nothing in hand the hints are still worth showing — they are where the track can go,
+    // which is the thing you are working out while you wait for a tile to free up — but they are
+    // no longer an invitation to tap, so they drop to a whisper.
+    //
+    // Up INSTANTLY, down on an ease. A tile coming free is news: the moment it does, the squares
+    // you can send it to should already be lit, because that is the moment you are deciding.
+    // Spending it is not news in the same way — it is something you just did — so the fade back
+    // is allowed to take its time rather than snapping out from under the tap that caused it.
+    const live = (oldestFreeTile() || state.flyTile) ? 1 : 0;
+    markLive = live > markLive ? 1 : markLive + (live - markLive)*0.14;
+    const C = nodeCenter(lead.n);
+    const a = MARK_EMPTY + (JUNCTION.mark - MARK_EMPTY)*markLive;
+    ctx.fillStyle = "rgba(255,255,255," + a.toFixed(3) + ")";
+    for (const e of junctionExits(lead.n, lead.prev)) {
       const mx = C.x + e.d.x*cell, my = C.y + e.d.y*cell;
       const os = cell*(0.25 + 0.25*markGrow), hs = os - cell/8;      // band inside the square
       if (hs <= 0) continue;
@@ -11214,10 +11349,21 @@
   // A stepper wearing a toggle's clothes: same plate, same height, same chequer — the only
   // difference is that pressing it moves on through a list rather than flipping a flag, and
   // the value on the right says where in the list you are.
-  function stepper(label, val, fn) {
-    const d = document.createElement("div"); d.className = "toggle";
-    d.innerHTML = "<span>" + label + "</span><span class='val'>" + val + "</span>";
-    d.onclick = (e) => { Sound.unlock(); Sound.tap(); fn(e); }; return d;
+  // A row of choices instead of a value you cycle. `vals` are the options in order, `val` the
+  // one that is on, `fmt` how each is written and `fn` what to do with the one that is picked.
+  function picker(label, vals, val, fmt, fn) {
+    const d = document.createElement("div"); d.className = "toggle picker";
+    const l = document.createElement("span"); l.textContent = label;
+    const track = document.createElement("div"); track.className = "track";
+    for (const v of vals) {
+      const seg = document.createElement("div");
+      seg.className = "seg" + (v === val ? " on" : "");
+      seg.textContent = fmt(v);
+      seg.onclick = (e) => { e.stopPropagation(); Sound.unlock(); Sound.tap(); fn(v); };
+      track.appendChild(seg);
+    }
+    d.appendChild(l); d.appendChild(track);
+    return d;
   }
   function toggle(label, on, fn) {
     const d = document.createElement("div"); d.className = "toggle" + (on ? "" : " off");
@@ -11591,9 +11737,8 @@
       menuBody.appendChild(toggle("Colorblind", colorblind,
         () => { colorblind = !colorblind; settings.colorblind = colorblind; saveSettings();
                 applyColorblind(); buildMenu(screen); }));
-      menuBody.appendChild(stepper("Speed", startCps().toFixed(1) + " TILES/S", () => {
-        const was = startCps();
-        settings.startCps = START_CPS[(START_CPS.indexOf(was) + 1) % START_CPS.length];
+      menuBody.appendChild(picker("Speed", START_CPS, startCps(), v => v.toFixed(1), (v) => {
+        settings.startCps = v;
         saveSettings();
         // Live, not on the next load: this is reached from the pause menu mid-level, and a
         // speed control that does nothing until you die is a speed control you cannot feel.
@@ -11806,10 +11951,13 @@
     // to skip to: a run you cannot finish should not be the end of the campaign for you, and
     // the alternative — hunting through the Tileverse for the next square — makes being stuck
     // feel like being punished.
-    if (end && end.kind === "lose" && levelIdx < LEVELS.length - 1)
-      menuBody.appendChild(btn("Skip Level", () => {
+    if (end && end.kind === "lose" && levelIdx < LEVELS.length - 1) {
+      const skipBtn = btn("Skip Level", () => {
         levelIdx = levelIdx + 1; loadLevel(levelIdx); closeMenu();
-      }));
+      });
+      skipBtn.classList.add("rust");
+      menuBody.appendChild(skipBtn);
+    }
     const worldBtn = btn("Tileverse", () => buildMenu("world"));
     worldBtn.classList.add("void");
     menuBody.appendChild(worldBtn);

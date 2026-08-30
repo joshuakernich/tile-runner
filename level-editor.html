@@ -80,6 +80,13 @@
   .opt{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;}
   .opts select{flex:1;min-width:0;} .opts input[type=number]{width:60px;}
   .opt[hidden],.tip[hidden]{display:none;}
+  /* A verse is a paragraph, not a field: it gets the full width of the rail and its own line. */
+  .opt-poem{flex-direction:column;align-items:stretch;gap:4px;}
+  /* white-space, because the rule for the JSON box below sets `pre` on every textarea on the
+     page — which is right for a line of JSON and wrong for a paragraph of English. */
+  .opt-poem textarea{width:100%;resize:vertical;font:inherit;font-size:11px;line-height:1.5;
+    white-space:pre-wrap;overflow-wrap:break-word;
+    background:#0d0b22;color:inherit;border:1px solid var(--line);border-radius:6px;padding:6px 7px;}
   .tip{max-width:620px;font-size:11px;opacity:.78;line-height:1.55;background:#0d0b22;
        border:1px solid var(--line);border-radius:8px;padding:9px 11px;}
   .toolbar{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;}
@@ -134,6 +141,9 @@
       <label class="opt">rows <input type="number" id="rowsIn" min="3" max="40" value="8"></label>
       <label class="opt">speed <input type="number" id="cpsIn" value="0.8" step="0.01" min="0.3" max="3"></label>
       <label class="opt">intro <input type="text" id="introBox" placeholder="wall,block …"></label>
+      <label class="opt opt-poem">poem
+        <textarea id="poemBox" rows="3" placeholder="shown on its own before the level opens — optional"></textarea></label>
+      <label class="opt">by <input type="text" id="byBox" placeholder="who said it" maxlength="60"></label>
     </div>
 
     <div class="card">
@@ -355,6 +365,8 @@ function toWorking(o){
   w.intro = (o.intro||[]).slice();
   w.cps = o.cps || 0.8;          // starting pace, tiles/sec
   w.name = o.name || "";         // what the level is called; optional, and omitted when blank
+  w.poem = o.poem || "";         // a verse shown before it opens; optional, same rule
+  w.by = o.by || "";             // ...and who said it, set apart from the verse itself
   // The music lab writes `music: {...}` onto a level. The editor does not edit it, but it
   // has to carry it: this is the only thing that rewrites levels.js, so anything it does not
   // know about is quietly deleted the next time you save.
@@ -381,6 +393,8 @@ function toStored(w){
               cols:w.cols, rows:w.rows, intro:(w.intro||[]).slice(),
               cps:w.cps || 0.8 };
   if((w.name||"").trim()) o.name = w.name.trim();   // only levels that HAVE a name carry one
+  if((w.poem||"").trim()) o.poem = w.poem.trim();   // ...and only the ones that have a verse
+  if((w.by||"").trim() && (w.poem||"").trim()) o.by = w.by.trim();   // an attribution needs a verse
   if(w.music && Object.keys(w.music).length) o.music = w.music;   // passed through untouched
   if(w.goal) o.goal = w.goal.slice();          // omitted entirely on a level with no exit
   o.walls = [...w.walls].map(s=>s.split(",").map(Number)).sort((a,b)=>a[1]-b[1]||a[0]-b[0]);
@@ -419,6 +433,8 @@ function loadLevel(n){
   $("nIn").value = L.n; $("colsIn").value = L.cols; $("rowsIn").value = L.rows;
   $("introBox").value = (L.intro||[]).join(",");
   $("nameIn").value = L.name || "";
+  $("poemBox").value = L.poem || "";
+  $("byBox").value = L.by || "";
   $("cpsIn").value = L.cps || 0.8;
   rebuildLevelList();
   syncSize(); draw();
@@ -1853,6 +1869,8 @@ $("colsIn").addEventListener("change",resizeGrid); $("rowsIn").addEventListener(
 $("nIn").addEventListener("change",()=>{ refreshOut(); });
 $("introBox").addEventListener("input",()=>{ refreshOut(); });
 $("nameIn").addEventListener("input",()=>{ L.name = $("nameIn").value; commit(); rebuildLevelList(); refreshOut(); });
+$("poemBox").addEventListener("input",()=>{ L.poem = $("poemBox").value; commit(); refreshOut(); });
+$("byBox").addEventListener("input",()=>{ L.by = $("byBox").value; commit(); refreshOut(); });
 $("cpsIn").addEventListener("input",()=>{ refreshOut(); });
 $("inspDel").onclick=()=>{
   if(!sel || !selAlive()) return;
