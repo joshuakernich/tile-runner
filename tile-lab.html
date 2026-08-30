@@ -68,6 +68,8 @@
       <div class="row"><label>strength</label><input type="range" id="edgeA" min="0" max="1" step="0.01"><output></output></div>
       <div class="row"><label>white &rarr; black</label><input type="range" id="edgeInk" min="0" max="1" step="0.01"><output></output></div>
       <div class="row"><label>texture</label><input type="range" id="edgeGrain" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>rim depth</label><input type="range" id="edgeTip" min="0" max="1" step="0.005"><output></output></div>
+      <div class="row"><label>rim white</label><input type="range" id="edgeTipA" min="0" max="1" step="0.01"><output></output></div>
       <p class="hint">A stack of bands hanging off the running surface, each shallower than the
         last, so the falloff CONTOURS the edge — parallel down a straight, concentric round a
         corner. Ink is a straight ramp: 1 white, 0 black, and every grey between.</p>
@@ -114,6 +116,8 @@ const SHIPPED = {
   edgeA:      0.300,
   edgeInk:    1.000,
   edgeGrain:  1.000,
+  edgeTip:    0.200,
+  edgeTipA:   0.450,
 };
 const T = Object.assign({}, SHIPPED);
 let HUE = 45, CELL = 130;
@@ -162,7 +166,7 @@ const JUNCTION = {
   left:    1.00,
   ahead:   0.40,
   right:   0.20,
-  mark:    0.20,
+  mark:    0.25,
   grain:   0.40,
 };
 const curTrack = () => hslHex(HUE,88,58);
@@ -315,6 +319,15 @@ function surfaceEdge(X, Y, S, C) {
   for (let k = 0; k < EDGE_STEPS; k++) {
     ctx.beginPath(); surfaceBand(S, C, d * (1 - k/EDGE_STEPS)); ctx.fill();
   }
+  // a second, much shallower ramp inside the first — the rim collects both and comes out far
+  // whiter, while the body of the lip keeps the weight it had
+  const td = d * T.edgeTip, ta = T.edgeTipA;
+  if (td > 0 && ta > 0) {
+    ctx.fillStyle = "rgba(" + v + "," + v + "," + v + "," + (ta / EDGE_STEPS).toFixed(4) + ")";
+    for (let k = 0; k < EDGE_STEPS; k++) {
+      ctx.beginPath(); surfaceBand(S, C, td * (1 - k/EDGE_STEPS)); ctx.fill();
+    }
+  }
   if (T.edgeGrain > 0) {
     ctx.beginPath(); surfaceBand(S, C, d); ctx.clip();
     grainFill(X, Y, cell, cell, T.edgeGrain * a);
@@ -404,20 +417,16 @@ function drawJunction(n, prev){
   } finally { ctx = main; }
   ctx.drawImage(jScratch, DX/dpr, DY/dpr, px/dpr, px/dpr);
 
-  // four small white squares in a half-tile block, dead centre of every cell you may build
-  // into, with a light running round them clockwise.
-  // This lab draws one static composition, so the chase is frozen at its first corner.
-  const MARK_SPIN = 1100, MARK_QUAD = [{x:-1,y:-1},{x:1,y:-1},{x:1,y:1},{x:-1,y:1}];
-  const head = (0 / MARK_SPIN) * 4;
+  // a square ring in every cell you may build into: a half-tile square with everything but its
+  // border punched out, so the band is an eighth of a tile thick and lies inside it
+  ctx.fillStyle = "rgba(255,255,255," + JUNCTION.mark + ")";
   for (const d of exits){
-    const mx = C.x + d.x*cell, my = C.y + d.y*cell, qs = cell/4;
-    for (let i=0;i<4;i++){
-      const q = MARK_QUAD[i];
-      let lag = (head - i) % 4; if (lag < 0) lag += 4;
-      const w = Math.max(0, 1 - lag/3);
-      ctx.fillStyle = "rgba(255,255,255," + (JUNCTION.mark * (0.34 + 0.66*w)).toFixed(3) + ")";
-      ctx.fillRect(mx + (q.x < 0 ? -qs : 0), my + (q.y < 0 ? -qs : 0), qs, qs);
-    }
+    const mx = C.x + d.x*cell, my = C.y + d.y*cell;
+    const os = cell/4, hs = os - cell/8;
+    ctx.beginPath();
+    ctx.rect(mx - os, my - os, os*2, os*2);
+    ctx.rect(mx - hs, my - hs, hs*2, hs*2);
+    ctx.fill("evenodd");
   }
 }
 function drawDragDots(fx,fy,s){
@@ -465,9 +474,9 @@ function render(){
 
 // ---- wiring -------------------------------------------------------------------------
 const KEYS = ["radius","glassA","glassGrain","bodyGrain","railW","pathW","underShade","shadowW","shadowShade",
-              "edgeDepth","edgeA","edgeInk","edgeGrain"];
+              "edgeDepth","edgeA","edgeInk","edgeGrain","edgeTip","edgeTipA"];
 const DP = { radius:3, glassA:2, glassGrain:2, bodyGrain:2, railW:3, pathW:3, underShade:0, shadowW:3, shadowShade:0,
-             edgeDepth:3, edgeA:3, edgeInk:3, edgeGrain:3 };
+             edgeDepth:3, edgeA:3, edgeInk:3, edgeGrain:3, edgeTip:3, edgeTipA:3 };
 function sync(){
   for (const k of KEYS){
     const el=document.getElementById(k); el.value=T[k];

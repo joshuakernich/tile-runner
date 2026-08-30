@@ -2634,7 +2634,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.1";                    // shown on the title & pause screens
+  const VERSION = "v10.2";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -2658,7 +2658,7 @@
   const REST_MS = REST.down + REST.still + REST.up + REST.settle;
   const REST_TEMPO = 6;                   // how many times slower the track gets at the bottom
   const REST_SINK  = 0.10;                // how far he settles toward the track, fraction of a cell
-  const REVEAL_MS = 5000;                  // how long the Lodestone shows the way      // the Spur and the Millstone, in ms — half a second each
+  const REVEAL_MS = 5000;                  // how long the Wayfinder shows the way      // the Spur and the Millstone, in ms — half a second each
   const REVIVE_HOLD_MS = 3000;     // how long the Ankh stands him still after bringing him back
   const COIN_BONUS = 5;                      // score value per coin
   const levelAttempts = {};                  // how many times each level has been started this session
@@ -2680,7 +2680,9 @@
   //   blurb one line, shown on the button and in the talisman screen
   const TALISMANS = [
 
-    { id:"magnet", name:"Cosmic Magnetite", col:"#ff6d6d", ms:3000,
+    // A lodestone is magnetite that has been struck by lightning and come out magnetic — which
+    // is what this is. The name was on the charm below until this one earned it.
+    { id:"magnet", name:"Lodestone", col:"#ff6d6d", ms:3000,
       face:"#f2685f", edge:"#8f2820",
       blurb:"Pulls coins in",
       etch:(g,x,y,r)=>{
@@ -2887,7 +2889,9 @@
     // the exit and at any key used to be on permanently, which answered the level's one standing
     // question — where am I going — before it had been asked. Now the board keeps its secret and
     // this is how you buy the answer, for five seconds.
-    { id:"lode", name:"Lodestone", col:"#8fe3c0", ms:REVEAL_MS,
+    // Its id is still `lode` — it is written into levels.js and into saved games, and an id is
+    // a key rather than a name. The NAME moved to the magnet, which has the better claim on it.
+    { id:"lode", name:"Wayfinder", col:"#8fe3c0", ms:REVEAL_MS,
       face:"#79cfae", edge:"#2c6b55",
       blurb:"Shows you the way, briefly",
       etch:(g,x,y,r)=>{
@@ -3294,10 +3298,25 @@
           g.quadraticCurveTo(d*H*0.74, byTop-bw*0.20, d*H*0.14, byTop+bw*0.04);
           g.closePath(); g.fill(); } } },
 
+    // A ring of light, and now it actually gives some off. The glow goes down ADDITIVELY and
+    // under the ring, squashed to the same ellipse so it reads as light coming off that ring
+    // rather than as a lamp behind his head, and it breathes slowly so it never sits dead.
     { id:"halo", name:"Halo", cost:20, col:"#fff3a8",
-      draw(g,s,bw,byTop,col){ const H=bw*0.5;
+      draw(g,s,bw,byTop,col,finish,inkCol,ts){ const H=bw*0.5, cy=byTop-bw*0.30;
+        const puls = 0.88 + 0.12*Math.sin((ts||0)/430);
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        g.translate(0, cy); g.scale(1, 0.52);          // a round gradient, squashed to the ring
+        const r = bw*1.30*puls;
+        const gd = g.createRadialGradient(0, 0, 0, 0, 0, r);
+        gd.addColorStop(0.00, "rgba(255,250,214," + (0.62*puls).toFixed(3) + ")");
+        gd.addColorStop(0.28, "rgba(255,241,168," + (0.34*puls).toFixed(3) + ")");
+        gd.addColorStop(0.62, "rgba(255,224,110," + (0.12*puls).toFixed(3) + ")");
+        gd.addColorStop(1.00, "rgba(255,214,80,0)");
+        g.fillStyle = gd; g.beginPath(); g.arc(0, 0, r, 0, Math.PI*2); g.fill();
+        g.restore();
         g.strokeStyle=col; g.lineWidth=bw*0.075;
-        g.beginPath(); g.ellipse(0, byTop-bw*0.30, H, bw*0.10, 0, 0, Math.PI*2); g.stroke(); } },
+        g.beginPath(); g.ellipse(0, cy, H, bw*0.10, 0, 0, Math.PI*2); g.stroke(); } },
 
     // THE COMB, and nothing else. The wattle and the beak were two more small red things on a
     // head that already had one, and at this size the three of them read as clutter rather
@@ -3453,6 +3472,12 @@
   //   hover a constant height off the track, fraction of a cell
   //   spin  radians per ms of continuous roll
   //   pose  a named leg fold that replaces the stock stride: lotus, fetal, onefoot
+  //   leap  leaps per TILE. He stands still on the ground at every 1/leap of a tile and
+  //         covers the whole of that gap in one jump, so his forward motion happens only in
+  //         the air. leapH is how high, leapHold the share of each cycle spent on the ground,
+  //         leapSplit how far the feet part at the apex, leapAlt swapping which foot is the
+  //         key one from one leap to the next so he comes down on them in turn, leapSpin
+  //         whole turns in the air per leap — positive forward, negative back.
   const SWAGGERS = [
     { id:"classic", name:"Classic",   cost:0 },
     { id:"lean",    name:"Lean Back", cost:5, lean:-0.30, bob:0.70, swing:1.20, lift:1.15 },
@@ -3461,17 +3486,35 @@
     // a NEGATIVE hover: the ball sinks until it is all but touching the track, because a
     // roll that happens in mid-air is just a spin
     { id:"roll",    name:"Rolling",   cost:10, pose:"fetal",   spin:0.0055, hover:-0.068, bob:0 },
-    // Seven more built from the same handful of knobs — a pose, how far he leans, how hard he
-    // bobs, how wide the arms swing, how high the knees come up. No new drawing code: the
-    // difference between a strut and a scurry is entirely in these numbers.
-    { id:"strut",   name:"Strut",     cost:15, lean:0.16,  bob:1.25, swing:1.60, lift:1.30 },
-    { id:"scurry",  name:"Scurry",    cost:15, lean:0.10,  bob:0.35, swing:0.55, lift:2.10 },
-        { id:"stomp",   name:"Stomp",     cost:20, lean:0.20, bob:2.60, swing:1.35, lift:2.60,
+    // Built from the same handful of knobs — a pose, how far he leans, how hard he bobs, how
+    // wide the arms swing, how high the knees come up. No new drawing code.
+    { id:"stomp",   name:"Stomp",     cost:20, lean:0.20, bob:2.60, swing:1.35, lift:2.60,
       hop:0.055 },   // the hop is the SLAM: one hard bounce a stride, on top of the bob
-    { id:"glide",   name:"Glide",     cost:20, hover:0.055, bob:0.10, swing:0.30, lift:0.20 },
-    { id:"tumble",  name:"Tumble",    cost:25, pose:"fetal", spin:0.0090, hover:-0.030, bob:0 },
-    { id:"meditate",name:"Meditate",  cost:25, pose:"lotus", hover:0.130, bob:0.12, swing:0, lift:0 },
-    { id:"pogo",    name:"Pogo",      cost:30, pose:"onefoot", hop:0.26, bob:0.05, swing:0.20, lift:0 },
+    // The one style that moves him differently rather than just holding him differently: two
+    // jumps a tile, planted at 0, a half and 1, still on the ground between them. Every other
+    // swagger is a decoration on a runner who slides along at a constant rate; this one makes
+    // the tile grid something he lands on.
+    { id:"jump",    name:"Pogo",      cost:30, leap:2, leapH:0.30, leapHold:0.40,
+      swing:0, lift:0, bob:0 },
+    // The same gearing, thrown wide: he opens at the apex and shuts again to land, so the
+    // straddle is the thing the eye reads rather than the height.
+    { id:"splits",  name:"Splits",    cost:35, leap:2, leapH:0.34, leapHold:0.34, leapSplit:0.14,
+      swing:0, lift:0, bob:0 },
+    // One leg does all the work and the other stays folded up out of the way, landing after
+    // landing. The onefoot pose already draws exactly that; it just never had a leap under it.
+    { id:"flamingo",name:"Flamingo",  cost:35, leap:2, leapH:0.28, leapHold:0.38, pose:"onefoot",
+      swing:0, lift:0, bob:0 },
+    // ...and the same hop again with the key foot swapping every leap: he comes down on one
+    // foot, then the other, the idle leg folded up out of the way either way.
+    { id:"bound",   name:"Bounding",  cost:40, leap:2, leapH:0.28, leapHold:0.34, pose:"onefoot",
+      leapAlt:1, leapSplit:0.16, swing:0, lift:0, bob:0 },
+    // One whole turn per leap, timed to the flight rather than to the clock: he leaves the
+    // ground upright and arrives upright, having gone all the way over in between. Higher and
+    // with a longer flight than the others, because a turn needs room to finish.
+    { id:"somer",   name:"Somersault",cost:45, leap:2, leapH:0.36, leapHold:0.28, leapSpin:1,
+      leapSplit:0.028, swing:0, lift:0, bob:0 },
+    { id:"backflip",name:"Backflip",  cost:50, leap:2, leapH:0.38, leapHold:0.28, leapSpin:-1,
+      leapSplit:0.028, swing:0, lift:0, bob:0 },
   ];
   // Each swatch is the same bust in the pose that style would hold it in — a still frame
   // reads the difference far better than a name does.
@@ -3479,7 +3522,8 @@
     g.save(); g.translate(S/2, 0);
     if (w.lean)  g.rotate(w.lean*0.8);
     if (w.spin)  g.rotate(0.7);
-    if (w.hover || w.hop) g.translate(0, -S*(w.hover||w.hop)*0.8);
+    if (w.leapSpin) g.rotate(0.9 * Math.sign(w.leapSpin));
+    if (w.hover || w.hop || w.leapH) g.translate(0, -S*(w.hover || w.hop || w.leapH)*0.8);
     g.translate(-S/2, 0);
     const b = swatchBust(g, S, "#bfe6ff", "#17263f");
     // a suggestion of legs under the body, in whatever the style holds them in
@@ -3495,6 +3539,10 @@
     } else if (w.pose === "onefoot") {            // one leg down, the other bent up under him
       g.moveTo(bx + b.w*0.20, by); g.lineTo(bx + b.w*0.26, by + u*1.05);
       g.moveTo(bx - b.w*0.20, by); g.lineTo(bx + b.w*0.20, by + u*0.44); g.lineTo(bx - b.w*0.42, by + u*0.74);
+    } else if (w.leapSplit) {                     // thrown wide, the way it reads at the apex
+      const rch = S*0.16;
+      g.moveTo(bx - b.w*0.20, by); g.lineTo(bx - b.w*0.20 - rch, by + u*0.72);
+      g.moveTo(bx + b.w*0.20, by); g.lineTo(bx + b.w*0.20 + rch, by + u*0.72);
     } else {
       const rch = S*0.09*(w.swing == null ? 1 : w.swing);
       g.moveTo(bx - b.w*0.20, by); g.lineTo(bx - b.w*0.20 - rch, by + u);
@@ -3949,6 +3997,9 @@
       runIdx:0, runT:0, msPerCell:effSpeed, speedMult:1, cpsNow: 1000/effSpeed,
       cps0: 1000/effSpeed,          // what it STARTED at, so the ramp can survive a retune
       status:"play", drag:null, fall:null, runPhase:0,
+      // Counts every time a tile leaves the path. "The oldest one you are not using" is the
+      // tile with the lowest count, which is the one the runner cleared longest ago.
+      freeSeq:0, flyTile:null,
       score:0, combo:0, maxCombo:0, coins:0, elapsed:0, flowClears:0,
       purse:0,                     // tiles found this run, unbanked until the flag is reached
       par: L.par || 24000,
@@ -4517,16 +4568,60 @@
     const fr = f - i, a = nodeCenter(p[i]), b = nodeCenter(p[i + 1]);
     return { x:a.x + (b.x - a.x) * fr, y:a.y + (b.y - a.y) * fr };
   }
+  // A leaping swagger does not travel at a constant rate: it stands still on the ground and
+  // then covers a whole gap in one jump. Given the true path parameter it returns where he
+  // should APPEAR and how far off the ground he is, 0..1. The true parameter is untouched, so
+  // the pace, the saws, the coins and the camera all carry on as if he were sliding — only the
+  // drawing stutters, which is the whole trick: he arrives at each tile exactly when he always
+  // did, having spent the journey standing still and then leaping.
+  function leapAt(w, param) {
+    const step = 1 / w.leap;                         // grounded every 1/leap of a tile
+    const idx = Math.floor(param / step);            // which leap this is — its parity is which
+    const anchor = idx * step;                       // foot leads, for a style that alternates
+    const foot = (idx & 1) ? -1 : 1;
+    const u = (param - anchor) / step;               // 0..1 through this leap
+    const hold = w.leapHold == null ? 0.40 : w.leapHold;
+    // `pose` is what the legs do: negative folds them under him, positive stretches them out.
+    if (u < hold) {
+      const g = u / hold;                            // 0 the instant he lands, 1 as he leaves
+      // The impact is a hard squash — it SHOULD arrive as a snap, since that is what landing
+      // is — and it recovers over the first half of the stand. The rest of the stand is the
+      // wind-up: he sinks again, on purpose this time, loading for the next jump.
+      return { param: anchor, lift: 0, foot, air: 0,
+               pose: g < 0.55 ? -(1 - g/0.55) : -0.75 * (g - 0.55)/0.45 };
+    }
+    const f = (u - hold) / (1 - hold);               // 0..1 through the air
+    // Linear across the gap, because a jump has no horizontal brakes; the arc is all vertical.
+    // The legs stretch in proportion to the arc, so they are longest at the apex and back to
+    // their standing length exactly as he takes off and again as he touches down.
+    const a = Math.sin(Math.PI * f);
+    return { param: anchor + step*f, lift: a, pose: a, foot, air: f };
+  }
+  // Given how far along a path a runner is, in TILES, set the leap flags paintRunner reads and
+  // hand back where he should actually be drawn. This is the whole of a leaping swagger, and
+  // it is here rather than inside runnerInfo because the board is not the only place a runner
+  // runs: the title screen and the cinematic walk their own polylines, and a style that only
+  // worked on the board would be a style you buy and then cannot see on the menu you bought it
+  // from. Callers that are not the board clear the flags with resetLeap() when they are done.
+  function applyLeap(tiles, moving) {
+    const w = lookItem("swagger");
+    if (!(w && w.leap > 0 && moving !== false)) { resetLeap(); return tiles; }
+    const L = leapAt(w, tiles);
+    _leapLift = L.lift; _leapPose = L.pose; _leapFoot = L.foot; _leapAir = L.air;
+    return L.param;
+  }
+  function resetLeap() { _leapLift = 0; _leapPose = 0; _leapFoot = 1; _leapAir = 0; }
   // runner frame: centre point, tangent (travel dir), normal (surface "up"),
   // and the surface point the runner's feet rest on
   function runnerInfo() {
-    const param = state.runIdx + state.runT;
+    const param = applyLeap(state.runIdx + state.runT, state.status === "play");
+    const lift = _leapLift, pose = _leapPose, foot = _leapFoot, air = _leapAir;
     const pos = visualAt(param);                     // follows the curved surface
     const a = visualAt(param - 0.08), b = visualAt(param + 0.08);
     let tx = b.x - a.x, ty = b.y - a.y;
     const m = Math.hypot(tx, ty) || 1; tx /= m; ty /= m;
     const nx = ty, ny = -tx;                 // left-normal = surface side
-    return { x:pos.x, y:pos.y, tx, ty, nx, ny,
+    return { x:pos.x, y:pos.y, tx, ty, nx, ny, lift, pose, foot, air,
              sx:pos.x, sy:pos.y,
              angle:Math.atan2(ty, tx) };
   }
@@ -4908,6 +5003,46 @@
     return true;
   }
 
+  // Tap a hint square and the tile flies to it. Which tile is not a choice worth making — it
+  // is always the one you have not used for longest, which is the one the runner cleared first
+  // and the one your hand would have reached for anyway. Returns false if (c,r) is not a hint
+  // square, so the tap can go on to mean whatever else it might have meant.
+  const FLY_MS = 190;
+  function sendTileTo(c, r) {
+    if (state.status !== "play" || state.flyTile) return false;
+    const lead = leadNode();
+    if (!lead) return false;
+    if (!junctionExits(lead.n, lead.prev).some(e => e.c === c && e.r === r)) return false;
+    // the oldest tile not currently part of the track — parked counts, it is still yours
+    let tile = null;
+    for (const t of state.tiles)
+      if ((t.status === "free" || t.status === "parked") &&
+          (!tile || (t.freedAt || 0) < (tile.freedAt || 0))) tile = t;
+    if (!tile) return false;
+    state.flyTile = { tile, c, r, t: 0,
+                      x0: cx(tile.c), y0: cy(tile.r), x1: cx(c), y1: cy(r) };
+    haptic(6);
+    return true;
+  }
+  // Advance the flight, and land it. The tile is not placed until it ARRIVES: dropping it at
+  // the moment of the tap and animating a ghost afterwards would link the track — and possibly
+  // send the runner round a corner — before the thing that did it had got there.
+  function tickFly(dt) {
+    const f = state.flyTile;
+    if (!f) return;
+    f.t += dt;
+    if (f.t < FLY_MS) return;
+    state.flyTile = null;
+    dropTileOn(f.tile, f.c, f.r);
+  }
+  // Where a flying tile is right now, or null. Eased out hard: it leaves fast and settles, so
+  // the eye reads it as thrown rather than dragged.
+  function flyPos() {
+    const f = state.flyTile;
+    if (!f) return null;
+    const k = 1 - Math.pow(1 - Math.min(1, f.t / FLY_MS), 3);
+    return { id: f.tile.id, x: f.x0 + (f.x1 - f.x0)*k, y: f.y0 + (f.y1 - f.y0)*k, k };
+  }
   // Pull any parked tile that touches the track's front into the path, chaining
   // along connected parked tiles. Freed (walked-over) tiles are left alone, so
   // the runner never links backward onto ground it already covered.
@@ -5071,11 +5206,20 @@
   }
 
   // ---------- Runner logic ------------------------------------------------
+  // Stride cycles per tile. Two puts a footfall on every half tile, which is where a leaping
+  // swagger lands, so the styles that walk and the styles that jump agree about the grid.
+  const STRIDES_PER_TILE = 2;
   function update(dt) {
     if (state.status !== "play") return;
     const s = state;
-    s.runPhase += dt / RUNNER.stepMs;       // legs animate while running
+    // The legs are GEARED TO THE TRACK rather than run off the clock: the phase is a pure
+    // function of how far along the path he is, so one tile is always the same number of
+    // strides whatever the pace. Every swagger hangs off this phase — the bob, the swing, the
+    // hop, the roll, the hover's breath — so all of them slow down and speed up with him
+    // instead of drifting against the tiles the way a clock-driven stride does.
+    s.runPhase = (s.runIdx + s.runT) * Math.PI*2 * STRIDES_PER_TILE;
     s.elapsed += dt;                        // level clock (for time bonus / stars)
+    tickFly(dt);                            // a tile on its way to a tapped hint square
     // the flag snaps down and plants itself once a tile is laid on the exit cell
     const planted = !!s.goal && s.path.some(n => n.kind === "tile" && n.c === s.goal.c && n.r === s.goal.r);
     s.flagPlantT += ((planted ? 1 : 0) - s.flagPlantT) * Math.min(1, dt/70);
@@ -5135,9 +5279,9 @@
     const h = s.path[tip];
     if (h.kind === "tile" && h.tileId === t.id && s.runIdx < tip) {
       while (s.path.length > tip) s.path.pop();
-      t.status = "free";                     // pop it off the front, back into the pool
+      t.status = "free"; t.freedAt = ++s.freeSeq;   // pop it off the front, back into the pool
     } else if (t.status === "parked") {
-      t.status = "free";                     // un-stage a parked tile
+      t.status = "free"; t.freedAt = ++s.freeSeq;   // un-stage a parked tile
     } else { return; }
     s.lastPlacedId = null;
     markOccDirty();                            // occupancy changed
@@ -5452,7 +5596,7 @@
   // tile to cycle, not a piece of track laid for you.
   function spawnSpareTile(col) {
     const s = state;
-    const t = { id: s.tiles.length, c: 0, r: 0, status: "free" };
+    const t = { id: s.tiles.length, c: 0, r: 0, status: "free", freedAt: ++s.freeSeq };
     s.tiles.push(t);
     // Free STAYS free. A loose tile that happens to sit where the track could continue links
     // itself on the next frame — that is what closes a circuit — so dropping this one in the
@@ -5595,7 +5739,7 @@
       const nd = s.path[k];
       if (nd.kind !== "tile" || nd.tileId == null) continue;
       const t = s.tiles[nd.tileId];
-      if (t && !want.has(nd.tileId)) t.status = "free";
+      if (t && !want.has(nd.tileId)) { t.status = "free"; t.freedAt = ++s.freeSeq; }
     }
     if (cut < s.path.length) s.path.length = cut;
 
@@ -5761,7 +5905,7 @@
               s.shake = Math.max(s.shake, cell * 0.12);
               Sound.swallow();
             } else {
-              t.status = "free";
+              t.status = "free"; t.freedAt = ++s.freeSeq;
             }
             changed = true;
           }
@@ -6396,7 +6540,9 @@
         if (doomed) { const tr = cell * RIFT.tremble * 0.34;
           jx = (Math.sin(ts/47) + Math.sin(ts/31.3)*0.6) * tr;
           jy = (Math.cos(ts/41) + Math.cos(ts/27.7)*0.6) * tr; }
-        drawFreeTile(cx(t.c) + jx, cy(t.r) + jy, ts, false);
+        const fly = flyPos();
+        if (fly && fly.id === t.id) drawFreeTile(fly.x, fly.y, ts, true);   // lifted, mid-throw
+        else drawFreeTile(cx(t.c) + jx, cy(t.r) + jy, ts, false);
       }
     drawLaidFlash();                              // over the tile it belongs to, nothing else
 
@@ -6431,7 +6577,7 @@
     ctx.restore();
 
     // Off-screen indicators (screen space): the exit, and any key not yet taken. Shown only
-    // while the Lodestone is lit — see its entry in TALISMANS for why they are not simply on.
+    // while the Wayfinder is lit — see its entry in TALISMANS for why they are not simply on.
     if (powerActive("lode") && (state.status === "play" || state.status === "falling")) {
       if (!state.keyCollected)
         for (const k of state.keys) if (!k.got)
@@ -6668,7 +6814,6 @@
     // a node carries a platform until the runner exits it (per-node flag, so a
     // re-placed tile's stale old node never affects its fresh placement).
     const live = (n) => n.kind === "tile" && !n.exited;
-    const onGoal = (n) => !!state.goal && n.c === state.goal.c && n.r === state.goal.r;
 
     drawPathGlass(p.slice(idx).filter(live));
 
@@ -8310,6 +8455,17 @@
     for (let k = 0; k < EDGE_STEPS; k++) {
       ctx.beginPath(); surfaceBand(S, C, d * (1 - k/EDGE_STEPS)); ctx.fill();
     }
+    // ...and a second ramp inside the first, over a much shallower depth: the same falloff run
+    // again in the top slice of the lip, so the very edge collects both and comes out far
+    // whiter than a single ramp of any strength would leave it. A stop rather than a brighter
+    // lip — the body of the contour keeps the weight it had, only the rim is lifted.
+    const td = d * TILE.edgeTip, ta = TILE.edgeTipA;
+    if (td > 0 && ta > 0) {
+      ctx.fillStyle = "rgba(" + v + "," + v + "," + v + "," + (ta / EDGE_STEPS).toFixed(4) + ")";
+      for (let k = 0; k < EDGE_STEPS; k++) {
+        ctx.beginPath(); surfaceBand(S, C, td * (1 - k/EDGE_STEPS)); ctx.fill();
+      }
+    }
     if (TILE.edgeGrain > 0) {                    // ...and a tooth to it, cut to the same band
       ctx.beginPath(); surfaceBand(S, C, d); ctx.clip();
       grainFill(X, Y, cell, cell, TILE.edgeGrain * a);
@@ -8333,9 +8489,14 @@
     left:    1.00,   // the turn one way   — the three routes are STACKED, not unioned, so where
     ahead:   0.40,   // straight on          two of them agree the alpha builds and where all
     right:   0.20,   // the turn the other   three do it builds again. Tune in junction-lab.html.
-    mark:    0.20,   // the white square marking each cell you may build into, its opacity
+    mark:    0.25,   // the white ring marking each cell you may build into, its opacity
     grain:   0.40,   // paper grain over the whole tile
   };                 // rail thickness is TILE.railW — the junction IS track, so it matches it
+  // How far the hint rings have opened out. They sit at a half tile while he is running and
+  // grow to fill the cell the moment a tile leaves the rack, so picking one up makes every
+  // place it could go bloom rather than just sitting there. Eased so it reads as the board
+  // reacting to the pickup, not as two different drawings swapped over.
+  let markGrow = 0;
   const jScratch = document.createElement("canvas");   // reused every frame
   // ...and a second, for the junction's three-way mask. The options are stacked into it rather
   // than unioned, so the shared trunk builds up and the arms only one route reaches stay faint.
@@ -8343,9 +8504,32 @@
   // the leading tile renders as a 3-way junction: three real platform pieces
   // oriented to the travel direction — a flat run forward, plus a curve each way
   // (up / down relative to travel) — signalling the path isn't set yet.
-  const MARK_SPIN = 1100;                  // ms for the light to go once round the four corners
-  // the four corners, in the order the light visits them: clockwise from top-left
-  const MARK_QUAD = [{x:-1,y:-1}, {x:1,y:-1}, {x:1,y:1}, {x:-1,y:1}];
+  // The cells the leading tile can actually grow into: the three ways out of it, less any that
+  // are off-grid, already occupied, or would double the runner back. The junction draws a
+  // marker in each of them and a TAP on one sends a tile there, so the two have to agree
+  // exactly — one list, computed once, rather than the same filter written twice.
+  function junctionExits(n, prev) {
+    const din = prev ? axisDir(prev, n) : { x:0, y:-1 };
+    const dirs = [{ x:-din.y, y:din.x }, din, { x:din.y, y:-din.x }];   // left, ahead, right
+    const occ = occupiedFor(null);
+    const out = [];
+    for (const d of dirs) {
+      const c = n.c + d.x, r = n.r + d.y;
+      if (inBounds(c, r) && !occ.has(key(c, r)) && !foldsBack(c, r)) out.push({ c, r, d });
+    }
+    return out;
+  }
+  // A node standing on the exit. The front tile stops being a junction the moment it lands
+  // there — there is nowhere further to build — so both the drawing and the tap ask this.
+  const onGoal = (n) => !!state.goal && n.c === state.goal.c && n.r === state.goal.r;
+  // The tile at the front of the track, if it is a live junction — the one thing both the
+  // marker and the tap need to find, and neither should go looking for on its own.
+  function leadNode() {
+    const p = state.path;
+    if (!p || !p.length) return null;
+    const n = p[p.length - 1];
+    return (n && !onGoal(n)) ? { n, prev: p[p.length - 2] } : null;
+  }
   function drawJunction(n, prev, ts) {
     const din = prev ? axisDir(prev, n) : { x:0, y:-1 };   // travel direction into the tile
     const left  = { x:-din.y, y:din.x };
@@ -8438,31 +8622,23 @@
     ctx.drawImage(jScratch, DX/dpr, DY/dpr, px/dpr, px/dpr);
 
 
-    // A marker in each cell you can actually build into: four small white squares in a half-tile
-    // block, dead centre, with a light running round them clockwise. The arrows it replaces
-    // pointed FROM the junction, which put them in the gutter between two cells and made you
-    // read a direction; a block sitting in the middle of a cell just says "here", which is the
-    // thing you are about to tap — and the turning light says it is still waiting for you
-    // without ever pointing anywhere, which matters when all three cells are equally valid.
+    // A marker in each cell you can actually build into: a square ring — a half-tile square
+    // with everything but its border punched out, so the band is an eighth of a tile thick and
+    // lies INSIDE the square, which keeps the hint the same size whatever the band does. The arrows it replaces pointed FROM
+    // the junction, which put them in the gutter between two cells and made you read a
+    // direction; a ring drawn on the cell itself just says "here" — and leaving the middle
+    // open means whatever is already in that cell still reads through it.
     if (JUNCTION.mark <= 0) return;       // hidden: skip the occupancy scan as well as the fill
-    const occ = occupiedFor(null);
-    const head = (ts / MARK_SPIN) * 4;    // the lit corner, continuous, one lap per MARK_SPIN
-    for (const d of exits) {
-      const tc = n.c + d.x, tr = n.r + d.y;
-      // skip the marker if that cell is off-grid, blocked, or would double the runner back
-      if (!inBounds(tc, tr) || occ.has(key(tc, tr)) || foldsBack(tc, tr)) continue;
-      const mx = C.x + d.x*cell, my = C.y + d.y*cell, qs = cell/4;
-      for (let i = 0; i < 4; i++) {
-        const q = MARK_QUAD[i];
-        // how far this corner is BEHIND the light, in corners. The tail runs almost the whole
-        // way round and fades off it in a straight line, so what you see is one light with a
-        // long comet tail rather than four squares taking turns to blink.
-        let lag = (head - i) % 4; if (lag < 0) lag += 4;
-        const w = Math.max(0, 1 - lag/3);
-        ctx.fillStyle = "rgba(255,255,255," + (JUNCTION.mark * (0.34 + 0.66*w)).toFixed(3) + ")";
-        // the four quarters of the half-tile block, edge to edge — a quarter of the hint each
-        ctx.fillRect(mx + (q.x < 0 ? -qs : 0), my + (q.y < 0 ? -qs : 0), qs, qs);
-      }
+    markGrow += ((state.drag ? 1 : 0) - markGrow) * 0.22;            // one leading tile a frame
+    ctx.fillStyle = "rgba(255,255,255," + JUNCTION.mark + ")";
+    for (const e of junctionExits(n, prev)) {
+      const mx = C.x + e.d.x*cell, my = C.y + e.d.y*cell;
+      const os = cell*(0.25 + 0.25*markGrow), hs = os - cell/8;      // band inside the square
+      if (hs <= 0) continue;
+      ctx.beginPath();
+      ctx.rect(mx - os, my - os, os*2, os*2);                        // the half-tile square...
+      ctx.rect(mx - hs, my - hs, hs*2, hs*2);                        // ...less everything but its border
+      ctx.fill("evenodd");
     }
   }
 
@@ -8557,7 +8733,10 @@
     }
   }
   const RUNNER = {
-    stepMs:   110,     // ms per radian of stride phase — lower = faster legs
+    stepMs:   110,     // ms per radian of stride phase — lower = faster legs. On the board the
+                       // phase comes off the TRACK (STRIDES_PER_TILE) rather than the clock, so
+                       // this drives the title, the shop and the cinematic, and sets the gearing
+                       // between a swagger's spin rate and that phase.
     swing:    0.16,    // how far a foot reaches, fraction of a cell
     bob:      0.064,   // body rise and fall per stride
     legLen:   0.12,    // hip height above the track
@@ -8621,8 +8800,9 @@
     let sx, sy, angle, moving;
     if (state.status === "falling") {
       sx = state.fall.x; sy = state.fall.y; angle = state.fall.angle; moving = false;
+      resetLeap();                                   // he is not leaping, he is going down
     } else {
-      const ri = runnerInfo(); sx = ri.sx; sy = ri.sy; angle = ri.angle;
+      const ri = runnerInfo(); sx = ri.sx; sy = ri.sy; angle = ri.angle;   // sets the leap flags
       moving = state.status === "play";      // the runner is always moving now
     }
     const s = cell;
@@ -8680,19 +8860,17 @@
                 state.status !== "falling");
     runnerShadowClip = null;      // every other caller — the lover, the shop, the opening — has no board
     _restFold = 0;
+    resetLeap();
     drawRoarRing();
   }
-  // A roll has to ACCUMULATE rather than be read off the clock, so that standing still stops
-  // it dead and starting again picks it up from where it stopped — a ball that keeps spinning
-  // while its owner waits for you to lay a tile reads as a bug. dt is clamped because ts jumps
-  // whenever the tab has been in the background.
-  let _rollA = 0, _rollT = null;
-  function rollAngle(ts, rate, moving) {
-    if (_rollT == null) _rollT = ts;
-    const dt = Math.max(0, Math.min(100, ts - _rollT));
-    _rollT = ts;
-    if (moving) _rollA = (_rollA + dt*rate) % (Math.PI*2);
-    return _rollA;
+  // A roll is read off the STRIDE PHASE, which is itself geared to the track — so the ball
+  // turns once per so much track rather than once per so much time, and standing still stops
+  // it dead because the phase stops too. `rate` is still radians per ms, as it always was:
+  // multiplying by stepMs converts it back through the phase, so the numbers in SWAGGERS carry
+  // over unchanged and the off-board runners (title, shop, cinematic), whose phase IS a clock,
+  // spin at exactly the speed they used to.
+  function rollAngle(phase, rate) {
+    return (phase * RUNNER.stepMs * rate) % (Math.PI*2);
   }
   // The runner himself, at an arbitrary place and size — knees, foot lift, bob, talisman and
   // all. Split out of drawRunner so the title screen and the opening cinematic can draw the
@@ -8703,8 +8881,11 @@
   // there is only one of him to tune and she should never drift away from it.
   // How far the runner is folded into the Millstone's sit, 0..1. A module flag rather than a
   // parameter because paintRunner is called from eight places — the board, the title, the
-  // cinematic, the shop swatches — and seven of them have no idea what a Lodestone is.
+  // cinematic, the shop swatches — and seven of them have no idea what a Millstone is.
   let _restFold = 0;
+  // ...and how far a leaping swagger has him off the track, 0..1. Same reasoning: paintRunner
+  // is called from places that have no path to leap along.
+  let _leapLift = 0, _leapPose = 0, _leapFoot = 1, _leapAir = 0;
   // Stroke the last `frac` of a limb, walking BACK from the foot along its bones — hip to
   // knee to foot, or hip straight to foot on a runner with no knees. The pen is whatever the
   // caller set, so this lays the kick's colour into the leg's own line rather than beside it.
@@ -8743,7 +8924,8 @@
     let   bob   = moving ? Math.abs(Math.sin(phase)) * s*RUNNER.bob * mul(w.bob, 1) : 0;
     if (w.hop && moving) bob += Math.max(0, Math.sin(phase)) * s*w.hop;   // one big bounce a stride
     // a hover sits him off the track and breathes, whether or not he is running
-    const hover = w.hover ? s*w.hover * (1 + 0.14*Math.sin(ts/430)) : 0;
+    const hover = (w.hover ? s*w.hover * (1 + 0.14*Math.sin(phase*0.256)) : 0)
+                + (_leapLift ? s*(w.leapH || 0.22)*_leapLift : 0);
     // Sitting settles him toward the track. It goes on HERE rather than being added to sx/sy by
     // the caller, so that it lands in the runner's own rotated frame — down the tile's normal on
     // a corner, not down the screen — and so the shadow below can undo it the same way it undoes
@@ -8771,13 +8953,22 @@
     const golden = !as && powerActive("star");
     const pale = golden ? "#ffdf78" : (skin.body || RUNNER.body);
     const inkCol = golden ? "#6b3f04" : (skin.ink || RUNNER.ink);
-    const legL = s*RUNNER.legLen, bodyH = s*RUNNER.bodyH, bodyW = s*RUNNER.bodyW;
+    // A leap folds the legs under him as he lands and stretches them out as he flies. Scaling
+    // the leg is the whole of it: the feet are on the ground plane and the body hangs off the
+    // hip, so a shorter leg drops him into a crouch with the knees taking up the difference,
+    // and a longer one points him. Crouching further than it stretches, because a landing
+    // absorbs and a jump only reaches.
+    const legK = 1 + (_leapPose < 0 ? _leapPose*0.50 : _leapPose*0.18);
+    const legL = s*RUNNER.legLen*legK, bodyH = s*RUNNER.bodyH, bodyW = s*RUNNER.bodyW;
     // soft ground shadow (not an outline). shadowBob ties it to the body's rise, so a
     // high bob can read as him actually leaving the ground rather than sliding along it.
     // Skipped entirely once he is falling — there is no ground left to cast it on, and a
     // shadow pinned under a plummeting character is the tell that it was never really there.
     if (grounded !== false) {
-      const shk = 1 - RUNNER.shadowBob * (bob / Math.max(1e-6, s*RUNNER.bob || 1e-6)) * 0.5;
+      // The leap counts as rising, the same as the bob does — a shadow that stays full size
+      // under a runner three quarters of a tile in the air is the tell that he never left.
+      const rise = (bob / Math.max(1e-6, s*RUNNER.bob || 1e-6)) + _leapLift;
+      const shk = 1 - RUNNER.shadowBob * rise * 0.5;
       ctx.save();
       // Cut to the GROUND HE IS ACTUALLY OVER. A shadow is cast on something, and his was
       // falling on whatever happened to be under it — the void past the edge of a tile, and
@@ -8829,7 +9020,15 @@
     // legs because a curled-up runner rolls WITH his legs; the ground shadow is already down.
     if (w.spin) {
       const bcy = byTop + bodyH/2;
-      ctx.translate(0, bcy); ctx.rotate(rollAngle(ts, w.spin, moving)); ctx.translate(0, -bcy);
+      ctx.translate(0, bcy); ctx.rotate(rollAngle(phase, w.spin)); ctx.translate(0, -bcy);
+    }
+    // A somersault is one whole turn spent entirely in the AIR: the angle is a function of how
+    // far through the flight he is, not of the clock, so he leaves the ground upright, goes all
+    // the way over, and arrives upright — every leap, at any pace. Positive turns him forward,
+    // negative back. Zero on the ground, which is what keeps the landing honest.
+    if (w.leapSpin && _leapAir > 0) {
+      const bcy = byTop + bodyH/2;
+      ctx.translate(0, bcy); ctx.rotate(Math.PI*2 * w.leapSpin * _leapAir); ctx.translate(0, -bcy);
     }
     // A finish (metal, gem, spectrum) paints the body with a gradient instead of a flat
     // colour. The legs take the SAME one: a gradient lives in user space at paint time, so
@@ -8881,13 +9080,51 @@
     } else if (w.pose === "onefoot") {
       // Hopping on the one leg. The foot leaves the track at the top of the hop rather than
       // staying pinned to it — otherwise the leg has to stretch to the full height of the hop.
-      const up = moving ? Math.max(0, Math.sin(phase)) : 0;
+      const up = _leapLift || (moving ? Math.max(0, Math.sin(phase)) : 0);
       const fx = moving ? Math.sin(phase)*s*0.03 : 0, fy = -up*s*(w.hop||0)*0.80;
+      if (w.leapAlt) {
+        // A bound. He comes down on one foot and swaps which one every leap, and the idle leg
+        // is folded BACK the whole time — never up in front — so the only thing that changes
+        // from leap to leap is which side is carrying him. In the air the pair opens right
+        // out, the key leg reaching forward for the landing and the idle one trailing straight
+        // behind, and closes back into the tuck as he touches down. Both legs are placed by
+        // their FEET and left to the knee solver, so the fold is a consequence of where the
+        // foot is rather than a shape drawn by hand.
+        const air = Math.max(0, _leapPose), sp = s*(w.leapSplit || 0.15)*air;
+        const standHip = _leapFoot > 0 ? frontHip : backHip;
+        const tuckHip  = _leapFoot > 0 ? backHip  : frontHip;
+        const kf = solveKnee(standHip, hipY, fx + sp, fy, RUNNER.kneeBend, RUNNER.kneeSplit, kneeLead);
+        limbs.push([standHip, kf.x, kf.y, fx + sp, fy]);
+        const tfx = -seg*0.55*(1 - air) - sp;           // behind him, and further behind in the air
+        const tfy = (hipY + seg*0.10)*(1 - air) + fy*air;   // tucked up to hip height on the ground
+        // a negative lead puts the knee BEHIND the hip-to-foot line, which is what folding
+        // backwards means — the same solver, pointed the other way
+        const kt = solveKnee(tuckHip, hipY, tfx, tfy, RUNNER.kneeBend, RUNNER.kneeSplit, -kneeLead);
+        limbs.push([tuckHip, kt.x, kt.y, tfx, tfy]);
+      } else {
       const k = solveKnee(frontHip, hipY, fx, fy, RUNNER.kneeBend, RUNNER.kneeSplit, kneeLead);
       limbs.push([frontHip, k.x, k.y, fx, fy]);
       const tk = 1 - 0.18*up;                           // the idle leg curls tighter at the apex
       const kx = backHip + seg*0.85, ky = hipY + seg*0.35*tk;
       limbs.push([backHip, kx, ky, kx - seg*0.95, ky + seg*0.30*tk]);
+      }
+    } else if (w.leapSpin) {
+      // Flipping. He curls up the moment he leaves the ground — knees out in front, feet drawn
+      // in under him — and opens back out as he comes down, landing with his feet a little
+      // apart to take it. Both ends are placed by hand and crossfaded on the leap's own arc:
+      // IK is no use for a tuck, where the foot ends up nearer the hip than the knee is, and a
+      // ball of a runner needs its knee where the drawing wants it rather than where a solver
+      // put it. It also means the tuck is tightest exactly at the apex, which is the half of
+      // the turn the eye actually reads.
+      const air = Math.max(0, _leapPose), sp = s*(w.leapSplit || 0.06);
+      for (const [hx, side] of [[backHip, -1], [frontHip, 1]]) {
+        const gkx = hx + side*sp*0.5, gky = hipY + seg*0.55;      // planted: straight down,
+        const gfx = hx + side*sp,     gfy = 0;                    // feet a little apart
+        const tkx = hx + seg*0.62,    tky = hipY + seg*0.10;      // tucked: knee up in front,
+        const tfx = hx + seg*0.10,    tfy = hipY + seg*0.62;      // foot drawn in under the hip
+        limbs.push([hx, gkx + (tkx-gkx)*air, gky + (tky-gky)*air,
+                        gfx + (tfx-gfx)*air, gfy + (tfy-gfy)*air]);
+      }
     } else {
       // A lean tips the WHOLE local frame about the feet, so y=0 stops meaning "on the track":
       // it becomes a slope, and the trailing foot sinks through the floor by as much as the
@@ -8895,7 +9132,17 @@
       //   fx·sinL + fy·cosL = the height the stride wanted
       // for fy. Costs nothing when there is no lean, since sinL is 0 and cosL is 1.
       const L = w.lean || 0, sinL = Math.sin(L), cosL = Math.cos(L);
-      for (const [hx, fx, fy0] of [[backHip, swing, lift(phase)], [frontHip, -swing, lift(phase + Math.PI)]]) {
+      // A straddling leap throws the feet apart at the apex and shuts them again to land. It
+      // goes in as extra STRIDE REACH rather than as a pose of its own: the two feet already
+      // sit at +reach and -reach, so opening him up is the same arithmetic the run uses, and
+      // the knees, the kicks and the lean all keep working without knowing about it.
+      // A plain straddle opens only in the air. An alternating one keeps a share of the split
+      // through the landing, so there is always a lead foot to come down on, and flips its sign
+      // every leap — which is the whole of "he lands on them in turn".
+      const open = w.leapAlt ? 0.45 + 0.55*Math.max(0, _leapPose) : Math.max(0, _leapPose);
+      const sp = w.leapSplit ? s*w.leapSplit*open*(w.leapAlt ? _leapFoot : 1) : 0;
+      const reach = swing + sp;
+      for (const [hx, fx, fy0] of [[backHip, reach, lift(phase)], [frontHip, -reach, lift(phase + Math.PI)]]) {
         const fy = (fy0 - fx*sinL) / cosL;
         const k = RUNNER.knees ? solveKnee(hx, hipY, fx, fy, RUNNER.kneeBend, RUNNER.kneeSplit, kneeLead) : null;
         limbs.push([hx, k && k.x, k && k.y, fx, fy]);
@@ -9890,7 +10137,9 @@
     edgeDepth:  0.150,   // how far down from the surface it reaches, fraction of a cell
     edgeA:      0.300,   // ...and how strong it is where it meets the surface
     edgeInk:    1.000,   // 1 white, 0 black, and every grey between
-    edgeGrain:  1.000,   // paper texture over it, so it reads as a worn edge and not an airbrush
+    edgeGrain:  1.000,
+    edgeTip:    0.200,   // the bright rim: how deep it runs, as a fraction of the lip's depth
+    edgeTipA:   0.450,   // ...and how much white it adds on top of the lip, at the surface   // paper texture over it, so it reads as a worn edge and not an airbrush
   };  const tileR = s => s * TILE.radius;
   // The running surface, off. Every measurement of it stays — TILE.railW, railPath, the round
   // caps, the way the junction lays three of them across one tile — and so does every routine
@@ -10051,6 +10300,11 @@
     if (!inBounds(c, r)) return;
     const tile = freeTileAt(c, r);
     if (!tile) {
+      // A tap on one of the junction's hint squares sends a tile there rather than making you
+      // carry one. It has to come before everything else this branch tries, because a hint
+      // square is by definition an empty cell and every other test below is looking for
+      // something standing in one.
+      if (sendTileTo(c, r)) return;
       // grab a sliding platform (tap the platform itself and drag it along its rail)
       for (const sl of (state.sliders||[])) {
         const cur = Math.round(sl.pos);
@@ -10080,6 +10334,10 @@
       if (tapSwitch(c, r)) return;                                     // tap an arcade button
       return;
     }
+    // A tile already on its way to a hint square is not lying there to be picked up: it is
+    // still parked on its old cell as far as the board is concerned, and grabbing it would
+    // leave two things holding the same tile.
+    if (state.flyTile && state.flyTile.tile.id === tile.id) return;
     state.drag = { tile, grabDX: wx - cx(tile.c), grabDY: wy - cy(tile.r), sx: x, sy: y };
     canvas.setPointerCapture(e.pointerId);
   });
@@ -10620,8 +10878,7 @@
     // ribbon has to leave him at the height it will be drawn at.
     const tr = lookItem("trail");
     if (tr.cols && s.trail) {
-      for (const p of s.trail) p.life += dt;
-      s.trail = s.trail.filter(p => p.life < TRAIL_MS);
+      s.trail = wakeAge(s.trail, dt);
       s.trailT -= dt;
       // Sampled while he is falling too. Cutting the trail off the instant he leaves the
       // track left the ribbon hanging in mid-air at the lip while he dropped away from it —
@@ -10635,22 +10892,43 @@
         // paintRunner does translate(sx,sy) then rotate(angle), so his local frame maps to the
         // world by exactly this rotation. Same maths here, or the ribbon leaves the wrong spot
         // on every corner.
-        const A = trailAnchor(performance.now(), s.runPhase, s.status === "play");
-        const ca = Math.cos(ri.angle), sa = Math.sin(ri.angle);
-        // `w` is this point's own scatter, fixed the moment it is laid down, and `nx/ny` the
-        // direction to scatter it along — his surface normal, taken here rather than at draw
-        // time. Together they let a shed particle sit STILL in the world: the wobble used to
-        // be a function of the wall clock, so every particle swam about long after it had left
-        // him, and what should have been a wake read as a shoal.
-        s.trail.push({ x: ri.sx + cell*(A.x*ca - A.y*sa),
-                       y: ri.sy + cell*(A.x*sa + A.y*ca), life: 0,
-                       w: Math.random()*2 - 1, nx: -sa, ny: ca });
+        wakeSample(s.trail, ri.sx, ri.sy, ri.angle, cell, performance.now(),
+                   s.runPhase, s.status === "play");
       }
     } else if (s.trail && s.trail.length) s.trail.length = 0;
   }
   // A long streamer — a few tiles of it. The sample interval is loosened to match, since
   // the path between tiles is straight and there is nothing for extra points to describe.
   const TRAIL_MS = 2600, TRAIL_EVERY = 45;
+  const TRAIL_MIN = 0.035;                 // closest two samples may be laid, in cells
+  // Age a wake and drop what has expired. Trivial, and shared anyway: the board is not the
+  // only runner with a trail, and two copies of a lifetime are two lifetimes.
+  const wakeAge = (pts, dt) => { for (const p of pts) p.life += dt; return pts.filter(p => p.life < TRAIL_MS); };
+  // Lay one point of a wake behind a runner standing at (sx,sy) facing `angle`, at `cellPx` to
+  // the cell. Every caller gets the same anchor, the same leap, the same scatter and the same
+  // minimum spacing — the board, the title screen and the cinematic all shed the same wake.
+  function wakeSample(pts, sx, sy, angle, cellPx, ts, phase, moving) {
+    const A = trailAnchor(ts, phase, moving);
+    // The anchor knows about hover and lean and bob, all of which are the swagger holding him
+    // differently; the leap is the swagger MOVING him, and it lives on the runner rather than
+    // on the style, so it is added here where the runner is known.
+    const w = lookItem("swagger");
+    if (w.leap && _leapLift) A.y -= _leapLift * (w.leapH || 0.22);
+    // paintRunner does translate(sx,sy) then rotate(angle), so his local frame maps to the
+    // world by exactly this rotation. Same maths here, or the ribbon leaves the wrong spot
+    // on every corner.
+    const ca = Math.cos(angle), sa = Math.sin(angle);
+    const px = sx + cellPx*(A.x*ca - A.y*sa), py = sy + cellPx*(A.x*sa + A.y*ca);
+    // A leaping swagger STANDS STILL for a good share of every tile, and a sample every 45ms
+    // of a runner who is not moving is a dozen points on the same spot — a dozen translucent
+    // quads of zero length stacked into a dark blot. Space them out instead.
+    const last = pts[pts.length - 1];
+    if (last && Math.hypot(px - last.x, py - last.y) <= cellPx*TRAIL_MIN) return;
+    // `w` is this point's own scatter, fixed the moment it is laid down, and `nx/ny` the
+    // direction to scatter it along — his surface normal, taken here rather than at draw time.
+    // Together they let a shed particle sit STILL in the world.
+    pts.push({ x: px, y: py, life: 0, w: Math.random()*2 - 1, nx: -sa, ny: ca });
+  }
   // Where the ribbon leaves him, in his own local frame (+x is travel, -y is up), in CELLS.
   // A swagger can hold the body a long way off its default height — float hovers above the
   // track, roll sits down on it, lean tips the whole body back about the feet, which both
@@ -10692,6 +10970,7 @@
   // copy that drifts — this one had, in every one of those four.
   // `band` is how deep the ribbon is (a body, on the board) and `T` the clock the wobble runs
   // on, both passed rather than read so a still card can ask for a still ribbon.
+  const TRAIL_SMOOTH = 9;                  // half-window of the smoothing pass, in samples
   function paintTrail(tr, pts, band, T) {
     const N = pts.length;
     const nor = pts.map((p, k) => {
@@ -10720,6 +10999,33 @@
       }
       ctx.restore();
       return;
+    }
+    // The wake is SMOOTHED before anything is drawn along it. The points are laid down at his
+    // body, and his body bobs a step at a time, so the raw wake is a sawtooth — and a striped
+    // band offset along the normal of a sawtooth folds over itself at every tooth, which is
+    // most of the overlapping the ribbon used to do. A triangular moving average takes the
+    // ripple out; the window closes to nothing at the head, so the ribbon still leaves his
+    // body at exactly the point it always did and only settles as it falls behind him.
+    if (N > 2) {
+      const sm = new Array(N);
+      for (let k = 0; k < N; k++) {
+        const u = k / (N - 1);                                   // 1 at his heels
+        const w = Math.round(TRAIL_SMOOTH * (1 - u*u*u));
+        if (w <= 0) { sm[k] = pts[k]; continue; }
+        let sx = 0, sy = 0, tot = 0;
+        for (let j = -w; j <= w; j++) {
+          const q = pts[Math.min(N-1, Math.max(0, k + j))];
+          const wt = 1 - Math.abs(j)/(w + 1);
+          sx += q.x*wt; sy += q.y*wt; tot += wt;
+        }
+        sm[k] = { x: sx/tot, y: sy/tot };
+      }
+      pts = sm;
+      for (let k = 0; k < N; k++) {                              // normals follow the new line
+        const a = pts[Math.max(0, k-1)], b = pts[Math.min(N-1, k+1)];
+        const tx = b.x - a.x, ty = b.y - a.y, m = Math.hypot(tx, ty) || 1;
+        nor[k].x = -ty/m; nor[k].y = tx/m;
+      }
     }
     // The ribbon used to be STROKED: each stripe a fat polyline, cut into ten chunks at ten
     // alphas, every chunk overlapping its neighbour by a point and every stripe overlapping
@@ -11082,23 +11388,22 @@
       // running out from UNDER him — it is drawn before he is, so his body covers the join
       // and it reads as attached — and fading along its length on the same curve the game
       // uses, rather than stopping dead in a flat block short of his back.
+      // The REAL ribbon, painted by the game's own routine along a straight run of points —
+      // the same thing the shop CARDS do. This used to be a stack of gradient-filled rectangles
+      // that reproduced the fade and nothing else: no taper, no wobble, no dashes, and a fade
+      // that had to be kept in step with the board's by hand. Four of the trails in the shop
+      // were being sold by a picture of a fifth.
       const tr = lookItem("trail");
       if (tr.cols) {
-        const bandH = rs*RUNNER.bodyH, tn = tr.cols.length, tsw = bandH/tn;
-        // he is drawn at angle 0 here, so local IS world — and on the stride the figure runs,
-        // which is the one the ribbon has to agree with
-        const A = trailAnchor(ts, ts/RUNNER.stepMs, true);
+        const A = trailAnchor(ts, ts/RUNNER.stepMs, true);      // his stride, not the board's
         const cyb = foot.y + rs*A.y;
-        const headX = foot.x + rs*(A.x + RUNNER.bodyW*0.20), tailX = S*0.03;
-        for (let i = 0; i < tn; i++) {
-          const grd = g.createLinearGradient(tailX, 0, headX, 0);
-          for (let k = 0; k <= 6; k++) {                        // matches drawTrail's ramp
-            const t = k/6;
-            grd.addColorStop(t, hexA(tr.cols[i], Math.pow(t, 1.4) * 0.92));
-          }
-          g.fillStyle = grd;
-          g.fillRect(tailX, cyb - bandH/2 + i*tsw - 0.35, headX - tailX, tsw + 0.7);
+        const headX = foot.x + rs*(A.x + RUNNER.bodyW*0.20), tailX = S*0.03, N = 46;
+        const pts = [];
+        for (let k = 0; k < N; k++) {
+          const u = k/(N-1);
+          pts.push({ x: tailX + (headX-tailX)*u, y: cyb, nx: 0, ny: -1, w: Math.sin(k*1.7)*0.5 });
         }
+        withCanvas(g, rs, 0, 0, () => paintTrail(tr, pts, rs*RUNNER.bodyH, ts));
       }
       // ...and the runner himself, drawn by the game, mid-stride so the swagger reads
       withCanvas(g, rs, 0, 0, () =>
@@ -12753,13 +13058,10 @@
       const fk = cineC01((t - CINE.fall[0]) / (CINE.fall[1] - CINE.fall[0]));
       ctx.globalAlpha = formK;
       if (running) {
-        // On the path proper: he follows the winding surface, tilting through its rises, dips
-        // and corners, and his stride is driven by ground covered rather than by the clock.
-        const surf = introSurface(introCellAt(i0), introCellAt(i0-1), introCellAt(i0+1), m);
-        const pos = samplePolyline(surf, fr);
-        const pa = samplePolyline(surf, Math.max(0, fr-0.07)), pb = samplePolyline(surf, Math.min(1, fr+0.07));
-        paintRunner(pos.x, pos.y, s0, u*Math.PI*3, Math.atan2(pb.y-pa.y, pb.x-pa.x), true, ts, 0);
+        // On the path proper: same runner as the board and the title, on this scene's geometry.
+        paintIntroRunner(introCellAt, u, m, ts, "cine", s0);
       } else {
+        clearIntroWake("cine");                  // he has not run anywhere yet
         paintRunner(FB.spawnX, cineMix(spawnY, groundY, fk*fk), s0, 0, 0, false, ts, 0);
       }
       ctx.globalAlpha = 1;
@@ -12900,6 +13202,41 @@
     ctx.restore();
   }
   function introCenter(cellObj, m){ return { x: m.x0 + cellObj.c*m.s + m.s/2, y: m.row0Y + cellObj.r*m.s + m.s/2 }; }
+  // The runner on an intro path — the title screen's endless maze and the cinematic's closing
+  // run — with everything a swagger does to him applied. `u` is how far he has come, in TILES,
+  // and it is the only thing either scene has to hand over: the leap remap, the stride gearing,
+  // the wake and the drawing all come from the same places the board uses them. A style that
+  // only worked on the board would be a style you buy on a menu you can never see it on.
+  //
+  // `key` names the wake, because the two scenes are never on screen together but do get torn
+  // down and rebuilt, and a shared buffer would have one inheriting the other's ribbon.
+  const introWakes = {};
+  function paintIntroRunner(cellAt, u, m, ts, key, size) {
+    const uu = applyLeap(u, true);              // stands still, then leaps — or just runs
+    const i0 = Math.floor(uu), f = uu - i0;
+    const surf = introSurface(cellAt(i0), cellAt(i0-1), cellAt(i0+1), m);
+    const pos = samplePolyline(surf, f);
+    const pa = samplePolyline(surf, Math.max(0, f-0.07)), pb = samplePolyline(surf, Math.min(1, f+0.07));
+    const angle = Math.atan2(pb.y - pa.y, pb.x - pa.x);
+    // Geared to ground covered, exactly as on the board: change the travel speed and the legs
+    // follow, instead of him sprinting on the spot.
+    const phase = uu * Math.PI*2 * STRIDES_PER_TILE;
+    const s0 = size || m.s;
+    const tr = lookItem("trail");
+    if (tr.cols) {
+      const W = introWakes[key] || (introWakes[key] = { pts: [], last: ts });
+      W.pts = wakeAge(W.pts, Math.max(0, Math.min(80, ts - W.last)));   // clamped: tabs go away
+      W.last = ts;
+      wakeSample(W.pts, pos.x, pos.y, angle, s0, ts, phase, true);
+      // before him, so his body covers the join and the ribbon reads as attached
+      if (W.pts.length > 1) paintTrail(tr, W.pts, s0*RUNNER.bodyH, ts);
+    }
+    paintRunner(pos.x, pos.y, s0, phase, angle, true, ts, 0, true);
+    resetLeap();                                // the next thing drawn is not leaping
+  }
+  // Wipe an intro wake, so a scene starts with nothing behind him rather than with the ribbon
+  // it had when it was last on screen.
+  function clearIntroWake(key) { delete introWakes[key]; }
   function introDir(a, b){ return { x: Math.sign(b.c-a.c), y: Math.sign(b.r-a.r) }; }
   // screen-space version of the game's tileSurface: straight (3 pts) or a quarter-circle corner
   function introSurface(cellObj, prev, next, m){
@@ -12952,13 +13289,9 @@
     // i0+1 is the front of the queue: the tile that landed as this flight started.
     laidFlashAt(introCellAt(i0 + 1), m, f / (TITLE_TRACK_SPEED * LAID_FLASH_MS));
     dragPlatform(introCellAt, i0 - 1, i0 - 1 + TITLE_QUEUE, f, m, ts);
-    // runner follows the winding surface, tilting through the rises, dips and corners
-    const surf = introSurface(introCellAt(i0), introCellAt(i0-1), introCellAt(i0+1), m);
-    const pos = samplePolyline(surf, f);
-    const pa = samplePolyline(surf, Math.max(0, f-0.07)), pb = samplePolyline(surf, Math.min(1, f+0.07));
-    // Stride is driven by ground covered rather than by the clock: change the travel speed
-    // and the legs follow, instead of him sprinting on the spot.
-    paintRunner(pos.x, pos.y, m.s, u*Math.PI*3, Math.atan2(pb.y-pa.y, pb.x-pa.x), true, ts, 0);
+    // runner follows the winding surface, tilting through the rises, dips and corners —
+    // leaping, flipping, trailing, whatever he is wearing
+    paintIntroRunner(introCellAt, u, m, ts, "title");
     ctx.restore();
     }
 
@@ -13054,82 +13387,23 @@
   // runner has just left looks like while it is being carried: an empty pane, with its track
   // only cast back into it once it reaches the front of the queue.
   function introDrawPlatform(cellObj, prev, next, m, content){
-    const C = introCenter(cellObj, m), s = m.s, tx = C.x - s/2, ty = C.y - s/2;
-    const S = introSurface(cellObj, prev, next, m);
-    // The same cross-section a laid tile has in play, on the intro's own geometry: this
-    // used to be a flat gold slab with its own hardcoded alphas, and it drifted every time
-    // the tile was retuned. Every number now comes from TILE.
-    // The WORN design, not the stylesheet's defaults. The title screen and the cinematic's
-    // closing run both draw their track through here, and both were showing --track/--rail —
-    // which stopped being what the board uses the moment a design could set its own. Wearing
-    // Neon and watching the intro lay Classic track was the tell.
-    const track = curTrack();
-    const line = () => { ctx.beginPath(); ctx.moveTo(S[0].x, S[0].y);
-                         for (let k = 1; k < S.length; k++) ctx.lineTo(S[k].x, S[k].y); };
-    ctx.save();
-    rrect(tx, ty, s, s, tileR(s)); ctx.clip();
-    ctx.fillStyle = "rgba(180,174,235," + TILE.glassA + ")"; ctx.fillRect(tx, ty, s, s);   // the pane
-    grainFill(tx, ty, s, s, TILE.glassGrain);
-    if (content === false) { ctx.restore(); return; }
-    ctx.save();
-    ctx.beginPath(); introBodyPath(S, m, introCenter(cellObj, m)); ctx.clip();
-    ctx.fillStyle = groundColour(track);                       // the ground, in its own colour
-    ctx.fillRect(tx, ty, s, s);
-    // ...and the design's own grid on it, keyed to THIS tile's place in the run. It was handed
-    // (0,0) for every tile, so all of them drew the same corner of the quilt and the pattern
-    // restarted at each tile edge instead of running on across the join — the one thing the
-    // whole grid is keyed off world cells to avoid. The board and the junction already pass
-    // their real cell; this is the third caller and the only one that did not.
-    drawGround(tx, ty, s, cellObj.c, cellObj.r);
-    ctx.lineJoin = "round"; ctx.lineCap = "butt";
-    if (TILE.pathW > 0 && TILE.shadowW > 0) {
-      ctx.strokeStyle = tintHex(track, TILE.underHue, TILE.underSat, TILE.underShade + TILE.shadowShade);
-      ctx.lineWidth = Math.max(1, s*(TILE.pathW + TILE.shadowW)*2); line(); ctx.stroke();
-    }
-    if (TILE.pathW > 0) {                                      // doubled: the top half is clipped
-      ctx.strokeStyle = track; ctx.lineWidth = Math.max(1, s*TILE.pathW*2); line(); ctx.stroke();
-    }
-    grainFill(tx, ty, s, s, TILE.bodyGrain);
-    ctx.restore();                                             // out of the body clip
-    ctx.strokeStyle = RAIL_COL; ctx.lineWidth = RAIL_PX;
-    ctx.lineCap = "round"; ctx.lineJoin = "round"; line();
-    if (SHOW_RAIL) ctx.stroke();          // the title and the opening lay the same track
-    ctx.restore();
+    // The BOARD's own tile, borrowed. This used to be a second copy of the cross-section —
+    // glass, ground, the design's grid, the beam and its shadow, the rail — written against
+    // the intro's geometry, and a copy is a copy that drifts: it had already missed the white
+    // contour along the running surface, and it would have missed the next thing too.
+    //
+    // Nothing has to be translated for it. The intro places a cell at `x0 + c*s`, which is
+    // exactly what the board's cx/cy do once withCanvas has pointed `cell` at the intro's tile
+    // size and the origin at the intro's corner — so tileSurface, drawGlass and
+    // drawPlatformSurface all land where introSurface would have put them.
+    withCanvas(ctx, m.s, m.x0, m.row0Y, () => {
+      drawGlass(cx(cellObj.c), cy(cellObj.r), cell);
+      // `content` false is a tile the runner has just left, being carried back to the front of
+      // the queue: an empty pane, its track only cast into it once it lands.
+      if (content !== false)
+        drawPlatformSurface(cellObj, tileSurface(cellObj, prev, next), curTrack());
+    });
   }
-  // the beam body polygon: the surface, then a far edge offset to the underside, clipped to the tile
-  function introBodyPath(S, m, C){
-    // Simple polygon: the surface, then closed along the cell's edges. The old version pushed
-    // every point 1.7 cells down its own normal, which on a CONCAVE corner shoots through the
-    // arc's centre and out the far side — a self-intersecting polygon whose winding cancelled,
-    // eating slivers along the tile edge. Nothing is offset now, so nothing can overshoot.
-    const h = m.s/2, last = S.length - 1, mid = last >> 1;
-    const a = S[Math.max(0, mid-1)], b = S[Math.min(last, mid+1)];
-    let tx = b.x - a.x, ty = b.y - a.y; const mm = Math.hypot(tx, ty) || 1; tx /= mm; ty /= mm;
-    const bx = -ty, by = tx;
-    ctx.moveTo(S[0].x, S[0].y);
-    for (let k = 1; k <= last; k++) ctx.lineTo(S[k].x, S[k].y);
-    if (last === 2) {
-      ctx.lineTo(S[last].x + bx*h, S[last].y + by*h);
-      ctx.lineTo(S[0].x    + bx*h, S[0].y    + by*h);
-    } else {
-      const O = { x: S[0].x + S[last].x - C.x, y: S[0].y + S[last].y - C.y };
-      const M = S[mid];
-      if ((O.x - M.x)*bx + (O.y - M.y)*by > 0) ctx.lineTo(O.x, O.y);
-      else {
-        const cs = [{x:C.x-h,y:C.y-h},{x:C.x+h,y:C.y-h},{x:C.x+h,y:C.y+h},{x:C.x-h,y:C.y+h}];
-        let k0 = 0, best = Infinity;
-        for (let i = 0; i < 4; i++) { const d = Math.hypot(cs[i].x-O.x, cs[i].y-O.y); if (d < best) { best = d; k0 = i; } }
-        const n1 = (k0+1)%4, n3 = (k0+3)%4;
-        const first = Math.hypot(cs[n1].x-S[last].x, cs[n1].y-S[last].y)
-                    < Math.hypot(cs[n3].x-S[last].x, cs[n3].y-S[last].y) ? n1 : n3;
-        ctx.lineTo(cs[first].x, cs[first].y);
-        ctx.lineTo(cs[(k0+2)%4].x, cs[(k0+2)%4].y);
-        ctx.lineTo(cs[first === n1 ? n3 : n1].x, cs[first === n1 ? n3 : n1].y);
-      }
-    }
-    ctx.closePath();
-  }
-
   // same proportions as the in-game runner (see drawRunner)
 
   loadLevel(0);

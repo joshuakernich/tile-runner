@@ -78,7 +78,7 @@
         <button data-app="corner" class="app">Corner</button></span></div>
       <div class="row"><label>track hue</label><input type="range" id="hue" min="0" max="359" step="1"><output></output></div>
       <div class="row"><label>cell</label><input type="range" id="cellPx" min="90" max="240" step="2"><output></output></div>
-      <div class="btns"><button id="grid">Guides</button><button id="reset">Reset</button></div>
+      <div class="btns"><button id="grid">Guides</button><button id="held">Tile held</button><button id="reset">Reset</button></div>
     </div>
     <div class="grp">
       <h2>Block</h2>
@@ -96,7 +96,7 @@ const SHIPPED = {
   left:   1.00,
   ahead:  0.40,
   right:  0.20,
-  mark:   0.20,
+  mark:   0.25,
   grain:  0.40,
 };
 // Mirror of the game's TILE block. The junction is a tile: it takes the same corner and the
@@ -121,10 +121,14 @@ const TILE = {
   edgeA:      0.300,
   edgeInk:    1.000,
   edgeGrain:  1.000,
+  edgeTip:    0.200,
+  edgeTipA:   0.450,
 };
 const tileR = s => s * TILE.radius;
 const J = Object.assign({}, SHIPPED);
 let DIR = "n", APPROACH = "straight", HUE = 45, CELL = 170, GUIDES = false;
+// the game opens the rings out to a full cell while a tile is off the rack
+let HELD = false;
 
 const cv = document.getElementById("cv");
 let ctx = cv.getContext("2d");
@@ -154,6 +158,15 @@ function surfaceEdge(X, Y, S, C) {
   ctx.fillStyle = "rgba(" + v + "," + v + "," + v + "," + (a / EDGE_STEPS).toFixed(4) + ")";
   for (let k = 0; k < EDGE_STEPS; k++) {
     ctx.beginPath(); surfaceBand(S, C, d * (1 - k/EDGE_STEPS)); ctx.fill();
+  }
+  // a second, much shallower ramp inside the first — the rim collects both and comes out far
+  // whiter, while the body of the lip keeps the weight it had
+  const td = d * TILE.edgeTip, ta = TILE.edgeTipA;
+  if (td > 0 && ta > 0) {
+    ctx.fillStyle = "rgba(" + v + "," + v + "," + v + "," + (ta / EDGE_STEPS).toFixed(4) + ")";
+    for (let k = 0; k < EDGE_STEPS; k++) {
+      ctx.beginPath(); surfaceBand(S, C, td * (1 - k/EDGE_STEPS)); ctx.fill();
+    }
   }
   if (TILE.edgeGrain > 0) {
     ctx.beginPath(); surfaceBand(S, C, d); ctx.clip();
@@ -449,19 +462,16 @@ function drawJunction(n, prev){
   } finally { ctx = main; }
   ctx.drawImage(jScratch, DX/dpr, DY/dpr, px/dpr, px/dpr);
 
-  // four small white squares in a half-tile block, dead centre of every cell you may build
-  // into, with a light running round them clockwise
-  const MARK_SPIN = 1100, MARK_QUAD = [{x:-1,y:-1},{x:1,y:-1},{x:1,y:1},{x:-1,y:1}];
-  const head = (performance.now() / MARK_SPIN) * 4;
+  // a square ring in every cell you may build into: a half-tile square with everything but its
+  // border punched out, so the band is an eighth of a tile thick and lies inside it
+  ctx.fillStyle = "rgba(255,255,255," + J.mark + ")";
   for (const d of exits){
-    const mx = C.x + d.x*cell, my = C.y + d.y*cell, qs = cell/4;
-    for (let i=0;i<4;i++){
-      const q = MARK_QUAD[i];
-      let lag = (head - i) % 4; if (lag < 0) lag += 4;
-      const w = Math.max(0, 1 - lag/3);
-      ctx.fillStyle = "rgba(255,255,255," + (J.mark * (0.34 + 0.66*w)).toFixed(3) + ")";
-      ctx.fillRect(mx + (q.x < 0 ? -qs : 0), my + (q.y < 0 ? -qs : 0), qs, qs);
-    }
+    const mx = C.x + d.x*cell, my = C.y + d.y*cell;
+    const os = cell*(HELD ? 0.5 : 0.25), hs = os - cell/8;
+    ctx.beginPath();
+    ctx.rect(mx - os, my - os, os*2, os*2);
+    ctx.rect(mx - hs, my - hs, hs*2, hs*2);
+    ctx.fill("evenodd");
   }
   if (GUIDES){
     ctx.save();
@@ -517,9 +527,8 @@ function sync(){
   document.querySelectorAll(".dir").forEach(b => b.classList.toggle("on", b.dataset.dir === DIR));
   document.querySelectorAll(".app").forEach(b => b.classList.toggle("on", b.dataset.app === APPROACH));
   document.getElementById("grid").classList.toggle("on", GUIDES);
+  document.getElementById("held").classList.toggle("on", HELD);
   syncOut(); render();
-  // the hint chases, so this lab draws every frame rather than only when a slider moves
-  (function spin(){ render(); requestAnimationFrame(spin); })();
 }
 for (const k of KEYS){
   document.getElementById(k).addEventListener("input", e => { J[k] = +e.target.value; sync(); });
@@ -529,6 +538,7 @@ document.getElementById("cellPx").addEventListener("input", e => { CELL = +e.tar
 document.querySelectorAll(".dir").forEach(b => b.addEventListener("click", () => { DIR = b.dataset.dir; sync(); }));
 document.querySelectorAll(".app").forEach(b => b.addEventListener("click", () => { APPROACH = b.dataset.app; sync(); }));
 document.getElementById("grid").addEventListener("click", () => { GUIDES = !GUIDES; sync(); });
+document.getElementById("held").addEventListener("click", () => { HELD = !HELD; sync(); });
 document.getElementById("reset").addEventListener("click", () => { Object.assign(J, SHIPPED); sync(); });
 document.getElementById("copy").addEventListener("click", async () => {
   const t = document.getElementById("out");
