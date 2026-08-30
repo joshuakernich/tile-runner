@@ -454,6 +454,9 @@
      drawn at — so the space between two buttons reads as one missing tile rather than as an
      arbitrary margin. Gaps INSIDE a button (icon to label) are not this; they are typography. */
   #menu-body { display:flex; flex-direction:column; gap:var(--chq); }
+  /* The fall's own shape: everything up under the heading, and one button pushed to the foot. */
+  #menu.fell #menu-body { min-height:100dvh; padding-bottom:calc(env(safe-area-inset-bottom) + var(--chq2)); }
+  .menu-push { flex:1 1 auto; min-height:var(--chq2); }
   #menu-body button { width:100%; }
   /* The one button in the menu that is about money, in the colour of the money. A deeper
      gold than the loot tile itself, so the tile sitting on it still reads as an object rather
@@ -2744,7 +2747,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.5";                    // shown on the title & pause screens
+  const VERSION = "v10.6";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -4054,7 +4057,6 @@
     levelIdx = clamp(i, 0, LEVELS.length - 1);
     levelAttempts[levelIdx] = (levelAttempts[levelIdx] || 0) + 1;      // count each start (incl. retries)
     beginLevel(LEVELS[levelIdx], String(levelIdx + 1));
-    state.walked = [{ c: state.path[0].c, r: state.path[0].r }];   // the route starts where he does
     state.attempts = levelAttempts[levelIdx];
     state.score = computeScore(); updateScoreHud();
   }
@@ -4115,7 +4117,11 @@
       // Counts every time a tile leaves the path. "The oldest one you are not using" is the
       // tile with the lowest count, which is the one the runner cleared longest ago.
       freeSeq:0, flyTile:null,
-      walked:[],                  // every cell he has stood on, in order — see update()
+      // Every cell he has stood on, in order — see update(). Seeded with the START, because he
+      // is standing on it before he has taken a step and the replay is the whole route: without
+      // it the rebuild began one tile in and the start gate was the one square it never laid.
+      // Seeded HERE rather than in loadLevel so that every way into a chapter gets it.
+      walked:[{ c:path[0].c, r:path[0].r }],
 
       score:0, combo:0, maxCombo:0, coins:0, elapsed:0, flowClears:0,
       purse:0,                     // tiles found this run, unbanked until the flag is reached
@@ -6245,7 +6251,10 @@
     }
   }
   // How far below the board the heap sits, and how long he lies in it before the words come.
+  // The drop pushes IN. Everything on the board is measured in cells, the heap included, so the
+  // whole scene scales together and the bodies stay the size of the runner lying on them.
   const PILE_DROP = 1.35, PILE_REST = 2200, FALL_ZOOM = 1.35;
+  const PILE_SKIRT = 5;                     // rows of heap carried on below the base, off-frame
   const WRIGGLE_MS = 1700;                  // how long the legs go on kicking once he is in
   const LAND_SPRING = 700;                  // ...and how long the impact takes to settle out
   const pileY = () => (state.fall && state.fall.floor != null) ? state.fall.floor
@@ -6261,6 +6270,7 @@
     const k = nc / cell;
     if (!(k > 0) || Math.abs(k - 1) < 1e-7) return;
     cell = nc; worldW = cell*COLS; worldH = cell*ROWS;
+    zoomWorldPoints(k);
     f.x *= k; f.y *= k; f.vx *= k; f.vy *= k; f.floor *= k; f.px *= k;
     camX *= k; camY *= k;
   }
@@ -6318,9 +6328,12 @@
   // would stop the fall being followed at all.
   function tickFallCam(dt) {
     const f = state.fall; if (!f) return;
-    const want = f.y - viewH*0.58;               // he lands in the lower third, heap and all
+    const want = f.y - viewH*0.62;               // the summit sits low, the heap running off the foot
     camY += (want - camY) * Math.min(1, dt/90);
-    camX += (camClampX(f.x) - camX) * Math.min(1, dt/140);
+    // Centred on the HEAP, not on him: he comes down off to one side of the peak, and a camera
+    // that follows him puts the mountain off-centre for the whole of the fall and the screen it
+    // ends on. The heap is the subject by then; he is a detail on top of it.
+    camX += ((pileMidX() - viewW/2) - camX) * Math.min(1, dt/140);
   }
   // Finishing a level earns you a compliment. Sort of. Split by whether you got it
   // first go or wore it down, because the backhand lands differently either way.
@@ -6397,6 +6410,15 @@
         : pickQuip(att > 1 ? WIN_QUIPS_RETRY : WIN_QUIPS) };
     openMenu("main");
   }
+  // Anything held in WORLD PIXELS has to be dragged along when the cell size changes under it.
+  // The board itself is measured in cells and rescales for free; the runner's wake is not — its
+  // points were laid down at whatever the cell was at the time, so a zoom left the ribbon at its
+  // old size, hanging off a level that had shrunk out from under it.
+  function zoomWorldPoints(k) {
+    if (!(k > 0) || Math.abs(k - 1) < 1e-7) return;
+    for (const p of (state.trail || [])) { p.x *= k; p.y *= k; }
+  }
+
   // ---------- The heap ----------------------------------------------------
   // Everyone who has already fallen off this chapter, lying at the bottom of the drop. It is
   // the one place the game keeps a tally of your failures, and it keeps it in the only form
@@ -6405,11 +6427,14 @@
   // Deterministic — the scatter is a hash of the body's index, not a random number — so the
   // heap does not reshuffle itself every frame, and it is the same heap on the way down as it
   // is once he is lying in it.
-  const PILE_SKINS = [
-    { body:"#e0844a", ink:"#5a2a10" }, { body:"#bfe6ff", ink:"#17263f" },
-    { body:"#9ad9b0", ink:"#1d4230" }, { body:"#c9b6ff", ink:"#2c1f4a" },
-    { body:"#ffd24a", ink:"#5a3f05" }, { body:"#ff8fc8", ink:"#4a1030" },
-  ];
+  // Each body is dressed out of the SHOP: a drip and a hat and a pair of kicks pulled from the
+  // real racks, so the heap is a crowd of runners who each got as far as this and no further —
+  // wearing what they were wearing when they did. Deterministic per body, and it costs nothing:
+  // paintRunner already takes a whole outfit through `as`, it was just being handed one colour.
+  function pileOutfit(rnd) {
+    const pick = (arr) => arr[(rnd()*arr.length) | 0];
+    return { skin: pick(SKIN_COLOURS), hat: pick(HATS), kicks: pick(KICKS), dead: true };
+  }
   // mulberry32, not a one-line index hash. The first attempt used the latter and every body's
   // HEIGHT came out correlated with its position across the heap — so instead of filling the
   // mound they traced its outline, and a pile of thirty runners read as a rainbow.
@@ -6431,23 +6456,24 @@
     const G = pileGeom();
     const d = 1 + ((state.attempts || 1) & 1);
     const side = (state.fall && state.fall.vx < 0) ? -1 : 1;
-    const row = Math.max(0, Math.min(G.rows - 1, G.cols - 2*d - 1));
+    // Row r is 2r columns narrower than the base, so it reaches out to (cols-2r-1)/2 steps —
+    // which puts the highest row covering distance `d` at rows - d.
+    const row = Math.max(0, Math.min(G.rows - 1, G.rows - d));
     // ...and high enough above that row for the legs to clear the bodies lying on it. He is
     // drawn BEHIND the heap, so level with the local surface is out of sight entirely.
     return { x: pileMidX() + side*d*G.stepX - cell*0.22,
-             y: pileY() - row*G.stepY - cell*1.05 };
+             y: pileY() - row*G.stepY - cell*0.55 };
   }
   function pileGeom() {
     // Squeezed toward the middle: a narrow step across packs the bodies into each other, so the
     // mountain is a dense mass at the centre of the screen rather than a thin slope spread the
     // whole way over it. The base still reaches the edges — it is the middle that is crowded.
     const s = cell, stepX = s*0.22, stepY = s*0.23;
-    // ONE column narrower per row, not two. Losing two made each row half a body narrower on
-    // each side against a row's worth of height — a 45-degree hill. Losing one doubles the
-    // pitch, and it means the base can be half as wide and still come to a point, which is what
-    // puts the whole thing in the middle of the screen instead of across it.
-    const cols = Math.max(9, (Math.round(viewW*0.55 / stepX) | 1) + ((state.attempts || 1) - 1)*2);
-    return { stepX, stepY, cols, rows: Math.min(22, cols) };
+    // The ROW COUNT leads and the base follows it. Deriving the rows from a screen-wide base
+    // gave a heap twenty-odd rows tall — far more of it than the moment needs. Seven rows, and
+    // a base exactly wide enough that losing two columns a row brings it to a point.
+    const rows = Math.min(10, 7 + Math.floor(((state.attempts || 1) - 1)/3));
+    return { stepX, stepY, rows, cols: rows*2 + 1 };
   }
   function drawFallPile(ts) {
     if (state.status !== "falling" && state.status !== "lose") return;
@@ -6469,10 +6495,14 @@
     let k = 0;
     // Top row first, bottom row last: on a heap the bodies nearest you are the ones at the
     // front of the base, and they overlap everything behind them.
-    for (let r = rows - 1; r >= 0; r--) {
-      const cols = Math.max(1, cols0 - r);
+    // ...and it carries on BELOW the base. The camera frames the summit high enough now that the
+    // bottom row would otherwise be on screen, and a mountain with a visible underside is a
+    // mountain floating in the air. The extra rows are full width and simply run off the frame.
+    for (let r = rows - 1; r >= -PILE_SKIRT; r--) {
+      const cols = Math.max(1, cols0 - Math.max(0, r)*2);
       for (let c = 0; c < cols; c++, k++) {
-        const j1 = rnd(), j2 = rnd(), j3 = rnd(), j4 = rnd();
+        const j1 = rnd(), j2 = rnd(), j3 = rnd(), j4 = rnd(), j5 = rnd();
+        const fit = pileOutfit(rnd);
         let x = pileMidX() + (c - (cols - 1)/2)*stepX + (j1 - 0.5)*s*0.10;
         let y = y0 - r*stepY + (j2 - 0.5)*s*0.08;
         let shove = 0;
@@ -6486,20 +6516,23 @@
         // Solid, every one of them. The back rows used to sit a shade quieter to give the heap
         // some depth, but a translucent body lets the one behind it show through its head — and
         // a pile you can see INTO is a pile of ghosts. The size ramp does the depth now.
-        // Tipped hard, and alternately: a body on a heap is LYING on it. Upright ones a few
-        // degrees off vertical read as a crowd standing in rows, which is a different picture
-        // entirely — and the alternation is what keeps the rows from looking combed.
-        // ...and they turn a little as they are shoved, away from him, which is what stops the
-        // whole thing reading as one sheet sliding rather than as bodies being pushed about.
-        const ang = ((c + r) & 1 ? 1 : -1) * (0.85 + j4*0.55)
+        // Every one of them at its OWN angle, right round the circle. Alternating two clusters
+        // of tilt gave a heap where half the bodies leaned one way and half the other, which
+        // reads as a pattern; a body that has landed on a pile of bodies is lying however it
+        // landed, and no two of them landed the same way. They also turn a little as they are
+        // shoved, away from him, which stops the impact reading as one sheet sliding.
+        // More than half of them are UPSIDE DOWN — legs in the air, head in the heap. That is
+        // how you arrive here: head first, off the end of a chapter, the same way he just did.
+        // The rest lie any which way, so the heap does not come out combed.
+        const ang = (j5 < 0.58 ? Math.PI + (j4 - 0.5)*1.2 : j4*Math.PI*2)
                   + shove * 0.5 * (x >= F0x() ? 1 : -1);
         // Bigger toward the BOTTOM. Nothing about a heap is in perspective, but a body at the
         // front of the base being half again the size of one at the peak is the cheapest way to
         // say that the peak is further away — and it makes the mountain read as one object
         // rather than as a stack of identical stickers.
-        const depth = rows > 1 ? 1 - r/(rows - 1) : 1;
+        const depth = rows > 1 ? 1 - Math.max(0, r)/(rows - 1) : 1;
         paintRunner(x, y, s*(0.82 + depth*0.46 + j3*0.08), j4*6, ang, false, ts, 0, false,
-                    { skin: PILE_SKINS[k % PILE_SKINS.length], hat: null, dead: true });
+                    fit);
         ctx.restore();
       }
     }
@@ -6664,7 +6697,9 @@
       // Ease the camera and the cell size together. cell is what everything on the board is
       // measured in, so changing it IS the zoom — there is no second scale to keep in step.
       const k = easeOut(Math.min(1, P.t / WIN.fit));
+      const was = cell;
       cell = P.cell0 + (P.cellFit - P.cell0)*k;
+      zoomWorldPoints(cell / was);
       worldW = cell*COLS; worldH = cell*ROWS;
       camX = (worldW - viewW)/2; camY = (worldH - viewH)/2;   // fits, so it centres
       if (done(WIN.fit)) { P.ph = "hold"; P.t = 0; }
@@ -6673,11 +6708,16 @@
     } else if (P.ph === "build") {
       const want = Math.min(P.route.length, Math.floor(P.t / P.stepMs));
       while (P.laid < want) {
-        P.laid++;
+        P.laid++; P.flashT = 0;                     // the newest piece is the one that flashes
         if (P.laid % 2 === 0) Sound.tileLaid();     // every other one: a route is long
       }
+      P.flashT = (P.flashT || 0) + dt;
       if (P.laid >= P.route.length) { P.ph = "rest"; P.t = 0; }
     } else if (P.ph === "rest") {
+      // The last piece keeps flashing while this runs down, and then it is simply track. A
+      // route that ends with one tile still lit reads as unfinished — the flash is the moment
+      // of ARRIVING, and by now everything has arrived.
+      P.flashT = (P.flashT || 0) + dt;
       if (done(WIN.rest)) { P.ph = "out"; P.t = 0; Sound.warp(true); }
     } else if (P.ph === "out") {
       if (done(WIN.out)) { P.ph = "name"; P.t = 0; Sound.warp(false); Sound.win(); }
@@ -6712,8 +6752,7 @@
     // Board beats: the level as it always looks, at whatever the zoom has reached, with the
     // route being cast back across it.
     if (P.ph === "fit" || P.ph === "hold" || P.ph === "build" || P.ph === "rest") {
-      draw(ts);
-      drawWinRoute(ts, P.laid, cell, -camX, -camY);
+      draw(ts);                                  // ...which lays the route in with the track
       return;
     }
     // Map beats. Everything from here is drawn from scratch: the cosmos, the map, the level
@@ -6814,34 +6853,30 @@
     g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, _winFrame.width, _winFrame.height);
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     const was = ctx; ctx = g;
-    try { draw(ts); drawWinRoute(ts, win ? win.laid : 0, cell, -camX, -camY); }
-    finally { ctx = was; }
+    try { draw(ts); } finally { ctx = was; }
     return _winFrame;
   }
   // The route, cast back across the board as fixed track: the same platform surface a level's
   // own fixed rails are drawn with, so what you are looking at is the shape of your solution in
   // the game's own material rather than a line drawn over it.
-  function drawWinRoute(ts, n, cw, ox, oy) {
+  function drawWinRoute(ts, n) {
     const P = win; if (!P || n <= 0) return;
-    const oc = cell; cell = cw;
     ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.translate(Math.round(ox), Math.round(oy));
     for (let i = 0; i < n && i < P.route.length; i++) {
       const nd = P.route[i], prev = P.route[i-1] || null, next = P.route[i+1] || null;
       drawGlass(cx(nd.c), cy(nd.r), cell);
       drawPlatformSurface(nd, tileSurface(nd, prev, next), curTrack());
       // the newest one flashes as it lands, exactly as a laid tile does
-      if (i === n - 1) winRouteFlash(nd);
+      if (i === n - 1) winRouteFlash(nd, 1 - Math.min(1, (P.flashT || 0)/240));
     }
     ctx.restore();
-    cell = oc;
   }
   // the newest piece of the route flashes as it lands, the way a laid tile does
-  function winRouteFlash(nd) {
+  function winRouteFlash(nd, k) {
+    if (!(k > 0)) return;
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
-    ctx.globalAlpha = 0.5;
+    ctx.globalAlpha = 0.5*k;
     ctx.fillStyle = "#fff7d6";
     rrect(cx(nd.c), cy(nd.r), cell, cell, tileR(cell)); ctx.fill();
     ctx.restore();
@@ -7243,7 +7278,11 @@
     drawHazardPaths(ts);      // ground markings — under the track and the tiles standing on it
     drawTrack(ts);
     if (state.drag) drawTargets(ts);
-    for (const t of state.tiles)
+    // The loose tiles are OFF during the victory replay. They are lying on the very cells the
+    // route is being rebuilt across — they are the same three tiles, recycled — so leaving them
+    // in covered the replay with the panes it is made of, and the rebuild drew underneath them
+    // without a mark showing.
+    for (const t of (win ? [] : state.tiles))
       if ((t.status === "free" || t.status === "parked") && (!state.drag || state.drag.tile.id !== t.id)) {
         // A tile parked over a rift shivers: the floor under it is already trying to take it,
         // and it is the only warning the player gets that this one is not coming back. Same
@@ -7543,6 +7582,11 @@
         else drawPlatformTile(p[i], p[i-1], p[i+1]);
       }
 
+    // The victory replay's route goes down HERE — the last thing in the track layer, before the
+    // flag and long before the runner. It is track: laying it over the top of him and the flag
+    // he is standing on made the replay look like something happening to the level rather than
+    // something the level is made of.
+    if (win && win.laid > 0) drawWinRoute(ts, win.laid);
     // the exit is a floating flag on its cell; you must lay a tile there to finish
     if (state.goal) drawFlag(state.goal.c, state.goal.r, ts, false);   // never locked (no primary key)
   }
@@ -12146,9 +12190,15 @@
     // map. The talisman shelf was on that list when it held eleven charms; it holds six, they
     // fit twice over, and pinning them to the top left the block stranded above a screen's worth
     // of empty ground. Centred, it sits where the eye already is.
+    // A FALL is pinned to the top too: its byline belongs directly under the heading, where it
+    // reads as the heading's second line rather than as a caption floating in the middle of the
+    // screen with the buttons chasing it.
+    const fell = state && state.end && state.end.kind === "lose" &&
+                 (state.status === "lose") && screen === "main";
     menuEl.classList.toggle("top",
       screen === "shop" || screen.indexOf("shop:") === 0 || screen === "levels" ||
-      screen === "world");
+      screen === "world" || fell);
+    menuEl.classList.toggle("fell", !!fell);
     // the map is a map: it wants the screen, the same as the shop's shelves do
     menuEl.classList.toggle("wide",
       screen === "shop" || screen.indexOf("shop:") === 0 || screen === "world");
@@ -12628,9 +12678,9 @@
       }));
     // RETRY everywhere but a clear — starting again is what a fall leaves you, and what a
     // pause offers; on a level you have just finished it is not what you came for.
-    if (!end || end.kind === "lose")
-      menuBody.appendChild(btn(end ? "Retry" : "Restart Chapter",
-                              () => { loadLevel(levelIdx); closeMenu(); }));
+    // RETRY is built LAST on a fall — see below, where it is pushed to the foot of the screen.
+    if (!end)
+      menuBody.appendChild(btn("Restart Chapter", () => { loadLevel(levelIdx); closeMenu(); }));
     // ...and a way PAST it. Only where you have just failed, and only where there is a level
     // to skip to: a run you cannot finish should not be the end of the campaign for you, and
     // the alternative — hunting through the Tileverse for the next square — makes being stuck
@@ -12641,6 +12691,25 @@
       });
       skipBtn.classList.add("rust");
       menuBody.appendChild(skipBtn);
+    }
+    // A FALL offers three answers and stops: go again, go past it, or go back to the map. The
+    // shop and the talismans and the settings are all still there, one tap away on the map —
+    // but a screen that has just told you you died is not the moment to sell you a hat, and six
+    // buttons is a list rather than a decision.
+    if (end && end.kind === "lose") {
+      const back = btn("Menu", () => buildMenu("world"));
+      back.classList.add("void");
+      menuBody.appendChild(back);
+      // ...and RETRY at the very bottom, a screen away from the two that take you elsewhere.
+      // It is the one you will press most and the one you press without reading, so it wants to
+      // be under your thumb rather than first in a list — and the gap is what stops it being
+      // pressed by accident on the way to the other two.
+      const gap = document.createElement("div"); gap.className = "menu-push";
+      menuBody.appendChild(gap);
+      menuBody.appendChild(btn("Retry", () => { loadLevel(levelIdx); closeMenu(); }));
+      const ver0 = document.createElement("div"); ver0.className = "menu-ver"; ver0.textContent = VERSION;
+      menuBody.appendChild(ver0);
+      return;
     }
     const worldBtn = btn("Tileverse", () => buildMenu("world"));
     worldBtn.classList.add("void");
@@ -12676,6 +12745,7 @@
   // ---------- Debug hook --------------------------------------------------
   window.__TR = {
     state: () => state, head, endWin, levelCount: () => LEVELS.length,
+    win: () => win,                          // the victory sequence, for poking at while it runs
     music: { get: () => Sound.musicNow(), set: (m) => Sound.setMusic(m) },
     targets: () => validTargets(state.drag ? state.drag.tile : null),
     freeTiles: () => state.tiles.filter(t => t.status === "free"),
