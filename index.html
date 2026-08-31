@@ -67,7 +67,24 @@
     font-size:22px; font-weight:900; letter-spacing:4px; text-transform:uppercase; color:var(--track);
     text-shadow: 2px 0 var(--shadow), -2px 0 var(--shadow), 0 2px var(--shadow), 0 -2px var(--shadow), 2px 2px var(--accent);
   }
-  :root { --body: 19px; --btn: 15px; }   /* body text = death-screen byline; buttons a touch smaller */
+  /* ONE setting, and it is the default rather than a size a few things opt into: 15px with 4px
+     of tracking. It used to be three — 19px body, 15px buttons, and whatever each label had
+     talked itself into — so the game was written in three voices depending on which screen you
+     were on. Everything inherits this now; what overrides it has to have a reason.
+     The reasons that stand are HEADINGS AND TITLES, which are meant to be bigger, and text
+     whose size is dictated by a box it must fit inside — a shop tile's price, a rack tab, a
+     segment of the speed picker. Those are not opinions about type, they are the shape of the
+     container, and forcing 15/4 through them would just break the row.
+     --ls, not --track: --track is already a COLOUR (the gold everything important is written
+     in), and two tokens with one name is a bug waiting to be typed. */
+  :root { --ui: 15px; --ls: 4px; --body: var(--ui); --btn: var(--ui); --menu-pad: 22px; }
+  body { font-size: var(--ui); letter-spacing: var(--ls); }
+  /* ...but NOT into the canvas. Canvas text takes its tracking from the element's own computed
+     letter-spacing when the context has not set one, so putting a default on <body> quietly
+     tracked out every word the game DRAWS as well as every word it lays out — the speedo went
+     half again as wide, and so did everything else on the board. The canvas sets its own
+     spacing in code (UI_TRACK, and each heading's own), so here it is told to inherit nothing. */
+  canvas { letter-spacing: normal; }
   /* The finish-line chequer, at one scale everywhere it appears. A plain menu button is 45px
      tall and should read as THREE squares high, so a square is 15 and the repeating cell —
      which is a 2x2 of them — is 30. The taller buttons (NEXT LEVEL is double height) get more
@@ -116,7 +133,7 @@
   :root { --btn-h: calc(var(--chq) * 3); }
   #hud {
     display:flex; gap:12px; align-items:center; justify-content:center;
-    margin-top:8px; font-size:var(--body); letter-spacing:2px; text-transform:uppercase; color:var(--dim);
+    margin-top:8px; font-size:var(--body); letter-spacing:var(--ls); text-transform:uppercase; color:var(--dim);
   }
   #hud b { color:var(--ink); }
   #pauseFloat {
@@ -227,6 +244,55 @@
     bottom:0; max-width:26rem; margin:0 auto;
   }
   #winui.show { display:flex; animation:poem-in 260ms ease-out both; }
+  /* The three doors off the interlevel screen, along the top: the charms on the left, the shop
+     and the settings on the right with the cog in the corner. They are up here and not in the
+     stack at the foot because the foot has ONE answer on it — the chapter you are about to
+     play — and anything standing next to that is competing with it. */
+  #wintop {
+    position:fixed; left:0; right:0; top:0; display:none; z-index:34;
+    flex-direction:column; gap:var(--chq);
+    padding:calc(env(safe-area-inset-top) + var(--chq2)) calc(env(safe-area-inset-right) + var(--chq2))
+            0 calc(env(safe-area-inset-left) + var(--chq2));
+  }
+  #wintop.show { display:flex; animation:poem-in 260ms ease-out both; }
+  /* The screen's name across the top, with the cog in the corner beside it. The title is
+     CENTRED on the screen rather than on the space left over — a heading that shifts left by
+     half a cog is a heading nobody centred — so it is padded by the cog's own width on both
+     sides, and sized to whatever room that leaves it. */
+  #wintop .wintop-head { position:relative; display:flex; align-items:flex-start;
+    justify-content:center; }
+  #wintop .wintop-head #win-cog { position:absolute; right:0; top:0; }
+  /* #wintop #wintop-title, not #wintop-title: the shared face rule further down the sheet is
+     also an ID and comes later, so a bare id here would lose the size to it and the heading
+     would stay at 46 however little room it had. */
+  #wintop #wintop-title { text-align:center; padding:0 var(--btn-h); white-space:nowrap;
+    font-size:min(46px, 8.6vw); }
+  /* ...and the two doors stand under it, one at each end of the row. Each is a MARK with its
+     name under it rather than a label in a box: the charm you are wearing, and what you have to
+     spend. Both are things you would want to see on this screen anyway, so the button is the
+     readout and the readout is the button. */
+  #wintop .wintop-row { display:flex; justify-content:space-between; align-items:flex-start;
+    gap:var(--chq); }
+  #wintop .wintop-row button { flex-direction:column; gap:6px; min-height:0; }
+  #wintop .wt-ico { display:flex; align-items:center; justify-content:center; gap:6px;
+    height:34px; }
+  #wintop .wt-ico canvas { display:block; }
+  #wintop .wt-ico .n { font-size:var(--ui); letter-spacing:var(--ls); color:#ffd24a; }
+  #wintop .wt-lbl { display:block; }
+  /* NO PLATE on any of them. A plate is what the game puts under a decision, and the decision
+     on this screen is the one at the foot — three chequered slabs across the top were three
+     more things asking to be pressed, and the loudest thing on a screen whose subject is the
+     map behind them. Words and a mark, standing on the cosmos.
+     The box is still three squares tall so there is a thumb-sized target behind the label. */
+  #wintop button { width:auto; min-height:var(--btn-h); height:auto; padding:0;
+    background:none; background-image:none; border:0; box-shadow:none;
+    color:#bfc6e0; line-height:1.25; text-align:center;
+    display:flex; align-items:center; justify-content:center; gap:8px; }
+  /* No slab means no slab to press DOWN, so the press is the label dimming instead. */
+  #wintop button:active { transform:none; opacity:0.55; }
+  /* ...and the cog is a mark in the corner, at the same square target and nothing else. */
+  #wintop #win-cog { width:var(--btn-h); flex:0 0 auto; }
+  #wintop #win-cog canvas { width:20px; height:20px; display:block; }
   #winui button { width:100%; display:flex; align-items:center; justify-content:center; gap:10px;
     height:var(--btn-h); padding-top:0; padding-bottom:0; }
   #poem {
@@ -236,17 +302,18 @@
     padding:calc(env(safe-area-inset-top) + var(--chq2)) calc(env(safe-area-inset-right) + var(--chq2))
             calc(env(safe-area-inset-bottom) + var(--chq2)) calc(env(safe-area-inset-left) + var(--chq2));
   }
-  #poem.show { display:flex; animation:poem-in 420ms ease-out both; }
+  #poem.show { display:flex; }
   @keyframes poem-in { from { opacity:0; } to { opacity:1; } }
   /* The four lines arrive in order rather than all at once — the number, the verse, whoever
      said it, and only then the way out. It is a title card, and a title card that lands in one
      piece is a card you have already finished reading before it has finished appearing. */
-  #poem > p { animation:poem-line 520ms ease-out both; }
-  #poem-n    { animation-delay:60ms; }
-  #poem-text { animation-delay:620ms; }
-  #poem-by   { animation-delay:1180ms; }
-  #poem-tap  { animation-delay:1620ms; }
+  /* The card lands whole and dark with its NUMBER already on it — you know which chapter you
+     are in before you have read a word. Everything after that arrives on its own delay, set in
+     JS because the timings run off the verse's own line count. */
+  #poem-text .ln, #poem-by, #poem-tap { animation:poem-line 520ms ease-out both; }
   @keyframes poem-line { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+  #poem-text { display:flex; flex-direction:column; gap:0.25rem; }
+  #poem-text .ln { margin:0; }
   #poem-n {
     margin:0; text-align:center;
     font-size:15px; line-height:1.6; letter-spacing:4px; text-transform:uppercase;
@@ -262,19 +329,20 @@
     position:absolute; left:0; right:0;
     bottom:calc(env(safe-area-inset-bottom) + var(--chq2) * 2);
     margin:0; text-align:center;
-    font-size:11px; letter-spacing:2px; text-transform:uppercase;
+    font-size:15px; letter-spacing:4px; text-transform:uppercase;
     color:#bfc6e0; opacity:0.6;
   }
-  #poem-text {
+  #poem-text, #poem-text .ln {
     margin:0; max-width:22rem; text-align:center; text-wrap:balance;
-    font-size:15px; line-height:2; letter-spacing:2px; text-transform:uppercase;
+    font-size:15px; line-height:2; letter-spacing:4px; text-transform:uppercase;
     color:var(--ink);
   }
-  /* Whoever said it, quieter and in the runner's own gold — the same relationship the byline
-     on an end screen has to its heading. */
+  /* Whoever said it, in the runner's own gold. One size and one tracking now run through the
+     whole card — the number, the verse, this, and the way out — so what separates them is
+     colour and weight of ink rather than a step down in scale. */
   #poem-by {
     margin:0; max-width:22rem; text-align:center;
-    font-size:11px; line-height:1.8; letter-spacing:2px; text-transform:uppercase;
+    font-size:15px; line-height:1.8; letter-spacing:4px; text-transform:uppercase;
     color:#ffd24a; opacity:0.75;
   }
   #poem-by:empty { display:none; }
@@ -296,7 +364,7 @@
   }
   #mech-icon { width:112px; height:112px; margin:0 auto 4px; display:block; }
   .mech-card h3 { font-size:18px; letter-spacing:2px; text-transform:uppercase; color:var(--track); margin:2px 0 8px; }
-  .mech-card p { font-size:var(--body); line-height:1.6; color:var(--ink); margin-bottom:16px; }
+  .mech-card p { font-size:var(--body); letter-spacing:var(--ls); line-height:1.6; color:var(--ink); margin-bottom:16px; }
   /* A shade up from the card it sits on. Both were --panel, so the one thing on the card you
      are meant to press was the same colour as the card — it read as a label rather than as a
      button, and the shadow under it was doing all the work of saying otherwise.
@@ -314,7 +382,10 @@
      underneath just says the button is standing off the page. The border is kept and made
      transparent so the states that colour it (.danger, .on) do not shift anything by 3px. */
   button {
-    font-family:inherit; font-weight:900; text-transform:uppercase; letter-spacing:2px; font-size:var(--btn);
+    /* 4px, the chapter card's tracking. Every label the player is asked to read and act on —
+       the card, the prompts, the buttons — is set the same way now; it used to be 2px here and
+       something else in each of the canvas prompts. */
+    font-family:inherit; font-weight:900; text-transform:uppercase; letter-spacing:4px; font-size:var(--btn);
     color:var(--ink); border:3px solid transparent;
     /* the shadow is the button's OWN colour darkened, the rule the gold and amber ones follow */
     box-shadow:0 4px 0 var(--panel-lo); padding:11px 16px; cursor:pointer; touch-action:manipulation;
@@ -398,8 +469,8 @@
     z-index:30; overflow:auto;
     /* #app pads for the notch, but a fixed inset:0 layer sits OUTSIDE it and covers the whole
        screen — so the shop's title landed under the notch. Add the insets here as well. */
-    padding:calc(env(safe-area-inset-top) + 22px) calc(env(safe-area-inset-right) + 22px)
-            calc(env(safe-area-inset-bottom) + 22px) calc(env(safe-area-inset-left) + 22px);
+    padding:calc(env(safe-area-inset-top) + var(--menu-pad)) calc(env(safe-area-inset-right) + var(--menu-pad))
+            calc(env(safe-area-inset-bottom) + var(--menu-pad)) calc(env(safe-area-inset-left) + var(--menu-pad));
   }
   #menu.show { display:flex; }
   /* Nothing else is on screen while a menu is. The backdrop behind it is the level's own,
@@ -426,7 +497,7 @@
      which also pulled the centred stack of them off centre by its own height. */
   .menu-ver { position:fixed; left:0; right:0; z-index:3; text-align:center;
     bottom:calc(env(safe-area-inset-bottom) + var(--chq));
-    font-size:var(--body); letter-spacing:2px; color:var(--dim); margin:0; opacity:0.7; }
+    font-size:var(--body); letter-spacing:var(--ls); color:var(--dim); margin:0; opacity:0.7; }
   /* The stepped extrusions below are the headings' own colour stacked behind them — the same
      idea as a button's plate, and they stay. What has gone is the soft dark blur that sat under
      each one, and the flat dark offset here: those were shadows cast ONTO the level, and the
@@ -455,9 +526,33 @@
      arbitrary margin. Gaps INSIDE a button (icon to label) are not this; they are typography. */
   #menu-body { display:flex; flex-direction:column; gap:var(--chq); }
   /* The fall's own shape: everything up under the heading, and one button pushed to the foot. */
-  #menu.fell #menu-body { min-height:100dvh; padding-bottom:calc(env(safe-area-inset-bottom) + var(--chq2)); }
+  /* Exactly the space there IS, not a whole viewport. #menu pads for the notch on every side,
+     so a body asking for 100dvh inside it is 100dvh plus that padding — which is taller than
+     the screen by definition, and a fail screen you can scroll is a fail screen that looks
+     broken. Subtracting the padding it actually sits in makes it fill and stop. */
+  #menu.fell #menu-body {
+    min-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - var(--menu-pad) * 2);
+    padding-bottom:calc(env(safe-area-inset-bottom) + var(--chq2)); }
   .menu-push { flex:1 1 auto; min-height:var(--chq2); }
   #menu-body button { width:100%; }
+  /* Two answers to a fall that are the same KIND of answer — go again, or go past it — so they
+     stand side by side on one row rather than as two entries in a list. Half a row each, with
+     one of the grid's own squares between them. */
+  #menu-body .menu-row { display:flex; gap:var(--chq); }
+  #menu-body .menu-row > button { flex:1 1 0; width:auto; min-width:0; }
+  /* The way BACK, sitting under the words that say why you are here. Hollow: no plate and no
+     drop under it, only the outline and the chequer showing through — so it reads as leaving
+     rather than as one more thing to press. It keeps the chequer, because everything you press
+     in this game has one; what it gives up is the slab. */
+  #menu-body button.hollow { background-color:transparent; border-color:var(--chq-lift);
+    color:#cfd4ea; box-shadow:none;
+    background-image:
+      conic-gradient(transparent 0 25%, var(--chq-void) 0 50%,
+                     transparent 0 75%, var(--chq-void) 0);
+    background-size:var(--chq2) var(--chq2);
+    background-position:0 0;
+    background-origin:border-box; }
+  #menu-body button.hollow:active { transform:translateY(2px); }
   /* The one button in the menu that is about money, in the colour of the money. A deeper
      gold than the loot tile itself, so the tile sitting on it still reads as an object rather
      than dissolving into its own background. */
@@ -548,7 +643,7 @@
   .toggle { display:flex; justify-content:space-between; align-items:center;
     border:3px solid transparent; box-shadow:0 4px 0 #0b0918;
     height:var(--btn-h); padding:0 14px; font-family:inherit; font-weight:900; text-transform:uppercase;
-    letter-spacing:2px; font-size:var(--btn); color:var(--ink); cursor:pointer;
+    letter-spacing:var(--ls); font-size:var(--btn); color:var(--ink); cursor:pointer;
     background-color:var(--panel);
     background-image:
       conic-gradient(transparent 0 25%, var(--chq-ink) 0 50%,
@@ -727,7 +822,10 @@
      for moves. `#menu-body` gets --title-h back as padding wherever the content is pinned to the
      top and would otherwise start underneath it. */
   #menu-title { position:fixed; left:0; right:0; z-index:3;
-    top:calc(env(safe-area-inset-top) + var(--chq) * 2.5);
+    top:calc(env(safe-area-inset-top) + var(--chq) * 2.5); }
+  /* The face, shared: the interlevel screen's own header is the Tileverse's header, reached a
+     different way, and it should be the same object. Only the positioning differs. */
+  #menu-title, #wintop-title {
     font-size:46px; letter-spacing:2px; line-height:1.05;
     transform:rotate(-4deg); margin:0; color:#ffd24a;
     text-shadow:0.85px 1px 0 #c79418,
@@ -746,7 +844,7 @@
                 4.25px 5px 0 #2f7827; }
   /* The Tileverse, in the same pale blue its button wears — arriving on the screen confirms
      the plate you pressed, which is the rule the amber already followed. */
-  #menu-title.pale { color:#5f96de;
+  #menu-title.pale, #wintop-title { color:#5f96de;
     text-shadow:0.85px 1px 0 #3f68a4,
                 1.7px 2px 0 #395f96,
                 2.55px 3px 0 #335688,
@@ -762,7 +860,13 @@
      control, so it is quiet and it takes its spacing from #menu-body's own grid gap rather
      than inventing a margin. setByline() places the break; 19rem is the narrowest width at
      which all 47 quips still fall on two lines. */
-  .menu-byline { font-size:var(--body); line-height:1.5; color:#fff1ea; letter-spacing:1px;
+  .menu-byline .bl { display:block; }
+  /* A fall's card ASSEMBLES rather than arriving: the header, then the words a line at a time,
+     then the two answers that carry on, and last the way out altogether. One that lands in one
+     piece is a screen you have finished reading before it has finished appearing. Each part
+     carries its own delay, set in JS because the timing runs off the byline's line count. */
+  #menu.fell .fell-in { animation:poem-line 380ms ease-out both; }
+  .menu-byline { font-size:var(--body); line-height:1.5; color:#fff1ea; letter-spacing:var(--ls);
     text-align:center; margin:0 auto; max-width:19rem; text-wrap:balance; }
   /* ...and the talismans in their own metal, matching the button that opened them, so arriving
      on the screen confirms the button you pressed. */
@@ -916,7 +1020,7 @@
      up to 60 the moment a button became two grid squares. */
   .lvl-map.blob .stop { min-height:0; height:var(--tv-tile); }
   .lvl-map.blob .stop > span { position:relative; font-size:calc(var(--tv-tile) * 0.289);
-                               font-weight:900; color:#fff; }
+                               font-weight:900; color:#fff; letter-spacing:0; }
   /* Open levels are shown as they ARE — full strength, no wash over them, cleared or not.
      Clearing a level does not change how it looks; it is the same place either way, and a green
      film over half the cloud was hiding the very palettes the tiles exist to show. */
@@ -966,7 +1070,7 @@
     position:fixed; left:50%; transform:translateX(-50%);
     bottom:calc(env(safe-area-inset-bottom) + 16px);
     width:calc(100% - 44px); max-width:330px; z-index:2;
-    font-size:13px; letter-spacing:2px; padding:11px 10px; line-height:1.2;
+    font-size:var(--btn); letter-spacing:4px; padding:11px 10px; line-height:1.2;
   }
   #menu-body .shop-go:active { transform:translateX(-50%) translateY(4px); box-shadow:none; }
   /* The same offer as the cell, said again where your thumb already is. Pinned directly above
@@ -981,7 +1085,7 @@
        both spanning the stock — and two buttons in a stack measuring differently is the kind of
        thing you see without being able to say what is wrong. */
     width:calc(var(--chq) * 23); max-width:none; height:calc(var(--chq) * 3); z-index:2;
-    font-size:13px; letter-spacing:2px; padding:11px 10px; line-height:1.2;
+    font-size:var(--btn); letter-spacing:4px; padding:11px 10px; line-height:1.2;
     display:flex; align-items:center; justify-content:center; gap:9px;
     background-color:#e0aa1e; border-color:transparent; color:#000; box-shadow:0 4px 0 #8a6410;
   }
@@ -1000,7 +1104,7 @@
      under the pinned BACK. It has no runner or tab strip above it, so it takes everything
      between the INTRO button and the button's landing strip. */
 
-  .lvl-grid .st { font-size:var(--body); color:var(--goal); letter-spacing:1px; font-weight:900; }
+  .lvl-grid .st { font-size:var(--body); color:var(--goal); letter-spacing:var(--ls); font-weight:900; }
   .lvl-grid .st.none { color:var(--dim); font-weight:400; }
 
 </style>
@@ -1028,9 +1132,18 @@
   </div>
 </div>
 
+<div id="wintop">
+  <div class="wintop-head">
+    <h2 id="wintop-title">Tileverse</h2>
+    <button id="win-cog" aria-label="Settings"></button>
+  </div>
+  <div class="wintop-row">
+    <button id="win-tal"><span class="wt-ico"></span><span class="wt-lbl">Holy Talismans</span></button>
+    <button id="win-shop"><span class="wt-ico"></span><span class="wt-lbl">Tile Shop</span></button>
+  </div>
+</div>
 <div id="winui">
   <button id="win-next">Play Chapter</button>
-  <button id="win-menu">Menu</button>
 </div>
 
 <div id="poem">
@@ -1085,13 +1198,16 @@
   const escHtml = t => t.replace(/[&<>]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" }[c]));
   function setByline(el, text) {
     const w = String(text).split(/\s+/).filter(Boolean);
-    if (w.length < 2) { el.textContent = text; return; }
+    if (w.length < 2) { el.innerHTML = "<span class=\"bl\">" + escHtml(text) + "</span>"; return; }
     let cut = 1, best = Infinity;
     for (let i = 1; i < w.length; i++) {
       const d = Math.abs(w.slice(0, i).join(" ").length - w.slice(i).join(" ").length);
       if (d < best) { best = d; cut = i; }
     }
-    el.innerHTML = escHtml(w.slice(0, cut).join(" ")) + "<br>" + escHtml(w.slice(cut).join(" "));
+    // Two SPANS rather than a line break: on a fall the words arrive a line at a time, and a
+    // <br> is not something you can give a delay to.
+    el.innerHTML = "<span class=\"bl\">" + escHtml(w.slice(0, cut).join(" ")) + "</span>" +
+                   "<span class=\"bl\">" + escHtml(w.slice(cut).join(" ")) + "</span>";
   }
   const elScore = document.getElementById("score");
 
@@ -2747,12 +2863,34 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.6";                    // shown on the title & pause screens
+  const VERSION = "v10.7";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
   // DOM text forced the fetch. Everything redraws each frame, so it swaps in on arrival.
   const UI_FONT = "'SquareFont','Fraunces',ui-serif,Georgia,serif";
+  // Every "tap to..." in the game is the same sentence in a different place — the title, the
+  // cinematic, the ceremony, the chapter card, the end of a run — and they had come out at
+  // four different sizes with four different trackings, each one sized off the viewport by a
+  // rule of its own. One setting now, matching the chapter card's (which is CSS, and says the
+  // same numbers): 15px, 4px of tracking, the heaviest weight.
+  // The same two numbers the stylesheet's --ui and --ls carry, for everything drawn on the
+  // canvas, where there is nothing to inherit from.
+  const UI_PX = 15, UI_TRACK = "4px";
+  const TAP_PX = UI_PX, TAP_TRACK = UI_TRACK;
+  // `text` and `maxW` are optional, and only ever shrink it: the longest of these prompts is
+  // wider than a narrow phone at 15/4, and one setting is not worth a clipped sentence. Both
+  // numbers come down together, so what gives way is the size of the thing and never its look.
+  function tapPromptFont(g, text, maxW) {
+    g.font = "900 " + TAP_PX + "px " + UI_FONT;
+    g.letterSpacing = TAP_TRACK;
+    if (!text || !(maxW > 0)) return;
+    const w = g.measureText(text).width;
+    if (w <= maxW) return;
+    const k = maxW / w;
+    g.font = "900 " + (TAP_PX*k).toFixed(2) + "px " + UI_FONT;
+    g.letterSpacing = (parseFloat(TAP_TRACK)*k).toFixed(2) + "px";
+  }
   if (document.fonts && document.fonts.load) document.fonts.load("900 100px SquareFont");
   const DEFAULT_CPS = 0.8;                    // fallback only — every shipped level sets its own L.cps
   // The player's own starting pace, which OVERRIDES whatever a level declares. Six steps, and
@@ -2769,6 +2907,11 @@
   // built before any of the drawing below exists. Down, held, up, and a beat on his feet.
   const REST = { down: 380, still: 1500, up: 380, settle: 260 };
   const REST_MS = REST.down + REST.still + REST.up + REST.settle;
+  // ...and how long he is actually down for, measured in TILES rather than in milliseconds.
+  // Everything else he does is timed off the track — his stride, the beat, the ramp — and a
+  // fixed sit made the Millstone a long rest on a slow chapter and a blink on a fast one. Five
+  // tiles' worth of running is a CEILING: a second press on the charm stands him up early.
+  const REST_TILES = 5;
   const REST_TEMPO = 6;                   // how many times slower the track gets at the bottom
   const REST_SINK  = 0.10;                // how far he settles toward the track, fraction of a cell
   const REVEAL_MS = 5000;                  // how long the Wayfinder shows the way      // the Spur and the Millstone, in ms — half a second each
@@ -3417,6 +3560,7 @@
     { id:"halo", name:"Halo", cost:20, col:"#fff3a8",
       draw(g,s,bw,byTop,col,finish,inkCol,ts){ const H=bw*0.5, cy=byTop-bw*0.30;
         const puls = 0.88 + 0.12*Math.sin((ts||0)/430);
+        if (!_noGlow) {                                // ...but not in the heap: see _noGlow
         g.save();
         g.globalCompositeOperation = "lighter";
         g.translate(0, cy); g.scale(1, 0.52);          // a round gradient, squashed to the ring
@@ -3428,6 +3572,7 @@
         gd.addColorStop(1.00, "rgba(255,214,80,0)");
         g.fillStyle = gd; g.beginPath(); g.arc(0, 0, r, 0, Math.PI*2); g.fill();
         g.restore();
+        }
         g.strokeStyle=col; g.lineWidth=bw*0.075;
         g.beginPath(); g.ellipse(0, cy, H, bw*0.10, 0, 0, Math.PI*2); g.stroke(); } },
 
@@ -4122,6 +4267,10 @@
       // it the rebuild began one tile in and the start gate was the one square it never laid.
       // Seeded HERE rather than in loadLevel so that every way into a chapter gets it.
       walked:[{ c:path[0].c, r:path[0].r }],
+      // Every pickup, with the point in `walked` it happened at. The run is replayed a cell at
+      // a time when you win, and this is what lets each thing you collected light up again at
+      // the moment it did — the route on its own is the shape of the solution; this is the run.
+      picked:[],
 
       score:0, combo:0, maxCombo:0, coins:0, elapsed:0, flowClears:0,
       purse:0,                     // tiles found this run, unbanked until the flag is reached
@@ -4255,6 +4404,8 @@
       blocks: (L.blocks||[]).map(b=>({ axis:b.axis||"h", c:b.c!=null?b.c:0, r:b.r!=null?b.r:0,
         lo:b.lo, hi:b.hi, pos: b.pos0!=null?b.pos0:b.lo })),
       blockDrag: null,
+      slides: [],                  // rails currently carrying a tapped piece to where it was called
+
       // manual sliding door: drag BOTH panels apart to open (left/right = 0..1 each)
       manualDoors: (L.mdoors||[]).map(d=>({ c:d[0], r:d[1], left:0, right:0 })),
       mdoorDrag: null,
@@ -4328,12 +4479,38 @@
     // still comes out right: the tail after a dash is taken as the attribution when there is no
     // field to say otherwise, so nothing has to be rewritten to keep reading properly.
     const m = by ? null : body.match(/^([\s\S]+?)\s+[-–—]\s*([^\n]{1,60})$/);
-    document.getElementById("poem-n").textContent    = "Chapter " + label;
-    document.getElementById("poem-text").textContent = m ? m[1].trim() : body;
-    document.getElementById("poem-by").textContent   = by ? String(by).trim() : (m ? m[2].trim() : "");
-    // The lines are on CSS delays, so the animations have to be restarted rather than merely
-    // re-shown: without this a second chapter card would arrive fully formed.
-    for (const q of el.querySelectorAll("p")) { q.style.animation = "none"; void q.offsetWidth; q.style.animation = ""; }
+    const verse = (m ? m[1] : body).trim();
+    document.getElementById("poem-n").textContent  = "Chapter " + label;
+    document.getElementById("poem-by").textContent = by ? String(by).trim() : (m ? m[2].trim() : "");
+    // The verse arrives a LINE AT A TIME, and the lines are the ones it was WRITTEN with: if the
+    // poem box in the editor has line breaks in it, those are the breaks, full stop. A verse is
+    // set the way its author set it, and second-guessing that would make the box a lie.
+    //
+    // Only a verse written as one unbroken paragraph is split for it, and then by sentence —
+    // read at the pace it was punctuated at, keeping the stop that ended each one. A single
+    // block fading up is a picture rather than a line of poetry.
+    const written = verse.split(/\n/).map(l => l.trim()).filter(Boolean);
+    const lines = written.length > 1 ? written
+                : (verse.match(/[^.!?]+[.!?]*/g) || [verse]).map(t => t.trim()).filter(Boolean);
+    const txt = document.getElementById("poem-text");
+    txt.textContent = "";
+    // 0.5s a line, starting half a second after the number; the attribution a second after the
+    // last of them, and the way out a second after that.
+    let t = 500;
+    for (const ln of lines) {
+      const q = document.createElement("p"); q.className = "ln"; q.textContent = ln;
+      q.style.animationDelay = t + "ms"; txt.appendChild(q);
+      t += 500;
+    }
+    const last = lines.length ? t - 500 : 0;
+    // Restart the two that PERSIST between cards before their delays are set, not after: the
+    // reset clears the whole `animation` shorthand, and the delay is part of it — setting the
+    // delay first and resetting afterwards wiped it, and every card after the first arrived
+    // fully formed. The verse's own lines are built fresh each time and need no reset.
+    const byEl = document.getElementById("poem-by"), tapEl = document.getElementById("poem-tap");
+    for (const q of [byEl, tapEl]) { q.style.animation = "none"; void q.offsetWidth; q.style.animation = ""; }
+    byEl.style.animationDelay  = (last + 1000) + "ms";
+    tapEl.style.animationDelay = (last + 2000) + "ms";
     paused = true;
     el.classList.add("show");
     const close = (go) => {
@@ -4463,36 +4640,99 @@
     ctx.restore();
   }
 
-  // ---------- Level-start intro (pixels assemble into the character) ------
-  const INTRO_CONVERGE = 950, INTRO_FLASH = 2000;
+  // ---------- Level-start intro (the quilt gathers itself into him) -------
+  // The board's own ground comes and gets him. A dozen squares in his DRIP peel off the quilt
+  // near its edges — cut to the quilt's own measure, half a tile, and sitting exactly on its
+  // grid, so what sets off is a patch of ground and not a sprite hovering over one. They do
+  // not slide in: they STEP, patch to patch, cutting diagonals and skipping a square here and
+  // there, because a straight line at a constant rate is a tween and this is supposed to be
+  // alive. Each one is paced by its own path length so they all land TOGETHER, on one square,
+  // and go off. His body comes out of that flash at exactly one patch across and shrinks to
+  // himself, growing legs as it goes.
+  const INTRO_TRAVEL = 950;      // the squares walk in — the gather sound runs the length of it
+  const INTRO_FLASH  = 240;      // they land on one square and it goes off
+  const INTRO_FORM   = 360;      // the body drops out of the flash and finds its legs
+  const INTRO_TAIL   = 2000;     // ...and he stands there while the intro music finishes
+  const INTRO_MOTES  = 12;
+  // The one measure everything here is cut to. drawPatchwork pieces the backdrop at exactly
+  // half a cell, welded to the camera, its grid running from the world origin — so a square of
+  // this size at a multiple of this size IS one of the quilt's own patches, dead on.
+  const patchW = () => (cell || 90) * 0.5;
+  // A stepped route from one patch to another. It closes on the target — every step is signed
+  // toward it and never overshoots — but it is allowed a stride of two, and a sidestep on
+  // whichever axis has less left to cover, which is what puts the wander in without ever
+  // risking a mote that does not arrive.
+  function moteRoute(x0, y0, tx, ty, rnd, want) {
+    const out = [{ x:x0, y:y0 }];
+    let x = x0, y = y0, guard = 0;
+    // One that spawns near the target has almost no walk to do, and a square that arrives in
+    // two steps has not travelled — it has appeared twice. So it is sent the LONG way round
+    // first: a few steps in no particular direction, taken before the closing loop below is
+    // allowed to start pulling it in.
+    for (let i = (Math.abs(tx - x0) + Math.abs(ty - y0)); i < (want || 0); i++) {
+      const sx = rnd() < 0.5 ? (rnd() < 0.5 ? 1 : -1) : 0;
+      const sy = sx && rnd() < 0.5 ? 0 : (rnd() < 0.5 ? 1 : -1);
+      x += sx; y += sy; out.push({ x, y });
+    }
+    while ((x !== tx || y !== ty) && guard++ < 40) {
+      const ddx = tx - x, ddy = ty - y;
+      let sx = ddx === 0 ? 0 : Math.sign(ddx) * (rnd() < 0.38 ? 2 : 1);
+      let sy = ddy === 0 ? 0 : Math.sign(ddy) * (rnd() < 0.38 ? 2 : 1);
+      if (rnd() < 0.28) {                                   // a step the wrong way, on the short axis
+        if (Math.abs(ddx) <= Math.abs(ddy)) sx = -(Math.sign(ddx) || 1);
+        else                                sy = -(Math.sign(ddy) || 1);
+      }
+      if (Math.abs(sx) > Math.abs(ddx)) sx = ddx;           // ...but never past the target
+      if (Math.abs(sy) > Math.abs(ddy)) sy = ddy;
+      if (!sx && !sy) break;
+      x += sx; y += sy; out.push({ x, y });
+    }
+    if (x !== tx || y !== ty) out.push({ x:tx, y:ty });      // the guard tripped: close it up
+    return out;
+  }
   function startIntro() {
     const s = state; s.status = "intro"; s.introT = 0; s.introSnd = { gather:false, flash:false };
-    const rp = visualAt(0);                        // where the character forms (start tile)
-    s.introTarget = { x: rp.x, y: rp.y };
-    s.introParticles = [];
-    // Held as polar starts plus a landing offset inside his silhouette, both unitless, so the
-    // cloud converges on the middle of his BODY and settles across his whole shape rather
-    // than collapsing to a point at his feet. Bounds come from RUNNER, so a retune carries.
-    const N = 90;
-    for (let i = 0; i < N; i++) {
-      const inBody = Math.random() < 0.72;         // most of him is body; the rest is legs
-      s.introParticles.push({
-        ang: Math.random()*Math.PI*2, dist: 0.55 + Math.random()*0.6,
-        ex: (Math.random()*2 - 1) * RUNNER.bodyW * (inBody ? 0.5 : 0.35),
-        ey: inBody ? -(RUNNER.legLen + RUNNER.bodyH*Math.random())
-                   : -RUNNER.legLen * Math.random(),
-        sz: cell*(0.05 + Math.random()*0.07),
-        col: Math.random() < 0.7 ? getVar("--runner") : "#ffffff",
-      });
+    const w = patchW(), rnd = mulberry32((0x5eed ^ (levelIdx + 1) * 2654435761) >>> 0);
+    const rp = visualAt(0);                        // his feet, on the start tile
+    // The square his body forms in: sitting ON the surface and centred on him, then snapped to
+    // the quilt. The snap is remembered as an offset so the forming body can give it back —
+    // it arrives on the grid, because that is what a patch of ground does, and settles onto
+    // his own axis as it shrinks.
+    const gx = Math.round((rp.x - w*0.5)/w), gy = Math.round((rp.y - w)/w);
+    s.introHome = { gx, gy };
+    s.introOff  = { x: (gx + 0.5)*w - rp.x, y: (gy + 1)*w - rp.y };
+    // His drip's BODY colour, and only that. The ink in a drip is the colour of his eyes, and
+    // squares of it in the crowd read as holes rather than as him.
+    const moteCol = lookItem("drip").body || RUNNER.body;
+    // Where they peel off: the board, clipped to what is actually on screen, a patch in from
+    // the edge. On a board that fits the frame those are its edges; on one taller than the
+    // frame they are the edges of what you can see, which is the same promise kept.
+    const i0 = Math.ceil(Math.max(0, camX)/w) + 1, i1 = Math.floor(Math.min(worldW, camX + viewW)/w) - 2;
+    const j0 = Math.ceil(Math.max(0, camY)/w) + 1, j1 = Math.floor(Math.min(worldH, camY + viewH)/w) - 2;
+    const lerpI = (a, b, u) => a + Math.round((b - a)*u);
+    s.introMotes = [];
+    for (let k = 0; k < INTRO_MOTES; k++) {
+      const side = k % 4, u = (Math.floor(k/4) + rnd()) / Math.ceil(INTRO_MOTES/4);
+      const inset = Math.floor(rnd()*2);            // a patch or two in, so the edge is a band
+      let px, py;
+      if      (side === 0) { px = lerpI(i0, i1, u); py = j0 + inset; }
+      else if (side === 1) { px = i1 - inset;       py = lerpI(j0, j1, u); }
+      else if (side === 2) { px = lerpI(i1, i0, u); py = j1 - inset; }
+      else                 { px = i0 + inset;       py = lerpI(j1, j0, u); }
+      const route = moteRoute(px, py, gx, gy, rnd, 5);
+      // Together, but not to the frame: each lands inside the last seventieth of a second of
+      // the walk, which reads as one arrival and not as a machine.
+      const arrive = INTRO_TRAVEL - rnd()*70;
+      s.introMotes.push({ route, arrive, step: arrive/Math.max(1, route.length - 1), col: moteCol });
     }
   }
   function tickIntro(dt) {
     const s = state;
     if (!s.introSnd.gather) { s.introSnd.gather = true; Sound.introGather(); }  // plays once the intro runs (audio unlocked)
     const before = s.introT; s.introT += dt;
-    if (before < INTRO_CONVERGE && s.introT >= INTRO_CONVERGE && !s.introSnd.flash) { s.introSnd.flash = true; Sound.introFlash(); }
-    if (s.introT >= INTRO_CONVERGE + INTRO_FLASH && s.status === "intro") {
-      s.introParticles = null;
+    if (before < INTRO_TRAVEL && s.introT >= INTRO_TRAVEL && !s.introSnd.flash) { s.introSnd.flash = true; Sound.introFlash(); }
+    if (s.introT >= INTRO_TRAVEL + INTRO_TAIL && s.status === "intro") {
+      s.introMotes = null;
       // He is assembled but not moving yet: wait out the rest of the current beat so his first
       // stride lands with the backing rather than a fraction of a beat off it.
       s.status = "cue"; s.cueT = Sound.cueDelay ? Sound.cueDelay() : 0;
@@ -4506,38 +4746,61 @@
     s.status = "play";
   }
   function drawIntro(ts) {
-    const s = state, t = s.introT, tgt = s.introTarget;
-    if (t < INTRO_CONVERGE) {                       // pixels stream in from all around
-      const u = t / INTRO_CONVERGE, e = 1 - Math.pow(1-u, 3);   // ease-out
-      const reach = Math.max(viewW, viewH);
-      // His local frame is tilted on slopes and corners, so the cloud is rotated with him —
-      // otherwise the pixels would assemble a runner standing at a different angle to himself.
-      const ri = runnerInfo(), ca = Math.cos(ri.angle), sa = Math.sin(ri.angle);
-      const at = (ox, oy) => ({ x: tgt.x + ox*ca - oy*sa, y: tgt.y + ox*sa + oy*ca });
-      const focus = at(0, -cell*(RUNNER.legLen + RUNNER.bodyH*0.5));   // centre of his body
-      for (const p of s.introParticles) {
-        const x0 = focus.x + Math.cos(p.ang)*p.dist*reach, y0 = focus.y + Math.sin(p.ang)*p.dist*reach;
-        const T = at(p.ex*cell, p.ey*cell);         // and each lands on its own piece of him
-        const px = x0 + (T.x - x0)*e, py = y0 + (T.y - y0)*e, sz = p.sz*(1 - u*0.4);
-        ctx.globalAlpha = 0.35 + 0.65*u; ctx.fillStyle = p.col;
-        ctx.fillRect(px - sz/2, py - sz/2, sz, sz);
+    const s = state, t = s.introT, w = patchW(), H = s.introHome;
+    if (!H || !s.introMotes) { drawRunner(ts); return; }
+    const hx = H.gx*w, hy = H.gy*w;
+    if (t < INTRO_TRAVEL) {                          // the squares walk in across the quilt
+      ctx.save();
+      for (const m of s.introMotes) {
+        const i = Math.min(m.route.length - 1, Math.floor(t / m.step));
+        const p = m.route[i];
+        ctx.fillStyle = m.col;
+        ctx.fillRect(p.x*w, p.y*w, w, w);
       }
-      ctx.globalAlpha = u*0.6; drawRunner(ts); ctx.globalAlpha = 1;   // character fading in
-    } else {
-      // Assembled: he is SOLID, and the flash is a flat-white copy of him laid over the top,
-      // pulsing and decaying away. Fading a just-formed character back out reads as him
-      // failing to arrive; RUNNER is the one source of his colours, so borrowing it for the
-      // overlay is what keeps the flash to his exact silhouette.
+      ctx.restore();
+      return;
+    }
+    const ft = t - INTRO_TRAVEL;
+    if (ft < INTRO_FLASH) {                          // landed, stacked, and going off
+      const k = ft / INTRO_FLASH;
+      ctx.save();
+      ctx.fillStyle = s.introMotes[0].col;
+      ctx.fillRect(hx, hy, w, w);
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 1 - k*k;
+      ctx.fillStyle = "#ffffff";
+      const g = w * k * 0.9;                         // the white outgrows the square as it burns
+      ctx.fillRect(hx - g/2, hy - g/2, w + g, w + g);
+      ctx.restore();
+      return;
+    }
+    // Out of the flash: one patch across, no legs, sitting on the grid — then down to his own
+    // size, onto his own axis, and up onto legs that grow under him. One eased number drives
+    // the lot, so the shrink and the sprout are the same movement rather than two.
+    const fk = clamp((ft - INTRO_FLASH) / INTRO_FORM, 0, 1), e = 1 - Math.pow(1 - fk, 3);
+    if (fk < 1) {
+      _formW = 1 + (w/(RUNNER.bodyW*cell) - 1)*(1 - e);
+      _formH = 1 + (w/(RUNNER.bodyH*cell) - 1)*(1 - e);
+      _formLeg = e;
+      ctx.save();
+      ctx.translate(s.introOff.x*(1 - e), s.introOff.y*(1 - e));
       drawRunner(ts);
-      const ft = t - INTRO_CONVERGE;
-      if (ft < INTRO_FLASH) {
-        const fl = 0.9 * (0.5 + 0.5*Math.sin(t/60)) * (1 - ft/INTRO_FLASH);
-        if (fl > 0.01) {
-          const body = RUNNER.body, ink = RUNNER.ink;
-          RUNNER.body = "#ffffff"; RUNNER.ink = "#ffffff";
-          ctx.globalAlpha = fl; drawRunner(ts); ctx.globalAlpha = 1;
-          RUNNER.body = body; RUNNER.ink = ink;
-        }
+      ctx.restore();
+      _formW = _formH = _formLeg = 1;
+    } else {
+      drawRunner(ts);
+    }
+    // ...and the last of the flash burns off him. A flat-white copy of the character, laid
+    // over the top and decaying: RUNNER is the one source of his colours, so borrowing it for
+    // the overlay is what keeps the flash to his exact silhouette.
+    const pt = ft - (INTRO_FLASH + INTRO_FORM);
+    if (pt >= 0 && pt < 900) {
+      const fl = 0.75 * (0.5 + 0.5*Math.sin(ts/60)) * (1 - pt/900);
+      if (fl > 0.01) {
+        const body = RUNNER.body, ink = RUNNER.ink;
+        RUNNER.body = "#ffffff"; RUNNER.ink = "#ffffff";
+        ctx.globalAlpha = fl; drawRunner(ts); ctx.globalAlpha = 1;
+        RUNNER.body = body; RUNNER.ink = ink;
       }
     }
   }
@@ -5220,6 +5483,72 @@
     const k = 1 - Math.pow(1 - Math.min(1, f.t / FLY_MS), 3);
     return { id: f.tile.id, x: f.x0 + (f.x1 - f.x0)*k, y: f.y0 + (f.y1 - f.y0)*k, k };
   }
+
+  // ---------- Tap a rail and the piece riding it comes to you --------------
+  // The sliding platform and the movable wall block are each one piece on a run of cells, and
+  // both were drag-only: you had to catch the piece itself and haul it the whole way. A tap on
+  // the empty rail now does the same job, the way a tap on a hint square fetches a tile.
+  //
+  // The rules are the DRAG'S rules, unchanged. A piece standing in the laid route stays put —
+  // moving it would take the floor out from under the runner — and a block will not park itself
+  // on live track. Only the effort is gone, not the constraints.
+  const SLIDE_PER_CELL = 90, SLIDE_MIN = 150, SLIDE_MAX = 420;
+  const railCell = (o, k) => o.axis === "h" ? { c: k, r: o.r } : { c: o.c, r: k };
+  // Where (c,r) falls along o's rail, or null if it is not on it at all.
+  function railIndex(o, c, r) {
+    if (o.axis === "h") return (r === o.r && c >= o.lo && c <= o.hi) ? c : null;
+    return (c === o.c && r >= o.lo && r <= o.hi) ? r : null;
+  }
+  function railPieces() {
+    const out = [];
+    for (const sl of (state.sliders || [])) out.push({ obj: sl, block: false });
+    for (const b  of (state.blocks  || [])) out.push({ obj: b,  block: true  });
+    return out;
+  }
+  // Returns false when the tap was not on a rail, or was on one that cannot move, so the tap
+  // can go on to mean whatever else it might have meant.
+  function slideTo(c, r) {
+    if (state.status !== "play") return false;
+    for (const { obj, block } of railPieces()) {
+      const target = railIndex(obj, c, r);
+      if (target === null) continue;
+      if (target === Math.round(obj.pos)) continue;     // a tap on the piece itself is a grab, not a call
+      const here = railCell(obj, Math.round(obj.pos));
+      if (state.path.some(n => n.c === here.c && n.r === here.r)) return false;   // locked under the track
+      if (block) {                                      // ...and a block may not land on live track
+        const t = railCell(obj, target);
+        const free = !state.path.some(n => n.kind === "tile" && !n.exited && n.c === t.c && n.r === t.r)
+                  && !state.tiles.some(x => (x.status === "parked" || x.status === "active") && x.c === t.c && x.r === t.r);
+        if (!free) return false;
+      }
+      startSlide(obj, target);
+      return true;
+    }
+    return false;
+  }
+  function startSlide(obj, target) { cancelSlide(obj);
+    state.slides.push({ obj, from: obj.pos, to: target, t: 0, last: Math.round(obj.pos),
+                        dur: clamp(SLIDE_PER_CELL*Math.abs(target - obj.pos), SLIDE_MIN, SLIDE_MAX) });
+    haptic(6);
+  }
+  function cancelSlide(obj) { const i = state.slides.findIndex(s => s.obj === obj); if (i >= 0) state.slides.splice(i, 1); }
+  // It ratchets cell by cell exactly as it does under a finger — the same scrape as each cell
+  // goes by, the same clack when it fetches up against an end stop — so a piece that was called
+  // sounds like a piece that was hauled. Eased at both ends, because it is machinery.
+  function tickSlide(dt) {
+    for (let i = state.slides.length - 1; i >= 0; i--) {
+      const sd = state.slides[i], o = sd.obj;
+      sd.t = Math.min(sd.dur, sd.t + dt);
+      const u = sd.t / sd.dur;
+      o.pos = sd.from + (sd.to - sd.from) * (u*u*(3 - 2*u));
+      const nc = Math.round(o.pos);
+      if (nc !== sd.last) {
+        sd.last = nc; markOccDirty();
+        if (nc === o.lo || nc === o.hi) { Sound.clack(); haptic(9); } else { Sound.slide(); haptic(4); }
+      }
+      if (sd.t >= sd.dur) { o.pos = sd.to; markOccDirty(); state.slides.splice(i, 1); }
+    }
+  }
   // Pull any parked tile that touches the track's front into the path, chaining
   // along connected parked tiles. Freed (walked-over) tiles are left alone, so
   // the runner never links backward onto ground it already covered.
@@ -5397,6 +5726,7 @@
     s.runPhase = (s.runIdx + s.runT) * Math.PI*2 * STRIDES_PER_TILE;
     s.elapsed += dt;                        // level clock (for time bonus / stars)
     tickFly(dt);                            // a tile on its way to a tapped hint square
+    tickSlide(dt);                          // a platform or block on its way to a tapped rail cell
     // the flag snaps down and plants itself once a tile is laid on the exit cell
     const planted = !!s.goal && s.path.some(n => n.kind === "tile" && n.c === s.goal.c && n.r === s.goal.r);
     s.flagPlantT += ((planted ? 1 : 0) - s.flagPlantT) * Math.min(1, dt/70);
@@ -5607,6 +5937,10 @@
     // Normally only while he is running. The exception is the Ankh's grace: he is already
     // falling, and that is precisely when the offer is open.
     const grace = s && s.status === "falling" && s.ankhGrace > 0;
+    // A second press on the Millstone is the way OUT of it. The sit runs long now — up to five
+    // tiles' worth of running — and a rest you cannot stand up from is a punishment rather than
+    // a power. The charm is spent either way, so letting go of it early costs nothing.
+    if (s && def && def.id === "brake" && s.rest) { endRest(); return true; }
     if (!s || (s.status !== "play" && !grace) || !def || s.power.used.has(def.id)) return false;
     s.power.used.add(def.id);
     // Every charm marks itself with a pulse on the runner's cell — except the Hammer, whose
@@ -5680,17 +6014,37 @@
   // eyes for a second and a half, gets up and carries on — and the backing track slurs down to
   // a crawl and back while he is under. Everything else in the game is a thing you set off at
   // the board; this is a thing you do to yourself, so it is drawn entirely on him.
+  // The stillness is whatever is left of five tiles once the folding down, the standing up and
+  // the beat on his feet have had their share — those three are gestures and keep their own
+  // timing at any pace. On a fast chapter that leaves almost nothing, which is right: there is
+  // less time in a tile to rest for.
+  const restTotal = R => REST.down + R.still + REST.up + REST.settle;
   function startRest(){
     const s = state;
-    s.rest = { t: 0 };
-    s.hold = REST_MS;                     // he is not going anywhere until he has had his moment
+    const still = Math.max(0, REST_TILES*s.msPerCell - (REST.down + REST.up + REST.settle));
+    s.rest = { t: 0, still };
+    s.hold = restTotal(s.rest);           // he is not going anywhere until he has had his moment
+  }
+  // Stand him up NOW. It winds the clock forward to the way back up rather than clearing the
+  // sit outright, so he unfolds and takes his beat on his feet exactly as he would have — the
+  // only part cut short is the stillness, which is the part being asked out of.
+  // cineSmooth is a symmetric smoothstep, so a fold of p on the way down is the same pose as
+  // (1-p) of the way back up: entering the rise there means he stands from wherever he had got
+  // to instead of snapping to the bottom of the sit first.
+  function endRest(){
+    const s = state, R = s.rest; if (!R) return;
+    const upAt = REST.down + R.still;
+    if (R.t >= upAt) return;                        // already on his way up; nothing left to cut
+    R.t = R.t < REST.down ? upAt + REST.up*(1 - R.t/REST.down) : upAt;
+    s.hold = Math.max(0, restTotal(R) - R.t);
+    Sound.tapBig();
   }
   function tickRest(dt){
     const s = state, R = s.rest; if (!R) return;
     R.t += dt;
     // The tempo follows him down and back up rather than stepping, so the track sags into it.
     try { Sound.setTempo && Sound.setTempo(s.msPerCell * (1 + (REST_TEMPO - 1)*restK())); } catch(_){}
-    if (R.t >= REST_MS) {
+    if (R.t >= restTotal(R)) {
       s.rest = null;
       try { Sound.setTempo && Sound.setTempo(s.msPerCell); } catch(_){}   // ...and back to pace
     }
@@ -5699,9 +6053,9 @@
   function restK(){
     const R = state && state.rest; if (!R) return 0;
     if (R.t < REST.down) return cineSmooth(R.t / REST.down);
-    if (R.t < REST.down + REST.still) return 1;
-    if (R.t < REST.down + REST.still + REST.up)
-      return 1 - cineSmooth((R.t - REST.down - REST.still) / REST.up);
+    if (R.t < REST.down + R.still) return 1;
+    if (R.t < REST.down + R.still + REST.up)
+      return 1 - cineSmooth((R.t - REST.down - R.still) / REST.up);
     return 0;
   }
   function startRoar(kind){
@@ -5973,6 +6327,13 @@
       s.power.kind = null; s.power.t = 0; s.power.armed = false;
     }
   }
+  // Log a pickup against the point in the route it happened at. Kept even on levels you go
+  // on to fail, because it costs nothing and the only thing that reads it runs after a win.
+  function notePick(kind, c, r, extra) {
+    const s = state;
+    if (!s.picked) return;
+    s.picked.push(Object.assign({ kind, c, r, at: Math.max(0, s.walked.length - 1) }, extra || {}));
+  }
   // one coin, collected — shared by passing over it and by the Magnet reeling it in
   // `flew` marks a coin the Magnet reeled in. Running over one is a single event and earns
   // the full pop; a magnet pulls a fistful at once, and five or six rings expanding out of
@@ -5995,6 +6356,7 @@
       showTally(rp.x/cell - 0.5, rp.y/cell - 0.5);
     } else showTally(c, r);
     if (!flew) { spawnPop(c, r, "#ffd24a"); spawnLight(c, r); }
+    notePick("coin", c, r);
     Sound.coin(); haptic(6);
   }
   // The Hammer of God: lift a tile that has already been laid, along with everything laid
@@ -6019,6 +6381,7 @@
       const def = talById(t.id);
       const fresh = unlockTalisman(t.id);
       spawnPop(t.c, t.r, def ? def.col : "#ffd24a"); spawnLight(t.c, t.r);
+      notePick("tal", t.c, t.r, { id: t.id });
       Sound.coin(); haptic([8, 30, 8]);
       // A level with a talisman and NO flag is that talisman's own maze: the charm IS the
       // exit, so picking it up finishes the level. Everywhere else it is just a pickup.
@@ -6032,18 +6395,26 @@
     for (const bk of Array.from(s.boost)) {
       const [c, r] = bk.split(",").map(Number);
       if (nearTight(c, r)) { s.boost.delete(bk); s.speedFx = { kind:"boost", t:BOOST_MS };
-                        spawnPop(c, r, pal("boost")); spawnLight(c, r); (Sound.boost||Sound.coin)(); haptic(12); }
+                        spawnPop(c, r, pal("boost")); spawnLight(c, r); notePick("boost", c, r);
+                        (Sound.boost||Sound.coin)(); haptic(12); }
     }
     for (const bk of Array.from(s.slow)) {
       const [c, r] = bk.split(",").map(Number);
       if (nearTight(c, r)) { s.slow.delete(bk); s.speedFx = { kind:"slow", t:SLOW_MS };
-                        spawnPop(c, r, pal("slow")); (Sound.slow||Sound.coin)(); haptic(12); }
+                        spawnPop(c, r, pal("slow")); notePick("slow", c, r);
+                        (Sound.slow||Sound.coin)(); haptic(12); }
     }
     // colored keys: each opens all doors of its colour; exit unlocks when ALL are held
     if (!s.keyCollected) {
       for (const k of s.keys) if (!k.got && near(k.c, k.r)) {
         k.got = true; spawnPop(k.c, k.r, k.color); haptic(10); Sound.key();
-        for (const d of s.doors) if (d.color === k.color) d.open = true;
+        notePick("key", k.c, k.r, { color: k.color });
+        // ...and every lock it just took off. The key and its padlocks are one event, and the
+        // replay should show it as one: the key lights, and so does everything it opened.
+        for (const d of s.doors) if (d.color === k.color) {
+          if (!d.open) notePick("lock", d.c, d.r, { color: d.color });
+          d.open = true;
+        }
       }
       if (s.keys.every(k => k.got)) { s.keyCollected = true; updateKeyHud(); }
     }
@@ -6414,9 +6785,20 @@
   // The board itself is measured in cells and rescales for free; the runner's wake is not — its
   // points were laid down at whatever the cell was at the time, so a zoom left the ribbon at its
   // old size, hanging off a level that had shrunk out from under it.
+  // Every LAYER of it, not just the wake. A monster's cell is a cell but the position it is
+  // drawn at is a world pixel it worked out for itself before the zoom started, and update() is
+  // inert once the level is won — so a monster left where it was while the board shrank out
+  // from under it, and so did every spark, pop and mote of dust still in the air.
   function zoomWorldPoints(k) {
     if (!(k > 0) || Math.abs(k - 1) < 1e-7) return;
     for (const p of (state.trail || [])) { p.x *= k; p.y *= k; }
+    for (const h of (state.hazards || [])) { if (h.wx != null) h.wx *= k; if (h.wy != null) h.wy *= k; }
+    for (const p of (state.pops   || [])) { p.x *= k; p.y *= k; }
+    for (const p of (state.lights || [])) { p.x *= k; p.y *= k; }
+    // The loose ones carry a velocity and a size in world pixels too, so they have to be
+    // rescaled whole or they arrive at the right place at the wrong speed.
+    for (const d of (state.shards   || [])) { d.x *= k; d.y *= k; d.vx *= k; d.vy *= k; d.sz *= k; }
+    for (const d of (state.starDust || [])) { d.x *= k; d.y *= k; d.vx *= k; d.vy *= k; d.sz *= k; }
   }
 
   // ---------- The heap ----------------------------------------------------
@@ -6477,6 +6859,10 @@
   }
   function drawFallPile(ts) {
     if (state.status !== "falling" && state.status !== "lose") return;
+    _noGlow = 1;                    // nothing in the heap gives off light — see the flag
+    try { paintFallPile(ts); } finally { _noGlow = 0; }
+  }
+  function paintFallPile(ts) {
     const y0 = pileY(), s = cell;
     // BUILT, not scattered. Rows, each one two bodies narrower than the row below it, stacked
     // and offset half a step like brickwork — so the silhouette is a triangle by construction
@@ -6491,7 +6877,11 @@
     // how long ago he landed, so the bodies drift home on their own with nothing to remember.
     const F = state.fall;
     const hit = (F && F.land != null) ? Math.exp(-F.land/380) : 0;
-    const REACH = s*3.2;
+    // Two or three bodies, not a quarter of the mountain. It used to reach three cells, which
+    // at this spacing is fourteen places in every direction — so a landing rippled through the
+    // whole heap and read as the pile being made of liquid. A heap is a heap: the ones he
+    // actually lands on give way, and the rest of it does not notice.
+    const REACH = Math.max(stepX, stepY) * 2.2;
     let k = 0;
     // Top row first, bottom row last: on a heap the bodies nearest you are the ones at the
     // front of the base, and they overlap everything behind them.
@@ -6508,7 +6898,10 @@
         let shove = 0;
         if (hit > 0.004) {
           const dx = x - F.x, dy = y - F.y, dd = Math.hypot(dx, dy) || 1;
-          shove = hit * Math.max(0, 1 - dd/REACH);         // nearest are shifted most
+          // Squared, so it is not a gentle slope across a crowd: the body he lands on takes
+          // nearly all of it and its neighbour takes a little.
+          const near = Math.max(0, 1 - dd/REACH);
+          shove = hit * near * near;
           x += dx/dd * shove * s*0.30;
           y += dy/dd * shove * s*0.22;
         }
@@ -6569,13 +6962,34 @@
     // him as he goes.
     const route = (state.walked || []).slice();
     win = { ph: "fit", t: 0, last, idx: levelIdx, next: Math.min(LEVELS.length - 1, levelIdx + 1),
-            route, laid: 0, cell0: cell, black: 0, shine: 0.35 };
+            route, laid: 0, cell0: cell, black: 0, shine: 0.35,
+            // A copy, with a clock of its own on each: `state.picked` is the record of the run
+            // and must not be chewed up by the thing replaying it.
+            picks: (state.picked || []).map(q => Object.assign({}, q, { t: -1 })),
+            coins: 0, coinsTotal: ((state.L && state.L.coins) || []).length, clock: 0, pickSnd: -1e9 };
     // Whatever cell size shows the whole board with a tile of air around it.
     win.cellFit = Math.max(4, Math.min(viewW/(COLS + 2), viewH/(ROWS + 2)));
     win.stepMs = route.length ? WIN.route / route.length : 40;
     hideWinUI();
   }
   function winEnd() { win = null; hideWinUI(); }
+  // The Tileverse, opened on its own rather than as the tail of a victory. The interlevel beat
+  // — drag the cloud, pick a chapter, play it — IS the map now, so every way in lands on the
+  // same place instead of on a grid of buttons that said the same thing less well. It is the
+  // win sequence's "wait" phase with nothing in front of it: no route to rebuild, no chapter
+  // just finished, no pull-back — you are simply there.
+  function openTileverse() {
+    closeMenu();
+    winEnd();
+    const here = mapCells()[levelIdx] || { c: 0, r: 0 };
+    win = { ph: "wait", t: 0, last: false, idx: levelIdx, next: levelIdx,
+            route: [], laid: 0, picks: [], coins: 0, coinsTotal: 0, clock: 0, pickSnd: -1e9,
+            cell0: cell, black: 0, shine: 0,
+            // Only the whip out of here reads this, but it reads it the moment you press PLAY.
+            cellFit: Math.max(4, Math.min(viewW/(COLS + 2), viewH/(ROWS + 2))),
+            camC: here.c, camR: here.r, camTo: null, drag: null };
+    showWinUI();
+  }
   // A tap anywhere moves the paused beat on. Returns true when it took the tap, so the board's
   // own pointer handling can leave it alone.
   function winTap() {
@@ -6584,22 +6998,147 @@
     win.ph = "pan"; win.t = 0;
     return true;
   }
+  // On the interlevel screen the whole board is the map's handle: press anywhere that is not one
+  // of the floating buttons — those are DOM and take their own taps before this ever runs — and
+  // drag the cloud about. Let go without having moved and it is a tap on whatever square is
+  // under your finger.
+  function winPointerDown(e) {
+    if (!win) return false;
+    if (winTap()) return true;
+    if (win.ph !== "wait" || win.camC == null) return false;
+    const { x, y } = screenXY(e);
+    win.drag = { sx: x, sy: y, c0: win.camC, r0: win.camR, moved: 0 };
+    try { canvas.setPointerCapture(e.pointerId); } catch(_) {}
+    return true;
+  }
+  function winPointerMove(e) {
+    const d = win && win.drag; if (!d) return false;
+    const { x, y } = screenXY(e), S = winMapFit();
+    win.camC = d.c0 - (x - d.sx)/S;
+    win.camR = d.r0 - (y - d.sy)/S;
+    win.camTo = null;
+    d.moved = Math.max(d.moved, Math.hypot(x - d.sx, y - d.sy));
+    clampWinCam();
+    return true;
+  }
+  // Eight pixels of slop, so a tap made with a thumb is still a tap.
+  const WIN_TAP_SLOP = 8;
+  function winPointerUp(e) {
+    const d = win && win.drag; if (!d) return false;
+    win.drag = null;
+    try { canvas.releasePointerCapture(e.pointerId); } catch(_) {}
+    if (d.moved <= WIN_TAP_SLOP) {
+      const { x, y } = screenXY(e), i = winCellAt(x, y);
+      // The origin story is not a chapter you select, it is a thing you watch — so it leaves
+      // the map rather than repointing the button at itself. It comes back here when it ends.
+      if (i === INTRO_CELL) { Sound.tapBig(); haptic(8); winEnd(); startCine("menu"); return true; }
+      // `next` IS the choice: the button's label, the whip's target and the level that loads
+      // all read it, so choosing a chapter is one assignment and nothing downstream has to know
+      // this screen can now be steered.
+      if (i != null && i !== win.next && winOpen(i)) {
+        win.next = i; win.camTo = mapCells()[i];
+        Sound.tapBig(); haptic(8);
+        showWinUI();
+      }
+    }
+    return true;
+  }
   function showWinUI() {
     const el = document.getElementById("winui"); if (!el) return;
     const nx = document.getElementById("win-next");
-    labelWithArrow(nx, "Play Chapter");
+    labelWithArrow(nx, "Play Chapter " + ((win ? win.next : levelIdx) + 1));
     el.classList.add("show");
+    const top = document.getElementById("wintop");
+    if (top) {
+      // Built on the way in rather than in the markup, and rebuilt EVERY time: the cog takes
+      // the button's own colour (not known until it is in the document), the charm is whichever
+      // one is worn right now, and the purse is whatever the last chapter left in it — all
+      // three can have changed while the shop was open.
+      const cog = document.getElementById("win-cog");
+      if (cog && !cog.firstChild) cog.appendChild(cogChip(10, getComputedStyle(cog).color || "#e8e6ff"));
+      // The charm you are wearing, or — with nothing on — the first one you own, or the first
+      // one there is. A door to the shelf should show something off the shelf.
+      const ti = document.querySelector("#win-tal .wt-ico");
+      if (ti) {
+        ti.textContent = "";
+        const def = wornTalisman() || TALISMANS.find(t => talLive(t) && talUnlocked.has(t.id)) || TALISMANS[0];
+        const R = 13, c = document.createElement("canvas");
+        c.width = c.height = Math.round(R*2.9);
+        const g = c.getContext("2d"), m = c.width/2;
+        talHook(g, m, m + R*0.22, R, def);
+        def.draw(g, m, m + R*0.22, R);
+        c.style.width = c.style.height = c.width + "px";
+        ti.appendChild(c);
+      }
+      // ...and what you have to spend, which is the whole question the shop asks.
+      const si = document.querySelector("#win-shop .wt-ico");
+      if (si) {
+        si.textContent = "";
+        si.appendChild(coinChip(19));
+        const n = document.createElement("span"); n.className = "n"; n.textContent = wallet.tiles;
+        si.appendChild(n);
+      }
+      top.classList.add("show");
+    }
   }
   function hideWinUI() {
     const el = document.getElementById("winui"); if (el) el.classList.remove("show");
+    const top = document.getElementById("wintop"); if (top) top.classList.remove("show");
   }
 
+  // The map's scale on the interlevel screen. Pulled out of drawWin because the hit test needs
+  // exactly the same number: a tap has to land on the square you can see, and two copies of this
+  // sum would drift apart the first time either was touched.
+  function winMapFit() {
+    const cells = mapCells();
+    const mCols = Math.max(...cells.map(p => p.c)) + 1, mRows = Math.max(...cells.map(p => p.r)) + 1;
+    return Math.min(viewW/(mCols + 1), viewH/(mRows + 1));
+  }
+  // Which chapters you may go to: everything cleared, and the first one you have not. The same
+  // rule drawMap colours by, so what is lit is exactly what is pressable.
+  function winOpen(i) {
+    const best = loadBest();
+    const done = k => { const b = best["L" + k]; return !!(b && (b.done || b.stars)); };
+    if (done(i)) return true;
+    let furthest = -1;
+    for (let k = 0; k < LEVELS.length; k++) if (done(k)) furthest = k;
+    return i <= furthest + 1;
+  }
+  // Which square is under a point on screen, or null. The inverse of mapRect, which centres
+  // square p at viewW/2 + (p.c - cx0)*S.
+  function winCellAt(x, y) {
+    if (!win || win.camC == null) return null;
+    const S = winMapFit(), cells = mapCells();
+    const c = Math.round((x - viewW/2)/S + win.camC), r = Math.round((y - viewH/2)/S + win.camR);
+    const iv = introMapCell();
+    if (c === iv.c && r === iv.r) return INTRO_CELL;
+    for (let i = 0; i < cells.length; i++) if (cells[i].c === c && cells[i].r === r) return i;
+    return null;
+  }
+  // The cloud, plus a square and a half of slack on every side. Without it the map can be thrown
+  // off into empty cosmos and there is nothing on screen to drag back by.
+  function clampWinCam() {
+    if (!win || win.camC == null) return;
+    const cells = mapCells(), pad = 1.5;
+    // one further left than the cloud, because the intro's square lives out there
+    const c0 = Math.min(...cells.map(p => p.c)) - 1, c1 = Math.max(...cells.map(p => p.c));
+    const r0 = Math.min(...cells.map(p => p.r)), r1 = Math.max(...cells.map(p => p.r));
+    win.camC = clamp(win.camC, c0 - pad, c1 + pad);
+    win.camR = clamp(win.camR, r0 - pad, r1 + pad);
+  }
   // Where a level's square sits on screen, given the scale and where the camera is looking.
   // The map is laid out in whole cells; `S` is how many pixels one of them is.
-  function mapRect(i, S, cx0, cy0) {
-    const cells = mapCells(), p = cells[i] || { c: 0, r: 0 };
+  function mapRectAt(p, S, cx0, cy0) {
     return { x: viewW/2 + (p.c - cx0)*S - S/2, y: viewH/2 + (p.r - cy0)*S - S/2, w: S, h: S };
   }
+  function mapRect(i, S, cx0, cy0) {
+    return mapRectAt(mapCells()[i] || { c: 0, r: 0 }, S, cx0, cy0);
+  }
+  // The origin story, as a square of the map: one place left of chapter one, wearing the cosmos
+  // it is set in rather than a level's palette. It is not a chapter and does not answer to
+  // winOpen — hence an index of its own, which is what winCellAt hands back for it.
+  const INTRO_CELL = -1;
+  function introMapCell() { const p = mapCells()[0] || { c: 0, r: 0 }; return { c: p.c - 1, r: p.r }; }
   // The whole map, drawn on the board's own canvas rather than in the menu's DOM: this has to
   // be something the camera can fly through, and a grid of buttons is not.
   function drawMap(ts, S, cx0, cy0, opts) {
@@ -6638,6 +7177,27 @@
       }
       ctx.restore();
       ctx.restore();
+      // The chapter's NUMBER, on every square you have been let into. Without them the pan from
+      // the one you have just finished to the one you are about to start is a move between two
+      // anonymous coloured tiles — the map knows which is which and was not saying. Greyed
+      // squares stay blank: a number on a place you cannot go is a label on a locked door.
+      //
+      // It fades in as the squares become MAP squares. Early in the pull-back one of them is
+      // most of the screen, and a chapter number rendered a foot tall across the cosmos is a
+      // caption on the wrong thing — so it waits until the tile is tile-sized. `lit` carries the
+      // rest, so the next chapter's number arrives exactly as its colour does.
+      const base = Math.min(viewW, viewH);
+      const numK = clamp((base*0.50 - S) / (base*0.15), 0, 1) * lit;
+      if (numK > 0.02 && S > 18) {
+        ctx.save();
+        ctx.globalAlpha = numK;
+        ctx.font = "900 " + Math.round(S*0.289) + "px " + UI_FONT;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.letterSpacing = "0px";                      // a number is not a word
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(String(i + 1), x + w/2, y + w/2);
+        ctx.restore();
+      }
       // A cleared level SHINES: a band of light drawn across it, and a rim to lift it off the
       // cosmos. It is the only thing on the map that is doing anything, so it does not need to
       // do much.
@@ -6674,6 +7234,41 @@
         rrect(x + lw/2, y + lw/2, w - lw, w - lw, Math.max(0, r - lw/2)); ctx.stroke();
       }
     }
+    // ...and the story of how all of it got here, beside the first chapter. Half-there: it is
+    // not somewhere you go, it is what the places you go are made of — and a square at full
+    // strength next to chapter one would read as a chapter you had somehow missed.
+    {
+      const R = mapRectAt(introMapCell(), S, cx0, cy0);
+      if (!(R.x > viewW + S || R.y > viewH + S || R.x + S < -S || R.y + S < -S)) {
+        const q = LEVEL_SWATCH, qs = S/q, vc = VOID_THEME.colors;
+        ctx.save();
+        ctx.save();
+        ctx.globalAlpha = 0.55;
+        rrect(R.x, R.y, S, S, r); ctx.clip();
+        for (let k = 0; k < q*q; k++) {
+          ctx.fillStyle = vc[k % vc.length];
+          ctx.fillRect(R.x + (k % q)*qs - 0.5, R.y + Math.floor(k/q)*qs - 0.5, qs + 1, qs + 1);
+        }
+        ctx.restore();
+        // A rim, because this square is cut from the very thing it is standing on: the cosmos
+        // over the cosmos is invisible, and without an edge all you can see is a triangle
+        // floating in space with nothing under it.
+        const lw = Math.max(1, S*0.03);
+        ctx.strokeStyle = "rgba(255,255,255,0.22)"; ctx.lineWidth = lw;
+        rrect(R.x + lw/2, R.y + lw/2, S - lw, S - lw, Math.max(0, r - lw/2)); ctx.stroke();
+        // the one mark that says "this one is a film": a play triangle, the shape the menu's
+        // own intro square wore
+        const m = S*0.30, cx1 = R.x + S/2 - m*0.10, cy1 = R.y + S/2;
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.moveTo(cx1 - m*0.45, cy1 - m*0.62);
+        ctx.lineTo(cx1 + m*0.68, cy1);
+        ctx.lineTo(cx1 - m*0.45, cy1 + m*0.62);
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+    }
   }
   // The heading, in the same extruded gold the title screen and the menus use.
   function winHeading(text, y, size, k) {
@@ -6692,6 +7287,18 @@
     if (!win) return;
     win.t += dt;
     const P = win;
+    // Each pickup lights again as the rebuild reaches the point in the route it happened at,
+    // and then stays lit — so what stands at the end is the whole run annotated, not a replay
+    // you had to be watching. The chime is rationed: a route is laid down in a second and a
+    // half and a level with a dozen coins along it would otherwise fire them all as one noise.
+    P.clock = (P.clock || 0) + dt;
+    if (P.picks) for (const q of P.picks) {
+      if (q.t >= 0) { q.t += dt; continue; }
+      if (q.at >= P.laid) continue;
+      q.t = 0;
+      if (q.kind === "coin") P.coins++;
+      if (P.clock - P.pickSnd > 90) { P.pickSnd = P.clock; Sound.coin(); }
+    }
     const done = (ms) => P.t >= ms;
     if (P.ph === "fit") {
       // Ease the camera and the cell size together. cell is what everything on the board is
@@ -6725,8 +7332,27 @@
       // Holds. The level you just finished is on the screen with its name on it, and moving on
       // from that is YOUR decision — the sequence has been running on its own long enough by
       // this point, and a beat you can sit in is what turns a cutscene into a moment.
+    } else if (P.ph === "wait") {
+      // A chapter you have just chosen is brought to the middle rather than cut to — the map is
+      // a place, and the camera moves across it. Dragging cancels it: your hand outranks it.
+      if (P.camTo && !P.drag) {
+        const k = Math.min(1, dt/140);
+        P.camC += (P.camTo.c - P.camC) * k;
+        P.camR += (P.camTo.r - P.camR) * k;
+        if (Math.abs(P.camTo.c - P.camC) < 0.01 && Math.abs(P.camTo.r - P.camR) < 0.01) {
+          P.camC = P.camTo.c; P.camR = P.camTo.r; P.camTo = null;
+        }
+      }
     } else if (P.ph === "pan") {
-      if (done(WIN.pan)) { P.ph = "wait"; P.t = 0; showWinUI(); }
+      if (done(WIN.pan)) {
+        P.ph = "wait"; P.t = 0;
+        // The pan lands and hands the camera over to YOU: from here the map can be dragged and
+        // any chapter you have been let into can be chosen. It starts looking at the one the
+        // pan just arrived on, which is the one the button already offers.
+        const there = mapCells()[P.next] || { c:0, r:0 };
+        P.camC = there.c; P.camR = there.r; P.camTo = null; P.drag = null;
+        showWinUI();
+      }
     } else if (P.ph === "whip") {
       if (done(WIN.whip)) {
         // ...and out the other side. The level loads under a black screen and comes up out of it.
@@ -6742,6 +7368,13 @@
 
   function drawWin(ts) {
     const P = win; if (!P) return;
+    // A menu opened FROM this screen takes the whole screen, and what stands behind it should be
+    // the cosmos and nothing else. The victory sequence owns the frame outright — it never falls
+    // through to draw(), which is where every other screen's "a menu is up, paint only the
+    // ground" rule lives — so the map went on being drawn under the shop: the squares, the ring
+    // round the next chapter, the words. A shelf of hats over the top of that reads as a card
+    // dropped onto the map rather than as somewhere you have gone.
+    if (menuEl && menuEl.classList.contains("show")) { drawVoid(ts); return; }
     // The last beat is the NEXT level playing normally with the black lifting off it.
     if (P.ph === "fade") {
       draw(ts);
@@ -6753,6 +7386,12 @@
     // route being cast back across it.
     if (P.ph === "fit" || P.ph === "hold" || P.ph === "build" || P.ph === "rest") {
       draw(ts);                                  // ...which lays the route in with the track
+      // Over the top of the level, not under it. The count climbs as the route reaches each
+      // coin, so it wants to be in the same glance as the thing that is making it climb — and
+      // it rides the board's own top edge as the pull-back opens the margin above it, rather
+      // than sitting at a fixed height the shrinking level walks away from.
+      const th = Math.min(20, viewW*0.048);
+      drawCoinTally(ts, Math.max(th*1.3, -camY - th*1.3), 1);
       return;
     }
     // Map beats. Everything from here is drawn from scratch: the cosmos, the map, the level
@@ -6783,7 +7422,8 @@
       glowA = 1 - k;                          // ...and it lets go as the camera leaves it
       litK = k; ring = k;
     } else if (P.ph === "wait") {
-      cx0 = there.c; cy0 = there.r;
+      cx0 = P.camC != null ? P.camC : there.c;
+      cy0 = P.camR != null ? P.camR : there.r;
       litK = 1; ring = 1;
     } else if (P.ph === "whip") {
       const k = easeIn(Math.min(1, P.t / WIN.whip));
@@ -6823,14 +7463,15 @@
       const inK = (at) => P.ph === "name" ? Math.min(1, Math.max(0, (P.t - at)/260)) : 1;
       winHeading("Chapter " + (P.idx + 1), viewH*0.16, size, inK(0)*outK);
       winHeading("Complete", viewH*0.16 + size*1.15, size, inK(340)*outK);
+      // ...and what you came away with, arriving after the words that name it.
+      drawCoinTally(ts, viewH*0.16 + size*2.35, inK(640)*outK);
     }
     if (P.ph === "name" && P.t > 900) {                 // ...and last of all, the way out
       ctx.save();
       ctx.globalAlpha = Math.min(1, (P.t - 900)/380) * (0.55 + 0.45*Math.sin(P.t/380));
       ctx.fillStyle = "#bfc6e0";
-      ctx.font = "900 " + Math.round(Math.min(15, viewW*0.036)) + "px " + UI_FONT;
+      tapPromptFont(ctx, "TAP TO CONTINUE", viewW*0.86);
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.letterSpacing = "2px";
       ctx.fillText("TAP TO CONTINUE", viewW/2, viewH*0.86);
       ctx.restore();
     }
@@ -6871,6 +7512,68 @@
     }
     ctx.restore();
   }
+  // Everything collected on the run, put back where it was collected. Drawn in the board's own
+  // space with the route, so it shrinks with the level and travels down into the map square
+  // along with it — these are part of the picture of the run, not a caption over it.
+  function drawWinPicks(ts) {
+    const P = win; if (!P || !P.picks) return;
+    for (const q of P.picks) {
+      if (q.t < 0) continue;
+      const k = Math.min(1, q.t/280), e = 1 - Math.pow(1 - k, 3);
+      const x = (q.c + 0.5)*cell, y = (q.r + 0.5)*cell;
+      // A light goes up under it as it lands and is gone in a quarter of a second, which is
+      // the "when"; the thing itself stays, which is the "where".
+      if (k < 1) {
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = 0.55*(1 - k)*(1 - k);
+        ctx.fillStyle = "#fff7d6";
+        rrect(cx(q.c), cy(q.r), cell, cell, tileR(cell)); ctx.fill();
+        ctx.restore();
+      }
+      if (q.kind === "boost" || q.kind === "slow") {   // these are painted ON the cell, not over it
+        ctx.save(); ctx.globalAlpha = e;
+        drawChevrons(q.c, q.r, ts, q.kind === "boost" ? -1 : 1, pal(q.kind));
+        ctx.restore();
+        continue;
+      }
+      ctx.save();
+      ctx.globalAlpha = e;
+      ctx.translate(x, y);
+      const sc = 1 + (1 - e)*0.85;                     // it drops in rather than fading up
+      ctx.scale(sc, sc);
+      if (q.kind === "coin") drawCoin(0, 0, ts);
+      else if (q.kind === "key") drawKey(0, 0, ts, q.color);
+      else if (q.kind === "lock") drawLock(0, 0, ts);
+      else if (q.kind === "tal") {
+        const d = talById(q.id), R = cell*0.30;
+        if (d) { talHook(ctx, 0, 0, R, d); d.draw(ctx, 0, 0, R); }
+      }
+      ctx.restore();
+    }
+  }
+  // The count, as it climbs. It is drawn on the GLASS rather than on the board — a tally is
+  // something the game is telling you, so it does not shrink into the map with the level.
+  function drawCoinTally(ts, y, alpha) {
+    const P = win;
+    if (!P || !P.coinsTotal || alpha <= 0.01) return;
+    const h = UI_PX, gap = h*0.55;
+    const txt = P.coins + " / " + P.coinsTotal;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = "900 " + h + "px " + UI_FONT;
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.letterSpacing = UI_TRACK;
+    const tw = ctx.measureText(txt).width, cw = h*0.86;
+    const x0 = viewW/2 - (cw + gap + tw)/2;
+    // The coin, in miniature and flat: the board's own coin is a lit object with a shadow under
+    // it, and one of those at HUD size reads as a smudge.
+    rrect(x0, y - cw/2, cw, cw, cw*0.26); ctx.fillStyle = "#ffd24a"; ctx.fill();
+    rrect(x0 + cw*0.26, y - cw*0.24, cw*0.48, cw*0.48, cw*0.12); ctx.fillStyle = "#c98d13"; ctx.fill();
+    ctx.fillStyle = "#f4f1ff";
+    ctx.fillText(txt, x0 + cw + gap, y);
+    ctx.restore();
+  }
   // the newest piece of the route flashes as it lands, the way a laid tile does
   function winRouteFlash(nd, k) {
     if (!(k > 0)) return;
@@ -6905,7 +7608,12 @@
   const VOID_THEME = { colors: Array.from({ length: 8 }, (_, i) =>
                          "hsl(" + Math.round(i * 360 / 8) + ",46%,7%)"),
                        patchW: 0.55, drift: 0.5, dir: 1, stripeW: 3 };
-  const drawVoid = ts => drawBackground(ts, VOID_THEME, true, "drift");
+  // Pieced at the level's OWN cell, always — never at whatever the win sequence's zoom has
+  // wound `cell` down to. The cosmos is what the levels hang in: it is not part of any one of
+  // them, and a starfield that shrinks along with the board it is behind turns the pull-back
+  // into the whole universe being sucked away rather than one level receding into it.
+  const voidCell = () => (win && win.cell0) || cell;
+  const drawVoid = ts => drawBackground(ts, VOID_THEME, true, "drift", voidCell());
   // The TILEVERSE button, wearing the cosmos the Tileverse hangs in — the same eight hues on the
   // same 45-degree ping-pong that drawVoid paints, so the button is a window onto where it goes
   // rather than a flat near-black that only happened to look like it.
@@ -6994,7 +7702,7 @@
     const last = cere.last;
     endCeremony();
     Sound.tapBig();
-    if (last) { openMenu("world"); }
+    if (last) { openTileverse(); }
     else { levelIdx = levelIdx + 1; loadLevel(levelIdx); }
     return true;
   }
@@ -7122,7 +7830,7 @@
         ctx.globalAlpha = 0.45 + 0.55*pulse;
         ctx.fillStyle = "#eef0ff";
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.font = "900 " + Math.round(Math.min(W*0.05, 19)) + "px " + UI_FONT;
+        tapPromptFont(ctx, "TAP TO CONTINUE", W*0.86);
         ctx.fillText("TAP TO CONTINUE", W/2, H*0.90);
         ctx.restore();
       }
@@ -7146,27 +7854,18 @@
     def.draw(g, 0, 0, R);
     g.restore();
   }
+  // How the fall's card comes together: the header first, then a line of the byline every
+  // FELL_STEP, then the pair, then the way out. Slow enough to read as one part arriving after
+  // another rather than as a stagger.
+  const FELL_HEAD = 320, FELL_STEP = 260;
   const LOSE_QUIPS = [
-    "Gravity: still undefeated.",
-    "That's not a shortcut, that's a cliff.",
-    "You'd like a word with HR about job safety.",
-    "Bold strategy — laying track behind yourself.",
-    "You had ONE job. It was the floor.",
-    "You ran out of ground and options.",
-    "Tiles are reusable. So are second chances.",
-    "The floor is lava. Also, missing.",
-    "Somewhere, a tile is feeling unused.",
-    "Speedrunning… into the void.",
-    "You trusted gravity. Rookie mistake.",
-    "Great pace! Shame about the ending.",
-    "Next time, maybe put a tile there.",
-    "That was a controlled descent. Very controlled.",
-    "You filed a complaint. It fell through.",
-    "Physics 1, You 0.",
-    "So close. So very, very not close.",
-    "You're fine. You always land on your… nope.",
-    "A for effort, F for flooring.",
-    "The abyss says thanks for the snack.",
+    "Are you high?",
+    "Physics 1. You 0.",
+    "If at first you don't succeed, give up.",
+    "Have you tried trying?",
+    "Where were you when a tile was needed?",
+    "Death is just another state of being.",
+    "If you stare into the abyss long enough, the abyss stares back.",
   ];
   const LOSE_TITLES = ["You Fell", "Wipeout!", "Splat.", "Down You Go", "Ouch.", "Gap Year"];
   let _lastQuip = -1;
@@ -7587,6 +8286,7 @@
     // he is standing on made the replay look like something happening to the level rather than
     // something the level is made of.
     if (win && win.laid > 0) drawWinRoute(ts, win.laid);
+    drawWinPicks(ts);                                 // ...and everything he picked up on the way
     // the exit is a floating flag on its cell; you must lay a tile there to finish
     if (state.goal) drawFlag(state.goal.c, state.goal.r, ts, false);   // never locked (no primary key)
   }
@@ -8459,7 +9159,7 @@
     // the top line already carries NEW TALISMAN, so the middle and top right are both taken.
     ctx.textAlign = "right";
     ctx.fillStyle = "rgba(214,218,240,0.42)";
-    ctx.font = "700 " + Math.round(h*0.16) + "px " + UI_FONT;
+    tapPromptFont(ctx, "TAP TO DISMISS", w*0.62);
     ctx.fillText("TAP TO DISMISS", x + w - h*0.34, y + h*0.90);
     ctx.restore();
   }
@@ -9401,6 +10101,12 @@
   // great gold tile floating over it.
   function drawJunctionMarks(ts) {
     if (JUNCTION.mark <= 0) return;
+    // Not until he is off. The hints are an invitation to act, and there is nothing to act on
+    // while the camera is still panning the board or the character is still assembling — a
+    // level that opens with three squares already blinking has told you to hurry before it has
+    // finished telling you where you are. They arrive with the first stride, and cold: markGrow
+    // and markLive are left at rest until then, so the first thing you see is them opening.
+    if (state.status !== "play") { markGrow = 0; markLive = 0; return; }
     const lead = leadNode();
     if (!lead) return;
     markGrow += ((state.drag ? 1 : 0) - markGrow) * 0.22;
@@ -9723,6 +10429,19 @@
   // ...and how far a leaping swagger has him off the track, 0..1. Same reasoning: paintRunner
   // is called from places that have no path to leap along.
   let _leapLift = 0, _leapPose = 0, _leapFoot = 1, _leapAir = 0;
+  // The level-start FORM. His body arrives one background patch across and with no legs at all,
+  // and these three are what let the intro say so without a second copy of the character
+  // sitting in it: two multipliers on the body box and one on the leg. Everything else about
+  // him — the hat cut to his head, the finish, the eyes — is already measured off those, so it
+  // all comes along. At 1/1/1 they are not there.
+  let _formW = 1, _formH = 1, _formLeg = 1;
+  // No light off anything while the heap is being painted. Every glow in the game is additive —
+  // a drip's, the halo's — which is right for one runner casting light on the board around him
+  // and wrong for fifty of them stacked up, where there is no board around him, only more of
+  // him: what comes out is one bloom with legs sticking out of it. A flag rather than an
+  // argument, because the thing that has to check it is a hat, and a hat is drawn by a function
+  // in a list that knows nothing about heaps.
+  let _noGlow = 0;
   // Stroke the last `frac` of a limb, walking BACK from the foot along its bones — hip to
   // knee to foot, or hip straight to foot on a runner with no knees. The pen is whatever the
   // caller set, so this lays the kick's colour into the leg's own line rather than beside it.
@@ -9798,7 +10517,7 @@
     // and a longer one points him. Crouching further than it stretches, because a landing
     // absorbs and a jump only reaches.
     const legK = 1 + (_leapPose < 0 ? _leapPose*0.50 : _leapPose*0.18);
-    const legL = s*RUNNER.legLen*legK, bodyH = s*RUNNER.bodyH, bodyW = s*RUNNER.bodyW;
+    const legL = s*RUNNER.legLen*legK*_formLeg, bodyH = s*RUNNER.bodyH*_formH, bodyW = s*RUNNER.bodyW*_formW;
     // soft ground shadow (not an outline). shadowBob ties it to the body's rise, so a
     // high bob can read as him actually leaving the ground rather than sliding along it.
     // Skipped entirely once he is falling — there is no ground left to cast it on, and a
@@ -9878,7 +10597,7 @@
     // live inside his silhouette, which is right for a colour and useless for light — light
     // leaves him and lands on the board around him. Drawn additively and BEFORE the legs and
     // the body, so everything he is made of still reads crisply on top of its own glare.
-    if (!golden && skin.glow) {
+    if (!golden && skin.glow && !_noGlow && !(as && as.dead)) {
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
       skin.glow(ctx, 0, byTop + bodyH/2, s, ts);
@@ -9886,7 +10605,7 @@
     }
     // legs — same colour as body, no outline
     ctx.strokeStyle = finish; ctx.lineWidth = Math.max(3, s*RUNNER.legWidth); ctx.lineCap = "round"; ctx.lineJoin = "round";
-    const hipY = -legL - bob - bodyH*(RUNNER.hipRise||0), kneeLead = s*RUNNER.kneeLead;
+    const hipY = -legL - bob - bodyH*(RUNNER.hipRise||0), kneeLead = s*RUNNER.kneeLead*_formLeg;
     const backHip = -bodyW*RUNNER.legSplay, frontHip = bodyW*RUNNER.legSplay;
     const feet = [];
     // A foot lifts while it is travelling FORWARD and is planted while it is travelling back —
@@ -10034,7 +10753,7 @@
     // a runner the game did not draw. The block parity check compares VALUES between the three
     // copies and cannot see a key that one of them quietly stopped using.
     ctx.fillStyle = finish;
-    rrect(-bodyW/2, byTop, bodyW, bodyH, s*RUNNER.bodyR); ctx.fill();
+    rrect(-bodyW/2, byTop, bodyW, bodyH, s*RUNNER.bodyR*Math.min(_formW, _formH)); ctx.fill();
     // the finish's own detail — facets, streaks — kept inside the silhouette
     if (skin.sheen) {
       ctx.save(); ctx.clip();                       // the body path is still current after fill()
@@ -10831,13 +11550,13 @@
       }
     ctx.restore();
   }
-  function drawPatchwork(ts, themeOverride, stars, mode) {
+  function drawPatchwork(ts, themeOverride, stars, mode, cellPx) {
     const T = themeOverride || (state && state.bgTheme) || DEFAULT_THEME;
     // Exactly half a game tile. It used to be a per-theme fraction between 0.38 and 0.70 of a
     // cell, which meant the ground was pieced to a different measure from everything standing
     // on it and no patch edge ever lined up with a tile edge. Half a cell means two patches to
     // a tile, dead on, on every level.
-    const w = (cell || 90) * 0.5;
+    const w = (cellPx || cell || 90) * 0.5;
     // Keyed on the EXACT patch width. It used to round to whole pixels, and since `cell` is
     // itself an integer, a resize that moved cell by one shifted w by patchW — 0.38 to 0.70 of
     // a pixel — which rounding swallowed about half the time. The pattern then kept the old
@@ -10937,9 +11656,9 @@
   // `mode` is how the quilt is anchored. "weld" pins it to the BOARD — it is the level's own
   // ground, so it must sit still relative to the tiles standing on it. "drift" lets it scroll
   // under its own steam, which is what the cosmos and the title screen want.
-  function drawBackground(ts, themeOverride, stars, mode) {
+  function drawBackground(ts, themeOverride, stars, mode, cellPx) {
     if (!grainPattern) buildPaper();
-    drawPatchwork(ts, themeOverride, stars, mode);               // pieced quilt of muted patches
+    drawPatchwork(ts, themeOverride, stars, mode, cellPx);       // pieced quilt of muted patches
     ctx.globalAlpha = 0.22; ctx.fillStyle = "#0a0817";            // lighter wash -> unify without deepening
     ctx.fillRect(0, 0, viewW, viewH); ctx.globalAlpha = 1;
     if (!grainScreen || grainScreenW !== viewW || grainScreenH !== viewH) buildGrainScreen();
@@ -11133,7 +11852,7 @@
 
   canvas.addEventListener("pointerdown", (e) => {
     e.preventDefault();
-    if (winTap()) return;               // the victory sequence is waiting to be let on
+    if (winPointerDown(e)) return;      // the victory sequence is waiting to be let on
     Sound.unlock();                     // first touch unlocks audio (iOS autoplay policy)
     if (cineActive)  { cineStep(); return; }    // tap anywhere to skip ahead one chapter
     if (titleActive) { leaveTitle(); return; }
@@ -11157,6 +11876,7 @@
         const onIt = sl.axis==="h" ? (r===sl.r && c===cur) : (c===sl.c && r===cur);
         const locked = state.path.some(n => sl.axis==="h" ? (n.r===sl.r && n.c===cur) : (n.c===sl.c && n.r===cur));
         if (onIt && !locked) {
+          cancelSlide(sl);                  // a hand on it beats a tap that called it
           state.sliderDrag = { sl }; haptic(6);
           canvas.setPointerCapture(e.pointerId);
           return;
@@ -11167,8 +11887,12 @@
         const cur = Math.round(b.pos);
         const onIt = b.axis==="h" ? (r===b.r && c===cur) : (c===b.c && r===cur);
         const locked = state.path.some(n => b.axis==="h" ? (n.r===b.r && n.c===cur) : (n.c===b.c && n.r===cur));
-        if (onIt && !locked) { state.blockDrag = { b }; haptic(6); canvas.setPointerCapture(e.pointerId); return; }
+        if (onIt && !locked) { cancelSlide(b); state.blockDrag = { b }; haptic(6); canvas.setPointerCapture(e.pointerId); return; }
       }
+      // Tap the empty rail ahead of a platform or a block and it comes to that cell. This sits
+      // BELOW sendTileTo on purpose: where a rail cell is also a live junction hotspot the tile
+      // wins, because that is the tap you make every few seconds and this is the rarer one.
+      if (slideTo(c, r)) return;
       // grab one side of a manual sliding door (push each panel away from the centre)
       for (const md of (state.manualDoors||[])) {
         if (c===md.c && r===md.r && !(md.left>=0.999 && md.right>=0.999)) {
@@ -11188,6 +11912,7 @@
     canvas.setPointerCapture(e.pointerId);
   });
   canvas.addEventListener("pointermove", (e) => {
+    if (winPointerMove(e)) { e.preventDefault(); return; }   // dragging the Tileverse about
     if (state.sliderDrag) { e.preventDefault();
       const { x, y } = screenXY(e); const wx = x + camX, wy = y + camY, sl = state.sliderDrag.sl;
       if (sl.axis === "h") sl.pos = clamp(wx/cell - 0.5, sl.lo, sl.hi);
@@ -11228,6 +11953,7 @@
     const { x, y } = screenXY(e); state.drag.sx = x; state.drag.sy = y;
   });
   function endDrag(e){
+    if (winPointerUp(e)) { e.preventDefault(); return; }     // ...and letting go of it
     if (state.sliderDrag) { e.preventDefault();
       const sl = state.sliderDrag.sl; sl.pos = clamp(Math.round(sl.pos), sl.lo, sl.hi);   // snap to a cell
       state.sliderDrag = null;
@@ -11377,7 +12103,14 @@
       const id = ids[i], mine = p.kind === id;
       const bar = b.lastChild;
       let cls = "pw";
-      if (mine && p.t > 0) { cls = "pw live";
+      // The Millstone never reaches the effect slot — it is a sit, with a clock of its own —
+      // but it IS running, and while it is, its own button is the way out of it. So it gets the
+      // live look and the draining bar every other running charm has; a second press that
+      // stands him up would otherwise be a thing you had to be told about.
+      const sit = id === "brake" && state.rest;
+      if (sit) { cls = "pw live";
+        bar.style.width = Math.max(0, 1 - state.rest.t/restTotal(state.rest))*100 + "%"; }
+      else if (mine && p.t > 0) { cls = "pw live";
         bar.style.width = Math.max(0, Math.min(1, p.t / (p.ms || 1)))*100 + "%"; }
       else if (id === "ankh" && p.ankh) { cls = "pw armed"; bar.style.width = "0"; }
       else { if (p.used.has(id)) cls = "pw dim"; bar.style.width = "0"; }
@@ -11928,6 +12661,24 @@
     g.beginPath(); g.moveTo(S*0.56, S*0.26); g.lineTo(S-m, S/2); g.lineTo(S*0.56, S*0.74); g.stroke();
     return c;
   }
+  // The settings cog, drawn with the arrow chip's own pen: a ring with six stubs standing off
+  // it. Not a gear-tooth profile — at twenty pixels that is a smudge, and a ring with spokes is
+  // what everyone reads as "settings" anyway.
+  function cogChip(px, col){
+    const c = document.createElement("canvas");
+    c.className = "arrow"; c.width = c.height = Math.round(px*2);
+    const g = c.getContext("2d"), S = c.width, m = S/2, r = S*0.25;
+    g.strokeStyle = col; g.lineWidth = S*0.13; g.lineCap = "butt";
+    g.beginPath(); g.arc(m, m, r, 0, Math.PI*2); g.stroke();
+    for (let i = 0; i < 6; i++) {
+      const a = i*Math.PI/3;
+      g.beginPath();
+      g.moveTo(m + Math.cos(a)*r*1.02, m + Math.sin(a)*r*1.02);
+      g.lineTo(m + Math.cos(a)*r*1.72, m + Math.sin(a)*r*1.72);
+      g.stroke();
+    }
+    return c;
+  }
   // RESTART: a loop that goes round and comes back, with the same head the arrow chip wears.
   // Square-capped and drawn as an arc rather than a ring, because a closed circle reads as a
   // status light — the gap is what makes it a journey back to the beginning.
@@ -11977,13 +12728,21 @@
     Sound.unlock(); Sound.tapBig(); Sound.warp(true);
     hideWinUI(); win.ph = "whip"; win.t = 0;
   });
-  document.getElementById("win-menu").addEventListener("click", () => {
-    if (!win) return;
-    Sound.unlock(); Sound.tapBig();
-    // Out of the sequence and onto the real map — the same one it has been flying over.
-    const nx = win.next; winEnd();
-    levelIdx = nx; loadLevel(nx); openMenu("world");
-  });
+  // The three doors along the top. Each one takes you off the interlevel screen and BACK to
+  // it: the sequence is paused where it stood, not abandoned, so buying a hat between chapters
+  // costs you your place in nothing. hideWinUI first — #winui sits above #menu, so the buttons
+  // would otherwise float over the shop.
+  function winDoor(screen) {
+    return () => {
+      if (!win) return;
+      Sound.unlock(); Sound.tapBig();
+      hideWinUI();
+      openMenu(screen, () => { closeMenu(); showWinUI(); });
+    };
+  }
+  document.getElementById("win-tal").addEventListener("click", winDoor("talismans"));
+  document.getElementById("win-shop").addEventListener("click", winDoor("shop"));
+  document.getElementById("win-cog").addEventListener("click", winDoor("settings"));
   document.getElementById("mech-ok").addEventListener("click", () => { Sound.unlock(); Sound.tapBig(); mechQueue.shift(); showNextMech(); });
 
   const menuEl = document.getElementById("menu");
@@ -11991,6 +12750,14 @@
   // menuReturn: opened from somewhere that is still on screen behind us (the level-clear
   // card), so Back has to hand control straight back rather than land on the pause menu.
   let menuReturn = null;
+  // Every DONE in the game goes through here. Without it they all landed on the pause menu,
+  // which is right when that is where you came from and wrong when it is not — the doors off
+  // the interlevel screen hand this a way home, and DONE takes it.
+  function menuBack() {
+    const f = menuReturn;
+    if (f) { menuReturn = null; f(); return; }
+    buildMenu("main");
+  }
   // A menu takes the whole screen: the backdrop stays (draw() paints only that once a menu is
   // up) and everything else goes. Opening the shop from the clear card used to leave LEVEL
   // CLEAR, its byline and its buttons showing through from underneath, and the talisman rack
@@ -12398,8 +13165,7 @@
           menuBody.appendChild(buy);
         }
       }
-      const go = btn("Done",
-                     () => buildMenu("main"), true);
+      const go = btn("Done", menuBack, true);
       go.className = "shop-go";
       labelWithArrow(go, "Done");
       menuBody.appendChild(go);
@@ -12451,8 +13217,7 @@
       // No tally. It counted against TALISMANS.length, which includes the ones held back, so it
       // could never reach its own total — and a shelf of charms says how many you have by being
       // a shelf with gaps in it.
-      const back = btn("Done",
-                       () => buildMenu("main"), true);
+      const back = btn("Done", menuBack, true);
       back.className = "shop-go";
       labelWithArrow(back, "Done");     // the button was built as Done and then relabelled Back
       menuBody.appendChild(back);
@@ -12522,7 +13287,7 @@
         setTimeout(() => { try { location.reload(); } catch(_) {} }, 480);
       });
       menuBody.appendChild(rb);
-      const back = btn("Done", () => buildMenu("main"));
+      const back = btn("Done", menuBack);
       back.className = "shop-go";
       menuBody.appendChild(back);
       return;
@@ -12610,7 +13375,7 @@
       map.appendChild(intro);
       rack.appendChild(map);
       menuBody.appendChild(rack);
-      const back = btn("Done", () => buildMenu("main"));
+      const back = btn("Done", menuBack);
       back.className = "shop-go";
       menuBody.appendChild(back);
       // Open on the level you are on, centred in the pane. offsetTop is measured inside the
@@ -12642,7 +13407,7 @@
       });
       rack.appendChild(grid);
       menuBody.appendChild(rack);
-      const back = btn("Done", () => buildMenu("main"));
+      const back = btn("Done", menuBack);
       back.className = "shop-go";
       menuBody.appendChild(back);
       return;
@@ -12673,7 +13438,7 @@
     if (end && end.kind === "win")
       menuBody.appendChild(btn(end.last ? "Chapter Select" : "Next Chapter", () => {
         endCeremony();
-        if (end.last) { buildMenu("world"); return; }
+        if (end.last) { openTileverse(); return; }
         levelIdx = levelIdx + 1; loadLevel(levelIdx); closeMenu();
       }));
     // RETRY everywhere but a clear — starting again is what a fall leaves you, and what a
@@ -12685,33 +13450,55 @@
     // to skip to: a run you cannot finish should not be the end of the campaign for you, and
     // the alternative — hunting through the Tileverse for the next square — makes being stuck
     // feel like being punished.
+    // Built here, but NOT put in the column: on a fall it stands beside RETRY at the foot of
+    // the screen, and that row is assembled below.
+    let skipBtn = null;
     if (end && end.kind === "lose" && levelIdx < LEVELS.length - 1) {
-      const skipBtn = btn("Skip Chapter", () => {
+      skipBtn = btn("Skip", () => {
         levelIdx = levelIdx + 1; loadLevel(levelIdx); closeMenu();
       });
       skipBtn.classList.add("rust");
-      menuBody.appendChild(skipBtn);
     }
     // A FALL offers three answers and stops: go again, go past it, or go back to the map. The
     // shop and the talismans and the settings are all still there, one tap away on the map —
     // but a screen that has just told you you died is not the moment to sell you a hat, and six
     // buttons is a list rather than a decision.
     if (end && end.kind === "lose") {
-      const back = btn("Menu", () => buildMenu("world"));
-      back.classList.add("void");
+      // Straight under the words: the way OUT of the chapter altogether. Hollow, because it is
+      // the answer that gives up on this run entirely, and it should not compete with the two
+      // that carry on — it is there for when neither of them is what you want.
+      const back = btn("Return to the Tileverse", openTileverse);
+      back.classList.add("hollow");
       menuBody.appendChild(back);
-      // ...and RETRY at the very bottom, a screen away from the two that take you elsewhere.
-      // It is the one you will press most and the one you press without reading, so it wants to
-      // be under your thumb rather than first in a list — and the gap is what stops it being
-      // pressed by accident on the way to the other two.
+      // ...and the two that DO carry on, side by side at the very bottom, a screen away from
+      // it. They are the ones you press most and the ones you press without reading, so they
+      // want to be under your thumb rather than first in a list — and the gap is what stops
+      // either being hit on the way to anything else.
       const gap = document.createElement("div"); gap.className = "menu-push";
       menuBody.appendChild(gap);
-      menuBody.appendChild(btn("Retry", () => { loadLevel(levelIdx); closeMenu(); }));
+      // SKIP on the left, RETRY on the right: the one you mean is under your writing thumb,
+      // and the one that gives up on the run is the one you have to reach for.
+      const row = document.createElement("div"); row.className = "menu-row";
+      if (skipBtn) row.appendChild(skipBtn);
+      row.appendChild(btn("Retry", () => { loadLevel(levelIdx); closeMenu(); }));
+      menuBody.appendChild(row);
       const ver0 = document.createElement("div"); ver0.className = "menu-ver"; ver0.textContent = VERSION;
       menuBody.appendChild(ver0);
+      // ...and now the order it all arrives in, which is the order it should be READ in rather
+      // than the order it is stacked in: RETURN TO THE TILEVERSE sits above the pair and comes
+      // after them, because it is the answer you reach for only once the other two are no.
+      const cue = (el, at) => { if (!el) return;
+        el.style.animation = "none"; void el.offsetWidth; el.style.animation = "";
+        el.classList.add("fell-in"); el.style.animationDelay = at + "ms"; };
+      cue(title, 0);
+      const lines = [...menuBody.querySelectorAll(".menu-byline .bl")];
+      lines.forEach((ln, i) => cue(ln, FELL_HEAD + i*FELL_STEP));
+      const after = FELL_HEAD + Math.max(0, lines.length - 1)*FELL_STEP + FELL_STEP;
+      cue(row, after);
+      cue(back, after + FELL_STEP);
       return;
     }
-    const worldBtn = btn("Tileverse", () => buildMenu("world"));
+    const worldBtn = btn("Tileverse", openTileverse);
     worldBtn.classList.add("void");
     menuBody.appendChild(worldBtn);
     // The plain grid is off the menu. The Tileverse says everything it said and says it as a
@@ -12793,6 +13580,7 @@
                  onBoard: () => state.talismans.map(t=>({c:t.c,r:t.r,id:t.id,got:t.got})),
                  reset: () => { talUnlocked = new Set(); saveTalismans(talUnlocked); },
                  flash: (id) => flashTalisman(talById(id || TALISMANS[0].id)) },
+    railTap: (c, r) => slideTo(c, r),
     moveBlock: (i, pos) => { const b = state.blocks[i]; if (b) { b.pos = clamp(pos, b.lo, b.hi); markOccDirty(); } },
     openMDoor: (i) => { const md = state.manualDoors[i]; if (md) { md.left = 1; md.right = 1; markOccDirty(); } },
     ui: {
@@ -12841,7 +13629,7 @@
     // is what a returning player wanted anyway: the old rule keyed off the level you were on,
     // so anyone still on level one sat through the whole opening every single launch.
     if (!cineSeen()) startCine("level");      // the cinematic picks the theme up from here
-    else openMenu("world");                   // the map, opened on the level you are up to
+    else openTileverse();                     // the map, opened on the level you are up to
   }
 
   // ---------- BIG MAN LITTLE ----------------------------------------------
@@ -13142,6 +13930,43 @@
       // of whatever is behind them, and forty tiles of that reads as a grid nobody drew.
       ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 1; ctx.stroke();
       if (shade > 0.002) { ctx.fillStyle = "rgba(0,0,0," + shade.toFixed(3) + ")"; ctx.fill(); }
+    }
+    ctx.restore();
+  }
+
+  // ---- the charms on the sides of the Tiloid ------------------------------------------
+  // Six faces, six charms, in the badges' own language: the inscribed panel, and the icon
+  // raised out of it in the charm's face colour. A talisman is a small tile with a mark on it,
+  // and this is the first tile there ever was — the marks belong on it, and they go as it
+  // unfolds, because a side that has lain down is a level now and not a charm.
+  //
+  // The face is projected as a lattice and an etch is a flat 2D drawing, so it is laid on with
+  // an affine frame built from three of the face's corners — the origin and the two edges — so
+  // that the unit square IS the face and the mark foreshortens with it. Not a homography: a
+  // symbol on a face turned hard away is a little off, but by then that face is dark and a few
+  // pixels wide, and the ones being read are the ones facing us, which are right.
+  const CINE_SIGILS = ["magnet", "finger", "brake", "ankh", "pulse", "mush"];
+  function cineFaceSigil(f, alpha) {
+    if (alpha <= 0.01 || f.face == null) return;
+    const def = talById(CINE_SIGILS[f.face % CINE_SIGILS.length]);
+    if (!def || !def.etch) return;
+    const P = LEVEL_SWATCH + 1, p0 = f.pts[0], pu = f.pts[P-1], pv = f.pts[P*(P-1)];
+    const ax = pu[0]-p0[0], ay = pu[1]-p0[1], bx = pv[0]-p0[0], by = pv[1]-p0[1];
+    if (Math.abs(ax*by - ay*bx) < 16) return;          // edge-on: there is no face to write on
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.transform(ax, ay, bx, by, p0[0], p0[1]);
+    const ip = TAL.panelPad;                           // the same inset the badge's panel takes
+    ctx.fillStyle = "rgba(9,6,20," + TAL.panelA + ")";
+    rrect(ip, ip, 1 - 2*ip, 1 - 2*ip, 0.10); ctx.fill();
+    ctx.lineJoin = "round";
+    ctx.fillStyle = ctx.strokeStyle = talFace(def);
+    def.etch(ctx, 0.5, 0.5, 0.30);
+    // ...and it takes the same darkening the quilt under it took, so a charm on a face turned
+    // away goes into shadow with the face rather than floating over it, lit.
+    if (f.shade > 0.002) {
+      ctx.fillStyle = "rgba(0,0,0," + f.shade.toFixed(3) + ")";
+      rrect(ip, ip, 1 - 2*ip, 1 - 2*ip, 0.10); ctx.fill();
     }
     ctx.restore();
   }
@@ -13484,7 +14309,7 @@
       const rx2 = nx*V.cry + nz*V.sry;  let rz = -nx*V.sry + nz*V.cry;
       const ry2 = ny*V.crx - rz*V.srx;      rz =  ny*V.srx + rz*V.crx;
       const lam = Math.abs(rx2*-0.22 + ry2*-0.30 + rz*-0.93);
-      out.push({ pts, z: zs/16, idx: F.cloud, shade: (1 - lam)*0.62*(1 - V.uk), num: V.uk });
+      out.push({ pts, z: zs/16, idx: F.cloud, shade: (1 - lam)*0.62*(1 - V.uk), num: V.uk, face: F.id });
     }
     return out;
   }
@@ -13552,7 +14377,7 @@
     Sound.levelMusicStop(true);
     Sound.warp(false);
     Sound.ambient(null);                                // the level's own arrangement takes over
-    if (cineNext === "menu") openMenu("world");         // replayed from the menu — go back to it
+    if (cineNext === "menu") openTileverse();           // replayed from the menu — go back to it
     else loadLevel(levelIdx);                           // opening run — straight into the level
   }
   // When each tile of the cloud arrives. The six faces are already there; everything after
@@ -13806,6 +14631,7 @@
       for (const f of faces) {
         if (mine && f.idx === 0) continue;
         cinePanel(f.pts, f.idx, cloudA, f.shade);
+        cineFaceSigil(f, cloudA*(1 - V.uk));       // ...and the charm cut into that side of it
       }
       ctx.restore();
 
@@ -14002,7 +14828,7 @@
       ctx.globalAlpha = 0.26 * Math.min(1, (t - 900) / 700);
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillStyle = "#eef0ff";
-      ctx.font = "900 " + Math.round(Math.min(viewW*0.034, 14)) + "px " + UI_FONT;
+      tapPromptFont(ctx, "TAP TO SKIP AHEAD", viewW*0.86);
       ctx.fillText("TAP TO SKIP AHEAD", viewW/2, viewH*0.93);
       ctx.restore();
     }
@@ -14206,12 +15032,14 @@
     // --- tap-to-play prompt (after the title has landed) ---
     if (TITLE.t > 400 + 520){
       const pulse = 0.5 + 0.5*Math.sin(ts/380);
+      ctx.save();
       ctx.globalAlpha = 0.45 + 0.55*pulse;
       ctx.fillStyle = "#eef0ff";
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.font = "900 " + Math.round(Math.min(viewW*0.05, 19)) + "px " + UI_FONT;   // match the byline size
-      ctx.fillText(first ? "TAP TO CREATE A TILEVERSE" : "TAP TO PLAY", viewW/2, viewH*0.90);
-      ctx.globalAlpha = 1;
+      const tp = first ? "TAP TO CREATE A TILEVERSE" : "TAP TO PLAY";
+      tapPromptFont(ctx, tp, viewW*0.86);
+      ctx.fillText(tp, viewW/2, viewH*0.90);
+      ctx.restore();
     }
     // small version number, bottom-right corner
     ctx.globalAlpha = 0.5; ctx.fillStyle = "#cfd3e6";
