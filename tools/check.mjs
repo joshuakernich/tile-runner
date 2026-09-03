@@ -49,10 +49,9 @@ function runnerBlock(file, name) {
 {
   const game = runnerBlock("index.html", "RUNNER");
   const lab  = runnerBlock("runner-lab.html", "SHIPPED");
-  const icon = runnerBlock("icon-lab.html", "RUNNER");
-  if (!game || !lab || !icon) bad("could not extract one of the three RUNNER blocks");
+  if (!game || !lab) bad("could not extract one of the two RUNNER blocks");
   else {
-    for (const [label, other] of [["runner-lab", lab], ["icon-lab", icon]]) {
+    for (const [label, other] of [["runner-lab", lab]]) {
       const diff = [...new Set([...Object.keys(game), ...Object.keys(other)])]
         .filter((k) => game[k] !== other[k])
         .map((k) => `${k}: game=${game[k]} ${label}=${other[k]}`);
@@ -60,6 +59,23 @@ function runnerBlock(file, name) {
       else ok(`${label} matches the game (${Object.keys(game).length} keys)`);
     }
   }
+}
+
+// -------------------------------------------------- 2a. icon-lab keeps no copy
+// icon-lab.html used to carry its own RUNNER and TILE blocks, its own tileSurface and its own
+// runner, because it drew the app icon itself. It doesn't any more — it hands the game a canvas
+// and the game paints the icon with the board's own routines. That is only true for as long as
+// nobody quietly puts a copy back, which is exactly how it drifted the first time.
+head("icon-lab draws nothing of its own");
+{
+  const src = read("icon-lab.html");
+  const copies = [["a RUNNER block", /const\s+RUNNER\s*=\s*\{/],
+                  ["a TILE block", /const\s+TILE\s*=\s*\{/],
+                  ["its own tileSurface", /function\s+tileSurface\s*\(/]];
+  const found = copies.filter(([, re]) => re.test(src)).map(([what]) => what);
+  if (found.length) bad("icon-lab.html has grown " + found.join(" and ") + " again");
+  else if (!/__TR\.icon\(/.test(src)) bad("icon-lab.html no longer asks the game to draw the icon");
+  else ok("icon-lab asks the game to draw the icon, and keeps no art of its own");
 }
 
 // -------------------------------------------------- 2b. the junction block
@@ -88,9 +104,7 @@ head("TILE block parity");
 {
   const game = runnerBlock("index.html", "TILE");
   // junction-lab carries a mirror too — the junction rides on the same cross-section
-  // icon-lab draws the app icon's tile with the same cross-section, so it carries a mirror too
-  for (const [file, name] of [["tile-lab.html", "SHIPPED"], ["junction-lab.html", "TILE"],
-                              ["icon-lab.html", "TILE"]]) {
+  for (const [file, name] of [["tile-lab.html", "SHIPPED"], ["junction-lab.html", "TILE"]]) {
     const lab = runnerBlock(file, name);
     if (!game || !lab) { bad(`could not extract the TILE block from index.html or ${file}`); continue; }
     const diff = [...new Set([...Object.keys(game), ...Object.keys(lab)])]

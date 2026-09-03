@@ -783,7 +783,15 @@
      little loot tile came out ten times too big. !important because the relic rule is more
      specific and this is the more specific INTENT: the wallet glyph has one size. */
   canvas.wallet { width:17px !important; height:17px !important; display:block; }
-  /* armed, and about to throw everything away */
+  /* A DEBUG door: something that hands you what the game is meant to make you earn. The PLATE
+     is grey where every other plate on the screen is the game's own violet-black — the words
+     stay as legible as any other button's, it is the slab under them that says "this one is not
+     really part of the game". Still a button, still pressable, just plainly not a setting. */
+  #menu-body button.dbg { background-color:#3b3a46;
+    background-image:
+      conic-gradient(transparent 0 25%, rgba(255,255,255,0.05) 0 50%,
+                     transparent 0 75%, rgba(255,255,255,0.05) 0); }
+  /* armed, and about to throw everything away — this outranks the grey, on purpose */
   #menu-body button.danger { border-color:#ff6d6d; color:#ff9d9d; box-shadow:0 0 0 2px #ff6d6d inset; }
   /* A toggle is a DIV rather than a button, but it stands in the same stack, you press it the
      same way, and it looked it — except for the two things that now mark a button here. It was
@@ -3058,7 +3066,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.9";                    // shown on the title & pause screens
+  const VERSION = "v10.10";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -4457,6 +4465,15 @@
   function loadLevel(i) { endCeremony();                            // no ceremony survives a load
                          Sound.warp(false); Sound.ambient(null);   // the tiles drive the music now
     levelIdx = clamp(i, 0, LEVELS.length - 1);
+    // Where you are up to, written down. The Tileverse opens on `levelIdx` and arms its PLAY for
+    // that chapter, and without this it was 0 on every launch — so a player twelve chapters in
+    // came back to the map sitting on chapter one, with the place they had actually reached off
+    // somewhere at the side of the screen.
+    //
+    // NOT while the title is up. The game loads chapter one at boot to have a board running
+    // behind the logo, and that is not a choice anybody made — left unguarded it stamped 0 over
+    // the real answer before the map had even opened.
+    if (!titleActive) { settings.at = levelIdx; saveSettings(); }
     levelAttempts[levelIdx] = (levelAttempts[levelIdx] || 0) + 1;      // count each start (incl. retries)
     beginLevel(LEVELS[levelIdx], String(levelIdx + 1));
     state.attempts = levelAttempts[levelIdx];
@@ -7609,6 +7626,19 @@
   // same place instead of on a grid of buttons that said the same thing less well. It is the
   // win sequence's "wait" phase with nothing in front of it: no route to rebuild, no chapter
   // just finished, no pull-back — you are simply there.
+  // Where the map should open. The chapter you last started, if that is still somewhere you may
+  // go; otherwise the frontier — everything cleared, plus the one after it. Never simply 0:
+  // that is the right answer for a brand new player and for nobody else.
+  function lastPlayed() {
+    const best = loadBest();
+    const done = k => { const b = best["L" + k]; return !!(b && (b.done || b.stars)); };
+    let furthest = -1;
+    for (let k = 0; k < LEVELS.length; k++) if (done(k)) furthest = k;
+    const frontier = clamp(furthest + 1, 0, LEVELS.length - 1);
+    const at = settings.at;
+    return (typeof at === "number" && at >= 0 && at < LEVELS.length && (done(at) || at <= frontier))
+      ? at : frontier;
+  }
   function openTileverse() {
     closeMenu();
     winEnd();
@@ -11235,6 +11265,11 @@
     // a corner, not down the screen — and so the shadow below can undo it the same way it undoes
     // the hover. Moving him from outside took his shadow with him, and it slid under the rail.
     const sink = s * REST_SINK * _restFold;
+    // The frame he is being drawn INTO, before any of his own transforms go on. The shadow's
+    // clip is built in it and the runner's frame is rebuilt on top of it, which is what lets the
+    // same routine serve the board — where this is the camera — and the title screen and the
+    // opening, where it is the intro's own corner and tile size.
+    const base = ctx.getTransform();
     ctx.save();
     ctx.translate(sx, sy); ctx.rotate(angle);
     if (hover) ctx.translate(0, -hover);
@@ -11277,15 +11312,15 @@
       // Cut to the GROUND HE IS ACTUALLY OVER. A shadow is cast on something, and his was
       // falling on whatever happened to be under it — the void past the edge of a tile, and
       // the blank half of the junction where no route has been drawn. The clip is built in the
-      // BOARD's frame, so it is undone here and put back after: `runnerShadowClip` is handed
-      // the world transform to draw into and the runner's own frame is restored on top of it.
+      // frame he was handed to, so it is undone here and put back after: `runnerShadowClip`
+      // draws into THAT frame and the runner's own is restored on top of it. It used to rebuild
+      // the board's camera by hand, which meant the clip only ever worked on the board — the
+      // title screen and the opening drew their shadows on the void between their platforms.
       const clip = runnerShadowClip;
       if (clip) {
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.translate(-Math.round(camX), -Math.round(camY));
+        ctx.setTransform(base);
         ctx.beginPath(); clip(); ctx.clip();
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.translate(-Math.round(camX), -Math.round(camY));
+        ctx.setTransform(base);
         ctx.translate(sx, sy); ctx.rotate(angle);
         if (hover) ctx.translate(0, -hover);
         if (sink)  ctx.translate(0, sink);
@@ -12269,8 +12304,10 @@
     bgScrollY = (bgScrollY + v*0.45) % per;
     return { x: bgScrollX, y: bgScrollY };
   }
-  // Is the level map the thing on screen? Its backdrop is its own, and it moves.
-  const worldOpen = () => !!menuEl && menuEl.classList.contains("show") && menuScreen === "world";
+  // The menu's own map is gone — there is one Tileverse and it draws its own cosmos — so this
+  // only ever answers false now. It is kept as the one place that decides whether a MENU wants
+  // the void behind it, because the fall screen still does.
+  const worldOpen = () => false;
   // Stars over the Tileverse's quilt: single squares, because everything in this game is a
   // square, and one pixel of a star is the only honest size for something that far off. They
   // are pinned to the QUILT rather than the screen — same scroll offset, same wrap — so they
@@ -13814,9 +13851,14 @@
     // screen with the buttons chasing it.
     const fell = state && state.end && state.end.kind === "lose" &&
                  (state.status === "lose") && screen === "main";
-    menuEl.classList.toggle("top",
-      screen === "shop" || screen.indexOf("shop:") === 0 || screen === "levels" ||
-      screen === "world" || fell);
+    // The `!!` is load-bearing. `fell` is a chain of `&&`s off `state`, so when there is no
+    // level loaded — or simply no `state.end` yet — the whole expression comes out `undefined`
+    // rather than `false`, and classList.toggle with an UNDEFINED second argument does not
+    // force the class off, it FLIPS it. Every rebuild of the menu therefore swapped the layout
+    // over: toggling Sound moved the whole settings screen down the page and toggling it back
+    // moved it up again.
+    menuEl.classList.toggle("top", !!(
+      screen === "shop" || screen.indexOf("shop:") === 0 || screen === "levels" || fell));
     menuEl.classList.toggle("fell", !!fell);
     // A PAUSE is the same shape as a fall: the whole frame, with its answer at the foot. The
     // difference is that a pause has somewhere to go back TO, so the pair at the bottom is
@@ -13826,7 +13868,7 @@
     menuEl.classList.toggle("paused", held);
     // the map is a map: it wants the screen, the same as the shop's shelves do
     menuEl.classList.toggle("wide",
-      screen === "shop" || screen.indexOf("shop:") === 0 || screen === "world");
+      screen === "shop" || screen.indexOf("shop:") === 0);
     // Anywhere but the rack it came from — another tab, another screen — and the fitting is off.
     if (shopPreview && screen !== "shop:" + shopPreview.key) shopPreview = null;
     const title = document.getElementById("menu-title");
@@ -14109,15 +14151,29 @@
         }
         buildMenu(screen);
       }));
-      menuBody.appendChild(btn("Give 100 tiles", () => {
+      // Everything below here is a DEBUG door: it hands you things the game is supposed to make
+      // you earn. They stand in the same column as the real settings because that is where they
+      // are useful, but they are drawn grey so the two kinds of switch never read as one kind.
+      const dbg = (b) => { b.classList.add("dbg"); menuBody.appendChild(b); return b; };
+      dbg(btn("Give 100 tiles", () => {
         Sound.unlock(); Sound.coin();
         wallet.tiles += 100; saveWallet();
       }));
-      menuBody.appendChild(btn("Unlock all talismans", (e) => {
+      dbg(btn("Unlock all talismans", (e) => {
         Sound.unlock(); Sound.tapBig();
         const live = TALISMANS.filter(talLive);
         for (const t of live) unlockTalisman(t.id);        // the real unlock path, so it persists
         e && e.target && (e.target.textContent = "All " + live.length + " unlocked");
+      }));
+      // Marks every level cleared, in the same shape winning one writes — `{ done: true }` under
+      // "L<index>" — so the Tileverse, the chapter numbers and the "furthest reached" line all
+      // read it without knowing where it came from.
+      dbg(btn("Unlock all levels", (e) => {
+        Sound.unlock(); Sound.tapBig();
+        const best = loadBest();
+        for (let i = 0; i < LEVELS.length; i++) best["L" + i] = { done: true };
+        saveBest(best);
+        e && e.target && (e.target.textContent = "All " + LEVELS.length + " unlocked");
       }));
       // Wipes EVERYTHING the player has: levels cleared, coins, everything bought and worn,
       // talismans found, settings, and the record of which tutorials have been seen. The old
@@ -14144,7 +14200,7 @@
         // A reload is the honest way back to a fresh player: every default is read at boot.
         setTimeout(() => { try { location.reload(); } catch(_) {} }, 480);
       });
-      menuBody.appendChild(rb);
+      dbg(rb);
       const back = btn("Done", menuBack);
       back.className = "shop-go";
       menuBody.appendChild(back);
@@ -14157,96 +14213,12 @@
     // "table of contents" where a cloud says "place". The edge is generated from a few sine
     // terms round the angle, so it is lumpy in a way no hand would draw twice and yet is exactly
     // the same lumps every time you open it.
-    if (screen === "world") {
-      title.textContent = "Tileverse"; title.className = "shop big pale";
-      // The opening is not a button any more — it is a square of the map, one place to the
-      // LEFT of level one. It is the story of what happened before the campaign, so it lives
-      // in the space before the campaign's first tile.
-      const rack = document.createElement("div"); rack.className = "shop-rack lvl-rack";
-      const map = document.createElement("div"); map.className = "lvl-map blob";
-      const best = loadBest();
-      const cells = tileverseLayout(LEVELS.length);
-      const cols = Math.max(...cells.map(p => p.c)) + 1;
-      const rows = Math.max(...cells.map(p => p.r)) + 1;
-      // The tile is whatever divides the panel evenly; the map is then exactly as tall as it
-      // needs to be. Read off the rack rather than guessed, so it fills whatever it is given.
-      // The intro square sits at level one's column minus one. If level one is already in
-      // column zero there is nowhere to its left, so the whole cloud shifts one place right
-      // and the map grows a column — the shape is untouched, it just starts further over.
-      const introC = cells[0].c - 1, shift = introC < 0 ? 1 : 0;
-      map.style.setProperty("--cols", cols + shift);
-      map.style.setProperty("--rows", rows);
-      // How far you have got: everything cleared, plus the one after the furthest of them, is
-      // open. Everything past that is greyed. It is a LOOK, not a gate — every tile is still
-      // pressable, because this game has never stopped you picking a level and quietly starting
-      // now is not a decision a colour should be making.
-      const isDone = k => { const b = best["L" + k]; return !!(b && (b.done || b.stars)); };
-      let furthest = -1;
-      for (let k = 0; k < LEVELS.length; k++) if (isDone(k)) furthest = k;
-      cells.forEach((p, i) => {
-        const done = isDone(i), open = done || i <= furthest + 1;
-        const el = document.createElement("button");
-        el.className = "stop" + (done ? " done" : "") + (open ? "" : " shut") +
-                       (i === levelIdx ? " here" : "");
-        el.style.gridColumn = (p.c + 1 + shift); el.style.gridRow = (p.r + 1);
-        // Nine of the level's OWN backdrop colours, laid out the way the quilt lays them. The
-        // seed is the level number, which is all beginLevel gives genTheme, so this is the
-        // actual palette you will be looking at rather than a stand-in for it — every tile in
-        // the cloud is a little window onto its level.
-        // ONE PIXEL PER COLOUR, blown up by `image-rendering: pixelated` — the same trick the
-        // TILEVERSE button's cosmos uses. It used to rasterise each colour as a 16px block, so
-        // the bitmap came out 48 wide inside a 45px tile: a 0.94 DOWNSCALE, which on any screen
-        // that is not 2x device pixels the browser resamples — and every colour bled a pixel
-        // into its neighbour. At a pixel a colour the scale is a whole number on every device
-        // (15x at dpr 1, 30x at dpr 2) and there is nothing to resample.
-        const sw = document.createElement("canvas"); sw.className = "swatch";
-        sw.width = sw.height = LEVEL_SWATCH;
-        const g = sw.getContext("2d");
-        const cols = genTheme(themeSeed(String(i + 1))).colors;
-        for (let k = 0; k < LEVEL_SWATCH*LEVEL_SWATCH; k++) {
-          g.fillStyle = cols[k % cols.length];
-          g.fillRect(k % LEVEL_SWATCH, Math.floor(k / LEVEL_SWATCH), 1, 1);
-        }
-        el.appendChild(sw);
-        const num = document.createElement("span"); num.textContent = (i + 1);
-        el.appendChild(num);
-        el.title = (LEVELS[i] && LEVELS[i].name) || ("Chapter " + (i + 1));
-        el.onclick = () => { levelIdx = i; loadLevel(i); closeMenu(); };
-        map.appendChild(el);
-      });
-      // ...and the origin story, wearing the cosmos it is set in rather than a level's palette,
-      // half-there because it is not a place you can go — it is what the places are made of.
-      const intro = document.createElement("button");
-      intro.className = "stop intro";
-      intro.style.gridColumn = (introC + 1 + shift); intro.style.gridRow = (cells[0].r + 1);
-      intro.title = "How the Tileverse was made";
-      const isw = document.createElement("canvas"); isw.className = "swatch";
-      isw.width = isw.height = LEVEL_SWATCH;               // a pixel a colour, as above
-      const ig = isw.getContext("2d"), vcol = VOID_THEME.colors;
-      for (let k = 0; k < LEVEL_SWATCH*LEVEL_SWATCH; k++) {
-        ig.fillStyle = vcol[k % vcol.length];
-        ig.fillRect(k % LEVEL_SWATCH, Math.floor(k / LEVEL_SWATCH), 1, 1);
-      }
-      intro.appendChild(isw);
-      intro.appendChild(document.createElement("span")).className = "play";
-      intro.onclick = () => { closeMenu(); startCine("menu"); };
-      map.appendChild(intro);
-      rack.appendChild(map);
-      menuBody.appendChild(rack);
-      const back = btn("Done", menuBack);
-      back.className = "shop-go";
-      menuBody.appendChild(back);
-      // Open on the level you are on, centred in the pane. offsetTop is measured inside the
-      // map, and the map now carries its own padding, so the two are added rather than assumed
-      // to be the same thing.
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        const here = map.querySelector(".stop.here");
-        rack.scrollTop = here
-          ? Math.max(0, here.offsetTop + map.offsetTop - rack.clientHeight/2 + here.offsetHeight/2)
-          : 0;
-      }));
-      return;
-    }
+    // There is ONE Tileverse, and it is the one the camera flies through — drawn on the board's
+    // own canvas by drawMap, edge to edge, opened by openTileverse(). The menu used to carry a
+    // second one: the same chapters laid out as a DOM grid of small spaced-out buttons. Nothing
+    // routed to it any more, but a screen that still builds is a screen that can still be
+    // reached, and two maps of the same place is one map too many — so it is gone rather than
+    // left standing. Every way in now lands on the map you can fly through.
     if (screen === "levels") {
       // Laid out like the shop: the header stays under the notch at the top, the grid scrolls
       // on its own, and BACK is pinned to the viewport instead of trailing 33 cells down.
@@ -14466,6 +14438,8 @@
                  flash: (id) => flashTalisman(talById(id || TALISMANS[0].id)) },
     // spare-lab.html drives this: the block, live, on the game's own tiles.
     spare: (patch) => { if (patch) Object.assign(SPARE, patch); return { ...SPARE }; },
+    // icon-lab.html drives this: the icon, drawn with the game's own art at any size.
+    icon: (g, S, opts) => drawIconInto(g, S, opts),
     // hammer-lab.html drives these: the beam block, and a swing on demand. The lab fires on a
     // loop, so the swing clears the charm's spent flag and any shout already in progress —
     // neither of which the game itself would ever do.
@@ -14526,7 +14500,7 @@
     // is what a returning player wanted anyway: the old rule keyed off the level you were on,
     // so anyone still on level one sat through the whole opening every single launch.
     if (!cineSeen()) startCine("level");      // the cinematic picks the theme up from here
-    else openTileverse();                     // the map, opened on the level you are up to
+    else { levelIdx = lastPlayed(); openTileverse(); }   // the map, opened where you left off
   }
 
   // ---------- BIG MAN LITTLE ----------------------------------------------
@@ -15813,7 +15787,20 @@
       // before him, so his body covers the join and the ribbon reads as attached
       if (W.pts.length > 1) paintTrail(tr, W.pts, s0*RUNNER.bodyH, ts);
     }
+    // The two platforms the scene actually drew — `TITLE_QUEUE - 1` of them, from the queue's
+    // own index rather than the leap-adjusted one, so that mid-leap the shadow is cut to the
+    // ground that is there rather than to the tile he is aiming at.
+    const q0 = Math.floor(u);
+    runnerShadowClip = () => {
+      withCanvas(ctx, m.s, m.x0, m.row0Y, () => {
+        for (let k = 0; k < TITLE_QUEUE - 1; k++) {
+          const n = cellAt(q0 + k);
+          bodyPath(tileSurface(n, cellAt(q0 + k - 1), cellAt(q0 + k + 1)), nodeCenter(n));
+        }
+      });
+    };
     paintRunner(pos.x, pos.y, s0, phase, angle, true, ts, 0, true);
+    runnerShadowClip = null;
     resetLeap();                                // the next thing drawn is not leaping
   }
   // Wipe an intro wake, so a scene starts with nothing behind him rather than with the ribbon
@@ -15991,6 +15978,73 @@
   // same proportions as the in-game runner (see drawRunner)
 
   loadLevel(0);
+
+  // ---------- the app icon, composed out of the game's own art -------------
+  // icon-lab.html used to keep a SECOND copy of the tile and the runner and draw the icon with
+  // it. A copy is a copy that drifts: it had its own tileSurface, its own runner, its own idea
+  // of what the ground under a beam looks like, and no idea at all about the cosmos. This draws
+  // the icon with the routines the board itself uses — hand it a canvas and a size and it paints
+  // the void, two tiles and the runner mid-stride into it, at whatever resolution is asked for.
+  //
+  // `viewW`/`viewH` go with the canvas: the cosmos is painted across the WHOLE view, so without
+  // that it would lay a 1024-square icon's worth of quilt into the top corner of a phone screen.
+  function drawIconInto(g, S, o) {
+    o = o || {};
+    const oldCtx = ctx, oldCell = cell, oldVW = viewW, oldVH = viewH;
+    const oldClip = runnerShadowClip;
+    ctx = g; viewW = S; viewH = S;
+    try {
+      g.save();
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.clearRect(0, 0, S, S);
+      // The cosmos, at the patch size the icon asks for rather than the board's — the quilt is
+      // scale-free and this is the only knob that decides how big its squares read.
+      cell = S * (o.voidCell != null ? o.voidCell : 0.28);
+      drawBackground(0, VOID_THEME, o.stars !== false, "drift", cell);
+      // Two tiles: the one he is on and the one ahead of him, laid edge to edge as they are on
+      // the board. Everything is placed off the tile size, so the composition holds at any S.
+      const cp = S * (o.tile != null ? o.tile : 0.30);
+      const dx = (o.x != null ? o.x : 0.50), dy = (o.y != null ? o.y : 0.60);
+      const ox = S*dx - cp, oy = S*dy - cp/2;      // tile A's corner: two tiles centred on dx
+      const a = { c: 0, r: 0 }, b = { c: 1, r: 0 };
+      const before = { c: -1, r: 0 }, after = { c: 2, r: 0 };
+      const track = o.track || TRACK_DEFAULT.earth[0];
+      withCanvas(g, cp, ox, oy, () => {
+        drawGlass(cx(a.c), cy(a.r), cell);
+        drawPlatformSurface(a, tileSurface(a, before, b), track);
+        drawGlass(cx(b.c), cy(b.r), cell);
+        drawPlatformSurface(b, tileSurface(b, a, after), track);
+        // ...and him, on the first one, in full stride. The shadow is cut to the two tiles by
+        // the same clip the board uses — it takes the frame it is handed, so it lands here too.
+        if (o.runner !== false) {
+          runnerShadowClip = () => {
+            bodyPath(tileSurface(a, before, b), nodeCenter(a));
+            bodyPath(tileSurface(b, a, after), nodeCenter(b));
+          };
+          const C0 = nodeCenter(a);
+          const as = o.worn ? null : { skin: { body: RUNNER.body, ink: RUNNER.ink }, swagger: {} };
+          // EYES OPEN. drawEyes blinks off whatever clock it is handed, and a clock of zero is
+          // the top of the cycle — which is the middle of the first blink. The icon was catching
+          // him with his eyes shut every single time. Half a cycle is clear of both shutters,
+          // and it is the same time the shop and the talisman previews pose him at, so he looks
+          // the same in a still wherever a still is taken.
+          const EYES_OPEN = EYES.blinkMs*0.5;
+          paintRunner(C0.x + cell*(o.runX || 0), C0.y + cell*(o.runY || 0),
+                      cell*(o.runScale != null ? o.runScale : 1),
+                      (o.stride != null ? o.stride : 0.9) * Math.PI,
+                      0, true, EYES_OPEN, 0, true, as);
+          runnerShadowClip = null;
+        }
+      });
+      g.restore();
+    } finally {
+      ctx = oldCtx; cell = oldCell; viewW = oldVW; viewH = oldVH;
+      runnerShadowClip = oldClip;
+      // The grain screen is cached at the view it was built for; the icon just built one at its
+      // own size, so hand the next frame back a screen-sized one rather than a stretched icon.
+      grainScreen = null;
+    }
+  }
 
   // ---------- the editor's TEST button ------------------------------------
   // level-editor.html parks the level it wants played in localStorage and opens the game with

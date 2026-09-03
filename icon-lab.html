@@ -3,669 +3,251 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta http-equiv="Cache-Control" content="no-store"/>
 <title>Tile Runner — Icon Lab</title>
 <style>
-  :root{ --bg:#12102a; --panel:#1b1838; --line:#2b2850; --ink:#cfe9ff; --accent:#7dd0ff; }
+  :root{ --bg:#12102a; --panel:#1b1838; --line:#2b2850; --ink:#cfe9ff; --accent:#f6c445; }
   *{box-sizing:border-box;}
-  body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-monospace,Menlo,Consolas,monospace;}
-  header{padding:10px 14px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:10px 14px;border-bottom:1px solid var(--line);
+         display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;}
   header h1{font-size:15px;margin:0 12px 0 0;font-weight:700;letter-spacing:.5px;}
-  .wrap{display:flex;gap:18px;padding:14px;align-items:flex-start;flex-wrap:wrap;justify-content:center;}
-  .stage{display:flex;flex-direction:column;gap:10px;align-items:center;}
-  canvas#cv{background:#0d0b22;border:1px solid var(--line);border-radius:10px;cursor:grab;touch-action:none;}
-  canvas#cv.drag{cursor:grabbing;}
-  .minis{display:flex;gap:14px;align-items:flex-end;}
-  .mini{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;opacity:.75;}
-  .panel{width:330px;display:flex;flex-direction:column;gap:2px;}
-  .group{margin:12px 0 3px;font-size:11px;letter-spacing:1px;text-transform:uppercase;opacity:.5;
-         border-top:1px solid var(--line);padding-top:9px;}
-  .group:first-child{border-top:0;margin-top:0;}
-  .sl{display:grid;grid-template-columns:74px 1fr 46px;gap:8px;align-items:center;font-size:11px;}
-  .sl label{opacity:.85;}
-  .sl input[type=range]{width:100%;accent-color:var(--accent);}
-  .sl .val{text-align:right;opacity:.7;font-variant-numeric:tabular-nums;}
-  .rowline{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px;margin:3px 0;}
-  .rowline label{opacity:.85;}
-  button.act{background:#233;color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:6px 10px;cursor:pointer;font:inherit;font-size:11px;}
-  .pals{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:4px 0 8px;}
-  button.pal{display:flex;flex-direction:column;align-items:center;gap:3px;background:#1a2430;
-    border:1px solid var(--line);border-radius:7px;padding:5px 2px 4px;cursor:pointer;font:inherit;
-    font-size:9px;letter-spacing:.3px;color:var(--ink);opacity:.85;}
-  button.pal:hover{opacity:1;border-color:#4a7;}
-  button.pal canvas{display:block;width:36px;height:36px;border-radius:3px;}
-  button.act:hover{border-color:var(--accent);}
-  button.act.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+  #status{font-size:12px;opacity:.8;}
+  .app{display:grid;grid-template-columns:280px minmax(0,1fr);gap:14px;padding:14px;align-items:start;}
+  .rail{position:sticky;top:14px;display:flex;flex-direction:column;gap:12px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;}
+  .card h2{font-size:11px;letter-spacing:1px;opacity:.55;margin:0 0 8px;
+           font-weight:700;text-transform:uppercase;}
+  .row{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:12px;}
+  .row label{flex:0 0 86px;opacity:.85;}
+  .row input[type=range]{flex:1;min-width:0;accent-color:var(--accent);}
+  .row output{flex:0 0 46px;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent);}
+  button{background:#233;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+         padding:8px 12px;cursor:pointer;font:inherit;font-size:12px;width:100%;}
+  button:hover{border-color:var(--accent);}
   button.prim{background:#1c6;color:#04120a;font-weight:700;border:none;}
-  select,input[type=color],input[type=number]{background:var(--panel);color:var(--ink);border:1px solid var(--line);
-    border-radius:6px;padding:3px 5px;font:inherit;font-size:11px;}
-  input[type=color]{width:34px;height:24px;padding:1px;}
-  textarea{width:100%;height:120px;background:#0d0b22;color:#bfe;border:1px solid var(--line);
-           border-radius:8px;padding:9px;font:inherit;font-size:10px;line-height:1.45;white-space:pre;}
-  .hint{font-size:11px;opacity:.7;line-height:1.6;max-width:700px;}
-  .pill{font-size:11px;background:#0d0b22;border:1px solid var(--line);border-radius:20px;padding:3px 9px;}
+  button.on{border-color:var(--accent);color:var(--accent);}
+  .opts{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+  .hint{font-size:11px;line-height:1.5;opacity:.65;}
+  .stage{display:flex;flex-direction:column;gap:12px;align-items:center;min-width:0;}
+  /* The icon, big, on the chequer that shows what is transparent and what is merely dark. */
+  #shot{width:min(420px,86vw);height:min(420px,86vw);display:block;border-radius:22%;
+        background:
+          conic-gradient(#242042 0 25%, #1a1733 0 50%, #242042 0 75%, #1a1733 0);
+        background-size:24px 24px;}
+  .sizes{display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;justify-content:center;}
+  .sizes figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:5px;}
+  .sizes canvas{display:block;border-radius:22%;}
+  .sizes figcaption{font-size:10px;opacity:.55;letter-spacing:1px;}
+  /* Android crops a maskable icon to roughly the middle 80% circle. */
+  .maskring{position:relative;}
+  .maskring::after{content:"";position:absolute;inset:10%;border-radius:50%;
+    border:1px dashed rgba(255,255,255,0.28);pointer-events:none;}
+  iframe{width:1px;height:1px;opacity:0;position:absolute;pointer-events:none;border:0;}
+  .legend{font-size:11px;opacity:.7;line-height:1.6;max-width:520px;}
+  code{color:var(--accent);}
+  .warn{color:#ffd24a;}
 </style>
 </head>
 <body>
+
 <header>
-  <h1>TILE RUNNER · ICON LAB</h1>
-  <span class="pill" id="pos">—</span>
-  <span class="pill" id="saved" style="opacity:.35;transition:opacity .3s">saved</span>
-  <button class="act" id="mask">Mask: rounded</button>
-  <button class="act" id="safe">Safe area</button>
-  <button class="act" id="anim">Animate</button>
+  <h1>Icon Lab</h1>
+  <span id="status">booting the game…</span>
 </header>
 
-<div class="wrap">
+<div class="app">
+  <aside class="rail">
+    <div class="card">
+      <h2>The cosmos</h2>
+      <div class="row"><label>patch</label><input id="voidCell" type="range" min="0.08" max="1.2" step="0.01" value="0.28"><output id="voidCellOut">0.28</output></div>
+      <div class="opts">
+        <button data-stars="1">stars</button>
+        <button data-stars="0">no stars</button>
+      </div>
+      <p class="hint">The same void the Tileverse and the title screen hang in, painted by the
+        game's own backdrop routine. <b>patch</b> is the size of one quilt square as a share of
+        the icon, so it decides how coarse the sky reads at 180px.</p>
+    </div>
+
+    <div class="card">
+      <h2>The tiles</h2>
+      <div class="row"><label>size</label><input id="tile" type="range" min="0.18" max="0.70" step="0.005" value="0.30"><output id="tileOut">0.30</output></div>
+      <div class="row"><label>across</label><input id="x" type="range" min="0.2" max="0.8" step="0.005" value="0.50"><output id="xOut">0.50</output></div>
+      <div class="row"><label>down</label><input id="y" type="range" min="0.2" max="0.9" step="0.005" value="0.60"><output id="yOut">0.60</output></div>
+      <p class="hint">Two tiles, edge to edge, exactly as the board lays them: the one he is on
+        and the one ahead of him. Glass, ground, the beam and its rail all come from the game —
+        the corner radius, the earth and the shading are whatever the game currently ships, not a
+        second opinion about them.</p>
+    </div>
+
+    <div class="card">
+      <h2>The runner</h2>
+      <div class="row"><label>scale</label><input id="runScale" type="range" min="0.4" max="1.8" step="0.01" value="1.00"><output id="runScaleOut">1.00</output></div>
+      <div class="row"><label>across</label><input id="runX" type="range" min="-1" max="1" step="0.01" value="0.00"><output id="runXOut">0.00</output></div>
+      <div class="row"><label>down</label><input id="runY" type="range" min="-1" max="1" step="0.01" value="0.00"><output id="runYOut">0.00</output></div>
+      <div class="row"><label>stride</label><input id="stride" type="range" min="0" max="2" step="0.01" value="0.50"><output id="strideOut">0.50</output></div>
+      <div class="opts">
+        <button data-worn="0">default skin</button>
+        <button data-worn="1">what's worn</button>
+      </div>
+      <p class="hint"><b>stride</b> is where in the step he is caught, in half-turns — 0.5 is one
+        leg fully out in front, which is the pose that reads as running at icon size. His shadow
+        is cut to the two tiles by the same clip the board uses.</p>
+    </div>
+
+    <div class="card">
+      <h2>Take it away</h2>
+      <button class="prim" id="save">Download all four PNGs</button>
+      <button id="restore" style="margin-top:6px">Restore my saved settings</button>
+      <button id="reload" style="margin-top:6px">Reload the game</button>
+      <p class="hint">Saves <code>icon-1024</code>, <code>icon-512</code>, <code>icon-192</code>
+        and <code>icon-180</code>, named for the manifest. Drop them in beside
+        <code>index.html</code> and bump <code>CACHE</code> in <code>sw.js</code>.</p>
+    </div>
+  </aside>
+
   <div class="stage">
-    <canvas id="cv" width="512" height="512"></canvas>
-    <div class="minis">
-      <div class="mini"><canvas id="m180" width="180" height="180" style="width:90px;height:90px"></canvas>180</div>
-      <div class="mini"><canvas id="m120" width="120" height="120" style="width:60px;height:60px"></canvas>120</div>
-      <div class="mini"><canvas id="m64"  width="64"  height="64"  style="width:44px;height:44px"></canvas>64</div>
-      <div class="mini"><canvas id="m32"  width="32"  height="32"  style="width:32px;height:32px"></canvas>32</div>
+    <canvas id="shot" width="1024" height="1024"></canvas>
+    <div class="sizes">
+      <figure><span class="maskring"><canvas id="p512" width="512" height="512" style="width:128px;height:128px"></canvas></span><figcaption>512 · MASKABLE</figcaption></figure>
+      <figure><canvas id="p192" width="192" height="192" style="width:96px;height:96px"></canvas><figcaption>192</figcaption></figure>
+      <figure><canvas id="p180" width="180" height="180" style="width:60px;height:60px"></canvas><figcaption>180 · IOS</figcaption></figure>
     </div>
-    <div class="rowline">
-      <button class="act prim" id="dl1024">Save 1024</button>
-      <button class="act" id="dl512">512</button>
-      <button class="act" id="dl192">192</button>
-      <button class="act" id="dl180">180</button>
-      <button class="act" id="dlall">Save all four</button>
-    </div>
-  </div>
-
-  <div class="panel" id="panel"></div>
-
-  <div class="panel" style="width:340px">
-    <div class="group">Config</div>
-    <textarea id="out" spellcheck="false"></textarea>
-    <div class="rowline">
-      <button class="act" id="copy">Copy</button>
-      <button class="act" id="paste">Load from box</button>
-      <button class="act" id="restoreBtn">Restore mine</button>
-      <button class="act" id="reset">Reset</button>
-    </div>
-    <div class="hint">
-      <b>Drag on the canvas</b> to move whichever element you last touched — grab the runner or the tile
-      directly. Everything else is on the sliders. The little previews are the real sizes an icon gets used at;
-      if he stops reading at 32 the composition is too busy.<br><br>
-      <b>Mask</b> cycles square → rounded → circle so you can check iOS and Android cropping, and
-      <b>Safe area</b> rings the region every platform keeps. Keep the runner inside it.<br><br>
-      <b>Save</b> writes PNGs named <code>icon-1024.png</code> and so on, matching what the manifest already
-      expects — drop them straight into the project folder. Exports are always full-bleed squares, whatever the
-      mask preview is showing, because iOS and Android round the corners themselves.<br><br>
-      The composition <b>autosaves to this browser</b>, so closing the tab doesn't lose it. <b>Reset</b> clears
-      the save and goes back to the shipped defaults.
-    </div>
+    <p class="legend">
+      Nothing here is redrawn. The lab hands the running game a canvas and a size and the game
+      paints the icon into it with the routines the board itself uses — <code>drawBackground</code>
+      for the void, <code>drawGlass</code> and <code>drawPlatformSurface</code> for the tiles,
+      <code>paintRunner</code> for him. There is no second copy of the art to drift, which is what
+      the old version of this page was.
+      <br><br>
+      The dashed circle on the 512 is roughly what Android keeps of a maskable icon. Anything
+      outside it may be cropped away on some launchers.
+      <span class="warn">This page must be SERVED</span> — <code>file://</code> stops it reading
+      the frame.
+    </p>
   </div>
 </div>
 
+<iframe id="game" title="Tile Runner"></iframe>
+
 <script>
-// ---------- the shipped runner (mirrors index.html's RUNNER) ----------
-const RUNNER = {
-  stepMs:110, swing:0.16, bob:0.064,
-  legLen:0.12, legWidth:0.05, legSplay:0.22, hipRise:0.06, footLift:0.098, footLiftPow:1,
-  knees:1, kneeBend:0.045, kneeSplit:0.5, kneeLead:-0.002, kneeR:0,
-  bodyW:0.26, bodyH:0.26, bodyR:0,
-  shadow:0.090, shadowW:1.12, shadowA:0.30, shadowY:0.00, shadowBob:0.48,
-  eyeR:0.034, eyeY:0.38, eyeAx:-0.02, eyeBx:0.28,
-  glanceMs:5200, glanceX:0.03, glanceY:0.024, blinkMs:3000,
-  talCordY:0.77, talHangY:1.01, talR:0.052,
-  talX:0.165, talCordW:0.02, talCordA:0.75, talSpan:0.485, talSag:-0.003,
-  body:"#bfe6ff", ink:"#17263f",
+// The same rule the other labs follow: drive the REAL game rather than keeping a copy of the
+// art here. This page used to be the exception — it had its own tile, its own runner and its own
+// idea of the ground under a beam — and that copy had already drifted.
+const $ = id => document.getElementById(id);
+const frame = $("game");
+let W = null;
+// A service worker will happily hand this frame a cached index.html, which would mean composing
+// an icon out of art the file on disk no longer contains. A unique query can't match the cache.
+const GAME_SRC = () => "index.html?lab=" + Date.now();
+
+const KEYS = ["voidCell", "tile", "x", "y", "runScale", "runX", "runY", "stride"];
+let stars = 1, worn = 0;
+
+// The composition is written down as you move it and put back when you come back. A NEW key:
+// the old page's save is a different shape entirely — its patchwork colours, its own tile — and
+// overwriting it would throw away whatever was last composed there.
+const SAVE_KEY = "tilerunner:icon2";
+function save(){
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(values())); } catch (e) {}
+}
+function restore(){
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) {}
+  if (!v || typeof v !== "object") return false;
+  for (const k of KEYS) if (typeof v[k] === "number") $(k).value = v[k];
+  if (typeof v.stars === "number") stars = v.stars;
+  if (typeof v.worn === "number") worn = v.worn;
+  return true;
+}
+
+function values(){
+  const o = { stars, worn };
+  for (const k of KEYS) o[k] = +$(k).value;
+  return o;
+}
+function opts(){
+  const v = values();
+  return { voidCell: v.voidCell, stars: !!v.stars, tile: v.tile, x: v.x, y: v.y,
+           runScale: v.runScale, runX: v.runX, runY: v.runY, stride: v.stride, worn: !!v.worn };
+}
+// Every size is drawn at its OWN resolution rather than scaled down from the big one: the quilt,
+// the grain and the runner's ink all have a pixel size, and a 180 that is a shrunken 1024 loses
+// exactly the crispness the game is made of.
+function paint(){
+  if (!W || !W.__TR || !W.__TR.icon) return;
+  try {
+    const o = opts();
+    for (const [id, S] of [["shot",1024],["p512",512],["p192",192],["p180",180]])
+      W.__TR.icon($(id).getContext("2d"), S, o);
+    save();
+    $("status").textContent = "live — drawn by the game at 1024, 512, 192 and 180";
+  } catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+}
+
+function setStars(v){
+  stars = v;
+  document.querySelectorAll("[data-stars]").forEach(b => b.classList.toggle("on", +b.dataset.stars === v));
+}
+function setWorn(v){
+  worn = v;
+  document.querySelectorAll("[data-worn]").forEach(b => b.classList.toggle("on", +b.dataset.worn === v));
+}
+function sync(k){ $(k + "Out").textContent = (+$(k).value).toFixed(2); }
+
+// The game boots into its title screen and its own rAF loop; wait for the debug surface rather
+// than guessing at a delay.
+function attach(){
+  W = frame.contentWindow;
+  let tries = 0;
+  (function wait(){
+    if (W.__TR && W.__TR.icon) { paint(); return; }
+    if (++tries > 200) {
+      $("status").innerHTML = '<span class="warn">the game never came up — is this being SERVED? ' +
+        'file:// blocks the frame from being read.</span>';
+      return;
+    }
+    setTimeout(wait, 50);
+  })();
+}
+frame.addEventListener("load", attach);
+frame.src = GAME_SRC();
+
+KEYS.forEach(k => $(k).addEventListener("input", () => { sync(k); paint(); }));
+// A wheel over a slider scrolls the rail; it does not drag the value.
+document.querySelectorAll("input[type=range]").forEach(el =>
+  el.addEventListener("wheel", (e) => { e.preventDefault(); window.scrollBy(0, e.deltaY); },
+                      { passive: false }));
+document.querySelectorAll("[data-stars]").forEach(b =>
+  b.onclick = () => { setStars(+b.dataset.stars); paint(); });
+document.querySelectorAll("[data-worn]").forEach(b =>
+  b.onclick = () => { setWorn(+b.dataset.worn); paint(); });
+
+$("restore").onclick = () => {
+  if (!restore()) { $("status").innerHTML = '<span class="warn">nothing saved yet</span>'; return; }
+  setStars(stars); setWorn(worn); KEYS.forEach(sync); paint();
+  $("status").textContent = "your saved settings, put back";
+};
+$("reload").onclick = () => { frame.src = GAME_SRC(); };
+$("save").onclick = () => {
+  // Each one drawn fresh at its own size, then handed over named for the manifest.
+  for (const S of [1024, 512, 192, 180]) {
+    const c = document.createElement("canvas"); c.width = c.height = S;
+    W.__TR.icon(c.getContext("2d"), S, opts());
+    const a = document.createElement("a");
+    a.download = "icon-" + S + ".png"; a.href = c.toDataURL("image/png");
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  $("status").textContent = "four PNGs saved — drop them in beside index.html and bump CACHE";
 };
 
-const TAL = {
-  ember:(g,x,y,r)=>{ g.beginPath(); g.moveTo(x,y-r);
-    g.bezierCurveTo(x+r*0.95,y-r*0.1,x+r*0.72,y+r,x,y+r);
-    g.bezierCurveTo(x-r*0.72,y+r,x-r*0.95,y-r*0.1,x,y-r); g.closePath(); g.fillStyle="#ff8a3d"; g.fill();
-    g.beginPath(); g.moveTo(x,y-r*0.36);
-    g.bezierCurveTo(x+r*0.5,y+r*0.1,x+r*0.34,y+r*0.62,x,y+r*0.62);
-    g.bezierCurveTo(x-r*0.34,y+r*0.62,x-r*0.5,y+r*0.1,x,y-r*0.36); g.closePath(); g.fillStyle="#ffd24a"; g.fill(); },
-  tide:(g,x,y,r)=>{ g.beginPath(); g.arc(x,y,r,0,7); g.fillStyle="#2b7fb8"; g.fill();
-    g.save(); g.beginPath(); g.arc(x,y,r,0,7); g.clip(); g.strokeStyle="#4dd6ff"; g.lineWidth=r*0.26; g.lineCap="round";
-    for(let k=-1;k<=1;k++){ g.beginPath(); g.moveTo(x-r,y+k*r*0.5); g.quadraticCurveTo(x,y+k*r*0.5-r*0.34,x+r,y+k*r*0.5); g.stroke(); } g.restore(); },
-  cog:(g,x,y,r)=>{ g.beginPath();
-    for(let k=0;k<16;k++){ const a=k/16*Math.PI*2, rr=(k%2?r:r*0.66); const X=x+Math.cos(a)*rr, Y=y+Math.sin(a)*rr; k?g.lineTo(X,Y):g.moveTo(X,Y); }
-    g.closePath(); g.fillStyle="#e0a53c"; g.fill(); g.beginPath(); g.arc(x,y,r*0.28,0,7); g.fillStyle="#7a5a18"; g.fill(); },
-  sun:(g,x,y,r)=>{ g.strokeStyle="#ffd24a"; g.lineWidth=r*0.2; g.lineCap="round";
-    for(let k=0;k<8;k++){ const a=k/8*Math.PI*2; g.beginPath(); g.moveTo(x+Math.cos(a)*r*0.52,y+Math.sin(a)*r*0.52); g.lineTo(x+Math.cos(a)*r,y+Math.sin(a)*r); g.stroke(); }
-    g.beginPath(); g.arc(x,y,r*0.46,0,7); g.fillStyle="#ffd24a"; g.fill();
-    g.beginPath(); g.arc(x,y,r*0.2,0,7); g.fillStyle="#b8781a"; g.fill(); },
-  shard:(g,x,y,r)=>{ g.beginPath(); g.moveTo(x,y-r); g.lineTo(x+r*0.62,y-r*0.2); g.lineTo(x+r*0.4,y+r);
-    g.lineTo(x-r*0.4,y+r); g.lineTo(x-r*0.62,y-r*0.2); g.closePath(); g.fillStyle="#7d4bb8"; g.fill();
-    g.beginPath(); g.moveTo(x,y-r); g.lineTo(x+r*0.62,y-r*0.2); g.lineTo(x,y+r); g.closePath(); g.fillStyle="#c77dff"; g.fill(); },
-  sprig:(g,x,y,r)=>{ g.strokeStyle="#3f8f34"; g.lineWidth=r*0.16; g.lineCap="round";
-    g.beginPath(); g.moveTo(x,y+r); g.lineTo(x,y-r*0.2); g.stroke();
-    g.beginPath(); g.moveTo(x,y-r*0.2); g.bezierCurveTo(x+r*0.95,y-r*0.5,x+r*0.5,y-r*1.05,x,y-r);
-    g.bezierCurveTo(x-r*0.5,y-r*1.05,x-r*0.95,y-r*0.5,x,y-r*0.2); g.closePath(); g.fillStyle="#7dff6b"; g.fill();
-    g.strokeStyle="#3f8f34"; g.lineWidth=r*0.1; g.beginPath(); g.moveTo(x,y-r*0.24); g.lineTo(x,y-r*0.92); g.stroke(); },
-};
-
-// ---------- palettes for the patchwork ----------
-// Nine patches in reading order plus the seam colour showing through the gaps. Kept as whole
-// sets rather than as a hue-and-spread formula: a quilt lives or dies on which colours sit
-// NEXT to each other, and a generated sweep gives you nine that are all equally spaced and
-// none that are deliberately placed. Picking one only writes patch1..9 and bg2 — grid, seam
-// width and corner radius are yours, so a palette never undoes your composition.
-const PALETTES = [
-  { name:"Rainbow", seam:"#241f4a",
-    cols:["#be2d2d","#be8e2d","#8ebe2d","#2dbe2d","#2dbe8e","#2d8ebe","#2d2dbe","#8e2dbe","#be2d8e"] },
-  { name:"Sunset", seam:"#2b1330",
-    cols:["#f2603c","#f58a3c","#f7b13f","#e8484f","#c93a6a","#a63577","#7e2f79","#f9c96b","#d9455c"] },
-  { name:"Ocean", seam:"#08202e",
-    cols:["#0e4d64","#12617a","#1a7b8f","#2494a1","#37acae","#56c3bb","#1b5f86","#2a7fa8","#0d3a52"] },
-  { name:"Forest", seam:"#0e2113",
-    cols:["#1e4620","#2a5a26","#37702c","#468635","#5b9b41","#77b055","#8fc069","#2f6b3c","#1a5233"] },
-  { name:"Berry", seam:"#210c26",
-    cols:["#5c1a4e","#7a1f5c","#98246a","#b62a74","#cf3a80","#e05493","#8e2b7e","#6b2470","#a83a92"] },
-  { name:"Citrus", seam:"#2c2408",
-    cols:["#c8a318","#d9b820","#e8cf2c","#b9c722","#93b81e","#6fa61c","#e0a91e","#f0c534","#a8b91d"] },
-  { name:"Candy", seam:"#2a2140",
-    cols:["#ff9ec4","#ffb8d2","#ffd0c2","#ffe6a8","#c8f0c0","#a8e6e0","#b8d0ff","#d4bcff","#f2b8e8"] },
-  // The muted band genTheme actually draws the board's backdrop in — the closest of these to
-  // what the game looks like behind the tiles.
-  { name:"Dusk", seam:"#151030",
-    cols:["#3b2f6e","#453a7d","#4f4a86","#3a4a7d","#2f5a84","#37628a","#5a4a86","#6b4a7e","#2e3a6b"] },
-  { name:"Earth", seam:"#241b12",
-    cols:["#7a5a34","#8f6b3c","#a37c46","#b58f56","#c9a468","#96693a","#7d5330","#6b4a2c","#ad8450"] },
-  { name:"Neon", seam:"#0a0a14",
-    cols:["#ff2e88","#ff6b2e","#ffe22e","#8cff2e","#2effa0","#2ee0ff","#2e6bff","#a02eff","#ff2ee0"] },
-  { name:"Ice", seam:"#122234",
-    cols:["#2b5570","#356780","#417b92","#5091a5","#63a7b6","#7cbcc6","#98d0d6","#2f6a86","#245c78"] },
-  { name:"Slate", seam:"#101018",
-    cols:["#2f3440","#383e4c","#424958","#4d5566","#5a6272","#48505f","#353b48","#5f6878","#272c36"] },
-];
-
-// ---------- the icon, described entirely by numbers ----------
-// x/y/size are FRACTIONS of the icon's width, so one config renders at every export size.
-const DEFAULT = {
-  bgStyle:"patchwork", bg1:"#3b2f6e", bg2:"#241f4a", bgAngle:35, stripes:5, vignette:0.25,
-  // The 3x3 patchwork: nine squares of the game's own backdrop, listed reading order
-  // (top-left first). patchGap insets each one so the seams show as the grid does in play.
-  patchN:3, patchGap:0.010, patchRound:0.016,
-  patch1:"#be2d2d", patch2:"#be8e2d", patch3:"#8ebe2d",
-  patch4:"#2dbe2d", patch5:"#2dbe8e", patch6:"#2d8ebe",
-  patch7:"#2d2dbe", patch8:"#8e2dbe", patch9:"#be2d8e",
-  tileOn:1, tileX:0.50, tileY:0.50, tileSize:0.75, tileRot:0, tileShape:"ew",
-  track:"#ffcf4d", rail:"#fff2c4", glass:0.55, glassCol:"#b4aeeb", tileR:0.16,
-  tileBlur:0.018,        // frosted glass: how far the tile smears what is behind it
-  // The ground under the beam. Normally DERIVED from the track colour by the game's own TILE
-  // rules, so the icon stays honest to what a tile looks like in play; turn groundAuto off to
-  // drive it yourself. The beam's shadow follows whichever one is in force.
-  groundAuto:1, ground:"#6b5a2e",
-  runOn:1, runX:0.50, runY:0.50, runScale:0.75, runRot:0, runStride:0.9,
-  knees:1, body:"#bfe6ff", ink:"#17263f", runShadow:1, talisman:"",
-};
-// The composition survives a reload — same idea as the level editor's autosave.
-// Unknown/renamed keys fall back to DEFAULT, so an older save can't break a newer tool.
-const LSKEY = "tilerunner:icon";
-const KEPTKEY = LSKEY + ":kept";      // what you had before you last reset
-let C = {...DEFAULT};
-try { const raw = localStorage.getItem(LSKEY);
-      if (raw) C = {...DEFAULT, ...JSON.parse(raw)}; } catch(e) {}
-let saveT = 0;
-function saveC(){
-  clearTimeout(saveT);
-  saveT = setTimeout(()=>{ try{ localStorage.setItem(LSKEY, JSON.stringify(C)); flagSaved(); }catch(e){} }, 200);
-}
-
-// entry first, exit second — the order decides which side the solid body fills,
-// exactly as in the game (body sits on the far side of the running surface).
-const SHAPES = { ew:["w","e"], ns:["n","s"], ne:["n","e"], es:["e","s"], sw:["s","w"], wn:["w","n"] };
-const VEC = { n:{x:0,y:-1}, s:{x:0,y:1}, e:{x:1,y:0}, w:{x:-1,y:0} };
-
-function rrect(g,x,y,w,h,r){ r=Math.max(0,Math.min(r,w/2,h/2)); g.beginPath(); g.moveTo(x+r,y);
-  g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); }
-
-// the platform's running surface across a tile — straight, or a quarter turn (from the game)
-function tileSurface(size, shape){
-  const [a,b]=SHAPES[shape]||SHAPES.ew, h=size/2, C0={x:0,y:0};
-  const entry=VEC[a], exit=VEC[b];
-  const Me={x:entry.x*h, y:entry.y*h}, Mx={x:exit.x*h, y:exit.y*h};
-  if(entry.x===-exit.x && entry.y===-exit.y) return [Me, C0, Mx];
-  const O={x:(entry.x+exit.x)*h, y:(entry.y+exit.y)*h};
-  let a0=Math.atan2(Me.y-O.y,Me.x-O.x), a1=Math.atan2(Mx.y-O.y,Mx.x-O.x);
-  let d=a1-a0; while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI;
-  const pts=[]; for(let k=0;k<=14;k++){ const ang=a0+d*(k/14); pts.push({x:O.x+h*Math.cos(ang), y:O.y+h*Math.sin(ang)}); }
-  return pts;
-}
-// solid body from the surface out to the tile edge, then the rail on top
-function hexA(hex,a){ const n=parseInt(String(hex).replace("#",""),16);
-  return "rgba("+((n>>16)&255)+","+((n>>8)&255)+","+(n&255)+","+a+")"; }
-// Mirror of the game's TILE block — the icon has to be the same object the game draws, not
-// a lookalike that quietly drifts. Tuned in tile-lab.html and pasted here; check.mjs diffs it.
-const TILE = {
-  radius:     0.000,   // corner radius, fraction of a cell
-  glassA:     0.50,    // the pane's flat fill alpha
-  glassGrain: 1.00,    // paper grain over the pane
-  bodyGrain:  1.00,    // paper grain over a laid platform body
-  railW:      0.075,   // running-surface rail thickness, fraction of a cell
-  pathW:      0.000,   // the beam directly under the rail, in the track colour
-  underShade: -50,     // how much darker the ground beneath it is
-  underHue:   -26,     // ...and how far its hue is turned from the track's, in degrees
-  underSat:   0.42,    // ...and how much of the track's saturation it keeps (1 = all of it)
-  strata:     1.000,    // the ground's own piecing: how far its shades run apart, 0 = flat
-  strataN:    4,       // how many squares to a side — 4 makes each a quarter of a tile
-  shadowW:    0.015,   // the shadow the beam casts onto the ground
-  shadowShade: -16,    // ...how much darker again that shadow is
-  edgeDepth:  0.150,
-  edgeA:      0.300,
-  edgeInk:    1.000,
-  edgeGrain:  1.000,
-  edgeTip:    0.200,
-  edgeTipA:   0.450,
-};
-
-// Turn a hex colour's hue, drain its saturation and shift its lightness, all at once.
-// shade() only moves lightness, which is why the ground could only ever be a darker copy
-// of the track — this lets it be a different material.
-function tintHex(hex, degrees, satMul, lightAmt) {
-  const n = parseInt(hex.replace("#",""), 16);
-  let r = ((n>>16)&255)/255, g = ((n>>8)&255)/255, b = (n&255)/255;
-  const mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx - mn;
-  let h = 0; const l = (mx+mn)/2;
-  let sat = d === 0 ? 0 : d / (1 - Math.abs(2*l - 1));
-  if (d !== 0) {
-    h = mx === r ? ((g-b)/d + (g < b ? 6 : 0)) : mx === g ? ((b-r)/d + 2) : ((r-g)/d + 4);
-    h *= 60;
-  }
-  h = (h + degrees + 360) % 360;
-  sat = Math.max(0, Math.min(1, sat * satMul));
-  const L = Math.max(0, Math.min(1, l + (lightAmt || 0)/255));
-  const C = (1 - Math.abs(2*L - 1)) * sat, X = C * (1 - Math.abs(((h/60) % 2) - 1)), m = L - C/2;
-  const seg = Math.floor(h/60) % 6;
-  const rgb = [[C,X,0],[X,C,0],[0,C,X],[0,X,C],[X,0,C],[C,0,X]][seg];
-  const to = v => Math.round((v + m)*255).toString(16).padStart(2,"0");
-  return "#" + to(rgb[0]) + to(rgb[1]) + to(rgb[2]);
-}
-
-// The body of a laid tile: the running surface, then closed along the cell's own edges, so
-// the slab hangs BELOW the surface. Lifted from index.html's bodyPath — the old version here
-// offset every point 1.7 cells down its normal, which self-intersects on a corner.
-function tileBody(g, S, h){
-  const last = S.length-1, mid = last >> 1;
-  const a = S[Math.max(0,mid-1)], b = S[Math.min(last,mid+1)];
-  let tx=b.x-a.x, ty=b.y-a.y; const m=Math.hypot(tx,ty)||1; tx/=m; ty/=m;
-  const bx=-ty, by=tx;
-  g.moveTo(S[0].x, S[0].y);
-  for(let k=1;k<=last;k++) g.lineTo(S[k].x, S[k].y);
-  if(last===2){ g.lineTo(S[last].x+bx*h, S[last].y+by*h); g.lineTo(S[0].x+bx*h, S[0].y+by*h); }
-  else {
-    const O={x:S[0].x+S[last].x, y:S[0].y+S[last].y}, M=S[mid];
-    if((O.x-M.x)*bx + (O.y-M.y)*by > 0) g.lineTo(O.x, O.y);
-    else {
-      const cs=[{x:-h,y:-h},{x:h,y:-h},{x:h,y:h},{x:-h,y:h}];
-      let k0=0, best=Infinity;
-      for(let i=0;i<4;i++){ const d=Math.hypot(cs[i].x-O.x, cs[i].y-O.y); if(d<best){best=d;k0=i;} }
-      const n1=(k0+1)%4, n3=(k0+3)%4;
-      const first = Math.hypot(cs[n1].x-S[last].x, cs[n1].y-S[last].y)
-                  < Math.hypot(cs[n3].x-S[last].x, cs[n3].y-S[last].y) ? n1 : n3;
-      g.lineTo(cs[first].x, cs[first].y);
-      g.lineTo(cs[(k0+2)%4].x, cs[(k0+2)%4].y);
-      g.lineTo(cs[first===n1?n3:n1].x, cs[first===n1?n3:n1].y);
-    }
-  }
-  g.closePath();
-}
-// Frosted glass: the tile shows what is behind it, out of focus.
-//
-// ctx.filter blurs what you DRAW, never what is already on the canvas — so there is no way to
-// blur a region in place. The trick is to snapshot everything painted so far, then draw that
-// snapshot back through a blur, clipped to the tile. Two details make it work: the clip is
-// stored in device space, so resetting the transform to blit the snapshot 1:1 does not move
-// it; and the snapshot covers the WHOLE icon, so the blur has real pixels to pull in from
-// outside the tile rather than smearing transparent black inwards from the tile's own edge.
-const _bgBufs = new Map();                       // one scratch canvas per export size
-function frostBehind(g, blurPx){
-  const W = g.canvas.width;
-  let buf = _bgBufs.get(W);
-  if(!buf){ buf = document.createElement("canvas"); buf.width = buf.height = W; _bgBufs.set(W, buf); }
-  const b = buf.getContext("2d");
-  b.setTransform(1,0,0,1,0,0); b.clearRect(0,0,W,W); b.drawImage(g.canvas,0,0);
-  g.save();
-  g.setTransform(1,0,0,1,0,0);
-  g.filter = "blur(" + blurPx + "px)";
-  g.drawImage(buf,0,0);
-  g.filter = "none";
-  g.restore();
-}
-function drawTile(g, cx, cy, size, rot, shape, track, rail, glass, tileR, glassCol, blur, ground){
-  const S=tileSurface(size, shape), h=size/2;
-  g.save(); g.translate(cx,cy); g.rotate(rot*Math.PI/180);
-  rrect(g,-h,-h,size,size,size*tileR); g.save(); g.clip();
-  if(blur>0) frostBehind(g, blur);               // ...behind the tint, so the tint sits ON the frost
-  if(glass>0){ g.fillStyle=hexA(glassCol||"#b4aeeb", glass); g.fillRect(-h,-h,size,size); }
-  const n=S.length-1;
-  const line = () => { g.beginPath(); g.moveTo(S[0].x,S[0].y); for(let k=1;k<=n;k++) g.lineTo(S[k].x,S[k].y); };
-  // Exactly the in-game cross-section: ground in its own colour with its bedding, the beam's
-  // shadow, then the beam riding the surface, then the rail on top.
-  g.save();
-  g.beginPath(); tileBody(g, S, h); g.clip();
-  // Derived from the track the way the game does it, unless the lab has been given a colour.
-  const groundCol = ground || tintHex(track, TILE.underHue, TILE.underSat, TILE.underShade);
-  g.fillStyle = groundCol;
-  g.fillRect(-h,-h,size,size);
-  if(TILE.strata > 0 && TILE.strataN > 0){                     // bedding lines in the ground
-    g.save(); g.globalAlpha = TILE.strata; g.fillStyle = "#05040d";
-    const step = size/TILE.strataN, th = Math.max(1, size*0.012);
-    for(let k=1;k<TILE.strataN;k++){
-      const y = -h + k*step;
-      g.fillRect(-h, y, size, th);
-      if(k % 2 === 0){ g.globalAlpha = TILE.strata*0.5;
-        g.fillRect(-h + size*0.18, y + step*0.42, size*0.42, th); g.globalAlpha = TILE.strata; }
-    }
-    g.restore();
-  }
-  g.lineJoin="round"; g.lineCap="butt";
-  if(TILE.pathW>0 && TILE.shadowW>0){
-    // Darken whatever the ground ended up being, rather than re-deriving from the track: a
-    // hand-picked ground with a shadow still tied to the track reads as two different tiles.
-    g.strokeStyle = tintHex(groundCol, 0, 1, TILE.shadowShade);
-    g.lineWidth = Math.max(1, size*(TILE.pathW+TILE.shadowW)*2); line(); g.stroke();
-  }
-  if(TILE.pathW>0){                                            // doubled: the top half is clipped
-    g.strokeStyle = track; g.lineWidth = Math.max(1, size*TILE.pathW*2); line(); g.stroke();
-  }
-  g.restore();                                                 // out of the body clip
-  g.lineJoin="round"; g.lineCap="round"; g.strokeStyle=rail;
-  g.lineWidth = Math.max(2, size*TILE.railW); line(); g.stroke();
-  g.restore(); g.restore();
-}
-
-function solveKnee(hx,hy,fx,fy,bend,split,lead){
-  const dx=fx-hx, dy=fy-hy, d=Math.hypot(dx,dy)||1e-4;
-  const total=d*(1+Math.max(0,bend)), thigh=total*split, shin=total-total*split;
-  const a=(thigh*thigh-shin*shin+d*d)/(2*d);
-  const h=Math.sqrt(Math.max(0,thigh*thigh-a*a));
-  const ux=dx/d, uy=dy/d;
-  return { x:hx+ux*a+uy*(h+lead), y:hy+uy*a-ux*(h+lead) };
-}
-// the game's runner, feet at (sx,sy), rotated by `rot` degrees
-function paintRunner(g, sx, sy, s, phase, ts, rot, cfg){
-  const R=RUNNER;
-  const swing=Math.sin(phase)*s*R.swing, bob=Math.abs(Math.sin(phase))*s*R.bob;
-  g.save(); g.translate(sx,sy); g.rotate(rot*Math.PI/180);
-  const pale=cfg.body, legL=s*R.legLen, bodyH=s*R.bodyH, bodyW=s*R.bodyW;
-  if(cfg.runShadow){ const shk = 1 - R.shadowBob*(bob/Math.max(1e-6, s*R.bob || 1e-6))*0.5;
-    g.fillStyle="rgba(5,4,13,"+R.shadowA+")";
-  g.save();
-  const rx=bodyW*R.shadowW*shk, ry=s*R.shadow*shk;                  // matches the game: a radial
-  g.translate(0, s*R.shadowY);                                      // falloff centred on the surface
-  if(rx>0.01 && ry>0.01){
-    g.scale(1, ry/rx);
-    const gd=g.createRadialGradient(0,0,0,0,0,rx);
-    gd.addColorStop(0.00,"rgba(5,4,13,"+R.shadowA+")");
-    gd.addColorStop(0.50,"rgba(5,4,13,"+R.shadowA+")");
-    gd.addColorStop(1.00,"rgba(5,4,13,0)");
-    g.fillStyle=gd; g.beginPath(); g.arc(0,0,rx,0,Math.PI*2); g.fill();
-  }
-  g.restore(); }
-  g.strokeStyle=pale; g.lineWidth=Math.max(2,s*R.legWidth); g.lineCap="round"; g.lineJoin="round";
-  const hipY=-legL-bob-bodyH*(R.hipRise||0), lead=s*R.kneeLead;
-  const lift = ph => -s*R.footLift*Math.pow(Math.max(0,Math.cos(ph)), R.footLiftPow);
-  for(const [hx,fx,fy] of [[-bodyW*R.legSplay,swing,lift(phase)],[bodyW*R.legSplay,-swing,lift(phase+Math.PI)]]){
-    if(cfg.knees){
-      const k=solveKnee(hx,hipY,fx,fy,R.kneeBend,R.kneeSplit,lead);
-      g.beginPath(); g.moveTo(hx,hipY); g.lineTo(k.x,k.y); g.lineTo(fx,fy); g.stroke();
-    } else { g.beginPath(); g.moveTo(hx,hipY); g.lineTo(fx,fy); g.stroke(); }
-  }
-  const byTop=-(legL+bodyH)-bob;
-  g.fillStyle=pale; rrect(g,-bodyW/2,byTop,bodyW,bodyH,s*R.bodyR); g.fill();
-  if(cfg.talisman && TAL[cfg.talisman]){
-    const cordY=byTop+bodyH*R.talCordY, hangY=byTop+bodyH*R.talHangY;
-    const px=bodyW*R.talX, span=bodyW*R.talSpan;          // the cord's dip follows the pendant
-    g.strokeStyle="rgba(23,38,63,"+R.talCordA+")"; g.lineWidth=Math.max(1,s*R.talCordW); g.lineCap="round";
-    g.beginPath(); g.moveTo(-span,cordY); g.quadraticCurveTo(px,hangY+s*R.talSag,span,cordY); g.stroke();
-    TAL[cfg.talisman](g,px,hangY,s*R.talR);
-  }
-  g.fillStyle=cfg.ink;
-  const eyeR=s*R.eyeR, eyeY=byTop+bodyH*R.eyeY;
-  const e1x=bodyW*R.eyeAx, e2x=bodyW*R.eyeBx;
-  const G=R.glanceMs, gt=ts%G; let gx=0, gy=0;
-  if(gt<G*0.125) gx=-s*R.glanceX; else if(gt<G*0.25) gx=s*R.glanceX;
-  else if(gt>G*0.654&&gt<G*0.779) gy=-s*R.glanceY;
-  g.beginPath(); g.arc(e1x+gx,eyeY+gy,eyeR,0,Math.PI*2); g.fill();
-  g.beginPath(); g.arc(e2x+gx,eyeY+gy,eyeR,0,Math.PI*2); g.fill();
-  g.restore();
-}
-
-// ---------- the whole icon at any size ----------
-function paintIcon(g, W, ts){
-  g.clearRect(0,0,W,W);
-  // background
-  if(C.bgStyle==="flat"){ g.fillStyle=C.bg1; g.fillRect(0,0,W,W); }
-  else if(C.bgStyle==="gradient"){
-    const a=C.bgAngle*Math.PI/180, dx=Math.cos(a)*W, dy=Math.sin(a)*W;
-    const gr=g.createLinearGradient(W/2-dx/2,W/2-dy/2,W/2+dx/2,W/2+dy/2);
-    gr.addColorStop(0,C.bg1); gr.addColorStop(1,C.bg2); g.fillStyle=gr; g.fillRect(0,0,W,W);
-  } else if(C.bgStyle==="patchwork"){
-    // A quilt of flat squares, the way the board's backdrop reads at a glance. Nine of them
-    // at 3x3: big enough to be legible once the icon is 40px on a home screen, where the
-    // diagonal stripes just turned into mush.
-    const N=Math.max(1,C.patchN|0), cellW=W/N, gap=W*C.patchGap, rad=W*C.patchRound;
-    g.fillStyle=C.bg2; g.fillRect(0,0,W,W);       // the seam colour, showing through the gaps
-    const cols=[C.patch1,C.patch2,C.patch3,C.patch4,C.patch5,C.patch6,C.patch7,C.patch8,C.patch9];
-    for(let r=0;r<N;r++) for(let c=0;c<N;c++){
-      const x=c*cellW+gap/2, y=r*cellW+gap/2, w=cellW-gap;
-      g.fillStyle=cols[(r*N+c)%cols.length]||C.bg1;
-      const rr=Math.min(rad,w/2);
-      g.beginPath(); g.moveTo(x+rr,y);
-      g.arcTo(x+w,y,x+w,y+w,rr); g.arcTo(x+w,y+w,x,y+w,rr);
-      g.arcTo(x,y+w,x,y,rr);     g.arcTo(x,y,x+w,y,rr);
-      g.closePath(); g.fill();
-    }
-  } else {                                        // the game's diagonal stripe backdrop
-    g.fillStyle=C.bg2; g.fillRect(0,0,W,W);
-    g.save(); g.translate(W/2,W/2); g.rotate(C.bgAngle*Math.PI/180); g.translate(-W,-W);
-    const band=W*2/Math.max(1,C.stripes);
-    for(let i=0;i<C.stripes*2+2;i+=2){ g.fillStyle=C.bg1; g.fillRect(0,i*band,W*3,band); }
-    g.restore();
-  }
-  if(C.vignette>0){
-    const vg=g.createRadialGradient(W/2,W/2,W*0.25,W/2,W/2,W*0.72);
-    vg.addColorStop(0,"rgba(0,0,0,0)"); vg.addColorStop(1,"rgba(0,0,0,"+C.vignette+")");
-    g.fillStyle=vg; g.fillRect(0,0,W,W);
-  }
-  if(C.tileOn) drawTile(g, C.tileX*W, C.tileY*W, C.tileSize*W, C.tileRot, C.tileShape, C.track, C.rail,
-                        C.glass, C.tileR, C.glassCol, W*C.tileBlur, C.groundAuto ? "" : C.ground);
-  if(C.runOn)  paintRunner(g, C.runX*W, C.runY*W, C.runScale*W, C.runStride, ts, C.runRot, C);
-}
-
-const cv=document.getElementById("cv"), ctx=cv.getContext("2d");
-const $=id=>document.getElementById(id);
-const minis=[["m180",180],["m120",120],["m64",64],["m32",32]];
-let maskMode=1, showSafe=false, animate=false, t0=performance.now();
-const MASKS=["square","rounded","circle"];
-
-function applyMask(g,W){
-  if(MASKS[maskMode]==="square") return;
-  g.globalCompositeOperation="destination-in";
-  g.fillStyle="#fff";
-  if(MASKS[maskMode]==="circle"){ g.beginPath(); g.arc(W/2,W/2,W/2,0,Math.PI*2); g.fill(); }
-  else { rrect(g,0,0,W,W,W*0.2237); g.fill(); }      // iOS squircle, near enough
-  g.globalCompositeOperation="source-over";
-}
-function frame(now){
-  const ts=animate?(now-t0):2000;
-  paintIcon(ctx,cv.width,ts); applyMask(ctx,cv.width);
-  if(showSafe){
-    ctx.save(); ctx.setLineDash([6,6]); ctx.lineWidth=1.5; ctx.strokeStyle="rgba(125,208,255,0.7)";
-    ctx.beginPath(); ctx.arc(cv.width/2,cv.width/2,cv.width*0.40,0,Math.PI*2); ctx.stroke();
-    ctx.strokeStyle="rgba(255,210,74,0.5)";
-    ctx.strokeRect(cv.width*0.10,cv.width*0.10,cv.width*0.80,cv.width*0.80);
-    ctx.setLineDash([]); ctx.restore();
-  }
-  for(const [id,W] of minis){ const c=$(id), g=c.getContext("2d"); paintIcon(g,W,ts); applyMask(g,W); }
-  requestAnimationFrame(frame);
-}
-
-// ---------- controls ----------
-const SPEC=[
-  ["group","Background"],
-  ["pick","bgStyle","style",["patchwork","stripes","gradient","flat"]],
-  ["col","bg1","colour A"], ["col","bg2","seam / colour B"],
-  ["num","bgAngle","angle",0,180,1],
-  ["num","stripes","stripes",2,14,1],
-  ["num","vignette","vignette",0,0.7,0.01],
-  ["group","Patchwork"],
-  ["palettes"],
-  ["num","patchN","grid",2,4,1],
-  ["num","patchGap","seam",0,0.06,0.002],
-  ["num","patchRound","corner",0,0.2,0.005],
-  ["col","patch1","1"], ["col","patch2","2"], ["col","patch3","3"],
-  ["col","patch4","4"], ["col","patch5","5"], ["col","patch6","6"],
-  ["col","patch7","7"], ["col","patch8","8"], ["col","patch9","9"],
-  ["group","Tile"],
-  ["tog","tileOn","show tile"],
-  ["pick","tileShape","platform",["ew","ns","ne","es","sw","wn"]],
-  ["num","tileX","x",0,1,0.005], ["num","tileY","y",0,1,0.005],
-  ["num","tileSize","size",0.1,1.1,0.005], ["num","tileRot","rotate",-180,180,1],
-  ["num","tileR","corner",0,0.5,0.005], ["num","glass","glass",0,1,0.01],
-  ["num","tileBlur","frost",0,0.04,0.001],
-  ["col","glassCol","tile"], ["col","track","track"], ["col","rail","rail"],
-  ["tog","groundAuto","ground from track"], ["col","ground","ground"],
-  ["group","Runner"],
-  ["tog","runOn","show runner"], ["tog","knees","knees"], ["tog","runShadow","shadow"],
-  ["num","runX","x",0,1,0.005], ["num","runY","y",0,1,0.005],
-  ["num","runScale","scale",0.1,1.2,0.005], ["num","runRot","rotate",-180,180,1],
-  ["num","runStride","stride",0,6.2832,0.01],
-  ["col","body","body"], ["col","ink","ink"],
-  ["pick","talisman","talisman",["","ember","tide","cog","sun","shard","sprig"]],
-];
-const panel=$("panel");
-for(const row of SPEC){
-  const kind=row[0];
-  if(kind==="group"){ const d=document.createElement("div"); d.className="group"; d.textContent=row[1]; panel.appendChild(d); continue; }
-  if(kind==="palettes"){
-    // Each chip is the palette drawn as the quilt it will become, because a row of nine
-    // stripes tells you the colours but not what they look like laid out three by three.
-    const wrap=document.createElement("div"); wrap.className="pals";
-    for(const P of PALETTES){
-      const b=document.createElement("button"); b.className="pal"; b.title=P.name;
-      const c=document.createElement("canvas"); c.width=c.height=36;
-      const pg=c.getContext("2d");
-      pg.fillStyle=P.seam; pg.fillRect(0,0,36,36);
-      for(let i=0;i<9;i++){ pg.fillStyle=P.cols[i];
-        pg.fillRect((i%3)*12+0.5,(i/3|0)*12+0.5,11,11); }
-      const t=document.createElement("span"); t.textContent=P.name;
-      b.appendChild(c); b.appendChild(t);
-      b.addEventListener("click",()=>{
-        for(let i=0;i<9;i++) C["patch"+(i+1)]=P.cols[i];
-        C.bg2=P.seam; C.bgStyle="patchwork";
-        syncUI(); refresh();
-      });
-      wrap.appendChild(b);
-    }
-    panel.appendChild(wrap); continue;
-  }
-  const key=row[1], label=row[2];
-  if(kind==="num"){
-    const [,,,min,max,step]=row;
-    const d=document.createElement("div"); d.className="sl";
-    d.innerHTML='<label>'+label+'</label><input type="range" id="i_'+key+'" min="'+min+'" max="'+max+'" step="'+step+'" value="'+C[key]+'"><span class="val" id="v_'+key+'"></span>';
-    panel.appendChild(d);
-    const inp=d.querySelector("input"), val=d.querySelector(".val");
-    const show=()=>val.textContent = step>=1 ? C[key] : (+C[key]).toFixed(3);
-    inp.addEventListener("input",()=>{ C[key]=+inp.value; show(); refresh(); }); show();
-  } else if(kind==="col"){
-    const d=document.createElement("div"); d.className="rowline";
-    d.innerHTML='<label style="width:74px">'+label+'</label><input type="color" id="i_'+key+'" value="'+C[key]+'">';
-    panel.appendChild(d);
-    d.querySelector("input").addEventListener("input",e=>{ C[key]=e.target.value; refresh(); });
-  } else if(kind==="pick"){
-    const d=document.createElement("div"); d.className="rowline";
-    d.innerHTML='<label style="width:74px">'+label+'</label><select id="i_'+key+'">'+
-      row[3].map(o=>'<option value="'+o+'">'+(o||"none")+'</option>').join("")+'</select>';
-    panel.appendChild(d);
-    const sel=d.querySelector("select"); sel.value=C[key];
-    sel.addEventListener("change",e=>{ C[key]=e.target.value; refresh(); });
-  } else if(kind==="tog"){
-    const d=document.createElement("div"); d.className="rowline";
-    d.innerHTML='<button class="act'+(C[key]?" on":"")+'" id="i_'+key+'">'+label+'</button>';
-    panel.appendChild(d);
-    const btn=d.querySelector("button");
-    btn.addEventListener("click",()=>{ C[key]=C[key]?0:1; btn.classList.toggle("on",!!C[key]); refresh(); });
-  }
-}
-function syncUI(){
-  for(const row of SPEC){
-    if(row[0]==="group" || row[0]==="palettes") continue;
-    const key=row[1], el=$("i_"+key); if(!el) continue;
-    if(row[0]==="tog") el.classList.toggle("on",!!C[key]);
-    else el.value=C[key];
-    if(row[0]==="num") $("v_"+key).textContent = row[5]>=1 ? C[key] : (+C[key]).toFixed(3);
-  }
-}
-let savedT=0;
-function flagSaved(){
-  const p=$("saved"); if(!p) return;
-  p.textContent="saved"; p.style.opacity="1";
-  clearTimeout(savedT); savedT=setTimeout(()=>{ p.style.opacity="0.35"; }, 900);
-}
-function refresh(){ $("out").value=JSON.stringify(C,null,1); saveC(); }
-
-// ---------- drag to place ----------
-let dragging=null;
-function hit(mx,my){
-  const W=cv.width;
-  const dr=Math.hypot(mx-C.runX*W, my-C.runY*W), dt=Math.hypot(mx-C.tileX*W, my-C.tileY*W);
-  if(C.runOn && dr < C.runScale*W*0.42) return "run";
-  if(C.tileOn && dt < C.tileSize*W*0.6) return "tile";
-  return C.runOn ? "run" : (C.tileOn ? "tile" : null);
-}
-cv.addEventListener("pointerdown",e=>{
-  const r=cv.getBoundingClientRect(), sc=cv.width/r.width;
-  const mx=(e.clientX-r.left)*sc, my=(e.clientY-r.top)*sc;
-  dragging=hit(mx,my); cv.classList.add("drag"); cv.setPointerCapture(e.pointerId);
-});
-cv.addEventListener("pointermove",e=>{
-  const r=cv.getBoundingClientRect(), sc=cv.width/r.width;
-  const mx=(e.clientX-r.left)*sc/cv.width, my=(e.clientY-r.top)*sc/cv.width;
-  $("pos").textContent = mx.toFixed(3)+", "+my.toFixed(3);
-  if(!dragging) return;
-  if(dragging==="run"){ C.runX=+mx.toFixed(4); C.runY=+my.toFixed(4); }
-  else { C.tileX=+mx.toFixed(4); C.tileY=+my.toFixed(4); }
-  syncUI(); refresh();
-});
-addEventListener("pointerup",()=>{ dragging=null; cv.classList.remove("drag"); });
-
-// ---------- export ----------
-function png(W){
-  const c=document.createElement("canvas"); c.width=c.height=W;
-  const g=c.getContext("2d");
-  paintIcon(g,W,2000);                       // export is always a still, never mid-blink
-  return c.toDataURL("image/png");
-}
-function save(W){
-  const a=document.createElement("a");
-  a.href=png(W); a.download="icon-"+W+".png"; a.click();
-}
-$("dl1024").onclick=()=>save(1024);
-$("dl512").onclick=()=>save(512);
-$("dl192").onclick=()=>save(192);
-$("dl180").onclick=()=>save(180);
-$("dlall").onclick=()=>{ [1024,512,192,180].forEach((w,i)=>setTimeout(()=>save(w), i*350)); };
-$("copy").onclick=()=>{ $("out").select(); document.execCommand("copy");
-  $("copy").textContent="Copied!"; setTimeout(()=>$("copy").textContent="Copy",1000); };
-$("paste").onclick=()=>{ try{ C={...DEFAULT, ...JSON.parse($("out").value)}; syncUI(); refresh(); }
-  catch(_){ $("paste").textContent="Bad JSON"; setTimeout(()=>$("paste").textContent="Load from box",1200); } };
-// Reset goes back to the shipped composition — but it does NOT throw away the one you had.
-// That copy is the work; it is kept to one side so "Restore mine" can bring it straight back.
-$("reset").onclick=()=>{
-  try{ const raw = localStorage.getItem(LSKEY); if (raw) localStorage.setItem(KEPTKEY, raw); }catch(e){}
-  C={...DEFAULT}; saveC(); syncUI(); refresh(); };
-$("restoreBtn").onclick=()=>{
-  let raw = null;
-  try{ raw = localStorage.getItem(KEPTKEY) || localStorage.getItem(LSKEY); }catch(e){}
-  if (!raw) { $("restoreBtn").textContent="Nothing kept"; setTimeout(()=>$("restoreBtn").textContent="Restore mine",1200); return; }
-  try{ C = {...DEFAULT, ...JSON.parse(raw)}; }catch(e){ return; }
-  saveC(); syncUI(); refresh(); };
-$("mask").onclick=()=>{ maskMode=(maskMode+1)%3; $("mask").textContent="Mask: "+MASKS[maskMode]; };
-$("safe").onclick=e=>{ showSafe=!showSafe; e.target.classList.toggle("on",showSafe); };
-$("anim").onclick=e=>{ animate=!animate; e.target.classList.toggle("on",animate); t0=performance.now(); };
-
-syncUI(); refresh();
-requestAnimationFrame(frame);
+const restored = restore();
+setStars(stars);
+setWorn(worn);
+KEYS.forEach(sync);
+if (restored) $("status").textContent = "your last settings, put back";
 </script>
 </body>
 </html>
