@@ -65,6 +65,7 @@
 
   <div class="row">
     <button class="act prim" id="copy">Copy RUNNER block</button>
+    <button class="act" id="restoreBtn">Restore mine</button>
     <button class="act" id="reset">Reset to shipped</button>
     <button class="act" id="rand">Nudge randomly</button>
   </div>
@@ -377,6 +378,23 @@ for(const row of SPEC){
   inp.addEventListener("input",()=>{ RUNNER[k]= step>=1 ? +inp.value : +(+inp.value).toFixed(4); show(); refresh(); });
   show();
 }
+// Everything on this page is written down as you move it and put back when you come back. A
+// tuning page you have to set up again every time you open it is a tuning page you stop opening.
+// "Reset to shipped" goes back to the committed block; "Restore mine" goes back to YOURS.
+const SAVE_KEY = "tilerunner:runner-lab";
+function save(){
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(RUNNER)); } catch (e) {}
+}
+function restore(){
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) {}
+  if (!v || typeof v !== "object") return false;
+  Object.assign(RUNNER, v);
+  return true;
+}
+document.addEventListener("input", save, true);
+document.addEventListener("change", save, true);
+
 function syncSliders(){ for(const row of SPEC){ if(row.length===1) continue; const k=row[0];
   const inp=$("s_"+k); if(inp){ inp.value=RUNNER[k]; $("v_"+k).textContent = row[4]>=1? RUNNER[k] : (+RUNNER[k]).toFixed(3); } }
   $("colBody").value=RUNNER.body; $("colInk").value=RUNNER.ink;
@@ -422,6 +440,8 @@ function refresh(){
 $("copy").onclick=()=>{ $("out").select(); document.execCommand("copy");
   $("copy").textContent="Copied!"; setTimeout(()=>$("copy").textContent="Copy RUNNER block",1100); };
 $("reset").onclick=()=>{ Object.assign(RUNNER,SHIPPED); syncSliders(); refresh(); };
+$("restoreBtn").onclick=()=>{ if (restore()) { syncSliders(); refresh(); } };
+if (restore()) { syncSliders(); refresh(); }
 $("rand").onclick=()=>{ for(const row of SPEC){ if(row.length===1) continue; const [k,,min,max]=row;
     const span=(max-min)*0.10, v=Math.min(max,Math.max(min,RUNNER[k]+(Math.random()*2-1)*span));
     RUNNER[k]= row[4]>=1 ? Math.round(v) : +v.toFixed(4); } syncSliders(); refresh(); };

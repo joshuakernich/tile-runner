@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta http-equiv="Cache-Control" content="no-store"/>
+<title>Tile Runner — Spare Tile Lab</title>
+<style>
+  :root{ --bg:#12102a; --panel:#1b1838; --line:#2b2850; --ink:#cfe9ff; --accent:#ff6d6d; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:10px 14px;border-bottom:1px solid var(--line);
+         display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;}
+  header h1{font-size:15px;margin:0 12px 0 0;font-weight:700;letter-spacing:.5px;}
+  #status{font-size:12px;opacity:.8;}
+  .app{display:grid;grid-template-columns:280px minmax(0,1fr);gap:14px;padding:14px;align-items:start;}
+  .rail{position:sticky;top:14px;display:flex;flex-direction:column;gap:12px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;}
+  .card h2{font-size:11px;letter-spacing:1px;opacity:.55;margin:0 0 8px;
+           font-weight:700;text-transform:uppercase;}
+  .row{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:12px;}
+  .row label{flex:0 0 86px;opacity:.85;}
+  .row input[type=range]{flex:1;min-width:0;accent-color:var(--accent);}
+  .row output{flex:0 0 46px;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent);}
+  button{background:#233;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+         padding:8px 12px;cursor:pointer;font:inherit;font-size:12px;width:100%;}
+  button:hover{border-color:var(--accent);}
+  button.prim{background:#1c6;color:#04120a;font-weight:700;border:none;}
+  button.on{border-color:var(--accent);color:var(--accent);}
+  .opts{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+  .presets{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+  .presets button{padding:7px 0;font-size:11px;}
+  .hint{font-size:11px;line-height:1.5;opacity:.65;}
+  .stage{display:flex;flex-direction:column;gap:8px;align-items:center;min-width:0;}
+  iframe{width:100%;max-width:520px;height:78vh;border:1px solid var(--line);
+         border-radius:12px;background:#000;display:block;}
+  .legend{font-size:11px;opacity:.7;line-height:1.6;max-width:520px;}
+  code{color:var(--accent);}
+  .warn{color:#ffd24a;}
+  textarea{width:100%;height:150px;background:#0d0b22;color:var(--ink);border:1px solid var(--line);
+           border-radius:8px;padding:8px;font:inherit;font-size:11px;line-height:1.5;resize:vertical;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Spare Tile Lab</h1>
+  <span id="status">booting the game…</span>
+</header>
+
+<div class="app">
+  <aside class="rail">
+    <div class="card">
+      <h2>The wheel</h2>
+      <div class="row"><label>one turn</label><input id="ms" type="range" min="240" max="3000" step="20" value="1100"><output id="msOut">1100</output></div>
+      <div class="row"><label>tail</label><input id="tail" type="range" min="0.05" max="1" step="0.01" value="0.62"><output id="tailOut">0.62</output></div>
+      <div class="row"><label>fade shape</label><input id="ease" type="range" min="0.3" max="4" step="0.05" value="1.60"><output id="easeOut">1.60</output></div>
+      <div class="row"><label>throb</label><input id="sheen" type="range" min="0" max="0.6" step="0.01" value="0.16"><output id="sheenOut">0.16</output></div>
+      <p class="hint">The centre dot is out; the eight around it light in turn, clockwise from
+        the top, and the pane throbs with them — sixteen square panes, four by four, each lighting
+        as the head crosses its bearing. <b>tail</b> is how much of the ring is still lit behind
+        the head — small is one travelling square, large is a pane that barely goes out.
+        <b>fade shape</b> above 1 drops away fast after the head, below 1 holds then falls.
+        <b>throb</b> is how hard the sixteen panes light; at zero the glass is plain and only the
+        dots turn.</p>
+    </div>
+
+    <div class="card">
+      <h2>The dots</h2>
+      <div class="row"><label>lit</label><input id="dotsA" type="range" min="0" max="1" step="0.01" value="0.95"><output id="dotsAOut">0.95</output></div>
+      <div class="row"><label>out</label><input id="dotsLow" type="range" min="0" max="1" step="0.01" value="0.18"><output id="dotsLowOut">0.18</output></div>
+      <p class="hint">A dot at the moment the head reaches it, and a dot the head has long left.
+        Set <b>out</b> near the ordinary dot opacity (~0.75) and the wheel becomes a brightening
+        rather than a chase.</p>
+    </div>
+
+    <div class="card">
+      <h2>Somewhere to start</h2>
+      <div class="presets">
+        <button data-p="shipped">shipped</button>
+        <button data-p="comet">comet</button>
+        <button data-p="sweep">sweep</button>
+        <button data-p="tick">tick</button>
+        <button data-p="halo">halo</button>
+        <button data-p="drowsy">drowsy</button>
+      </div>
+      <p class="hint"><b>comet</b> one bright dot with a short trail · <b>sweep</b> a long trail,
+        half the ring lit · <b>tick</b> a hard second hand, no fade · <b>halo</b> the ring never
+        quite goes out · <b>drowsy</b> a slow turn, soft everywhere.</p>
+    </div>
+
+    <div class="card">
+      <h2>Try it</h2>
+      <button id="restore">Restore my saved settings</button>
+      <button id="claim" style="margin-top:6px">Hear a tile being claimed</button>
+      <button id="reboard" style="margin-top:6px">Rebuild the board</button>
+      <button id="reload" style="margin-top:6px">Reload the game</button>
+    </div>
+
+    <div class="card">
+      <h2>Take it away</h2>
+      <button class="prim" id="copy">Copy SPARE block</button>
+      <textarea id="out" readonly style="margin-top:8px"></textarea>
+    </div>
+  </aside>
+
+  <div class="stage">
+    <iframe id="game" src="index.html" title="Tile Runner"></iframe>
+    <p class="legend">
+      The board above carries <b>two spare tiles</b> — the two out on their own, with the wheel
+      turning in the grip — and <b>one ordinary free tile</b> for comparison, which appears
+      behind the runner once he has passed one.
+      A spare is a tile the level left lying out there, or one the Mushroom dropped: it is not
+      yours until the track reaches it, so it cannot be dragged, cannot be called to a junction
+      and does not count toward the tiles you are holding.
+      <br><br>
+      Nothing here is redrawn. The lab pushes the <code>SPARE</code> block straight into the
+      running game through <code>__TR.spare()</code>, so what you are looking at is the shipped
+      renderer and not a copy of it that could drift. <span class="warn">This page must be
+      SERVED</span> — <code>file://</code> stops it reading the frame.
+    </p>
+  </div>
+</div>
+
+<script>
+// The lab drives the REAL game in the frame rather than redrawing any of it here — the same
+// rule radius-lab.html follows, and for the same reason: a lab that keeps its own copy of the
+// art is a lab that will one day be tuning something the game no longer draws.
+const $ = id => document.getElementById(id);
+const frame = $("game");
+let W = null;
+// The game is a PWA with a service worker, and a service worker will happily hand this frame a
+// cached index.html — which means a lab can sit there tuning code the file on disk no longer
+// contains. A unique query per load can't match anything in that cache, so the frame always gets
+// what is actually on disk.
+const GAME_SRC = () => "index.html?lab=" + Date.now();
+                                   // the game's window, once it is up
+
+const KEYS = ["ms", "tail", "ease", "sheen", "dotsA", "dotsLow"];
+
+// A board with a long slow climb up the left-hand side and two tiles stranded away from it.
+// The stranded pair are marked spare by the GAME, at build, by the rule a real level uses —
+// the lab never sets the flag itself, so what is on screen is a spare in the only sense the
+// game has of one.
+//
+// The pace is a crawl rather than a stop: a level cannot be frozen from outside without
+// reaching into its clock, and the runner walking off the end of his track is a fall, which
+// takes the board away. Five tiles at this speed is a hundred seconds of tuning, and the
+// watchdog below rebuilds the board if you outlast it.
+function specimen(){
+  // Narrow on purpose. The camera centres on the runner rather than on the board, so a board
+  // any wider than this pushes one of the spares off the side of the frame — and the spares
+  // are the whole point of the page. Three columns keeps everything on screen at once.
+  const cols = 3, rows = 9;
+  return { n: 0, name: "SPARE", cols, rows, cps: 0.05, intro: [],
+           start: [1, rows-1],
+           // the chain off the start, then two tiles nowhere near it. Neither spare touches a
+           // laid tile: one that did would be claimed by the track the moment the board built.
+           init: [[1, rows-2], [1, rows-3], [1, rows-4], [1, rows-5], [0, 2], [2, 2]],
+           goal: [cols-1, 0],
+           walls: [], stone: [], platforms: [], doors: [], keys: [],
+           coins: [], talismans: [], crumble: [], blocks: [], hazards: [] };
+}
+
+// A level's own `cps` is a starting pace the game re-derives on build, so setting it in the
+// specimen doesn't stick — the pace has to be written onto the live clock, and rewritten,
+// because every cleared tile ramps it back up by RAMP_PER_TILE.
+const CRAWL = 0.05;
+function crawl(){
+  if (!W || !W.__TR || !W.__TR.state) return;
+  const s = W.__TR.state();
+  if (!s || s.status !== "play") return;
+  if (Math.abs(s.cpsNow - CRAWL) < 1e-6) return;
+  s.cpsNow = CRAWL;
+  s.msPerCell = 1000 / CRAWL;
+}
+
+// Everything on this rail is written down as you move it and put back when you come back. A
+// tuning page you have to set up again every time you open it is a tuning page you stop opening
+// — and the settings you are part way through are worth more than the ones already shipped.
+// The presets are known starting points; "Restore" is YOUR last state.
+const SAVE_KEY = "tilerunner:spare-lab";
+function save(){
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(values())); } catch (e) {}
+}
+function restore(){
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) {}
+  if (!v || typeof v !== "object") return false;
+  for (const k of KEYS) if (typeof v[k] === "number") $(k).value = v[k];
+  return true;
+}
+
+function values(){
+  const o = {};
+  for (const k of KEYS) o[k] = +$(k).value;
+  return o;
+}
+function push(){
+  if (!W || !W.__TR || !W.__TR.spare) return;
+  try {
+    W.__TR.spare(values()); crawl(); save();
+    $("status").textContent = "live — one turn every " + Math.round(+$("ms").value) + "ms";
+    refreshOut();
+  } catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+}
+function reboard(){
+  if (!W || !W.__TR || !W.__TR.demo) return;
+  try {
+    // The game may be sitting behind a menu — it boots into one on the way to the Tileverse —
+    // and a paused game never leaves the flag peek, so the board would come up and stay there.
+    W.__TR.ui.closeMenu();
+    W.__TR.demo(specimen(), "SPARE"); clearCards(); setTimeout(push, 60);
+  }
+  catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+}
+// A chapter opens with its card and, the first time, a card per mechanic it introduces. They
+// are the right thing in the game and the wrong thing here — the board is the whole point of
+// this page — so the lab taps through them as they come.
+function clearCards(){
+  let tries = 0;
+  (function tick(){
+    if (!W || !W.__TR) return;
+    const D = W.document;
+    const poem = D.getElementById("poem");
+    if (poem && poem.classList.contains("show"))
+      poem.dispatchEvent(new W.PointerEvent("pointerdown", { bubbles:true, pointerId: 1 }));
+    const mech = D.getElementById("mechpop");
+    if (mech && mech.classList.contains("show"))
+      mech.dispatchEvent(new W.MouseEvent("click", { bubbles:true }));
+    const s = W.__TR.state();
+    if (s && s.status === "play") { push(); return; }
+    if (++tries > 400) return;      // ~24s: long enough to outlast the flag peek and the pan
+    setTimeout(tick, 60);
+  })();
+}
+
+// The block, written the way it is written in index.html, so it can be pasted over the top of
+// the real one without reformatting.
+function refreshOut(){
+  const v = values(), f = (n, d) => (+n).toFixed(d);
+  $("out").value =
+    "  const SPARE = {\n" +
+    "    ms:      " + Math.round(v.ms)+ ",   // one turn of the wheel\n" +
+    "    dotsA:   " + f(v.dotsA, 2)   + ",   // a dot at the moment it lights\n" +
+    "    dotsLow: " + f(v.dotsLow, 2) + ",   // ...and once the wheel has left it behind\n" +
+    "    tail:    " + f(v.tail, 2)    + ",   // how much of the wheel is still lit behind the head, 1 = all of it\n" +
+    "    ease:    " + f(v.ease, 2)    + ",   // the shape of the fade — above 1 falls away fast, below 1 holds then drops\n" +
+    "    sheen:   " + f(v.sheen, 2)   + ",   // the throb of the sixteen panes under the wheel, 0 = plain glass\n" +
+    "  };";
+}
+
+const PRESETS = {
+  shipped: { ms:1100, tail:0.62, ease:1.60, sheen:0.16, dotsA:0.95, dotsLow:0.18 },
+  comet:   { ms:900,  tail:0.30, ease:1.20, sheen:0.22, dotsA:1.00, dotsLow:0.10 },
+  sweep:   { ms:1600, tail:0.55, ease:0.70, sheen:0.13, dotsA:0.95, dotsLow:0.14 },
+  tick:    { ms:800,  tail:0.13, ease:0.30, sheen:0.30, dotsA:1.00, dotsLow:0.30 },
+  halo:    { ms:1300, tail:1.00, ease:2.20, sheen:0.10, dotsA:1.00, dotsLow:0.55 },
+  drowsy:  { ms:2400, tail:0.80, ease:1.10, sheen:0.08, dotsA:0.80, dotsLow:0.28 },
+};
+function apply(p){
+  for (const k of KEYS) { $(k).value = p[k]; sync(k); }
+  push();
+}
+function sync(k){ $(k + "Out").textContent = k === "ms" ? $(k).value : (+$(k).value).toFixed(2); }
+
+// The game boots into its title screen and its own rAF loop; wait for the debug surface to
+// exist rather than guessing at a delay.
+function attach(){
+  W = frame.contentWindow;
+  let tries = 0;
+  (function wait(){
+    if (W.__TR && W.__TR.demo && W.__TR.spare) {
+      // Every mechanic marked as already seen, so the board comes up bare. The cards are the
+      // right thing in the game and the wrong thing here, and tapping them away afterwards is
+      // a race against a camera pan that is easy to lose.
+      try { W.localStorage.setItem("tilerunner:seen", JSON.stringify(W.__TR.mechs())); } catch (e) {}
+      reboard(); return;
+    }
+    if (++tries > 200) {
+      $("status").innerHTML = '<span class="warn">the game never came up — is this being SERVED? ' +
+        'file:// blocks the frame from being read.</span>';
+      return;
+    }
+    setTimeout(wait, 50);
+  })();
+}
+frame.addEventListener("load", attach);
+frame.src = GAME_SRC();
+
+KEYS.forEach(k => $(k).addEventListener("input", () => { sync(k); push(); }));
+document.querySelectorAll(".presets button").forEach(b =>
+  b.onclick = () => { apply(PRESETS[b.dataset.p]); $("status").textContent = "preset: " + b.dataset.p; });
+
+// The claim sound on its own, without having to run a tile all the way to a spare to hear it.
+$("claim").onclick = () => {
+  if (!W || !W.__TR || !W.__TR.sound) return;
+  try { W.__TR.sound.unlock && W.__TR.sound.unlock(); W.__TR.sound.claim(); }
+  catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+};
+// The rail saves itself as you move it; this is for after you have wandered off into the
+// presets and want back what you actually had.
+$("restore").onclick = () => {
+  if (!restore()) { $("status").innerHTML = '<span class="warn">nothing saved yet</span>'; return; }
+  KEYS.forEach(sync); push();
+  $("status").textContent = "your saved settings, put back";
+};
+$("reboard").onclick = reboard;
+// If the runner runs out of track while you are tuning, the fall takes the board away and
+// leaves you looking at a heap. Put it back.
+setInterval(() => {
+  if (!W || !W.__TR || !W.__TR.state) return;
+  const st = W.__TR.state();
+  if (st && (st.status === "lose" || st.status === "win")) reboard();
+  else crawl();
+}, 1200);
+$("reload").onclick = () => { frame.src = GAME_SRC(); };
+$("copy").onclick = () => {
+  navigator.clipboard.writeText($("out").value).then(
+    () => $("status").textContent = "SPARE block copied — paste it over the one in index.html",
+    () => $("status").innerHTML = '<span class="warn">clipboard refused — copy it out of the box below</span>');
+};
+
+const restored = restore();
+KEYS.forEach(sync);
+refreshOut();
+if (restored) document.getElementById("status").textContent = "your last settings, put back";
+</script>
+</body>
+</html>

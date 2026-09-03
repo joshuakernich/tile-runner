@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta http-equiv="Cache-Control" content="no-store"/>
+<title>Tile Runner — Bell Lab</title>
+<style>
+  :root{ --bg:#12102a; --panel:#1b1838; --line:#2b2850; --ink:#cfe9ff; --accent:#c9b6ff; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:10px 14px;border-bottom:1px solid var(--line);
+         display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;}
+  header h1{font-size:15px;margin:0 12px 0 0;font-weight:700;letter-spacing:.5px;}
+  #status{font-size:12px;opacity:.8;}
+  .app{display:grid;grid-template-columns:280px minmax(0,1fr);gap:14px;padding:14px;align-items:start;}
+  .rail{position:sticky;top:14px;display:flex;flex-direction:column;gap:12px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;}
+  .card h2{font-size:11px;letter-spacing:1px;opacity:.55;margin:0 0 8px;
+           font-weight:700;text-transform:uppercase;}
+  .row{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:12px;}
+  .row label{flex:0 0 86px;opacity:.85;}
+  .row input[type=range]{flex:1;min-width:0;accent-color:var(--accent);}
+  .row output{flex:0 0 46px;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent);}
+  button{background:#233;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+         padding:8px 12px;cursor:pointer;font:inherit;font-size:12px;width:100%;}
+  button:hover{border-color:var(--accent);}
+  button.prim{background:#1c6;color:#04120a;font-weight:700;border:none;}
+  button.on{border-color:var(--accent);color:var(--accent);}
+  .opts{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+  .presets{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+  .presets button{padding:7px 0;font-size:11px;}
+  .hint{font-size:11px;line-height:1.5;opacity:.65;}
+  .stage{display:flex;flex-direction:column;gap:8px;align-items:center;min-width:0;}
+  iframe{width:100%;max-width:520px;height:78vh;border:1px solid var(--line);
+         border-radius:12px;background:#000;display:block;}
+  .legend{font-size:11px;opacity:.7;line-height:1.6;max-width:520px;}
+  code{color:var(--accent);}
+  .warn{color:#ffd24a;}
+  textarea{width:100%;height:190px;background:#0d0b22;color:var(--ink);border:1px solid var(--line);
+           border-radius:8px;padding:8px;font:inherit;font-size:11px;line-height:1.5;resize:vertical;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Bell Lab</h1>
+  <span id="status">booting the game…</span>
+</header>
+
+<div class="app">
+  <aside class="rail">
+    <div class="card">
+      <h2>The ring</h2>
+      <button id="ring">Ring it now</button>
+      <button id="loop" class="on" style="margin-top:6px">Ringing on a loop</button>
+      <p class="hint">The loop rings every couple of seconds; turn it off to hold a still frame,
+        or wind <b>one turn</b> right up and watch a single sweep crawl round him.</p>
+    </div>
+
+    <div class="card">
+      <h2>The circle</h2>
+      <div class="row"><label>radius</label><input id="radius" type="range" min="0.5" max="4" step="0.05" value="1.75"><output id="radiusOut">1.75</output></div>
+      <div class="row"><label>quiet</label><input id="hole" type="range" min="0" max="1.5" step="0.05" value="0.35"><output id="holeOut">0.35</output></div>
+      <div class="row"><label>grid</label><input id="grid" type="range" min="1" max="8" step="1" value="4"><output id="gridOut">4</output></div>
+      <p class="hint"><b>radius</b> is what it draws <i>and</i> what it unmakes at — one number,
+        so the picture cannot lie about what it took. <b>quiet</b> is the hole he stands in at
+        the middle. <b>grid</b> is squares per tile each way; at 4 the circle is drawn out of
+        quarter-tiles, the same grain as the Hammer's beam.</p>
+    </div>
+
+    <div class="card">
+      <h2>The sweep</h2>
+      <div class="row"><label>one turn</label><input id="sweepMs" type="range" min="60" max="4000" step="20" value="700"><output id="sweepMsOut">700</output></div>
+      <div class="row"><label>turns</label><input id="turns" type="range" min="1" max="6" step="1" value="2"><output id="turnsOut">2</output></div>
+      <div class="row"><label>tail</label><input id="tail" type="range" min="0.05" max="1" step="0.01" value="0.55"><output id="tailOut">0.55</output></div>
+      <div class="row"><label>fade shape</label><input id="ease" type="range" min="0.3" max="4" step="0.05" value="1.60"><output id="easeOut">1.60</output></div>
+      <p class="hint">One hand goes round him, lighting each square as it passes. <b>tail</b> is
+        how much of the circle is still lit behind it — small is a single spoke chasing round,
+        large is a circle that barely goes out between turns. <b>fade shape</b> above 1 drops
+        away fast behind the hand, below 1 holds then falls.</p>
+    </div>
+
+    <div class="card">
+      <h2>The weight</h2>
+      <div class="row"><label>rim</label><input id="rimA" type="range" min="0" max="1" step="0.01" value="0.92"><output id="rimAOut">0.92</output></div>
+      <div class="row"><label>inner</label><input id="innerA" type="range" min="0" max="1" step="0.01" value="0.30"><output id="innerAOut">0.30</output></div>
+      <div class="row"><label>left behind</label><input id="low" type="range" min="0" max="1" step="0.01" value="0.06"><output id="lowOut">0.06</output></div>
+      <div class="row"><label>fade out</label><input id="outMs" type="range" min="0" max="800" step="10" value="140"><output id="outMsOut">140</output></div>
+      <p class="hint">A square as the hand passes it, at the <b>rim</b> and just outside the
+        quiet. Climbing outward puts the force at the edge, where the Bell's reach actually is;
+        set them equal for a flat disc. <b>left behind</b> is what remains of a square once the
+        hand has gone by, and <b>fade out</b> is the whole circle going at the end.</p>
+    </div>
+
+    <div class="card">
+      <h2>The front</h2>
+      <div class="opts">
+        <button data-pt="1">rounded</button>
+        <button data-pt="0">square</button>
+      </div>
+      <p class="hint">The leading edge of the sweep — the squares within one square's width of
+        the hand, measured round the arc. <b>Rounded</b> leaves out the ones at the rim and the
+        ones against the quiet, so the arm comes to a point instead of arriving as a flat spoke
+        with square shoulders.</p>
+    </div>
+
+    <div class="card">
+      <h2>The rainbow</h2>
+      <div class="row"><label>tint</label><input id="rainbow" type="range" min="0" max="1" step="0.01" value="0.28"><output id="rainbowOut">0.28</output></div>
+      <div class="row"><label>from</label><input id="hue0" type="range" min="0" max="360" step="5" value="250"><output id="hue0Out">250</output></div>
+      <div class="row"><label>through</label><input id="hueSpan" type="range" min="-720" max="720" step="10" value="300"><output id="hueSpanOut">300</output></div>
+      <p class="hint">The hue runs <i>round</i> the circle rather than along it, so the tail
+        behind the hand carries a drift of colour with it instead of the whole ring being one
+        shade at a time. Keep <b>tint</b> low — the Bell's tones are near-black, so a little
+        colour goes a long way over them.</p>
+    </div>
+
+    <div class="card">
+      <h2>The tones</h2>
+      <div class="opts">
+        <button data-chq="1">chequered</button>
+        <button data-chq="0">one tone</button>
+      </div>
+      <p class="hint">The Bell's two tones are near-black — what it does is subtract something
+        from the world, so it is drawn in the colour of that. Alternating them square by square
+        gives the circle its grain; one tone makes it a solid shadow.</p>
+    </div>
+
+    <div class="card">
+      <h2>Somewhere to start</h2>
+      <div class="presets">
+        <button data-p="shipped">shipped</button>
+        <button data-p="toll">toll</button>
+        <button data-p="alarm">alarm</button>
+        <button data-p="shockwave">shockwave</button>
+        <button data-p="veil">veil</button>
+        <button data-p="spoke">spoke</button>
+      </div>
+      <p class="hint"><b>toll</b> one slow turn, heavy · <b>alarm</b> four fast ones · <b>shockwave</b>
+        a hard bright rim and nothing inside · <b>veil</b> wide, soft, barely going out ·
+        <b>spoke</b> a single arm chasing round.</p>
+    </div>
+
+    <div class="card">
+      <h2>Try it</h2>
+      <button id="reach">Check what it unmakes</button>
+      <button id="restore" style="margin-top:6px">Restore my saved settings</button>
+      <button id="reboard" style="margin-top:6px">Rebuild the board</button>
+      <button id="reload" style="margin-top:6px">Reload the game</button>
+      <p class="hint"><b>Check what it unmakes</b> builds a board with monsters standing at one,
+        two and three tiles, rings once, and says which of them are still there.</p>
+    </div>
+
+    <div class="card">
+      <h2>Take it away</h2>
+      <button class="prim" id="copy">Copy BELL block</button>
+      <textarea id="out" readonly style="margin-top:8px"></textarea>
+    </div>
+  </aside>
+
+  <div class="stage">
+    <iframe id="game" title="Tile Runner"></iframe>
+    <p class="legend">
+      The runner crawls up the middle of a field of stone so he stays put, and rings on a loop.
+      The Bell takes monsters, not rock, so the stone is only there to give the circle something
+      to fall across — it stands all day, which is what makes it a good backdrop for tuning.
+      <br><br>
+      Nothing is redrawn: the lab pushes the <code>BELL</code> block into the running game
+      through <code>__TR.bell()</code> and rings through <code>__TR.ring()</code>, so this is the
+      shipped renderer and not a copy of it that could drift.
+      <span class="warn">This page must be SERVED</span> — <code>file://</code> stops it reading
+      the frame.
+    </p>
+  </div>
+</div>
+
+<script>
+// Same rule as radius-lab, spare-lab and hammer-lab: drive the REAL game rather than keeping a
+// second copy of the art here, because a lab with its own copy is a lab that will one day be
+// tuning something the game no longer draws.
+const $ = id => document.getElementById(id);
+const frame = $("game");
+let W = null;                                   // the game's window, once it is up
+// The game is a PWA with a service worker, and a service worker will happily hand this frame a
+// cached index.html — which means a lab can sit there tuning code the file on disk no longer
+// contains. A unique query per load can't match anything in that cache.
+const GAME_SRC = () => "index.html?lab=" + Date.now();
+let looping = true;
+
+const KEYS = ["radius", "hole", "grid", "sweepMs", "turns", "tail", "ease",
+              "rimA", "innerA", "low", "outMs", "rainbow", "hue0", "hueSpan"];
+let chequer = 1, point = 1;
+
+// Everything on this rail is written down as you move it and put back when you come back. A
+// tuning page you have to set up again every time you open it is a tuning page you stop opening
+// — and the settings you are part way through are worth more than the ones already shipped.
+// The presets are known starting points; "Restore" is YOUR last state.
+const SAVE_KEY = "tilerunner:bell-lab";
+function save(){
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(values())); } catch (e) {}
+}
+function restore(){
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) {}
+  if (!v || typeof v !== "object") return false;
+  for (const k of KEYS) if (typeof v[k] === "number") $(k).value = v[k];
+  if (typeof v.chequer === "number") chequer = v.chequer;
+  if (typeof v.point === "number") point = v.point;
+  return true;
+}
+
+// A field of stone with the runner crawling up the middle of it. The Bell doesn't break rock, so
+// the stone is scenery that never runs out — which is exactly what a circle needs to be read
+// against. No monsters here on purpose: they would be gone on the first ring and every ring
+// after that would be drawn over bare ground.
+function specimen(monsters){
+  const cols = 9, rows = 11, mid = 4;
+  const stone = [];
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (c === mid && r >= rows - 5) continue;      // leave his own chain clear
+      stone.push([c, r, 1]);
+    }
+  const hazards = [];
+  if (monsters)
+    // One, two and three tiles out along HIS OWN ROW — a monster a row or two up is further
+    // away than it looks, and the whole point of this test is that the distances are exact.
+    for (const dc of [1, 2, 3]) hazards.push({ kind:"monster", variant:"trap", c: mid - dc, r: rows - 1, speed: 2200 });
+  return { n: 0, name: "BELL", cols, rows, cps: 0.4, intro: [],
+           start: [mid, rows - 1],
+           init: [[mid, rows-2], [mid, rows-3], [mid, rows-4], [mid, rows-5]],
+           goal: [mid, 0],
+           walls: [], stone, platforms: [], doors: [], keys: [],
+           coins: [], talismans: [], crumble: [], blocks: [], hazards };
+}
+
+// A level's own `cps` is a starting pace the game re-derives on build, so setting it in the
+// specimen doesn't stick — the pace has to be written onto the live clock, and rewritten,
+// because every cleared tile ramps it back up by RAMP_PER_TILE.
+const CRAWL = 0.02;
+function crawl(){
+  if (!W || !W.__TR || !W.__TR.state) return;
+  const s = W.__TR.state();
+  if (!s || s.status !== "play") return;
+  if (Math.abs(s.cpsNow - CRAWL) < 1e-6) return;
+  s.cpsNow = CRAWL;
+  s.msPerCell = 1000 / CRAWL;
+}
+
+function values(){
+  const o = { chequer, point };
+  for (const k of KEYS) o[k] = +$(k).value;
+  return o;
+}
+function push(){
+  if (!W || !W.__TR || !W.__TR.bell) return;
+  try {
+    W.__TR.bell(values()); crawl(); save();
+    $("status").textContent = "live — " + (+$("radius").value).toFixed(2) + " tiles, " +
+      $("turns").value + " turn" + (+$("turns").value === 1 ? "" : "s") + " of " + $("sweepMs").value + "ms";
+    refreshOut();
+  } catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+}
+function reboard(monsters){
+  if (!W || !W.__TR || !W.__TR.demo) return;
+  try {
+    // The game boots behind a menu on its way to the Tileverse, and a paused game never leaves
+    // the flag peek, so the board would come up and sit there.
+    W.__TR.ui.closeMenu();
+    W.__TR.demo(specimen(monsters), "BELL"); clearCards(); setTimeout(push, 60);
+  }
+  catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+}
+// A chapter opens with its card and, the first time, a card per mechanic it introduces. They
+// are the right thing in the game and the wrong thing here, so the lab taps them away.
+function clearCards(done){
+  let tries = 0;
+  (function tick(){
+    if (!W || !W.__TR) return;
+    const D = W.document;
+    const poem = D.getElementById("poem");
+    if (poem && poem.classList.contains("show"))
+      poem.dispatchEvent(new W.PointerEvent("pointerdown", { bubbles:true, pointerId: 1 }));
+    const mech = D.getElementById("mechpop");
+    if (mech && mech.classList.contains("show"))
+      mech.dispatchEvent(new W.MouseEvent("click", { bubbles:true }));
+    const s = W.__TR.state();
+    if (s && s.status === "play") { push(); if (done) done(); return; }
+    if (++tries > 400) return;      // ~24s: long enough to outlast the flag peek and the pan
+    setTimeout(tick, 60);
+  })();
+}
+
+function ring(){
+  if (!W || !W.__TR || !W.__TR.ring) return;
+  const s = W.__TR.state();
+  if (!s || s.status !== "play") return;
+  W.__TR.ring();
+}
+
+// What it actually TOOK, rather than what it looked like it took. A monster is a cell-sized body
+// and touching the circle is enough, so the kill reach is the radius plus half a tile — which is
+// the sort of thing that is much better measured than reasoned about.
+function checkReach(){
+  if (!W || !W.__TR) return;
+  $("status").textContent = "putting monsters out…";
+  reboard(true);
+  clearCards(async () => {
+    const T = W.__TR, s = T.state(), cam = T.cam();
+    await new Promise(r => setTimeout(r, 400));
+    const ri = T.runner();
+    const before = s.hazards.map(h => +(Math.hypot(h.wx - ri.x, h.wy - ri.y)/cam.cell).toFixed(1));
+    T.ring();
+    for (let i = 0; i < 300; i++) { const R = T.state().roar; if (R && R.fired) break; await new Promise(r => setTimeout(r, 10)); }
+    await new Promise(r => setTimeout(r, 120));
+    const ri2 = T.runner();
+    const after = T.state().hazards.map(h => +(Math.hypot(h.wx - ri2.x, h.wy - ri2.y)/cam.cell).toFixed(1));
+    const gone = before.filter(d => !after.includes(d));
+    $("status").textContent = "stood at " + before.join(", ") + " tiles · unmade " +
+      (gone.length ? gone.join(", ") : "nothing") + " · left " + (after.length ? after.join(", ") : "nothing");
+    setTimeout(() => reboard(false), 1400);
+  });
+}
+
+// The block, written the way it is written in index.html, so it can be pasted over the top of
+// the real one without reformatting.
+function refreshOut(){
+  const v = values(), f = (n, d) => (+n).toFixed(d), i = n => Math.round(+n);
+  $("out").value =
+    "  const BELL = {\n" +
+    "    radius:  " + f(v.radius, 2) + ",   // how far it reaches, in tiles\n" +
+    "    hole:    " + f(v.hole, 2)   + ",   // the quiet he stands in at the middle, in tiles\n" +
+    "    grid:    " + i(v.grid)      + ",      // squares per tile, each way\n" +
+    "    sweepMs: " + i(v.sweepMs)   + ",    // one turn of the hand round him\n" +
+    "    turns:   " + i(v.turns)     + ",      // how many turns it makes before it is spent\n" +
+    "    tail:    " + f(v.tail, 2)   + ",   // how much of the circle is still lit behind the hand\n" +
+    "    ease:    " + f(v.ease, 2)   + ",   // the shape of that fade — above 1 falls away fast behind it\n" +
+    "    rimA:    " + f(v.rimA, 2)   + ",   // a square at the rim as the hand passes\n" +
+    "    innerA:  " + f(v.innerA, 2) + ",   // ...and one just outside the quiet\n" +
+    "    low:     " + f(v.low, 2)    + ",   // what is left of a square once the hand has gone by\n" +
+    "    outMs:   " + i(v.outMs)     + ",    // the whole circle fading at the end\n" +
+    "    chequer: " + v.chequer      + ",      // alternates the two tones square by square\n" +
+    "    point:   " + v.point         + ",      // 1 shaves a square off each radial end of the leading edge, rounding it\n" +
+    "    rainbow: " + f(v.rainbow, 2) + ",   // how far the tones are pulled toward a hue running round the circle\n" +
+    "    hue0:    " + i(v.hue0)       + ",    // where that hue starts, in degrees\n" +
+    "    hueSpan: " + i(v.hueSpan)    + ",    // ...and how far round the wheel it travels over one turn of the circle\n" +
+    "  };";
+}
+
+const PRESETS = {
+  shipped:   { radius:1.75, hole:0.35, grid:4, sweepMs:700,  turns:2, tail:0.55, ease:1.60, rimA:0.92, innerA:0.30, low:0.06, outMs:140, chequer:1, point:1, rainbow:0.28, hue0:250, hueSpan:300 },
+  toll:      { radius:1.50, hole:0.40, grid:4, sweepMs:900,  turns:1, tail:0.70, ease:1.20, rimA:1.00, innerA:0.45, low:0.10, outMs:300, chequer:1, point:1, rainbow:0.10, hue0:280, hueSpan:160 },
+  alarm:     { radius:1.50, hole:0.30, grid:4, sweepMs:130,  turns:4, tail:0.35, ease:2.20, rimA:1.00, innerA:0.25, low:0.02, outMs:90,  chequer:1, point:1, rainbow:0.22, hue0:0,   hueSpan:360 },
+  shockwave: { radius:1.50, hole:1.05, grid:4, sweepMs:200,  turns:2, tail:0.90, ease:1.00, rimA:1.00, innerA:0.00, low:0.00, outMs:120, chequer:0, point:1, rainbow:0.18, hue0:200, hueSpan:-240 },
+  veil:      { radius:2.00, hole:0.20, grid:4, sweepMs:600,  turns:2, tail:1.00, ease:0.60, rimA:0.70, innerA:0.55, low:0.30, outMs:320, chequer:1, point:0, rainbow:0.08, hue0:250, hueSpan:300 },
+  spoke:     { radius:1.50, hole:0.15, grid:4, sweepMs:300,  turns:3, tail:0.12, ease:0.60, rimA:1.00, innerA:0.85, low:0.00, outMs:80,  chequer:0, point:1, rainbow:0.26, hue0:190, hueSpan:120 },
+};
+function apply(p){
+  for (const k of KEYS) { $(k).value = p[k]; sync(k); }
+  setChequer(p.chequer);
+  setPoint(p.point);
+  push();
+}
+function sync(k){
+  const v = +$(k).value;
+  $(k + "Out").textContent =
+    (k === "sweepMs" || k === "outMs" || k === "grid" || k === "turns" ||
+     k === "hue0" || k === "hueSpan") ? v : v.toFixed(2);
+}
+function setChequer(v){
+  chequer = v;
+  document.querySelectorAll("[data-chq]").forEach(b => b.classList.toggle("on", +b.dataset.chq === v));
+}
+function setPoint(v){
+  point = v;
+  document.querySelectorAll("[data-pt]").forEach(b => b.classList.toggle("on", +b.dataset.pt === v));
+}
+
+// The game boots into its title screen and its own rAF loop; wait for the debug surface to
+// exist rather than guessing at a delay.
+function attach(){
+  W = frame.contentWindow;
+  let tries = 0;
+  (function wait(){
+    if (W.__TR && W.__TR.demo && W.__TR.bell && W.__TR.ring) {
+      // Every mechanic marked as already seen, so the board comes up bare.
+      try { W.localStorage.setItem("tilerunner:seen", JSON.stringify(W.__TR.mechs())); } catch (e) {}
+      reboard(false); return;
+    }
+    if (++tries > 200) {
+      $("status").innerHTML = '<span class="warn">the game never came up — is this being SERVED? ' +
+        'file:// blocks the frame from being read.</span>';
+      return;
+    }
+    setTimeout(wait, 50);
+  })();
+}
+frame.addEventListener("load", attach);
+frame.src = GAME_SRC();
+
+KEYS.forEach(k => $(k).addEventListener("input", () => { sync(k); push(); }));
+// A wheel over a slider scrolls the rail; it does not drag the value. Losing a setting you had
+// just found because the pointer happened to be over it is the one thing a tuning page must not
+// do — and this rail is long enough that you scroll it constantly.
+document.querySelectorAll("input[type=range]").forEach(el =>
+  el.addEventListener("wheel", (e) => { e.preventDefault(); window.scrollBy(0, e.deltaY); },
+                      { passive: false }));
+document.querySelectorAll("[data-chq]").forEach(b =>
+  b.onclick = () => { setChequer(+b.dataset.chq); push(); });
+document.querySelectorAll("[data-pt]").forEach(b =>
+  b.onclick = () => { setPoint(+b.dataset.pt); push(); });
+document.querySelectorAll(".presets button").forEach(b =>
+  b.onclick = () => { apply(PRESETS[b.dataset.p]); $("status").textContent = "preset: " + b.dataset.p; });
+
+$("ring").onclick = ring;
+$("loop").onclick = () => {
+  looping = !looping;
+  $("loop").classList.toggle("on", looping);
+  $("loop").textContent = looping ? "Ringing on a loop" : "Loop off — ring with the button";
+};
+$("reach").onclick = checkReach;
+// The rail saves itself as you move it; this is for after you have wandered off into the presets
+// and want back what you actually had.
+$("restore").onclick = () => {
+  if (!restore()) { $("status").innerHTML = '<span class="warn">nothing saved yet</span>'; return; }
+  setChequer(chequer); setPoint(point); KEYS.forEach(sync); push();
+  $("status").textContent = "your saved settings, put back";
+};
+$("reboard").onclick = () => reboard(false);
+$("reload").onclick = () => { frame.src = GAME_SRC(); };
+$("copy").onclick = () => {
+  navigator.clipboard.writeText($("out").value).then(
+    () => $("status").textContent = "BELL block copied — paste it over the one in index.html",
+    () => $("status").innerHTML = '<span class="warn">clipboard refused — copy it out of the box below</span>');
+};
+
+// The demo runs itself: a ring every couple of seconds, the pace held down, and the board put
+// back if the runner walks off the end of his chain.
+setInterval(() => {
+  if (!W || !W.__TR || !W.__TR.state) return;
+  const st = W.__TR.state();
+  if (!st) return;
+  if (st.status === "lose" || st.status === "win") { reboard(false); return; }
+  if (st.status !== "play") return;
+  crawl();
+  if (looping && !st.roar) ring();
+}, 2100);
+
+const restored = restore();
+setChequer(chequer);
+setPoint(point);
+KEYS.forEach(sync);
+refreshOut();
+if (restored) $("status").textContent = "your last settings, put back";
+</script>
+</body>
+</html>

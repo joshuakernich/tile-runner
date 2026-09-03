@@ -85,7 +85,7 @@
       <h2>Scene</h2>
       <div class="row"><label>track hue</label><input type="range" id="hue" min="0" max="359" step="1"><output></output></div>
       <div class="row"><label>cell</label><input type="range" id="cellPx" min="70" max="190" step="2"><output></output></div>
-      <div class="btns"><button id="reset">Reset</button></div>
+      <div class="btns"><button id="restoreBtn">Restore</button><button id="reset">Reset</button></div>
     </div>
     <div class="grp">
       <h2>Block</h2>
@@ -163,9 +163,9 @@ function hexA(hex,a){ const h=hex.replace("#",""), n=parseInt(h,16);
 // Mirror of the game's JUNCTION. The junction is shown here so the cross-section can be
 // judged on it too; its own alphas are tuned in junction-lab.html, not here.
 const JUNCTION = {
-  left:    1.00,
-  ahead:   1.00,
-  right:   1.00,
+  left:    0.50,
+  ahead:   0.50,
+  right:   0.50,
   mark:    0.25,
   grain:   0.40,
 };
@@ -475,9 +475,27 @@ function render(){
 // ---- wiring -------------------------------------------------------------------------
 const KEYS = ["radius","glassA","glassGrain","bodyGrain","railW","pathW","underShade","shadowW","shadowShade",
               "edgeDepth","edgeA","edgeInk","edgeGrain","edgeTip","edgeTipA"];
+
+// Everything on this page is written down as you move it and put back when you come back. A
+// tuning page you have to set up again every time you open it is a tuning page you stop opening
+// — and the settings you are part way through are worth more than the ones already shipped.
+// "Reset" goes back to the shipped block; "Restore" goes back to YOURS.
+const SAVE_KEY = "tilerunner:tile-lab";
+function save(){
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(T)); } catch (e) {}
+}
+function restore(){
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) {}
+  if (!v || typeof v !== "object") return false;
+  for (const k of KEYS) if (typeof v[k] === "number") T[k] = v[k];
+  return true;
+}
+
 const DP = { radius:3, glassA:2, glassGrain:2, bodyGrain:2, railW:3, pathW:3, underShade:0, shadowW:3, shadowShade:0,
              edgeDepth:3, edgeA:3, edgeInk:3, edgeGrain:3, edgeTip:3, edgeTipA:3 };
 function sync(){
+  save();
   for (const k of KEYS){
     const el=document.getElementById(k); el.value=T[k];
     el.parentElement.querySelector("output").textContent=(+T[k]).toFixed(DP[k]);
@@ -500,6 +518,8 @@ document.getElementById("copy").addEventListener("click", async () => {
   const b=document.getElementById("copy"), was=b.textContent;
   b.textContent="Copied"; setTimeout(()=>b.textContent=was,900);
 });
+document.getElementById("restoreBtn").addEventListener("click", () => { if (restore()) sync(); });
+restore();
 sync();
 </script>
 </body>

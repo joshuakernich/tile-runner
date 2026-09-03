@@ -93,6 +93,7 @@
       <button class="act" id="pickfile">Choose index.html…</button>
       <button class="act" id="copy">Copy</button>
       <button class="act" id="paste">Load from box</button>
+      <button class="act" id="restoreBtn">Restore mine</button>
       <button class="act" id="reset">Reset to shipped</button>
     </div>
     <div class="hint" id="notes"></div>
@@ -795,6 +796,7 @@ function syncUI(){
 // Per-level overrides
 // ============================================================================
 const LSKEY="tilerunner:music";
+const KEPTKEY=LSKEY+":kept";          // what you had before you last reset
 let overrides = {}, curLevel = 1;
 try{ const raw=localStorage.getItem(LSKEY);
      if(raw){ const d=JSON.parse(raw); overrides=d.overrides||{};
@@ -940,7 +942,21 @@ $("copy").onclick=()=>{ $("out").select(); document.execCommand("copy");
   $("copy").textContent="Copied!"; setTimeout(()=>$("copy").textContent="Copy",1000); };
 $("paste").onclick=()=>{ try{ M={...BASE, ...JSON.parse($("out").value)}; syncUI(); refresh(); }
   catch(_){ $("paste").textContent="Bad JSON"; setTimeout(()=>$("paste").textContent="Load from box",1200); } };
-$("reset").onclick=()=>{ M={...BASE}; syncUI(); refresh(); };
+// Reset goes back to the baseline — but the settings you had are kept to one side first, so
+// "Restore mine" brings them straight back.
+$("reset").onclick=()=>{
+  try{ const raw = localStorage.getItem(LSKEY); if (raw) localStorage.setItem(KEPTKEY, raw); }catch(e){}
+  M={...BASE}; syncUI(); refresh(); };
+$("restoreBtn").onclick=()=>{
+  let raw = null;
+  try{ raw = localStorage.getItem(KEPTKEY) || localStorage.getItem(LSKEY); }catch(e){}
+  if (!raw) { $("restoreBtn").textContent="Nothing kept"; setTimeout(()=>$("restoreBtn").textContent="Restore mine",1200); return; }
+  try{ const d = JSON.parse(raw);
+       if (d.overrides) overrides = d.overrides;
+       if (d.BASE) BASE = {...SHIPPED, ...d.BASE};
+       if (d.M) M = {...BASE, ...d.M};
+  }catch(e){ return; }
+  persist(); syncUI(); refresh(); };
 // Pin everything on screen as the new baseline. Any level override that only said what the
 // baseline now says stops being an override at all — otherwise the table fills up with rows
 // that change nothing.

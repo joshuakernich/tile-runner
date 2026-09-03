@@ -88,7 +88,8 @@
 
     <div class="card">
       <h2>Reload</h2>
-      <button id="reload">Reload the game</button>
+      <button id="restoreBtn">Restore my saved settings</button>
+      <button id="reload" style="margin-top:6px">Reload the game</button>
       <p class="hint" style="margin:8px 0 0">
         Picks up edits to <code>index.html</code> without losing your slider position.
       </p>
@@ -116,7 +117,13 @@
 // only way a radius lab can be trusted is if what it shows IS the shipped renderer.
 const $ = id => document.getElementById(id);
 const frame = $("game");
-let W = null;                                   // the game's window, once it is up
+let W = null;
+// The game is a PWA with a service worker, and a service worker will happily hand this frame a
+// cached index.html — which means a lab can sit there tuning code the file on disk no longer
+// contains. A unique query per load can't match anything in that cache, so the frame always gets
+// what is actually on disk.
+const GAME_SRC = () => "index.html?lab=" + Date.now();
+                                   // the game's window, once it is up
 
 // One board carrying one of everything, laid out in reading order so nothing overlaps and
 // every specimen has open floor around it. Rebuilt whenever the tile size changes.
@@ -148,6 +155,31 @@ function specimen(cols){
   return L;
 }
 
+
+// Everything on this page is written down as you move it and put back when you come back. A
+// tuning page you have to set up again every time you open it is a tuning page you stop opening
+// — and the settings you are part way through are worth more than the ones already shipped.
+const SAVE_KEY = "tilerunner:radius-lab";
+function save(){
+  const v = {};
+  document.querySelectorAll("input").forEach(el => {
+    if (el.id) v[el.id] = (el.type === "checkbox") ? el.checked : el.value;
+  });
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(v)); } catch (e) {}
+}
+function restore(){
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) {}
+  if (!v || typeof v !== "object") return false;
+  for (const id in v) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    if (el.type === "checkbox") el.checked = !!v[id]; else el.value = v[id];
+  }
+  return true;
+}
+document.addEventListener("input", save, true);
+
 function push(){
   if (!W || !W.__TR) return;
   const r = +$("rad").value;
@@ -177,7 +209,13 @@ function attach(){
     setTimeout(wait, 50);
   })();
 }
+document.getElementById("restoreBtn").onclick = () => {
+  if (restore()) { document.querySelectorAll("input").forEach(el =>
+    el.dispatchEvent(new Event("input", { bubbles:true }))); }
+};
+restore();
 frame.addEventListener("load", attach);
+frame.src = GAME_SRC();
 
 const fmt = v => v.toFixed(3).replace(/0+$/, "").replace(/\.$/, ".0");
 $("rad").addEventListener("input", () => { $("radOut").textContent = fmt(+$("rad").value); push(); });
@@ -192,7 +230,7 @@ $("copy").onclick = () => {
     () => $("status").textContent = "copied: " + line.trim(),
     () => $("status").innerHTML = '<span class="warn">clipboard refused — the line is: ' + line.trim() + "</span>");
 };
-$("reload").onclick = () => { frame.contentWindow.location.reload(); };
+$("reload").onclick = () => { frame.src = GAME_SRC(); };
 </script>
 </body>
 </html>

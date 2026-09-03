@@ -78,7 +78,7 @@
         <button data-app="corner" class="app">Corner</button></span></div>
       <div class="row"><label>track hue</label><input type="range" id="hue" min="0" max="359" step="1"><output></output></div>
       <div class="row"><label>cell</label><input type="range" id="cellPx" min="90" max="240" step="2"><output></output></div>
-      <div class="btns"><button id="grid">Guides</button><button id="held">Tile held</button><button id="reset">Reset</button></div>
+      <div class="btns"><button id="grid">Guides</button><button id="held">Tile held</button><button id="restoreBtn">Restore</button><button id="reset">Reset</button></div>
     </div>
     <div class="grp">
       <h2>Block</h2>
@@ -93,9 +93,9 @@
 <script>
 // ---- the shipped defaults (mirror of index.html's JUNCTION) -------------------------
 const SHIPPED = {
-  left:   1.00,
-  ahead:  1.00,
-  right:  1.00,
+  left:   0.50,
+  ahead:  0.50,
+  right:  0.50,
   mark:   0.25,
   grain:  0.40,
 };
@@ -510,11 +510,29 @@ function render(){
 
 // ---- wiring ------------------------------------------------------------------------
 const KEYS = ["left","ahead","right","mark","grain"];
+
+// Everything on this page is written down as you move it and put back when you come back. A
+// tuning page you have to set up again every time you open it is a tuning page you stop opening
+// — and the settings you are part way through are worth more than the ones already shipped.
+// "Reset" goes back to the shipped block; "Restore" goes back to YOURS.
+const SAVE_KEY = "tilerunner:junction-lab";
+function save(){
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(J)); } catch (e) {}
+}
+function restore(){
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) {}
+  if (!v || typeof v !== "object") return false;
+  for (const k of KEYS) if (typeof v[k] === "number") J[k] = v[k];
+  return true;
+}
+
 function syncOut(){
   const lines = KEYS.map(k => "    " + (k+":").padEnd(11) + " " + J[k].toFixed(2) + ",");
   document.getElementById("out").value = "  const JUNCTION = {\n" + lines.join("\n") + "\n  };";
 }
 function sync(){
+  save();
   for (const k of KEYS){
     const el = document.getElementById(k);
     el.value = J[k];
@@ -546,6 +564,8 @@ document.getElementById("copy").addEventListener("click", async () => {
   const b = document.getElementById("copy"); const was = b.textContent;
   b.textContent = "Copied"; setTimeout(() => b.textContent = was, 900);
 });
+document.getElementById("restoreBtn").addEventListener("click", () => { if (restore()) sync(); });
+restore();
 sync();
 </script>
 </body>

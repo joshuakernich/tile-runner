@@ -29,6 +29,7 @@
   <div class="row">
     <button class="prim" id="copy">Copy RIFT block</button>
     <button id="strip">Filmstrip</button>
+    <button id="restoreBtn">Restore</button>
   </div>
   <p class="note">Left: on the board at real size, on the track it eats. Right: the same tile blown up.
      The squares are one function of time and index — no particles, no state — so it costs the same
@@ -172,5 +173,32 @@ $("strip").onclick = () => {
   }
   window.__strip = out.toDataURL("image/png");
 };
+
+// Everything on this page is written down as you move it and put back when you come back. A
+// tuning page you have to set up again every time you open it is a tuning page you stop opening
+// — and the settings you are part way through are worth more than the ones already shipped.
+const SAVE_KEY = "tilerunner:crumble-lab";
+function save(){
+  const v = {};
+  document.querySelectorAll("input").forEach(el => {
+    if (el.id) v[el.id] = (el.type === "checkbox") ? el.checked : el.value;
+  });
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(v)); } catch (e) {}
+}
+function restore(){
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) {}
+  if (!v || typeof v !== "object") return false;
+  for (const id in v) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    if (el.type === "checkbox") el.checked = !!v[id]; else el.value = v[id];
+  }
+  return true;
+}
+document.addEventListener("input", save, true);
+
+document.getElementById("restoreBtn").onclick = () => { restore(); };
+restore();
 requestAnimationFrame(render);
 </script>

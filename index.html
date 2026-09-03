@@ -2519,6 +2519,35 @@
         o.start(t); o.stop(t + 0.24);
       });
     }
+    // A spare, CLAIMED. The one moment in the game where something that was not yours becomes
+    // yours, so it is the one sound allowed to be pleased with itself: the laid-tile thud to
+    // say a tile has landed, and then a rising arpeggio — root, fifth, octave, tenth — over a
+    // shimmer an octave and a half up. Four notes rather than two, because two is confirmation
+    // and four is a reward; and it goes to the echo, so it rings out in the room the board is
+    // in rather than clicking on the glass in front of it.
+    function claim() {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = tileThud(1);
+      [12, 19, 24, 28].forEach((semi, i) => {
+        const t = t0 + 0.03 + i*0.062;
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "triangle"; o.frequency.setValueAtTime(BASE * Math.pow(2, semi/12), t);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.19 - i*0.018, t + 0.006);
+        g.gain.exponentialRampToValueAtTime(0.0006, t + 0.30);
+        o.connect(g); g.connect(master); g.connect(sendBus);
+        o.start(t); o.stop(t + 0.34);
+        // ...and a bell an octave and a half over each note, quiet enough to be a sheen on it
+        // rather than a second melody.
+        const o2 = ac.createOscillator(), g2 = ac.createGain();
+        o2.type = "sine"; o2.frequency.setValueAtTime(BASE * Math.pow(2, (semi + 19)/12), t);
+        g2.gain.setValueAtTime(0.0001, t);
+        g2.gain.exponentialRampToValueAtTime(0.055, t + 0.004);
+        g2.gain.exponentialRampToValueAtTime(0.0004, t + 0.22);
+        o2.connect(g2); g2.connect(master); g2.connect(sendBus);
+        o2.start(t); o2.stop(t + 0.26);
+      });
+    }
     // ---- UI ----------------------------------------------------------------------
     // Every button in the game makes this noise. Short, dry, no reverb send: it is a
     // control surface, not part of the world, so it must not sound like it is in the room.
@@ -3003,7 +3032,7 @@
              slide, clack, tap, tapBig, power, warp, vortex, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck,
              ambient,
-             swish, introGather, introFlash, rumble, flap, life, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
+             swish, introGather, introFlash, rumble, flap, life, claim, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
              levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, setMusicGate,
              musicNow: () => ({ ...MU }) };
   })();
@@ -3029,7 +3058,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.8";                    // shown on the title & pause screens
+  const VERSION = "v10.9";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -4647,9 +4676,11 @@
     // level data any more, only tiles and the rules that link them.
     markOccDirty();
     linkParkedTiles();
-    // Whatever is still parked once the starting chain has formed is not part of the chain: a
-    // tile the level put out there on its own. Same rule as a spawned one — you have to reach it.
-    for (const t of state.tiles) if (t.status === "parked") t.spare = true;
+    // Whatever is not IN the chain once it has formed is a tile the level put out there on its
+    // own, and you have to reach it before it is yours. Tested on "not active" rather than on
+    // "parked": a stranded tile comes out of the build as `free`, so the narrower test marked
+    // none of them and every level's loose tiles were pickable from the first frame.
+    for (const t of state.tiles) if (t.status !== "active") t.spare = true;
     if (elLevel) elLevel.textContent = label;
     updateReadyHud();
     updateScoreHud();
@@ -5778,27 +5809,12 @@
     f.t += dt;
     if (f.t < FLY_MS) return;
     state.flyTile = null;
-    // A spare is MOVED, not laid: it is not yours yet, so it lands where it was sent and goes
-    // on lying there until the track reaches it.
-    if (f.move) { f.tile.c = f.c; f.tile.r = f.r; markOccDirty(); }
-    else dropTileOn(f.tile, f.c, f.r);
+    dropTileOn(f.tile, f.c, f.r);
   }
-  // Tap an empty square and the SPARE comes to it. A spare is a tile lying on the board that is
-  // not yours yet — you have to reach it — and this is what lets you say where you would rather
-  // reach it. It is the one tile that moves without being picked up, because it is the one tile
-  // you are not holding. Returns false when there is no spare or nowhere to put it, so the tap
-  // goes on to mean whatever else it might have meant.
-  function sendSpareTo(c, r) {
-    const s = state;
-    if (s.status !== "play" || s.flyTile) return false;
-    const t = s.tiles.find(x => x.spare);
-    if (!t || (t.c === c && t.r === r)) return false;
-    if (!inBounds(c, r) || occupiedFor(t).has(key(c, r))) return false;
-    s.flyTile = { tile: t, c, r, t: 0, move: true,
-                  x0: cx(t.c), y0: cy(t.r), x1: cx(c), y1: cy(r) };
-    Sound.tap(); haptic(6);
-    return true;
-  }
+  // A spare does NOT answer a tap. It used to fly to any empty square you pointed at, which
+  // read as picking it up — and the one thing a tile you have not reached should never do is
+  // come when it is called. It lies where the level or the charm put it until the track
+  // arrives, and the flight below is only ever a tile of your own being sent to a junction.
   // Where a flying tile is right now, or null. Eased out hard: it leaves fast and settles, so
   // the eye reads it as thrown rather than dragged.
   function flyPos() {
@@ -5981,7 +5997,11 @@
       const t = s.tiles.find(t => (t.status === "parked" || t.status === "free") &&
                                   trackConnects(h, { c:t.c, r:t.r }) && !foldsBack(t.c, t.r));
       if (!t) break;
-      t.status = "active"; t.spare = false;      // reaching it is what makes it yours
+      // Reaching it is what makes it yours, and that is worth a noise of its own — but only
+      // for a tile that was actually out there to be reached. An ordinary parked tile chaining
+      // on is the every-few-seconds hum of the game working.
+      if (t.spare) { t.spare = false; Sound.claim && Sound.claim(); haptic([8, 24, 10]); }
+      t.status = "active";
       // A tile joining the track changes what it IS — a loose pane becomes laid platform — and
       // that swap happened silently between two frames. A short flash on the cell carries the
       // eye across it. Only mid-run: at level load a whole starting chain links at once, and
@@ -6316,16 +6336,77 @@
     return true;
   }
   const powerActive = id => state && state.power.kind === id && state.power.t > 0;
-  const PULSE_TILES = 1;                   // how far the Bell reaches, in cells
+  // The Bell of Unmaking. It works the way the Hammer's beam does — squares off the world's own
+  // grid, a quarter-tile each — but where the Hammer throws a line, the Bell turns a circle: a
+  // hand goes round him, twice, fast, lighting each square as it sweeps past and leaving it to
+  // fade behind. Black, because what the Bell does is subtract something from the world; the
+  // brightness climbs toward the rim, because that is where the force of it is, and he stands
+  // in the quiet at the middle. `radius` is the reach it DRAWS and the reach it UNMAKES at —
+  // one number, so the picture cannot lie about what it took.
+  const BELL = {
+    radius:  1.75,   // how far it reaches, in tiles
+    hole:    0.35,   // the quiet he stands in at the middle, in tiles
+    grid:    4,      // squares per tile, each way
+    sweepMs: 700,    // one turn of the hand round him
+    turns:   2,      // how many turns it makes before it is spent
+    tail:    0.55,   // how much of the circle is still lit behind the hand
+    ease:    1.60,   // the shape of that fade — above 1 falls away fast behind it
+    rimA:    0.92,   // a square at the rim as the hand passes
+    innerA:  0.30,   // ...and one just outside the quiet
+    low:     0.06,   // what is left of a square once the hand has gone by
+    outMs:   140,    // the whole circle fading at the end
+    chequer: 1,      // alternates the two tones square by square
+    point:   1,      // 1 shaves a square off each radial end of the leading edge, rounding it
+    rainbow: 0.28,   // how far the tones are pulled toward a hue running round the circle
+    hue0:    250,    // where that hue starts, in degrees
+    hueSpan: 300,    // ...and how far round the wheel it travels over one turn of the circle
+  };
+  const PULSE_TILES = 1;                   // (the old flat reach; the Bell's radius is BELL.radius)
   const HAMMER_TILES = 1;                  // (the debug hook's old radius; the charm is a BEAM now)
   // The Hammer throws a LINE, not a circle: a run of tiles laid straight out in front of him,
   // one after the other, each one hitting whatever it lands on once as it arrives. A circle was
   // a thing that happened AROUND him and could only ever be one tile across before it started
   // taking rock behind his own back; a line is a thing he aims, and it runs until the board
   // stops it.
-  const HAMMER_REACH = 4;                  // how far the line carries, in tiles
-  const HAMMER_STEP = 26;                  // ms between one tile of the beam and the next
-  const HAMMER_HOLD = 240;                 // ...and how long the whole line stands before it goes
+  // The beam is drawn as a run of TILES broken into a grid of squares — the quilt's own pixels
+  // lighting up rather than a bar laid over the ground. Across its width the middle lanes carry
+  // more weight than the outside ones, so the line has a core and an edge instead of being one
+  // flat stripe; set `ripple` and that weight travels from the middle out to the edges before
+  // the tile goes, so the beam blows itself apart sideways on its way out. Tune it in
+  // hammer-lab.html.
+  const HAMMER = {
+    reach:   3,      // how far the line carries, in tiles
+    clear:   0.85,   // how far ahead of him the line must start, in tiles — nothing lands on him
+    step:    26,     // ms between one tile of the beam and the next
+    hold:    240,    // ...and how long the whole line stands before it goes
+    outStep: 110,    // ms between one tile LEAVING and the next — the line dissolves back to front
+    grid:    4,      // squares per tile, each way
+    width:   1.00,   // how wide the stream is, in tiles, measured across the line
+    coreA:   0.22,   // the two middle lanes
+    edgeA:   0.85,   // ...and the two outside them
+    ripple:  0,      // ms for that weight to travel from the middle out; 0 = it stays put
+    spread:  0.90,   // how wide the travelling band is, as a share of the half-width
+    inMs:    50,     // the snap-on as a tile arrives
+    outMs:   90,     // ...and the fade as it leaves
+    chequer: 1,      // 1 alternates the two stone tones square by square, 0 uses the one
+    nose:    1,      // SQUARES deep at the leading edge drawn at the OUTSIDE weight — a rim, not a tile
+    point:   1,      // 1 takes the outer corners off the leading edge, rounding the tip
+    rainbow: 0.18,   // how far the stone tones are pulled toward a running hue, 0 = plain stone
+    hue0:    40,     // where that hue starts, in degrees
+    hueSpan: 300,    // ...and how far round the wheel it travels over the whole line
+  };
+  // A hue as three channels, 0..1. Small and local: the beam is the only thing in the game that
+  // wants one, and it wants it once per square.
+  function hueRGB(h) {
+    h = (((h % 360) + 360) % 360) / 60;
+    const x = 1 - Math.abs(h % 2 - 1);
+    if (h < 1) return [1, x, 0];
+    if (h < 2) return [x, 1, 0];
+    if (h < 3) return [0, 1, x];
+    if (h < 4) return [0, x, 1];
+    if (h < 5) return [x, 0, 1];
+    return [1, 0, x];
+  }
   // The Hammer is not a button, it is a MOMENT. He stops, straightens, leans back, and shouts
   // the rock apart. Three beats: the draw of breath, the shout itself, and a beat of quiet
   // afterwards before he runs on — without that last one the run resumes on the same frame the
@@ -6390,9 +6471,12 @@
       return 1 - cineSmooth((R.t - REST.down - R.still) / REST.up);
     return 0;
   }
-  function startRoar(kind){
+  // `dir` overrides where the Hammer's line goes — [dx, dy], either sign or zero. Nothing in
+  // the game passes it; hammer-lab.html does, so a swing can be aimed without steering a runner
+  // into a corner to get a diagonal out of him.
+  function startRoar(kind, dir){
     const s = state;
-    s.roar = { t: 0, fired: false, kind };
+    s.roar = { t: 0, fired: false, kind, dir: dir || null };
     s.hold = ROAR_MS;                       // he is not going anywhere until it is done
   }
   function tickRoar(dt){
@@ -6400,14 +6484,14 @@
     R.t += dt;
     if (!R.fired && R.t >= ROAR.wind) {     // the shout, and whatever goes with it
       R.fired = true;
-      if (R.kind === "pulse") unmakeMonsters(PULSE_TILES, "#c9b6ff");
+      if (R.kind === "pulse") unmakeMonsters(BELL.radius, "#c9b6ff");
       else {
-        R.beam = hammerBeam(); R.hit = 0;
+        R.beam = hammerBeam(R.dir); R.hit = 0;
         // Paced to the shout: the line goes out and comes back inside the blast however long it
         // turns out to be, so a beam across a wide board is quicker per tile rather than still
         // arriving when the shouting has stopped.
-        R.step = Math.min(HAMMER_STEP,
-                          (ROAR.blast - HAMMER_HOLD) * 0.5 / Math.max(1, R.beam.length));
+        R.step = Math.min(HAMMER.step,
+                          (ROAR.blast - HAMMER.hold) * 0.5 / Math.max(1, R.beam.length));
       }
       try { Sound.roar && Sound.roar(R.kind); } catch(_){}
       haptic([12, 26, 60]);
@@ -6427,7 +6511,14 @@
       const k = 1 - (R.t - ROAR.wind) / ROAR.blast;
       s.shake = Math.max(s.shake, cell * 0.09 * k);
     }
-    if (R.t >= ROAR_MS) s.roar = null;
+    // The shout may well finish before the charm has: a slow dissolve or a slow sweep outlives
+    // it, and the roar object is the only thing keeping either on screen. He is already free to
+    // run — `hold` ran out on its own clock — so this holds nothing up, it just lets the thing
+    // finish going.
+    const spent = R.kind === "pulse"
+      ? R.t - ROAR.wind >= Math.max(1, BELL.sweepMs)*Math.max(1, BELL.turns)
+      : (!R.beam || R.t - ROAR.wind >= beamGoneAt(R));
+    if (R.t >= ROAR_MS && spent) s.roar = null;
   }
   // 0 while he runs, 1 at the top of the shout — drives both his lean and the ring.
   function roarK(){
@@ -6440,87 +6531,180 @@
   // wall it cannot break. His heading is SNAPPED to one of eight — the four axes and the four
   // true diagonals — because on a corner he is half way through a turn, and a beam fired at
   // twenty-three degrees is a line nothing on a square board can line up with.
-  function hammerBeam() {
+  // When the last of the line has finished leaving, measured from the shout like everything
+  // else in the beam. The near end goes first and each tile follows `outStep` behind the one
+  // before it, so a long line takes a long time to unmake itself.
+  function beamGoneAt(R) {
+    const L = R.beam ? R.beam.length : 0;
+    if (!L) return 0;
+    return (L - 1)*R.step + HAMMER.hold + (L - 1)*HAMMER.outStep + Math.max(1, HAMMER.outMs);
+  }
+  function hammerBeam(dir) {
     const s = state, ri = runnerInfo();
     const k = Math.round(Math.atan2(ri.ty, ri.tx) / (Math.PI/4));
-    const dx = Math.round(Math.cos(k*Math.PI/4)), dy = Math.round(Math.sin(k*Math.PI/4));
+    let dx = Math.round(Math.cos(k*Math.PI/4)), dy = Math.round(Math.sin(k*Math.PI/4));
+    if (dir) { dx = Math.sign(dir[0]); dy = Math.sign(dir[1]); }
     const out = [];
+    out.dx = dx; out.dy = dy;                     // the line carries its own axis, for the drawing
     if (!dx && !dy) return out;
+    const m = Math.hypot(dx, dy), ux = dx/m, uy = dy/m;
     let { c, r } = runnerCell();
     for (c += dx, r += dy; inBounds(c, r) && !s.walls.has(key(c, r)); c += dx, r += dy) {
+      // Nothing lands on him, and nothing lands behind him. Mid-stride his path index still
+      // names the cell he is LEAVING, so the very next one along can be the cell he is most of
+      // the way onto — measure from where he actually IS and step over anything his body is
+      // still standing in. The wall and edge scan carries on regardless, so a beam still stops
+      // at the first thing between him and the open board.
+      const ahead = ((cx(c) + cell/2) - ri.x)*ux + ((cy(r) + cell/2) - ri.y)*uy;
+      if (ahead < cell*HAMMER.clear) continue;
       out.push({ c, r });
-      if (out.length >= HAMMER_REACH) break;      // a swing, not a searchlight
+      if (out.length >= HAMMER.reach) break;      // a swing, not a searchlight
     }
     return out;
   }
-  // The beam, drawn as what it is: a run of TILES, each one exactly a cell and so exactly four
-  // squares of the backdrop's own quilt, laid outward in the order they land and taken away in
-  // that same order — the near end goes first, so the line retreats the way it came rather than
-  // snapping out all at once. Hard edges, no corner radius: these are squares of ground lighting
-  // up, not panes laid on it.
+  // The beam, drawn as what it is: a stream of squares off the world's own grid, arriving tile
+  // by tile in the order they land and leaving in that same order — the near end goes first, so
+  // the line dissolves back to front rather than snapping out all at once. Hard edges, no corner
+  // radius: these are squares of ground lighting up, not panes laid on it.
+  //
+  // Across the line there are lanes. A square's lane is how far it sits from the beam's own
+  // axis, NOT from the middle of the screen. The middle lanes burn at `coreA` and the outside
+  // ones at `edgeA`, which is what gives the line a core; and with `ripple` set, that bright
+  // band walks outward from the axis as the tile stands, so the beam comes apart sideways
+  // instead of just fading.
   function drawHammerBeam() {
     const R = state && state.roar; if (!R || !R.fired || !R.beam || !R.beam.length) return;
     const C = ROAR_KIND.finger, u = R.t - ROAR.wind, L = R.beam.length;
-    const goneAt = (L - 1)*R.step + HAMMER_HOLD;      // when the FIRST tile starts to go
+    const goneAt = (L - 1)*R.step + HAMMER.hold;      // when the FIRST tile starts to go
+    const n = Math.max(1, Math.round(HAMMER.grid)), q = cell/n, sub = 1/n;
+    const MID = rgbOf(C.mid), RIM = rgbOf(C.rim);
+    const dx = R.beam.dx || 0, dy = R.beam.dy || 0;
+    const m = Math.hypot(dx, dy) || 1, ux = dx/m, uy = dy/m;
+    const nx = -uy, ny = ux;                          // across the line
+    const dStep = m;                                  // tiles from one beam cell to the next
+    const halfW = 0.5*HAMMER.width;
+    const in0 = 0.5/n, out0 = 0.5 - 0.5/n, span = Math.max(1e-3, out0 - in0);
+    const b0 = R.beam[0], ox0 = b0.c + 0.5, oy0 = b0.r + 0.5;      // the origin, in tiles
+    const alongMin = -dStep/2, alongMax = (L - 1)*dStep + dStep/2;
+    const stepF = (Math.abs(ux) + Math.abs(uy))/n;                 // one square, along the line
+    // The beam is a BAND, not a run of filled cells. On an axis the two come to the same thing —
+    // a one-tile band covers exactly the cells the line names — but on a diagonal, cells only
+    // touch at their corners, so filling them gives a staircase of separate squares. Drawn as a
+    // band, the stream runs unbroken at forty-five degrees with its own clean edges, and the
+    // squares it lights are whichever ones of the world's grid fall inside it. That means
+    // reaching into the cells the line merely clips, so the scan takes one cell either side of
+    // the run and lets the geometry decide.
+    let c0 = Infinity, c1 = -Infinity, r0 = Infinity, r1 = -Infinity;
+    for (const b of R.beam) { c0 = Math.min(c0, b.c); c1 = Math.max(c1, b.c);
+                              r0 = Math.min(r0, b.r); r1 = Math.max(r1, b.r); }
+    c0 = Math.max(0, c0 - 1); c1 = Math.min(COLS - 1, c1 + 1);
+    r0 = Math.max(0, r0 - 1); r1 = Math.min(ROWS - 1, r1 + 1);
     ctx.save();
-    for (let i = 0; i < L; i++) {
-      const inAt = i*R.step, outAt = goneAt + i*R.step;
-      if (u < inAt || u >= outAt + 90) continue;
-      // Snaps on, fades off: arriving is an impact and leaving is not.
-      const a = u < outAt ? Math.min(1, (u - inAt)/50) : 1 - (u - outAt)/90;
-      if (a <= 0.01) continue;
-      // FOUR squares, not one: a cell is exactly two of the backdrop's patches across, so this
-      // is the quilt's own grid lighting up rather than a bar laid over it. Chequered between
-      // the two stone tones, which is what stops a long beam reading as one flat stripe.
-      const b = R.beam[i], x = cx(b.c), y = cy(b.r), h = cell*0.5;
-      ctx.globalAlpha = a;
-      for (let j = 0; j < 4; j++) {
-        ctx.fillStyle = ((j + (j >> 1)) & 1) ? C.mid + "0.92)" : C.rim + "0.96)";
-        ctx.fillRect(x + (j & 1)*h, y + (j >> 1)*h, h + 0.5, h + 0.5);
+    for (let cc = c0; cc <= c1; cc++) for (let rr = r0; rr <= r1; rr++) {
+      if (state.walls.has(key(cc, rr))) continue;     // it does not light rock it cannot pass
+      const x = cx(cc), y = cy(rr);
+      for (let gy = 0; gy < n; gy++) for (let gx = 0; gx < n; gx++) {
+        // this square's centre, in tiles, measured off the first beam cell's centre
+        const sx = cc + (gx + 0.5)*sub - ox0, sy = rr + (gy + 0.5)*sub - oy0;
+        const perp = Math.abs(sx*nx + sy*ny);
+        if (perp > halfW) continue;                   // outside the stream
+        const along = sx*ux + sy*uy;
+        if (along < alongMin || along > alongMax) continue;
+        // Which tile of the line it belongs to — that is what gives it its moment and its hue.
+        const i = clamp(Math.round(along/dStep), 0, L - 1);
+        const inAt = i*R.step, outAt = goneAt + i*HAMMER.outStep;
+        if (u < inAt || u >= outAt + HAMMER.outMs) continue;
+        // Snaps on, fades off: arriving is an impact and leaving is not.
+        const a = u < outAt ? Math.min(1, (u - inAt)/Math.max(1, HAMMER.inMs))
+                            : 1 - (u - outAt)/Math.max(1, HAMMER.outMs);
+        if (a <= 0.01) continue;
+        const ld = clamp((perp - in0)/span, 0, 1);    // 0 on the axis, 1 at the outside lane
+        // The far end of the line is its POINT. The leading edge is a RIM — `nose` squares deep,
+        // not whole tiles — burning at the outside weight, so the stream ends in a thin dim
+        // border rather than a tile that quietly gave up; and the very front of that rim loses
+        // its outer corners, which is what stops the line ending in a flat wall.
+        if (HAMMER.point >= 0.5 && ld > 0.999 && along > alongMax - stepF) continue;
+        const nose = along > alongMax - Math.max(0, HAMMER.nose)*stepF;
+        const p = HAMMER.ripple > 0 ? (u - inAt)/HAMMER.ripple : 0;   // where the band has got to
+        const w = nose ? 0 : (HAMMER.ripple > 0
+          ? clamp(1 - Math.abs(ld - p)/Math.max(0.01, HAMMER.spread), 0, 1)
+          : 1 - ld);
+        const chq = HAMMER.chequer >= 0.5 && ((gx + gy) & 1);
+        ctx.globalAlpha = a * (HAMMER.edgeA + (HAMMER.coreA - HAMMER.edgeA)*w);
+        ctx.fillStyle = charmTone(chq ? MID : RIM, chq ? 0.92 : 0.96,
+                                  clamp((along - alongMin)/(alongMax - alongMin), 0, 1),
+                                  HAMMER.rainbow, HAMMER.hue0, HAMMER.hueSpan);
+        ctx.fillRect(x + gx*q, y + gy*q, q + 0.5, q + 0.5);
       }
     }
     ctx.restore();
   }
-  // The circle of influence, in the stone's own colour. It does not grow: it appears and goes
-  // at EXACTLY the radius the Hammer reaches, because that is the one thing it is for. An
-  // expanding ring says "a wave is travelling outward" and invites you to watch where it gets
-  // to; the Hammer does not work like that. smashStones takes every stone whose centre lies
-  // within HAMMER_TILES cells of him, measured straight — so this is that circle, drawn.
-  function drawRoarRing(){
+
+  // A charm's own tone, pulled a little way toward a hue that runs across it — along the line
+  // for the Hammer, round the circle for the Bell. `t` is how far through that run this square
+  // sits. Subtle on purpose, and for both of them: the thing is still made of ground, and a
+  // rainbow you can see through is a shimmer where a rainbow you cannot is a toy.
+  const rgbOf = (s) => s.match(/\d+/g).slice(0, 3).map(Number);
+  function charmTone(base, toneA, t, mix, h0, span) {
+    if (mix <= 0) return "rgba(" + base[0] + "," + base[1] + "," + base[2] + "," + toneA + ")";
+    const h = hueRGB(h0 + t*span);
+    return "rgba(" + Math.round(base[0] + (h[0]*255 - base[0])*mix) + "," +
+                     Math.round(base[1] + (h[1]*255 - base[1])*mix) + "," +
+                     Math.round(base[2] + (h[2]*255 - base[2])*mix) + "," + toneA + ")";
+  }
+  // The Bell, drawn as a sweep: one hand going round him inside `radius`, lighting the squares
+  // of the world's grid as it passes and leaving them to fade behind it. Same grain as the
+  // Hammer's beam and the same reason — these are squares of ground going out, not a shape laid
+  // over them — but turned into a circle, which is the shape the Bell's reach actually is.
+  function drawBellSweep(){
     const R = state && state.roar; if (!R || !R.fired) return;
-    const u = Math.min(1, (R.t - ROAR.wind) / ROAR.blast);
+    const u = R.t - ROAR.wind;
+    const life = Math.max(1, BELL.sweepMs) * Math.max(1, BELL.turns);
+    if (u < 0 || u > life) return;
+    const env = u > life - BELL.outMs ? Math.max(0, (life - u)/Math.max(1, BELL.outMs)) : 1;
+    if (env <= 0.01) return;
+    const C = ROAR_KIND.pulse, MID = rgbOf(C.mid), RIM = rgbOf(C.rim);
     const p = visualAt(state.runIdx + state.runT);
-    // quick to arrive, slower to leave
-    const a = u < 0.12 ? u/0.12 : Math.pow(Math.max(0, 1 - (u - 0.12)/0.88), 1.5);
-    if (a <= 0.004) return;
-    const C = ROAR_KIND[R.kind] || ROAR_KIND.finger;
-    const R2 = (R.kind === "pulse" ? PULSE_TILES : HAMMER_TILES) * cell;
+    const rad = BELL.radius*cell, hole = BELL.hole*cell;
+    const n = Math.max(1, Math.round(BELL.grid)), q = cell/n;
+    const turn = u / Math.max(1, BELL.sweepMs);          // where the hand has got to
+    const c0 = Math.max(0, Math.floor((p.x - rad)/cell)), c1 = Math.min(COLS-1, Math.floor((p.x + rad)/cell));
+    const r0 = Math.max(0, Math.floor((p.y - rad)/cell)), r1 = Math.min(ROWS-1, Math.floor((p.y + rad)/cell));
+    const spanR = Math.max(1e-3, rad - hole);
     ctx.save();
-    // The flat disc: the reach itself, stated plainly and at one size.
-    ctx.globalAlpha = 0.45 * a;
-    ctx.fillStyle = C.fill;
-    ctx.beginPath(); ctx.arc(p.x, p.y, R2, 0, Math.PI*2); ctx.fill();
-    // ...and over it, the blast RUNNING OUT to that edge. It races the whole way in the first
-    // fifth of the shout and then holds — so it reads as something arriving at the boundary
-    // rather than as a wave still travelling when the stones have already gone.
-    //
-    // Clear in the middle and solid at the rim: the force is at the FRONT of the thing, and he
-    // is standing in the quiet at its centre. Bright at him instead would have put the loudest
-    // part of the picture on the one spot nothing happens, and hidden him behind it.
-    const grow = Math.min(1, u / 0.20);
-    const rad = R2 * (1 - Math.pow(1 - grow, 3));
-    if (rad > 1) {
-      const g2 = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rad);
-      g2.addColorStop(0,    C.mid + "0)");
-      g2.addColorStop(0.55, C.mid + (0.22*a).toFixed(3) + ")");
-      g2.addColorStop(0.88, C.rim + (0.72*a).toFixed(3) + ")");
-      g2.addColorStop(1,    C.rim + a.toFixed(3) + ")");
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = g2;
-      ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, Math.PI*2); ctx.fill();
+    for (let cc = c0; cc <= c1; cc++) for (let rr = r0; rr <= r1; rr++) {
+      if (state.walls.has(key(cc, rr))) continue;        // it does not ring through rock
+      const x = cx(cc), y = cy(rr);
+      for (let gy = 0; gy < n; gy++) for (let gx = 0; gx < n; gx++) {
+        const sx = x + (gx + 0.5)*q - p.x, sy = y + (gy + 0.5)*q - p.y;
+        const d = Math.hypot(sx, sy);
+        if (d > rad || d < hole) continue;               // the reach, and the quiet he stands in
+        // where this square sits on the circle, measured from the top and going clockwise, and
+        // how long ago the hand went past it
+        const f = ((Math.atan2(sy, sx) + Math.PI/2)/(Math.PI*2) % 1 + 1) % 1;
+        const since = ((turn - f) % 1 + 1) % 1;
+        const k = Math.pow(Math.max(0, 1 - since/Math.max(0.01, BELL.tail)), BELL.ease);
+        const rd = clamp((d - hole)/spanR, 0, 1);        // 0 at the quiet, 1 at the rim
+        // The front of the wave is ROUNDED: along the leading edge — the squares within one
+        // square's width of the hand, measured round the arc — the ones at the rim and the ones
+        // against the quiet are left out, so the arm comes to a point instead of arriving as a
+        // flat spoke with square shoulders.
+        if (BELL.point >= 0.5 && since*Math.PI*2*d < q && (d > rad - q || d < hole + q)) continue;
+        const band = BELL.innerA + (BELL.rimA - BELL.innerA)*rd;
+        const a = env * (BELL.low + (band - BELL.low)*k);
+        if (a <= 0.01) continue;
+        const chq = BELL.chequer >= 0.5 && ((gx + gy) & 1);
+        ctx.globalAlpha = a;
+        // The hue runs ROUND the circle rather than along it, so the tail behind the hand carries
+        // a drift of colour with it instead of the whole ring being one shade at a time.
+        ctx.fillStyle = charmTone(chq ? MID : RIM, chq ? 0.92 : 0.96, f,
+                                  BELL.rainbow, BELL.hue0, BELL.hueSpan);
+        ctx.fillRect(x + gx*q, y + gy*q, q + 0.5, q + 0.5);
+      }
     }
     ctx.restore();
   }
+
   // One more tile in the hand, dropped as close to the middle of the board as there is room
   // for. It goes down LOOSE, exactly as if you had dragged it there yourself: it is a fourth
   // tile to cycle, not a piece of track laid for you.
@@ -10496,11 +10680,12 @@
   // That is why there is one body alpha and one rail alpha rather than separate entry and
   // exit values — see git history if the split is ever wanted back.
   const JUNCTION = {
-    left:    1.00,   // the turn one way   — all three at full strength now. They are STACKED
-    ahead:   1.00,   // straight on          rather than unioned, so the weights were a way of
-    right:   1.00,   // the turn the other   saying which way the track was most likely to go —
-                     // and it is not: every one of the three is a place you may build, and the
-                     // faint two read as options the game was less willing to offer. Tune in
+    left:    0.50,   // the turn one way   — all three at the same strength: they are STACKED
+    ahead:   0.50,   // straight on          rather than unioned, so a weight is the game saying
+    right:   0.50,   // the turn the other   which way the track is most likely to go, and it
+                     // does not know. Every one of the three is a place you may build. Half,
+                     // because where two of them overlap the alpha builds — and a junction that
+                     // reads as solid track is a junction you have already laid. Tune in
                      // junction-lab.html.
     mark:    0.25,   // the white ring marking each cell you may build into, its opacity
     grain:   0.40,   // paper grain over the whole tile
@@ -10939,13 +11124,19 @@
       moving = false;
       _restFold = sk;                                  // paintRunner folds him, and sinks him
     }
+    // Both charms go down BEFORE he does. The Hammer's line is a thing he throws out in front
+    // of himself, so it has no business being painted across his face — and the line already
+    // starts clear of his body. The Bell's sweep is drawn AROUND him, and keeps a hole at the
+    // middle for him to stand in, so neither of them ever closes over the runner.
+    const swinging = state.roar && state.roar.kind === "finger";
+    if (swinging) drawHammerBeam();
+    else if (state.roar && state.roar.kind === "pulse") drawBellSweep();
     paintRunner(sx, sy, s, phase, angle, moving, ts, (state.status === "squash") ? squashK() : 0,
                 state.status !== "falling");
     runnerShadowClip = null;      // every other caller — the lover, the shop, the opening — has no board
     _restFold = 0; _scurry = 0; _deadEyes = 0;
     resetLeap();
-    if (state.roar && state.roar.kind === "finger") drawHammerBeam();
-    else drawRoarRing();
+
   }
   // A roll is read off the STRIDE PHASE, which is itself geared to the track — so the ball
   // turns once per so much track rather than once per so much time, and standing still stops
@@ -12325,6 +12516,22 @@
     grainFill(x0, y0, x1-x0, y1-y0, TILE.glassGrain);
     ctx.restore();
   }
+  // The look of a tile that is NOT YOURS YET — one the level left lying out there, or one the
+  // Mushroom dropped. The pane is an ordinary pane, because it IS an ordinary tile, only later.
+  // The single mark is in the grip: the centre dot is out and the eight around it light in turn
+  // and fade behind the head, a loading wheel. It says WAIT, which is true, where a colour would
+  // have said NO, which is not. Tune it in spare-lab.html.
+  const SPARE = {
+    ms:      1100,   // one turn of the wheel
+    dotsA:   0.95,   // a dot at the moment it lights
+    dotsLow: 0.18,   // ...and once the wheel has left it behind
+    tail:    0.62,   // how much of the wheel is still lit behind the head, 1 = all of it
+    ease:    1.60,   // the shape of the fade — above 1 falls away fast, below 1 holds then drops
+    sheen:   0.16,   // the throb of the sixteen panes under the wheel, 0 = plain glass
+  };
+  const SPARE_SHEEN = "255,255,255";
+  // The eight outer cells of the 3x3 grip, clockwise from the top: the order they light in.
+  const SPARE_WHEEL = [[0,-1], [1,-1], [1,0], [1,1], [0,1], [-1,1], [-1,0], [-1,-1]];
   function drawGlass(x, y, s) {
     ctx.save();
     rrect(x, y, s, s, tileR(s)); ctx.clip();
@@ -12338,14 +12545,55 @@
     const s = cell, r = tileR(s);
     if (lifted) { ctx.fillStyle = "rgba(5,4,13,0.4)"; rrect(x+6, y+9, s, s, r); ctx.fill(); }
     drawGlass(x, y, s);
-    // 3x3 grid of dots in the centre — the "draggable" affordance. WHITE on a tile you cannot
-    // pick up yet: the dots are the game saying "this is a thing you carry", and one you have
-    // not reached is not one of yours, so it says it in the wrong colour. It stops breathing
-    // too — the pulse is an invitation, and this is not inviting anything.
-    const pulse = spare ? 0.5 : 0.5 + 0.5*Math.sin(ts/180);
-    ctx.globalAlpha = spare ? 0.85 : 0.6 + 0.35*pulse;
-    drawDragDots(x + s/2, y + s/2, s, spare ? "#ffffff" : null);
-    ctx.globalAlpha = 1;
+    // 3x3 grid of dots in the centre — the "draggable" affordance. On a spare the middle one is
+    // out and the ring turns instead: each dot snaps on as the head reaches it and fades as the
+    // head moves off, so the mark reads as a wheel going round rather than a tile blinking. The
+    // same mark serves a tile the level laid out on its own and one the Mushroom dropped — they
+    // are the same state, and a state should look like itself.
+    if (spare) {
+      // One wheel drives the whole tile. `lit(f)` is how bright a thing sitting f turns round
+      // the ring should be right now: full the instant the head reaches it, then falling away
+      // behind as the head goes on. Everything that moves on a spare asks this one question,
+      // so nothing on the tile can drift out of step with anything else.
+      const turn = (ts / Math.max(1, SPARE.ms)) % 1;
+      const lit = (f) => {
+        const u = ((turn - f) % 1 + 1) % 1;            // turns since the head passed
+        return Math.pow(Math.max(0, 1 - u/Math.max(0.01, SPARE.tail)), SPARE.ease);
+      };
+      // The pane throbs round with it — sixteen square panes, four by four, each one lighting
+      // as the head crosses its bearing from the middle of the tile. Squares rather than a
+      // smooth sweep because everything in this game is one, and because a quarter-tile is
+      // exactly half a background quilt patch, so the throb sits on the grid the world is
+      // already built on. The inner four share their bearings with the corners, which is what
+      // makes it read as spokes turning rather than a ring sliding.
+      if (SPARE.sheen > 0) {
+        const q = s/4;
+        ctx.save();
+        rrect(x, y, s, s, r); ctx.clip();
+        ctx.fillStyle = "rgb(" + SPARE_SHEEN + ")";
+        for (let gy = 0; gy < 4; gy++) for (let gx = 0; gx < 4; gx++) {
+          // its bearing from the centre, measured from the top and going clockwise
+          const f = ((Math.atan2(gy - 1.5, gx - 1.5) + Math.PI/2) / (Math.PI*2) % 1 + 1) % 1;
+          const k = lit(f);
+          if (k <= 0) continue;
+          ctx.globalAlpha = SPARE.sheen * k;
+          ctx.fillRect(x + gx*q, y + gy*q, q, q);
+        }
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      }
+      const a = [0,0,0, 0,0,0, 0,0,0];
+      for (let i = 0; i < 8; i++) {
+        const g = SPARE_WHEEL[i];
+        a[(g[1]+1)*3 + (g[0]+1)] = SPARE.dotsLow + (SPARE.dotsA - SPARE.dotsLow)*lit(i/8);
+      }
+      drawDragDots(x + s/2, y + s/2, s, null, a);      // a[4] is left at 0 — the centre is out
+    } else {
+      const pulse = 0.5 + 0.5*Math.sin(ts/180);
+      ctx.globalAlpha = 0.6 + 0.35*pulse;
+      drawDragDots(x + s/2, y + s/2, s);
+      ctx.globalAlpha = 1;
+    }
   }
 
   // Nine small SQUARES (3x3) centred in the tile, signalling it can be dragged. Squares because
@@ -12354,12 +12602,22 @@
   //
   // One routine serves all four things that carry them: the free tile, the movable block, the
   // wall plate, and the tile going down the Singularity.
-  function drawDragDots(fx, fy, s, col) {
-    const gap = s*0.16, rad = Math.max(1.5, s*0.035), d = rad*2;
+  // `alphas`, when given, is nine opacities in reading order — one per dot, zero for a dot that
+  // is not to be drawn at all. It is how the spare's wheel turns without a second copy of the
+  // grip living somewhere else.
+  function drawDragDots(fx, fy, s, col, alphas) {
+    const gap = s*0.16, rad = Math.max(1.5, s*0.035), d = rad*2, a0 = ctx.globalAlpha;
     ctx.fillStyle = col || getVar("--shadow");
     for (let gy = -1; gy <= 1; gy++)
-      for (let gx = -1; gx <= 1; gx++)
+      for (let gx = -1; gx <= 1; gx++) {
+        if (alphas) {
+          const a = alphas[(gy+1)*3 + (gx+1)];
+          if (a <= 0) continue;
+          ctx.globalAlpha = a0 * a;
+        }
         ctx.fillRect(fx + gx*gap - rad, fy + gy*gap - rad, d, d);
+      }
+    if (alphas) ctx.globalAlpha = a0;
   }
 
   // Ghost of the single cell the dragged tile will snap to (nearest empty cell).
@@ -12463,9 +12721,6 @@
       }
       if (state.stones.has(key(c, r))) { breakStone(c, r); return; }   // tap a stone to chip/smash it
       if (tapSwitch(c, r)) return;                                     // tap an arcade button
-      // Last of all: an empty square, and a spare lying somewhere else on the board. Everything
-      // above has had its refusal first, so this only ever fires on ground nothing else wanted.
-      if (sendSpareTo(c, r)) return;
       return;
     }
     // A tile already on its way to a hint square is not lying there to be picked up: it is
@@ -14209,6 +14464,19 @@
                  onBoard: () => state.talismans.map(t=>({c:t.c,r:t.r,id:t.id,got:t.got})),
                  reset: () => { talUnlocked = new Set(); saveTalismans(talUnlocked); },
                  flash: (id) => flashTalisman(talById(id || TALISMANS[0].id)) },
+    // spare-lab.html drives this: the block, live, on the game's own tiles.
+    spare: (patch) => { if (patch) Object.assign(SPARE, patch); return { ...SPARE }; },
+    // hammer-lab.html drives these: the beam block, and a swing on demand. The lab fires on a
+    // loop, so the swing clears the charm's spent flag and any shout already in progress —
+    // neither of which the game itself would ever do.
+    hammer: (patch) => { if (patch) Object.assign(HAMMER, patch); return { ...HAMMER }; },
+    bell: (patch) => { if (patch) Object.assign(BELL, patch); return { ...BELL }; },
+    ring: () => { const s = state; if (!s || s.status !== "play") return false;
+                  s.power.used.delete("pulse"); s.roar = null;
+                  startRoar("pulse"); return true; },
+    swing: (dir) => { const s = state; if (!s || s.status !== "play") return false;
+                      s.power.used.delete("finger"); s.roar = null;
+                      startRoar("finger", dir); return true; },
     railTap: (c, r) => slideTo(c, r),
     moveBlock: (i, pos) => { const b = state.blocks[i]; if (b) { b.pos = clamp(pos, b.lo, b.hi); markOccDirty(); } },
     openMDoor: (i) => { const md = state.manualDoors[i]; if (md) { md.left = 1; md.right = 1; markOccDirty(); } },

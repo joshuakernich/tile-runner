@@ -57,7 +57,7 @@
     <textarea id="out" spellcheck="false"></textarea>
     <div class="row" style="margin-top:8px">
       <button class="prim" id="copy">Copy TAL block</button>
-      <button id="reset">Reset</button>
+      <button id="restoreBtn">Restore</button><button id="reset">Reset</button>
     </div>
   </div>
 </div>
@@ -251,7 +251,25 @@ function frame(now){
 }
 
 const KEYS = ["loopR","loopY","loopW","panelPad","panelA","lift","grain"];
+
+// Everything on this page is written down as you move it and put back when you come back. A
+// tuning page you have to set up again every time you open it is a tuning page you stop opening
+// — and the settings you are part way through are worth more than the ones already shipped.
+// "Reset" goes back to the shipped block; "Restore" goes back to YOURS.
+const SAVE_KEY = "tilerunner:talisman-lab";
+function save(){
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(TAL)); } catch (e) {}
+}
+function restore(){
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) {}
+  if (!v || typeof v !== "object") return false;
+  for (const k of KEYS) if (typeof v[k] === "number") TAL[k] = v[k];
+  return true;
+}
+
 function sync(){
+  save();
   for (const k of KEYS){
     const el = document.getElementById(k); if(!el) continue;
     el.value = TAL[k];
@@ -272,6 +290,8 @@ document.getElementById("copy").addEventListener("click", async () => {
   const b = document.getElementById("copy"), was = b.textContent;
   b.textContent = "Copied"; setTimeout(()=>b.textContent=was, 900);
 });
+document.getElementById("restoreBtn").addEventListener("click", () => { if (restore()) sync(); });
+restore();
 sync();
 requestAnimationFrame(frame);
 </script>

@@ -81,6 +81,7 @@
     <div class="rowline">
       <button class="act" id="copy">Copy</button>
       <button class="act" id="paste">Load from box</button>
+      <button class="act" id="restoreBtn">Restore mine</button>
       <button class="act" id="reset">Reset</button>
     </div>
     <div class="hint">
@@ -198,6 +199,7 @@ const DEFAULT = {
 // The composition survives a reload — same idea as the level editor's autosave.
 // Unknown/renamed keys fall back to DEFAULT, so an older save can't break a newer tool.
 const LSKEY = "tilerunner:icon";
+const KEPTKEY = LSKEY + ":kept";      // what you had before you last reset
 let C = {...DEFAULT};
 try { const raw = localStorage.getItem(LSKEY);
       if (raw) C = {...DEFAULT, ...JSON.parse(raw)}; } catch(e) {}
@@ -647,8 +649,17 @@ $("copy").onclick=()=>{ $("out").select(); document.execCommand("copy");
   $("copy").textContent="Copied!"; setTimeout(()=>$("copy").textContent="Copy",1000); };
 $("paste").onclick=()=>{ try{ C={...DEFAULT, ...JSON.parse($("out").value)}; syncUI(); refresh(); }
   catch(_){ $("paste").textContent="Bad JSON"; setTimeout(()=>$("paste").textContent="Load from box",1200); } };
-$("reset").onclick=()=>{ C={...DEFAULT}; try{ localStorage.removeItem(LSKEY); }catch(e){}
-  syncUI(); refresh(); };
+// Reset goes back to the shipped composition — but it does NOT throw away the one you had.
+// That copy is the work; it is kept to one side so "Restore mine" can bring it straight back.
+$("reset").onclick=()=>{
+  try{ const raw = localStorage.getItem(LSKEY); if (raw) localStorage.setItem(KEPTKEY, raw); }catch(e){}
+  C={...DEFAULT}; saveC(); syncUI(); refresh(); };
+$("restoreBtn").onclick=()=>{
+  let raw = null;
+  try{ raw = localStorage.getItem(KEPTKEY) || localStorage.getItem(LSKEY); }catch(e){}
+  if (!raw) { $("restoreBtn").textContent="Nothing kept"; setTimeout(()=>$("restoreBtn").textContent="Restore mine",1200); return; }
+  try{ C = {...DEFAULT, ...JSON.parse(raw)}; }catch(e){ return; }
+  saveC(); syncUI(); refresh(); };
 $("mask").onclick=()=>{ maskMode=(maskMode+1)%3; $("mask").textContent="Mask: "+MASKS[maskMode]; };
 $("safe").onclick=e=>{ showSafe=!showSafe; e.target.classList.toggle("on",showSafe); };
 $("anim").onclick=e=>{ animate=!animate; e.target.classList.toggle("on",animate); t0=performance.now(); };

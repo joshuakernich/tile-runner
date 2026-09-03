@@ -55,9 +55,21 @@ bump and installed home-screen copies keep serving the old icons and manifest.
 | `talisman-lab.html` | The five charms: loop, inscribed panel, raised icon. **Copy TAL block**. |
 | `crumble-lab.html` | The **Singularity** — the hole in the floor that swallows the tile you cross it on. Sliders for the swirl, the eye and its tremble. **Copy RIFT block**. (The file and the block still say crumble/rift; the mechanic was renamed and they were not.) |
 | `radius-lab.html` | The one corner radius. Drives the **running game** in an iframe over a board carrying one of everything — free tiles, walls, stone, doors, platforms, the rift, monsters — via `__TR.tile()` and `__TR.demo()`, so it shows the shipped renderer rather than a copy that can drift. **Copy radius line**. Must be *served*, not opened off the filesystem. |
+| `hammer-lab.html` | The **Hammer's beam** — the line of tiles the Hammer of God throws. Drives the running game in an iframe over a pen of stone with the runner crawling in the middle of it, swinging on a loop; eight buttons aim the swing so a diagonal doesn't mean steering him into a corner. Sliders for the pixel grid, the lane weights, the ripple and the timing. **Copy HAMMER block**. Must be *served*. |
+| `bell-lab.html` | The **Bell of Unmaking** — the sweep it turns around the runner. Same iframe pattern: a field of stone the Bell can't break, so the circle always has something to fall across, ringing on a loop. Sliders for the circle, the sweep, the weight and the tones, and a **Check what it unmakes** button that stands monsters at one, two and three tiles and reports which survived. **Copy BELL block**. Must be *served*. |
+| `spare-lab.html` | The **spare tile** — the disconnected tile a level leaves lying out, unusable until the track reaches it. Drives the running game in an iframe over a three-column board carrying two spares, crawling at 0.05 tiles/s so it holds still. Sliders for the red wash, the dots and the breath, six presets, and a button that plays the claim sound. **Copy SPARE block**. Must be *served*. |
 | `tile-lab.html` / `junction-lab.html` | The laid tile's cross-section and the leading tile's 3-way junction. **Copy TILE / JUNCTION block**. |
 | `stone-generator.html` | Design reference for the stone crack art. |
 | `tools/` | The two check scripts. |
+
+## Every lab saves your settings
+
+Each lab writes its own controls to `localStorage` under `tilerunner:<lab-name>` as you move
+them, puts them back when the page opens, and carries a **Restore** button for after you have
+wandered off into the presets. **Reset** goes back to the shipped block; **Restore** goes back to
+yours. Where a Reset used to delete the autosave (icon-lab did), it now copies it to
+`tilerunner:<lab>:kept` first, so Restore can still reach it. Build this into any new lab — it is
+not a follow-up.
 
 ## Traps
 

@@ -48,7 +48,7 @@
       <div class="row"><label>freeze</label><input type="range" id="frozen" min="0" max="1" step="1"><output></output></div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:10px">
-      <button class="prim" id="copy">Copy EYES block</button><button id="reset">Reset</button>
+      <button class="prim" id="copy">Copy EYES block</button><button id="restoreBtn">Restore</button><button id="reset">Reset</button>
     </div>
     <textarea id="out" readonly></textarea>
   </div>
@@ -220,12 +220,30 @@ function render(t){
 }
 // ---- wiring -----------------------------------------------------------------------
 const KEYS = ["r","gap","bias","lid","glanceX","glanceY","glanceMs","blinkMs"];
+
+// Everything on this page is written down as you move it and put back when you come back. A
+// tuning page you have to set up again every time you open it is a tuning page you stop opening
+// — and the settings you are part way through are worth more than the ones already shipped.
+// "Reset" goes back to the shipped block; "Restore" goes back to YOURS.
+const SAVE_KEY = "tilerunner:eye-lab";
+function save(){
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(EYES)); } catch (e) {}
+}
+function restore(){
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) {}
+  if (!v || typeof v !== "object") return false;
+  for (const k of KEYS) if (typeof v[k] === "number") EYES[k] = v[k];
+  return true;
+}
+
 const DP = { r:3, gap:3, bias:3, lid:2, glanceX:3, glanceY:3, glanceMs:0, blinkMs:0 };
 function syncOut(){
   const lines = KEYS.map(k => "    " + (k+":").padEnd(10) + " " + (+EYES[k]).toFixed(DP[k]) + ",");
   $("out").value = "  const EYES = {\n" + lines.join("\n") + "\n  };";
 }
 function sync(){
+  save();
   for (const k of KEYS){ const el=$(k); el.value = EYES[k];
     el.parentElement.querySelector("output").textContent = (+EYES[k]).toFixed(DP[k]); }
   for (const k of ["cellPx","frozen"]) $(k).parentElement.querySelector("output").textContent = $(k).value;
@@ -236,6 +254,8 @@ KEYS.forEach(k => $(k).addEventListener("input", e => { EYES[k] = +e.target.valu
 $("cellPx").value = 110; $("frozen").value = 0;
 $("reset").onclick = () => { Object.assign(EYES, SHIPPED); sync(); };
 $("copy").onclick = () => { $("out").select(); document.execCommand("copy"); };
+document.getElementById("restoreBtn").addEventListener("click", () => { if (restore()) sync(); });
+restore();
 sync();
 requestAnimationFrame(render);
 </script></body></html>

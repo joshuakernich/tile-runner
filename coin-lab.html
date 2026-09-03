@@ -65,7 +65,7 @@
     </div>
     <div class="grp"><h2>Scene</h2>
       <div class="row"><label>cell</label><input type="range" id="cellPx" min="70" max="200" step="2"><output></output></div>
-      <div class="btns"><button id="bg">Dark board</button><button id="reset">Reset</button></div>
+      <div class="btns"><button id="bg">Dark board</button><button id="restoreBtn">Restore</button><button id="reset">Reset</button></div>
     </div>
     <div class="grp"><h2>Block</h2>
       <div class="btns"><button id="copy">Copy COIN block</button></div>
@@ -189,8 +189,26 @@ requestAnimationFrame(frame);
 
 const KEYS = ["size","float","floatMs","rock","shadowA","gloss","rim","sweep","sweepMs","spark","sparkMs",
               "panelPad","panelA"];
+
+// Everything on this page is written down as you move it and put back when you come back. A
+// tuning page you have to set up again every time you open it is a tuning page you stop opening
+// — and the settings you are part way through are worth more than the ones already shipped.
+// "Reset" goes back to the shipped block; "Restore" goes back to YOURS.
+const SAVE_KEY = "tilerunner:coin-lab";
+function save(){
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(COIN)); } catch (e) {}
+}
+function restore(){
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) {}
+  if (!v || typeof v !== "object") return false;
+  for (const k of KEYS) if (typeof v[k] === "number") COIN[k] = v[k];
+  return true;
+}
+
 const DP = k => /Ms$/.test(k) ? 0 : (k==="size"||k==="float"||k==="rock"||k==="panelPad" ? 3 : 2);
 function sync(){
+  save();
   for (const k of KEYS){
     const el=document.getElementById(k); el.value=COIN[k];
     el.parentElement.querySelector("output").textContent = (+COIN[k]).toFixed(DP(k));
@@ -211,6 +229,8 @@ document.getElementById("copy").addEventListener("click", async () => {
   const b=document.getElementById("copy"), was=b.textContent;
   b.textContent="Copied"; setTimeout(()=>b.textContent=was,900);
 });
+document.getElementById("restoreBtn").addEventListener("click", () => { if (restore()) sync(); });
+restore();
 sync();
 </script>
 </body>
