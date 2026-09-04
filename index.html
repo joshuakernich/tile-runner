@@ -85,7 +85,12 @@
              be 22rem for the verse and 19rem for the byline, neither of which fitted a small
              screen and neither of which knew about the other. Capped at the container as well,
              so a box narrower than the measure still wins. */
-          --copy: 70vw; }
+          --copy: 70vw;
+          /* ...and a NARROWER one for the pop-ups. A share of the screen is right on a phone
+             and wrong on anything bigger: at 70vw a card on a desktop ran half the width of the
+             window, which is a poster rather than a note. Capped in absolute units, so it stays
+             70vw where 70vw is a sensible line and stops growing once it isn't. */
+          --pop: min(var(--copy), 320px); }
   body { font-size: var(--ui); letter-spacing: var(--ls); }
   /* ...but NOT into the canvas. Canvas text takes its tracking from the element's own computed
      letter-spacing when the context has not set one, so putting a default on <body> quietly
@@ -247,11 +252,35 @@
   #winui {
     position:fixed; left:0; right:0; display:none; flex-direction:column; gap:var(--chq);
     z-index:34; align-items:stretch;
+    /* One grid square off the foot, which is exactly where DONE sits on every screen that has
+       one. It was two, and the one answer on this screen stood a square higher than the answer
+       on every other — near enough to read as a wobble rather than as a decision. */
     padding:0 calc(env(safe-area-inset-left) + var(--chq2)) 
-            calc(env(safe-area-inset-bottom) + var(--chq2)) calc(env(safe-area-inset-right) + var(--chq2));
+            calc(env(safe-area-inset-bottom) + var(--chq)) calc(env(safe-area-inset-right) + var(--chq2));
     bottom:0; max-width:26rem; margin:0 auto;
   }
   #winui.show { display:flex; animation:poem-in 260ms ease-out both; }
+  /* A black ground under the one answer on this screen, fading up into the map. Every chapter
+     brings its own palette to the bottom of the frame, and a button standing on whatever colour
+     happens to be there is a button whose legibility is decided by the level behind it. Pinned
+     to the FOOT rather than to the button, so it reads as the edge of the picture going dark
+     rather than as a plate the button is sitting on. */
+  #winfade {
+    position:fixed; left:0; right:0; bottom:0; height:calc(var(--chq) * 13);
+    z-index:33; pointer-events:none; display:none;
+    background:linear-gradient(to top,
+      rgba(5,4,13,0.94) 0%, rgba(5,4,13,0.86) 26%, rgba(5,4,13,0.52) 62%, rgba(5,4,13,0) 100%); }
+  #winfade.show { display:block; animation:poem-in 260ms ease-out both; }
+  /* ...and the paper over it, masked to the same fall, so the ground under the button is the
+     same material as everything else in the game rather than a flat wash of black. */
+  #winfade::after {
+    content:""; position:absolute; inset:0; opacity:0.22;
+    background-image:url("data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'>\
+<filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/>\
+</filter><rect width='140' height='140' filter='url(%23n)'/></svg>");
+    -webkit-mask-image:linear-gradient(to top, #000 0%, rgba(0,0,0,0.55) 55%, transparent 100%);
+            mask-image:linear-gradient(to top, #000 0%, rgba(0,0,0,0.55) 55%, transparent 100%); }
   /* The three doors off the interlevel screen, along the top: the charms on the left, the shop
      and the settings on the right with the cog in the corner. They are up here and not in the
      stack at the foot because the foot has ONE answer on it — the chapter you are about to
@@ -259,7 +288,11 @@
   #wintop {
     position:fixed; left:0; right:0; top:0; display:none; z-index:34;
     flex-direction:column; gap:var(--chq);
-    padding:calc(env(safe-area-inset-top) + var(--chq2)) calc(env(safe-area-inset-right) + var(--chq2))
+    /* Two and a half grid squares down, which is exactly where #menu-title pins itself. It was
+       two, and the Tileverse's header sat half a square proud of the Settings, Tile Shop and
+       Holy Talismans headers it is a sibling of — near enough to look like a mistake rather
+       than a decision. The number is the same expression on both, so they cannot drift apart. */
+    padding:calc(env(safe-area-inset-top) + var(--chq) * 2.5) calc(env(safe-area-inset-right) + var(--chq2))
             0 calc(env(safe-area-inset-left) + var(--chq2));
   }
   #wintop.show { display:flex; animation:poem-in 260ms ease-out both; }
@@ -336,7 +369,14 @@
   #wintop .wt-ico { display:flex; align-items:center; justify-content:center; gap:6px;
     height:46px; }
   #wintop .wt-ico canvas { display:block; }
-  #wintop .wt-ico .n { font-size:var(--ui); letter-spacing:var(--ls); color:#ffd24a; }
+  /* The same tally the shop itself shows, at the same size and spacing — it is the same number
+     answering the same question, and it had been saying it in two different voices. */
+  #wintop .wt-ico { gap:9px; }
+  #wintop .wt-ico .n { font-size:26px; letter-spacing:1px; color:var(--track); font-weight:900; }
+  /* `canvas.wallet` is pinned to 17px with an !important, because the wallet glyph has one size
+     everywhere it appears in a LIST of prices. This is not that — it is the shop's own purse,
+     said again on the way in — so it takes the purse's size, and needs the same weapon to do it. */
+  #wintop .wt-ico canvas.wallet { width:26px !important; height:26px !important; }
   #wintop .wt-lbl { display:block; }
   /* NO PLATE on any of them. A plate is what the game puts under a decision, and the decision
      on this screen is the one at the foot — three chequered slabs across the top were three
@@ -415,7 +455,7 @@
     color:#bfc6e0; opacity:0.6;
   }
   #poem-text, #poem-text .ln {
-    margin:0; max-width:min(var(--copy), 100%); text-align:center; text-wrap:balance;
+    margin:0; max-width:min(var(--pop), 100%); text-align:center; text-wrap:balance;
     font-size:var(--ui); line-height:2; letter-spacing:var(--ls); text-transform:uppercase;
     color:var(--ink);
   }
@@ -423,7 +463,7 @@
      whole card — the number, the verse, this, and the way out — so what separates them is
      colour and weight of ink rather than a step down in scale. */
   #poem-by {
-    margin:0; max-width:min(var(--copy), 100%); text-align:center;
+    margin:0; max-width:min(var(--pop), 100%); text-align:center;
     font-size:var(--ui); line-height:1.8; letter-spacing:var(--ls); text-transform:uppercase;
     color:#ffd24a; opacity:0.75;
   }
@@ -446,7 +486,7 @@
      number being older. The 44 is its own padding, added back so the measure is the text's and
      not the box's. */
   .mech-card {
-    max-width:min(calc(var(--copy) + 44px), 100%);
+    max-width:min(calc(var(--pop) + 44px), 100%);
     text-align:center; background:var(--panel);
     border:3px solid transparent; box-shadow:0 6px 0 #0b0918; padding:20px 22px 18px;
   }
@@ -661,10 +701,12 @@
   #menu-body .menu-cog canvas { width:27px; height:27px; display:block; }
   /* The way out lives in the TOP-LEFT corner of both screens that offer it — opposite the cog,
      and out of the way of what the screen is actually saying. It used to sit in the middle,
-     which is where the message goes. */
+     which is where the message goes. Both screens hang it at the SAME height: it is one door in
+     one place, and a fall that sat it a square higher than a pause read as the corner shifting
+     under you between two screens you see back to back. */
   #menu-body .tv-back {
     position:fixed; z-index:4; width:auto;   /* not the 100% every button in the column takes */
-    top:calc(env(safe-area-inset-top) + var(--chq));
+    top:calc(env(safe-area-inset-top) + var(--chq2));
     left:calc(env(safe-area-inset-left) + var(--chq2)); }
   #menu-body .tv-back .tv-word { font-size:28px; }
   #menu-body .tv-back .l1 { font-size:12px; letter-spacing:2px; }
@@ -948,7 +990,9 @@
      box, so there is room to turn inside it without clipping a corner. */
   .relic canvas { width:var(--relic); height:var(--relic); display:block;
     transform:rotate(var(--tilt, 0deg)); }
-  .relic span { font-size:10px; letter-spacing:0.4px; line-height:1.15; text-align:center;
+  /* The body size, like every other word in the game. These were set at 10px with 0.4 of
+     tracking, from before there was a standard to be out of step with. */
+  .relic span { font-size:var(--body); letter-spacing:var(--ls); line-height:1.15; text-align:center;
     text-transform:uppercase; font-weight:900; color:var(--ink); }
   .relic i { font-size:9px; letter-spacing:0.2px; line-height:1.1; font-style:normal;
     font-weight:700; color:var(--track); text-align:center; }
@@ -1305,6 +1349,7 @@
     <button id="win-shop"><span class="wt-ico"></span><span class="wt-lbl">Tile<br>Shop</span></button>
   </div>
 </div>
+<div id="winfade"></div>
 <div id="winui">
   <button id="win-next">Play Chapter</button>
 </div>
@@ -3066,7 +3111,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.10";                    // shown on the title & pause screens
+  const VERSION = "v10.11";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -5306,11 +5351,15 @@
       }, Math.round(S*0.62));
       return;
     }
-    // The block on its rail — the rail run out past the tile on both sides, because "drag it
-    // aside" is the whole mechanic and a rail that stops at the block cannot say it.
+    // The block on its rail, THREE TILES ACROSS: the block in the middle with a full tile of
+    // rail either side of it. "Drag it aside" is the whole mechanic, and a rail that stops at
+    // the block cannot say it — it needs to show the room the block has to move into. The cell
+    // is a third of the card, so the three of them span it exactly.
     if (type==="block")    {
-      real(() => { drawBlockRail(-OX + 5, cell*0.5, cell + OX - 5, cell*0.5);
-                   drawBlockBody(0, 0, 0, false); });
+      const cp = Math.round(S/3);
+      real(() => { drawBlockRail(-cell, cell*0.5, cell*2, cell*0.5);
+                   drawBlockBody(0, 0, 0, false); },
+           cp, (S - cp)/2, (S - cp)/2);
       return;
     }
     // The manual door, cracked open the little the drag arrows need to read.
@@ -5682,13 +5731,65 @@
     }
     return false;
   }
+  // What he was carrying, thrown out of him as he lands. A fall has always forfeited the purse,
+  // and it has always done it silently, in a line of bookkeeping inside showLose. This is the
+  // game saying it out loud: the coins spring out of the heap, arc over and go off the bottom of
+  // the screen, and you watch the run's takings leave. Nothing is decided here — the purse was
+  // already lost; this is only the part you can see.
+  const SPILL = {
+    max:  48,      // coins at most, however deep the purse — a hundred of them is confetti
+    up:   0.0052,  // how hard they leave him, up the screen, in cells per ms
+    out:  0.0034,  // ...and sideways, either way
+    spin: 0.0021,  // radians per ms, give or take
+    g:    0.0011,  // ...and the gravity they come down under, in px per ms squared. Lighter than
+                   // the stone grit's, which is tuned for a puff that is over in a third of a
+                   // second: a coin has to be watchable on its way out.
+    size: 0.30,    // a coin, as a share of a cell
+    life: 4000,    // ...and the backstop, for one that somehow never leaves
+  };
+  function spillPurse(x, y) {
+    const n = Math.min(SPILL.max, Math.round((state && state.purse) || 0));
+    for (let i = 0; i < n; i++) {
+      // Fanned rather than random: a ring of directions walked in steps that do not divide into
+      // it, so they come out evenly spread and never in a pattern you could count.
+      const a = (i * 2.399963) % (Math.PI*2);          // the golden angle, in radians
+      const sp = 0.55 + ((i * 7) % 11)/11 * 0.9;       // ...and each one thrown a little harder
+      state.shards.push({
+        coin: true, x, y,
+        vx: Math.cos(a) * cell * SPILL.out * sp,
+        vy: -Math.abs(Math.sin(a)) * cell * SPILL.up * sp - cell*SPILL.up*0.35,
+        spin: ((i & 1) ? 1 : -1) * SPILL.spin * (0.6 + ((i*5) % 7)/7),
+        life: 0, max: SPILL.life, sz: cell * SPILL.size });
+    }
+  }
   function updateShards(dt) {
     if (!state || !state.shards.length) return;
-    for (const p of state.shards) { p.life += dt; p.vy += 0.0018*dt; p.x += p.vx*dt; p.y += p.vy*dt; }
-    state.shards = state.shards.filter(p => p.life < p.max);
+    for (const p of state.shards) {
+      p.life += dt; p.vy += (p.coin ? SPILL.g : 0.0018)*dt;
+      p.x += p.vx*dt; p.y += p.vy*dt;
+    }
+    // A spilled coin is culled when it has left the picture rather than when its clock runs out:
+    // it is supposed to go over the edge, and a coin that faded away above the fold would read
+    // as the game quietly taking it back.
+    state.shards = state.shards.filter(p =>
+      p.coin ? (p.life < p.max && p.y - camY < viewH + cell*2) : p.life < p.max);
+  }
+  // The spilled purse, drawn AFTER the heap rather than with the grit: the coins come out of
+  // him, and one passing in front of the pile that was drawn behind it would read as the pile
+  // eating them on the way out.
+  function drawSpill() {
+    if (!state || !state.shards.length) return;
+    for (const p of state.shards) {
+      if (!p.coin) continue;              // a coin does not fade, it leaves — that is the point
+      ctx.save();
+      ctx.translate(p.x, p.y); ctx.rotate(p.life * (p.spin || 0));
+      coinGlyph(0, 0, p.sz);
+      ctx.restore();
+    }
   }
   function drawShards() {
     for (const p of state.shards) {
+      if (p.coin) continue;               // ...drawn later, over the heap they came out of
       ctx.globalAlpha = Math.max(0, 1 - p.life/p.max);
       ctx.fillStyle = p.color || "#8a8478";      // stone grit unless the thing that broke had a colour
       ctx.fillRect(Math.round(p.x - p.sz/2), Math.round(p.y - p.sz/2), Math.ceil(p.sz), Math.ceil(p.sz));
@@ -6283,11 +6384,24 @@
 
   // ---------- Talisman powers ---------------------------------------------
   const REWIND_TILES = 2;      // how far back the Tape of Regret puts you
-  const MAGNET_CELLS = 2.5;    // the Magnet's reach, in tiles
-  // The reach is drawn as rings falling inward rather than as one ring sitting still: a
-  // static circle says "this is the area", where a collapsing one says "and it is pulling".
-  const MAGNET_RINGS = 2;      // how many are on their way in at any moment
-  const MAGNET_RING_MS = 820;  // one disc's trip from the rim to him
+  // The Lodestone's reach, drawn in the same grain as the Hammer's beam and the Bell's sweep —
+  // squares off the world's own grid, a quarter-tile each. The reach falls INWARD rather than
+  // sitting still: a static circle says "this is the area", a collapsing one says "and it is
+  // pulling". `radius` is the reach it draws and the reach it pulls at — one number, so the
+  // picture cannot lie about what it took. Tune it in magnet-lab.html.
+  const MAGNET = {
+    radius:  2.50,   // the reach, in tiles
+    hole:    0.60,   // the quiet at the middle, where he stands
+    grid:    4,      // squares per tile, each way
+    rings:   1,      // how many rings are on their way in at any moment
+    ms:      840,    // one ring's trip from the rim to him
+    band:    0.13,   // how thick a ring is, as a share of the radius
+    ease:    3.00,   // its life: how it comes in at the rim and how it lands at the middle
+    ringA:   0.56,   // a square at the middle of a ring
+    wash:    0.07,   // the flat wash over the whole reach, so it reads as an AREA and not a ring
+    chequer: 1,      // alternates the two tones square by square
+  };
+  const MAGNET_TONE = { mid: "rgba(255,140,140,", rim: "rgba(255,236,236," };
   const COIN_FLY_MS = 240;     // how long a pulled coin takes to reach him
   // Press the button: the worn talisman gives up its one power for this level.
   // A level still allows ONE power — that has always been the balance — but which one is now
@@ -6669,6 +6783,20 @@
                      Math.round(base[1] + (h[1]*255 - base[1])*mix) + "," +
                      Math.round(base[2] + (h[2]*255 - base[2])*mix) + "," + toneA + ")";
   }
+  // The two shouting charms, drawn LAST of everything on the board — over the track, over the
+  // loose tiles, over the tile still in your hand. They are a thing happening to the world
+  // rather than a thing lying in it, and a pane of glass in front of a shockwave read as the
+  // shockwave being somewhere underneath the floor.
+  //
+  // Drawing them last would ordinarily paint them across the runner, which is the one place
+  // neither belongs. It doesn't, because neither of them ever reaches him: the Hammer's line
+  // starts `clear` tiles in front of his feet whatever the stride, and the Bell keeps a hole at
+  // the middle of its circle for him to stand in. The z-order is safe because the geometry is.
+  function drawCharmFx(ts) {
+    const R = state && state.roar; if (!R || !R.fired) return;
+    if (R.kind === "finger") drawHammerBeam();
+    else if (R.kind === "pulse") drawBellSweep();
+  }
   // The Bell, drawn as a sweep: one hand going round him inside `radius`, lighting the squares
   // of the world's grid as it passes and leaving them to fade behind it. Same grain as the
   // Hammer's beam and the same reason — these are squares of ground going out, not a shape laid
@@ -6916,7 +7044,7 @@
       const rp = visualAt(s.runIdx + s.runT), rx = rp.x/cell, ry = rp.y/cell;
       for (const ck of Array.from(s.coinCells)) {
         const i = ck.indexOf(","), c = +ck.slice(0, i), r = +ck.slice(i+1);
-        if (Math.hypot(rx - (c+0.5), ry - (r+0.5)) > MAGNET_CELLS) continue;
+        if (Math.hypot(rx - (c+0.5), ry - (r+0.5)) > MAGNET.radius) continue;
         s.coinCells.delete(ck);
         s.coinFly.push({ c, r, t: 0, done: false });
       }
@@ -7224,7 +7352,7 @@
   // The drop pushes IN. Everything on the board is measured in cells, the heap included, so the
   // whole scene scales together and the bodies stay the size of the runner lying on them.
   const PILE_DROP = 1.35, PILE_REST = 2200, FALL_ZOOM = 1.35;
-  const PILE_SKIRT = 5;                     // rows of heap carried on below the base, off-frame
+  const PILE_SKIRT = () => PILE.skirt;      // rows of heap carried on below the base, off-frame
   const WRIGGLE_MS = 1700;                  // how long the legs go on kicking once he is in
   const LAND_SPRING = 700;                  // ...and how long the impact takes to settle out
   const pileY = () => (state.fall && state.fall.floor != null) ? state.fall.floor
@@ -7286,6 +7414,7 @@
       state.shake = Math.max(state.shake || 0, cell*0.18);
       Sound.thud ? Sound.thud() : Sound.clack();
       haptic(18);
+      spillPurse(f.x, f.y);          // ...and everything he was carrying comes out of him
       return;
     }
     // ...but not while the Ankh is still on offer. The drop is shorter than the grace, and
@@ -7298,7 +7427,19 @@
   // would stop the fall being followed at all.
   function tickFallCam(dt) {
     const f = state.fall; if (!f) return;
-    const want = f.y - viewH*0.62;               // the summit sits low, the heap running off the foot
+    // Two framings, and the LOWER of them wins. The first puts the summit `frame` of the way
+    // down the view, which is what the camera has always done. The second puts the base row past
+    // the foot of the screen by `sink` cells — and that is the one that matters once the skirt
+    // is off: with no rows carried on below the base, the base IS the bottom of the mound, and a
+    // summit-framed camera on a short heap leaves a band of empty sky under it. Taking the
+    // smaller camY pushes everything further down the screen, so the mound always runs off the
+    // foot however few rows it has.
+    const wantSummit = f.y - viewH*PILE.frame;
+    // screen y = world y - camY, so a SMALLER camY pushes the world further down the screen.
+    // Base at the foot is camY = pileY() - viewH; another `sink` cells of camera below that
+    // puts the bottom row off the edge entirely.
+    const wantBase   = pileY() - viewH - cell*PILE.sink;
+    const want = Math.min(wantSummit, wantBase);
     camY += (want - camY) * Math.min(1, dt/90);
     // Centred on the HEAP, not on him: he comes down off to one side of the peak, and a camera
     // that follows him puts the mountain off-centre for the whole of the fall and the screen it
@@ -7414,12 +7555,62 @@
   // paintRunner already takes a whole outfit through `as`, it was just being handed one colour.
   function pileOutfit(rnd) {
     const pick = (arr) => arr[(rnd()*arr.length) | 0];
-    return { skin: pick(SKIN_COLOURS), hat: pick(HATS), kicks: pick(KICKS), dead: true };
+    // A flat COLOUR, not a drip. The shop's finishes glow, streak, facet and split down the
+    // middle, and thirty of those in one heap read as a pile of special effects rather than a
+    // pile of people — the eye goes to the two that are lit instead of to the mound. One hue
+    // off the wheel and nothing else, so what you see is the SHAPE.
+    const hue = Math.round(PILE.hue0 + rnd()*PILE.hueSpan) % 360;
+    // Lightness gets its OWN draw rather than reusing the hue's. Sharing one would tie the two
+    // together — a heap where the reds are all dark and the violets all pale — which is the
+    // same correlation the seed comment below warns about, and just as visible.
+    const light = clamp(PILE.light + (rnd() - 0.5)*PILE.lightSpan, 0.04, 0.98);
+    const hsl = (sat, l) => "hsl(" + hue + "," + Math.round(sat*100) + "%," +
+                            Math.round(l*100) + "%)";
+    const skin = { id: "pile", body: hsl(PILE.sat, light),
+                               ink:  hsl(PILE.sat*0.6, light*0.26) };
+    // The hat comes from the real rack still — it is a silhouette rather than a finish, so it
+    // says "this was somebody" without lighting anything up. `kicks` is drawn for nobody in the
+    // heap (there are no feet any more), but the pick stays: the scatter is a hash of the draw
+    // ORDER, and taking a call out of it reshuffles every body in the mound.
+    const hat = pick(HATS), kicks = pick(KICKS);
+    return { skin, hat: PILE.hats ? hat : { draw: null }, kicks, dead: true };
   }
   // mulberry32, not a one-line index hash. The first attempt used the latter and every body's
   // HEIGHT came out correlated with its position across the heap — so instead of filling the
   // mound they traced its outline, and a pile of thirty runners read as a rainbow.
   const PILE_SEED = 0x51ed2701;
+  // The heap, tuned in pile-lab.html — paste the PILE block between the two.
+  //
+  // Every body in it is drawn BODY ONLY: no legs, no kicks, just the square and its eyes. A
+  // heap built out of running figures is mostly leg, and a leg is a thin line — so however
+  // tightly the rows were packed the mound came out full of holes with a thicket of shins
+  // across them. Squares stack; runners do not.
+  const PILE = {
+    shape:    1.00,  // 0 = straight-sided triangle, 1 = a peak with long tails
+    gamma:    0.33,  // how sharp that peak is — half-width at half height, share of the base
+    hue0:     174,   // where on the colour wheel the bodies start
+    hueSpan:  360,   // ...and how much of it they use
+    sat:      0.17,  // how strong those colours are — 0 is grey, and greys are what this is
+    light:    0.69,  // the middle of the range they are lit at
+    lightSpan:0.28,  // ...and how far either side of it they spread, which is the variety
+    hats:     0,     // 1 puts the hats back on; 0 leaves plain squares with eyes
+    rows:     10,    // rows at the first fall; one more every few attempts, up to `rowsMax`
+    rowsMax:  8,
+    stepX:    0.13,  // how far apart they sit across, as a fraction of a CELL
+    stepY:    0.16,  // ...and up
+    jitX:     0.10,  // how far one may wander off its place, across
+    jitY:     0.08,  // ...and up
+    sizeBase: 0.94,  // a body at the SUMMIT, as a fraction of a cell
+    sizeDepth:0.44,  // ...and how much bigger one at the front of the base is
+    sizeJit:  0.08,  // how much bodies vary among themselves
+    upDown:   0.78,  // the share of them lying head-down, the way you arrive
+    tilt:     1.20,  // how far off straight a head-down body may lean, in radians
+    skirt:    0,     // rows carried on below the base, off the bottom of the frame
+    frame:    0.34,  // where down the view the SUMMIT sits, as a share of it
+    sink:     0.00,  // ...and how far the BASE is pushed past the foot of it, in cells
+    coldFrom: 0.34,  // where down the screen the heap starts sinking into the dark
+    coldTo:   0.86,  // ...and how far under it goes by the foot of it
+  };
   // The heap's geometry, in one place: the tap that lands him on the summit and the drawing
   // that builds the summit have to agree about where it is.
   //
@@ -7437,23 +7628,42 @@
     const G = pileGeom();
     const d = 1 + ((state.attempts || 1) & 1);
     const side = (state.fall && state.fall.vx < 0) ? -1 : 1;
-    // Row r is 2r columns narrower than the base, so it reaches out to (cols-2r-1)/2 steps —
-    // which puts the highest row covering distance `d` at rows - d.
-    const row = Math.max(0, Math.min(G.rows - 1, G.rows - d));
+    // The highest row that still reaches `d` places out from the middle. This used to be the
+    // triangle's own arithmetic — rows - d — which was exact while the mound WAS a triangle and
+    // silently wrong the moment it stopped being one. Ask the profile instead.
+    let row = 0;
+    for (let r = G.rows - 1; r >= 0; r--) {
+      if ((pileCols(r, G) - 1) / 2 >= d) { row = r; break; }
+    }
     // ...and high enough above that row for the legs to clear the bodies lying on it. He is
     // drawn BEHIND the heap, so level with the local surface is out of sight entirely.
     return { x: pileMidX() + side*d*G.stepX - cell*0.22,
              y: pileY() - row*G.stepY - cell*0.55 };
   }
+  // How wide row `r` is, in bodies. A straight-sided heap loses two a row and comes to a point,
+  // which is a triangle; a LORENTZIAN loses them slowly at the bottom and then all at once near
+  // the top, which is a peak with tails — a spire standing out of a long low skirt. `shape`
+  // crossfades between the two so the old mound is still reachable, and `gamma` is how sharp
+  // that spire is: the curve's half-width at half its height, as a share of the base's.
+  function pileCols(r, G) {
+    if (r <= 0) return G.cols;                       // the base, and the skirt below it
+    const half0 = (G.cols - 1) / 2;
+    const straight = half0 - r;
+    // height at this row: 0 at the base and exactly 1 at the summit, so the top row is a point
+    const h = (r + 1) / G.rows;
+    const lor = h >= 1 ? 0 : PILE.gamma * half0 * Math.sqrt(1/h - 1);
+    const half = straight + (Math.min(half0, lor) - straight) * PILE.shape;
+    return Math.max(1, Math.round(Math.max(0, half)) * 2 + 1);
+  }
   function pileGeom() {
     // Squeezed toward the middle: a narrow step across packs the bodies into each other, so the
     // mountain is a dense mass at the centre of the screen rather than a thin slope spread the
     // whole way over it. The base still reaches the edges — it is the middle that is crowded.
-    const s = cell, stepX = s*0.22, stepY = s*0.23;
+    const s = cell, stepX = s*PILE.stepX, stepY = s*PILE.stepY;
     // The ROW COUNT leads and the base follows it. Deriving the rows from a screen-wide base
     // gave a heap twenty-odd rows tall — far more of it than the moment needs. Seven rows, and
     // a base exactly wide enough that losing two columns a row brings it to a point.
-    const rows = Math.min(10, 7 + Math.floor(((state.attempts || 1) - 1)/3));
+    const rows = Math.min(PILE.rowsMax, PILE.rows + Math.floor(((state.attempts || 1) - 1)/3));
     return { stepX, stepY, rows, cols: rows*2 + 1 };
   }
   // Him, then the heap over the top of him. Once he is DOWN he is part of it, and the heap
@@ -7476,8 +7686,8 @@
   // would come out as a blue rectangle with runners in it. Composited `source-atop`, so it
   // only marks what the heap actually covers.
   const PILE_COLD = "26,42,88";       // the dark blue it fades to
-  const PILE_COLD_FROM = 0.34;        // ...where down the screen it starts, and how far it goes
-  const PILE_COLD_TO = 0.86;
+  const PILE_COLD_FROM = () => PILE.coldFrom;   // ...where it starts down the screen,
+  const PILE_COLD_TO = () => PILE.coldTo;       // ...and how far under it goes by the foot
   let _pileLayer = null;
   function drawFallPile(ts) {
     if (state.status !== "falling" && state.status !== "lose") return;
@@ -7498,8 +7708,8 @@
     g.globalCompositeOperation = "source-atop";
     const gd = g.createLinearGradient(0, 0, 0, lay.height);
     gd.addColorStop(0, "rgba(" + PILE_COLD + ",0)");
-    gd.addColorStop(PILE_COLD_FROM, "rgba(" + PILE_COLD + ",0)");
-    gd.addColorStop(1, "rgba(" + PILE_COLD + "," + PILE_COLD_TO + ")");
+    gd.addColorStop(PILE_COLD_FROM(), "rgba(" + PILE_COLD + ",0)");
+    gd.addColorStop(1, "rgba(" + PILE_COLD + "," + PILE_COLD_TO() + ")");
     g.fillStyle = gd;
     g.fillRect(0, 0, lay.width, lay.height);
     g.globalCompositeOperation = "source-over";
@@ -7517,7 +7727,7 @@
     // rather than by luck. Random placement kept producing a cloud with a vaguely pointed top;
     // the shape has to be the structure, and the randomness only what stops it looking stamped.
     const G = pileGeom();
-    const stepX = G.stepX, stepY = G.stepY, rows = G.rows, cols0 = G.cols;
+    const stepX = G.stepX, stepY = G.stepY, rows = G.rows;
     const rnd = mulberry32(PILE_SEED);
     // The impact, still ringing. He lands ON these people, and a heap that takes a body without
     // moving is a heap made of bricks — so everything near the point of contact is shoved a
@@ -7531,18 +7741,20 @@
     // actually lands on give way, and the rest of it does not notice.
     const REACH = Math.max(stepX, stepY) * 2.2;
     let k = 0;
+    _bodyOnly = 1;                    // squares with eyes — see the flag, and PILE above
+    try {
     // Top row first, bottom row last: on a heap the bodies nearest you are the ones at the
     // front of the base, and they overlap everything behind them.
     // ...and it carries on BELOW the base. The camera frames the summit high enough now that the
     // bottom row would otherwise be on screen, and a mountain with a visible underside is a
     // mountain floating in the air. The extra rows are full width and simply run off the frame.
-    for (let r = rows - 1; r >= -PILE_SKIRT; r--) {
-      const cols = Math.max(1, cols0 - Math.max(0, r)*2);
+    for (let r = rows - 1; r >= -PILE_SKIRT(); r--) {
+      const cols = pileCols(r, G);
       for (let c = 0; c < cols; c++, k++) {
         const j1 = rnd(), j2 = rnd(), j3 = rnd(), j4 = rnd(), j5 = rnd();
         const fit = pileOutfit(rnd);
-        let x = pileMidX() + (c - (cols - 1)/2)*stepX + (j1 - 0.5)*s*0.10;
-        let y = y0 - r*stepY + (j2 - 0.5)*s*0.08;
+        let x = pileMidX() + (c - (cols - 1)/2)*stepX + (j1 - 0.5)*s*PILE.jitX;
+        let y = y0 - r*stepY + (j2 - 0.5)*s*PILE.jitY;
         let shove = 0;
         if (hit > 0.004) {
           const dx = x - F.x, dy = y - F.y, dd = Math.hypot(dx, dy) || 1;
@@ -7565,18 +7777,19 @@
         // More than half of them are UPSIDE DOWN — legs in the air, head in the heap. That is
         // how you arrive here: head first, off the end of a chapter, the same way he just did.
         // The rest lie any which way, so the heap does not come out combed.
-        const ang = (j5 < 0.58 ? Math.PI + (j4 - 0.5)*1.2 : j4*Math.PI*2)
+        const ang = (j5 < PILE.upDown ? Math.PI + (j4 - 0.5)*PILE.tilt : j4*Math.PI*2)
                   + shove * 0.5 * (x >= F0x() ? 1 : -1);
         // Bigger toward the BOTTOM. Nothing about a heap is in perspective, but a body at the
         // front of the base being half again the size of one at the peak is the cheapest way to
         // say that the peak is further away — and it makes the mountain read as one object
         // rather than as a stack of identical stickers.
         const depth = rows > 1 ? 1 - Math.max(0, r)/(rows - 1) : 1;
-        paintRunner(x, y, s*(0.82 + depth*0.46 + j3*0.08), j4*6, ang, false, ts, 0, false,
-                    fit);
+        paintRunner(x, y, s*(PILE.sizeBase + depth*PILE.sizeDepth + j3*PILE.sizeJit),
+                    j4*6, ang, false, ts, 0, false, fit);
         ctx.restore();
       }
     }
+    } finally { _bodyOnly = 0; }
   }
 
   // ---------- The victory sequence ----------------------------------------
@@ -7733,6 +7946,7 @@
                      : (b && (b.done || b.stars) ? "Replay Chapter " : "Play Chapter ") + (idx + 1));
     winNextQuilt(nx, idx);
     el.classList.add("show");
+    const fd = document.getElementById("winfade"); if (fd) fd.classList.add("show");
     const top = document.getElementById("wintop");
     if (top) {
       // Built on the way in rather than in the markup, and rebuilt EVERY time: the cog takes
@@ -7762,7 +7976,7 @@
       const si = document.querySelector("#win-shop .wt-ico");
       if (si) {
         si.textContent = "";
-        si.appendChild(coinChip(19));
+        si.appendChild(coinChip(26));       // ...and the same coin, at the shop's own size
         const n = document.createElement("span"); n.className = "n"; n.textContent = wallet.tiles;
         si.appendChild(n);
       }
@@ -7772,6 +7986,7 @@
   }
   function hideWinUI() {
     const el = document.getElementById("winui"); if (el) el.classList.remove("show");
+    const fd = document.getElementById("winfade"); if (fd) fd.classList.remove("show");
     const top = document.getElementById("wintop"); if (top) top.classList.remove("show");
     stopAtom();
   }
@@ -7913,6 +8128,12 @@
         ctx.fillStyle = cols[k % cols.length];
         ctx.fillRect(x + (k % q)*qs - 0.5, y + Math.floor(k/q)*qs - 0.5, qs + 1, qs + 1);
       }
+      // ...and the paper over it, the same grain every other surface in the game wears. A
+      // chapter on this map is a TILE — it is the thing you are about to stand on, drawn small —
+      // and it was the one flat-printed surface in a game where everything else is on paper.
+      // Inside the grey filter with the quilt, so an unreached chapter's paper is drained along
+      // with its colours rather than staying bright over a tile that has gone quiet.
+      grainFill(x, y, w, w, TILE.bodyGrain);
       ctx.restore();
       ctx.restore();
       // The chapter's NUMBER, on every square you have been let into. Without them the pan from
@@ -8765,6 +8986,7 @@
     // lands ON a pile is a body sitting on it. Drawn behind, the heap closes over his head and
     // only the legs are left out in the air, which is the picture.
     else drawRunnerAndPile(ts);                   // "cue" included: standing, about to go
+    drawSpill();                                  // ...and whatever he was carrying, leaving
     drawHazards(ts);
     // Coins last of everything on the board. They hover off the surface, so a saw or a
     // block passing over one used to swallow it and the player would never know it was there.
@@ -8783,6 +9005,7 @@
       const d = state.drag;
       drawFreeTile(d.sx + camX - d.grabDX, d.sy + camY - d.grabDY, ts, true);
     }
+    drawCharmFx(ts);                              // ...and the shouting charms over the lot
     ctx.restore();
 
     // Off-screen indicators (screen space): the exit, and any key not yet taken. Shown only
@@ -8966,34 +9189,45 @@
   function drawMagnetField(ts) {
     if (!powerActive("magnet")) return;
     const rp = visualAt(state.runIdx + state.runT);
-    const cxm = rp.x, cym = rp.y - cell*0.3, R = MAGNET_CELLS * cell;
+    const px = rp.x, py = rp.y - cell*0.3;
+    const R = MAGNET.radius*cell, hole = MAGNET.hole*cell;
+    const n = Math.max(1, Math.round(MAGNET.grid)), q = cell/n;
+    const MID = rgbOf(MAGNET_TONE.mid), RIM = rgbOf(MAGNET_TONE.rim);
+    const rings = Math.max(1, Math.round(MAGNET.rings)), band = Math.max(1e-3, MAGNET.band*R);
+    // Where each ring has got to, worked out once rather than per square: they are the same
+    // few radii for the whole field, and a square only has to ask how near it is to one.
+    const at = [];
+    for (let i = 0; i < rings; i++) {
+      const u = ((ts / Math.max(1, MAGNET.ms)) + i/rings) % 1;
+      // In as it leaves the rim, out as it lands, so nothing pops into or out of being.
+      at.push({ rad: R*(1 - u), life: Math.pow(Math.sin(Math.PI*u), MAGNET.ease) });
+    }
+    const c0 = Math.max(0, Math.floor((px - R)/cell)), c1 = Math.min(COLS-1, Math.floor((px + R)/cell));
+    const r0 = Math.max(0, Math.floor((py - R)/cell)), r1 = Math.min(ROWS-1, Math.floor((py + R)/cell));
     ctx.save();
-    // a wash under it all, so the reach still reads as an AREA between the discs
-    ctx.globalAlpha = 0.12; ctx.fillStyle = "#ff6d6d";
-    ctx.beginPath(); ctx.arc(cxm, cym, R, 0, Math.PI*2); ctx.fill();
-    // Shaded discs rather than drawn rings. An outline is a hard edge travelling across the
-    // board, which reads as a boundary; a disc that is brightest at its rim and clear in the
-    // middle reads as something closing IN, which is the whole idea.
-    for (let i = 0; i < MAGNET_RINGS; i++) {
-      // u runs 0 at the rim to 1 at him. Evenly spread, so one leaves as another arrives.
-      const u = ((ts / MAGNET_RING_MS) + i / MAGNET_RINGS) % 1;
-      const rad = R * (1 - u);
-      if (rad < cell*0.05) continue;
-      // in as it leaves the rim, out as it lands, so nothing ever pops into or out of being
-      // Brighter, and the bright part is a narrower band at the rim — spreading the same ink
-      // from 55% of the radius outward made a soft blob, where keeping it near the edge reads
-      // as a ring closing in. Nearly white at the leading edge so it holds up over gold track.
-      const a = 0.72 * Math.pow(Math.sin(Math.PI*u), 0.55);
-      const g = ctx.createRadialGradient(cxm, cym, rad*0.72, cxm, cym, rad);
-      g.addColorStop(0,    "rgba(255,157,157,0)");
-      g.addColorStop(0.55, "rgba(255,140,140," + (a*0.40).toFixed(4) + ")");
-      g.addColorStop(0.88, "rgba(255,190,190," + a.toFixed(4) + ")");
-      g.addColorStop(1,    "rgba(255,236,236," + (a*0.80).toFixed(4) + ")");
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(cxm, cym, rad, 0, Math.PI*2); ctx.fill();
+    for (let cc = c0; cc <= c1; cc++) for (let rr = r0; rr <= r1; rr++) {
+      const x = cx(cc), y = cy(rr);
+      for (let gy = 0; gy < n; gy++) for (let gx = 0; gx < n; gx++) {
+        const sx = x + (gx + 0.5)*q - px, sy = y + (gy + 0.5)*q - py;
+        const d = Math.hypot(sx, sy);
+        if (d > R || d < hole) continue;          // the reach, and the quiet he stands in
+        let a = MAGNET.wash;
+        for (const g of at) {
+          if (g.rad < hole) continue;             // it has arrived; it is not a ring any more
+          const k = 1 - Math.abs(d - g.rad)/band;
+          if (k > 0) a = Math.max(a, MAGNET.wash + (MAGNET.ringA - MAGNET.wash)*k*g.life);
+        }
+        if (a <= 0.01) continue;
+        const chq = MAGNET.chequer >= 0.5 && ((gx + gy) & 1);
+        const base = chq ? MID : RIM;
+        ctx.globalAlpha = a;
+        ctx.fillStyle = "rgba(" + base[0] + "," + base[1] + "," + base[2] + ",0.94)";
+        ctx.fillRect(x + gx*q, y + gy*q, q + 0.5, q + 0.5);
+      }
     }
     ctx.restore();
   }
+
   // the coin as a flat badge, for the HUD and the shop — no float, no shine, just the shape
   function coinGlyph(cxp, cyp, s2) {
     const h = s2/2, r = s2*TILE.radius;
@@ -10170,17 +10404,27 @@
   // It is one function of time and index: no particles, no state, nothing to update. Twenty of
   // these on a board cost what one does, and none of them can drift out of step with itself.
   const RIFT = {
-    n:       4,        // squares falling at once
-    drift:   0.17,     // how far off centre they wander, fraction of a cell
-    turns:   0.55,     // turns each one makes on its way in
-    ms:      1500,     // one square's whole fall
-    ease:    1.5,      // slow to leave, then it lets go
-    big:     1.1,      // where a square comes in, as a fraction of a CELL
-    peak:    1,        // its opacity as it lands on the eye
-    tint:    0,        // 0 = black; higher walks a hue round the wheel square to square
-    tremble: 0.014,    // how hard the eye shakes, fraction of a cell
-    hole:    0.6,      // the eye itself, as a fraction of a cell
-    halo:    0.6,      // the bruise the pull leaves in the floor
+    // THE WELL — three black plates, each inset further into the tile space than the last, so
+    // the hole has a floor you can see down to rather than being one flat black square. There
+    // is no colour anywhere in this tile: what a Singularity is, is an absence.
+    p1:      0.75,  // the outermost, as a fraction of the CELL — and the edge of everything
+    p2:      0.60,  // the middle step
+    p3:      0.45,  // the floor, and where a sub-tile lands
+    a1:      0.34,  // how black each plate is
+    a2:      0.60,
+    a3:      1.00,
+    grain:   2.00,  // the paper the whole hole is printed on
+    tremble: 0.010, // how hard the floor shakes, fraction of a cell
+    // THE DRAW — sub-tiles the size of one square of a grid cut across the whole cell,
+    // appearing on the tile's own rim and pulled smoothly in to the middle.
+    grid:    8,     // sub-tiles to a side
+    n:       4,     // how many are being drawn in at once
+    ms:      720,   // one sub-tile's whole journey in
+    ease:    0.75,  // slow to leave the rim, then it lets go
+    peak:    0.22,  // its opacity where it appears; it lands at the floor's own
+    // THE GLOW behind the whole thing — the light the hole has not finished swallowing.
+    glowA:   1.00,  // how bright it is at the middle
+    glowR:   0.71,  // how far it reaches, fraction of a CELL — over 0.5 and it spills past the tile
   };
   const EATEN_MS = 520;                    // how long a swallowed tile takes to go
   function tickEaten(dt) {
@@ -10201,10 +10445,10 @@
       //
       // The shrink is a transform because drawGlass always draws one CELL; scaling also keeps
       // the pane's bevel and its dots in proportion the whole way down.
-      const k2 = 1 - q * (1 - RIFT.hole*0.6);
+      const k2 = 1 - q * (1 - RIFT.p3*0.6);
       ctx.save();
       ctx.translate(x, y);
-      ctx.rotate(q * RIFT.turns * Math.PI*2 * 1.6);        // it goes round harder than the rest
+      ctx.rotate(q * Math.PI * 0.8);                       // a tile goes down turning; the well itself no longer does
       ctx.scale(k2, k2);
       ctx.globalAlpha = 1 - k*k;                            // and out as it gets there
       drawGlass(-cell/2, -cell/2, cell);
@@ -10212,49 +10456,110 @@
       ctx.restore();
     }
   }
-  function drawSingularity(c, r, gone, ts) {
-    const x = cx(c) + cell*0.5, y = cy(r) + cell*0.5;
-    const P = RIFT, a = gone ? 0.35 : 1, t = ts || 0;
-    const eye = cell * P.hole, start = cell * P.big;
-    ctx.save(); ctx.translate(x, y);
-    if (P.halo > 0) {                                   // the pull, as a bruise in the floor
-      const s2 = cell*0.5;
-      const h = ctx.createRadialGradient(0, 0, s2*0.3, 0, 0, s2*1.2);
-      h.addColorStop(0,   "rgba(78,44,128,0)");
-      h.addColorStop(0.6, "rgba(78,44,128," + (P.halo*a) + ")");
-      h.addColorStop(1,   "rgba(78,44,128,0)");
-      ctx.fillStyle = h;
-      ctx.beginPath(); ctx.arc(0, 0, s2*1.2, 0, Math.PI*2); ctx.fill();
+  // Which square on the rim a sub-tile comes in on. Deterministic from its index and which
+  // pass it is on, so there is no state to keep and no two boards can drift apart — but not so
+  // regular that you can see the pattern come round.
+  function riftHash(v) { const f = Math.sin(v * 127.1) * 43758.5453; return f - Math.floor(f); }
+  // ...and the ring of grid squares on that rim, worked out once per grid size and kept.
+  let _rimG = 0, _rim = [];
+  function riftRim(G) {
+    if (G !== _rimG) {
+      _rim = [];
+      for (let gy = 0; gy < G; gy++) for (let gx = 0; gx < G; gx++)
+        if (gx === 0 || gy === 0 || gx === G-1 || gy === G-1) _rim.push([gx, gy]);
+      _rimG = G;
     }
+    return _rim;
+  }
+  function drawSingularity(c, r, gone, ts) {
+    const x = cx(c), y = cy(r), t = ts || 0;
+    const P = RIFT, a = gone ? 0.35 : 1;
+    const R = tileR(cell);
+    // A plate of the well: a square of the cell, centred, cut to the one corner radius.
+    const plate = (f) => rrect(x + (cell - cell*f)*0.5, y + (cell - cell*f)*0.5,
+                               cell*f, cell*f, R);
+    // NOTHING HERE IS STILL, and the smaller a thing is the harder it shakes. The outermost
+    // plate never moves at all; the floor gets the whole of `tremble`; a sub-tile, smaller than
+    // any plate, gets more than the floor does — so the shake is something the well does TO what
+    // it is swallowing rather than a wobble laid over the tile.
+    //
+    // Two sines at frequencies that do not divide into each other, so the shake never repeats
+    // and never falls into a rhythm you could tap along to — and deliberately NOT on the fall's
+    // clock, which is what makes it read as something straining rather than something animating.
+    // The phase offset is what keeps the three from moving as one piece.
+    const span = Math.max(1e-4, P.p1 - P.p3);
+    const jig = (f, ph) => {
+      const amp = cell * P.tremble * clamp((P.p1 - f) / span, 0, 1.5);
+      ctx.translate((Math.sin(t/47 + ph) + Math.sin(t/31.3 + ph)*0.6) * amp,
+                    (Math.cos(t/41 + ph) + Math.cos(t/27.7 + ph)*0.6) * amp);
+    };
+    // THE GLOW, behind everything and drawn BEFORE the clip so it can reach past the tile.
+    // What falls inside gets buried under the three plates; what falls outside is all of it that
+    // escapes. The hot middle is white going to yellow at the edge — the one warm thing on a
+    // tile that is otherwise pure absence, and the reason the hole reads as something being
+    // consumed rather than a square someone forgot to paint.
+    if (P.glowA > 0) {
+      const mx = x + cell*0.5, my = y + cell*0.5, gr = cell * P.glowR;
+      const gg = ctx.createRadialGradient(mx, my, 0, mx, my, gr);
+      gg.addColorStop(0,    "rgba(255,255,238," + (P.glowA * a).toFixed(3) + ")");
+      gg.addColorStop(0.34, "rgba(255,233,152," + (P.glowA * a * 0.70).toFixed(3) + ")");
+      gg.addColorStop(0.68, "rgba(255,196,74,"  + (P.glowA * a * 0.24).toFixed(3) + ")");
+      gg.addColorStop(1,    "rgba(255,180,40,0)");
+      ctx.save(); ctx.fillStyle = gg;
+      ctx.beginPath(); ctx.arc(mx, my, gr, 0, Math.PI*2); ctx.fill(); ctx.restore();
+    }
+    ctx.save();
+    // THE EDGE OF EVERYTHING is the CELL — nothing this tile draws reaches past its own square,
+    // whatever the numbers say, so a Singularity can never touch the tile next door. It is cut
+    // to the same corner every other full-cell piece is cut to, because a round hole in a board
+    // made of squares read as a thing laid on top of the board rather than a thing missing
+    // from it.
+    plate(1); ctx.clip();
+    // The one ink everything on this tile is painted in, set OUT HERE rather than inside the
+    // plates' clip below. A restore() puts back the fill style as well as the transform, so an
+    // ink set inside that clip is gone by the time the sub-tiles are drawn and they come out in
+    // whatever colour the previous tile happened to leave on the canvas — which is exactly what
+    // they did: yellow, or grey, depending on what was drawn before them.
+    ctx.fillStyle = "#07060d";
+    // The plates get a second, tighter clip of their own so the outermost of them stays a hard
+    // square at `p1` while the sub-tiles above are free to use the whole cell.
+    ctx.save(); plate(P.p1); ctx.clip();
+    // THE THREE PLATES, outermost first, each one darkening what is already under it. Stacked
+    // rather than blended: three translucent blacks over the level's own floor give three steps
+    // of depth out of one fill each, and the step edges are what tell you the hole has a bottom.
+    ctx.globalAlpha = a * P.a1; plate(P.p1); ctx.fill();
+    ctx.globalAlpha = a * P.a2;
+    ctx.save(); jig(P.p2, 1.7); plate(P.p2); ctx.fill(); ctx.restore();
+    ctx.globalAlpha = a * P.a3;
+    ctx.save(); jig(P.p3, 3.4); plate(P.p3); ctx.fill(); ctx.restore();
+    ctx.restore();                                      // ...and out of the plates' own clip
+    // THE DRAW. Sub-tiles the size of one square of a grid cut across the WHOLE CELL, appearing
+    // on a square of its rim — the tile's own edge, not the well's — and pulled smoothly in to
+    // the middle. The grid sets where a sub-tile comes from and how big it is; it is not a track
+    // it steps along, so the pull is a slide rather than a march. It arrives at the floor's own
+    // black rather than winking out, so there is no instant at which it is swapped for anything.
+    const G = Math.max(2, Math.round(P.grid));
+    const cs = cell / G;                                // one sub-tile
+    const gx0 = x, gy0 = y;
+    const RIM = riftRim(G);
     for (let i = 0; i < P.n; i++) {
-      const k = ((t / P.ms) + i/P.n) % 1;               // its own place in the fall, looping
-      const e = Math.pow(k, P.ease);
-      const sz = start + (eye - start) * e;
-      if (sz <= eye + 0.5) continue;                    // arrived; the eye has it now
-      const ang = e * P.turns * Math.PI*2 + i*0.4;
-      const off = cell * P.drift * (1 - e);             // closing on centre as it lands
+      const u = t / P.ms + i / P.n;
+      const pass = Math.floor(u);                       // which trip in; it picks a new rim square
+      const e = Math.pow(u - pass, P.ease);
+      const from = RIM[Math.floor(riftHash(i * 7.13 + pass * 3.77) * RIM.length) % RIM.length];
+      const fx = (from[0] + 0.5) + (G*0.5 - (from[0] + 0.5)) * e;   // in grid squares, unrounded
+      const fy = (from[1] + 0.5) + (G*0.5 - (from[1] + 0.5)) * e;
       ctx.save();
-      ctx.globalAlpha = a * P.peak * e;                 // invisible at the rim, solid at the eye
-      ctx.translate(Math.cos(i*2.4 + e*3.1) * off, Math.sin(i*2.4 + e*3.1) * off);
-      ctx.rotate(ang);
-      ctx.fillStyle = P.tint > 0
-        ? "hsl(" + (Math.round((i / P.n) * 360 + e * 40) % 360) + "," +
-          Math.round(P.tint*100) + "%," + (4 + P.tint*7).toFixed(1) + "%)"
-        : "#07060d";
-      ctx.fillRect(-sz/2, -sz/2, sz, sz);
+      ctx.globalAlpha = a * (P.peak + (P.a3 - P.peak) * e);
+      jig(cs / cell, i * 2.1);                          // the smallest things here, so the loosest
+      ctx.fillRect(gx0 + fx*cs - cs*0.5, gy0 + fy*cs - cs*0.5, cs, cs);
       ctx.restore();
     }
-    // The eye, last and over everything — and never still. Two sines at frequencies that do not
-    // divide into each other, so the shake never repeats and never falls into a rhythm you
-    // could tap along to. It is deliberately NOT on the swirl's clock: the two running in
-    // different times is what makes it read as something straining rather than something
-    // being animated.
-    const tr = cell * P.tremble;
-    const jx = (Math.sin(t/47) + Math.sin(t/31.3)*0.6) * tr;
-    const jy = (Math.cos(t/41) + Math.cos(t/27.7)*0.6) * tr;
-    ctx.globalAlpha = a;
-    ctx.fillStyle = "#07060d";
-    ctx.fillRect(-eye/2 + jx, -eye/2 + jy, eye, eye);
+    // One paper over the whole hole, last — the same grain every laid tile is printed on. Under
+    // the plates instead of over them and each step would carry its own texture, which reads as
+    // three sheets rather than one thing with a bottom.
+    ctx.globalAlpha = 1;
+    if (P.grain > 0) grainFill(x, y, cell, cell, P.grain * a);
     ctx.restore();
   }
   // a coloured key-door: two slim riveted panels (styled like the wall tiles) side by side
@@ -11154,13 +11459,6 @@
       moving = false;
       _restFold = sk;                                  // paintRunner folds him, and sinks him
     }
-    // Both charms go down BEFORE he does. The Hammer's line is a thing he throws out in front
-    // of himself, so it has no business being painted across his face — and the line already
-    // starts clear of his body. The Bell's sweep is drawn AROUND him, and keeps a hole at the
-    // middle for him to stand in, so neither of them ever closes over the runner.
-    const swinging = state.roar && state.roar.kind === "finger";
-    if (swinging) drawHammerBeam();
-    else if (state.roar && state.roar.kind === "pulse") drawBellSweep();
     paintRunner(sx, sy, s, phase, angle, moving, ts, (state.status === "squash") ? squashK() : 0,
                 state.status !== "falling");
     runnerShadowClip = null;      // every other caller — the lover, the shop, the opening — has no board
@@ -11207,6 +11505,11 @@
   // him — the hat cut to his head, the finish, the eyes — is already measured off those, so it
   // all comes along. At 1/1/1 they are not there.
   let _formW = 1, _formH = 1, _formLeg = 1;
+  // BODY ONLY — no legs, no kicks, and the body centred on the anchor instead of hanging off a
+  // hip above it. The heap uses it: a pile built out of running figures is mostly leg, and legs
+  // are thin, so however tightly the rows are packed the mound comes out full of holes with a
+  // thicket of shins across them. A body is a square, and squares stack.
+  let _bodyOnly = 0;
   // No light off anything while the heap is being painted. Every glow in the game is additive —
   // a drip's, the halo's — which is right for one runner casting light on the board around him
   // and wrong for fifty of them stacked up, where there is no board around him, only more of
@@ -11298,7 +11601,8 @@
     // and a longer one points him. Crouching further than it stretches, because a landing
     // absorbs and a jump only reaches.
     const legK = 1 + (_leapPose < 0 ? _leapPose*0.50 : _leapPose*0.18);
-    const legL = s*RUNNER.legLen*legK*_formLeg, bodyH = s*RUNNER.bodyH*_formH, bodyW = s*RUNNER.bodyW*_formW;
+    const legL = _bodyOnly ? 0 : s*RUNNER.legLen*legK*_formLeg;
+    const bodyH = s*RUNNER.bodyH*_formH, bodyW = s*RUNNER.bodyW*_formW;
     // soft ground shadow (not an outline). shadowBob ties it to the body's rise, so a
     // high bob can read as him actually leaving the ground rather than sliding along it.
     // Skipped entirely once he is falling — there is no ground left to cast it on, and a
@@ -11354,7 +11658,10 @@
       }
       ctx.restore();
     }
-    const byTop = -(legL + bodyH) - bob;
+    // Standing, the body hangs off the hip above the feet, so the anchor is the GROUND. With no
+    // legs there is no ground to stand on and the anchor becomes the body's own middle — which
+    // is what lets the heap turn one on the spot instead of swinging it round a point below it.
+    const byTop = (_bodyOnly ? -bodyH/2 : -(legL + bodyH)) - bob;
     // A rolling swagger tumbles the whole body about its own centre. It happens before the
     // legs because a curled-up runner rolls WITH his legs; the ground shadow is already down.
     if (w.spin) {
@@ -11487,6 +11794,7 @@
         limbs.push([hx, k && k.x, k && k.y, fx, fy]);
       }
     }
+    if (_bodyOnly) limbs.length = 0;   // ...and with it the kicks: both passes read limbs/feet
     for (const [hx, kx, ky, fx, fy] of limbs) {
       ctx.beginPath(); ctx.moveTo(hx, hipY);
       if (kx != null) ctx.lineTo(kx, ky);
@@ -13759,8 +14067,13 @@
   function coinChip(px){
     const c = document.createElement("canvas");
     c.className = "wallet";
+    // The canvas is drawn at ICON_SCALE for the pixel density, and the COIN has to be scaled
+    // with it — drawn at a bare `px` inside a canvas twice the size it lands at half the size it
+    // was asked for, which is exactly what every wallet chip in the game had been doing. The
+    // 1.32 is the padding: the coin fills about three quarters of the box it is shown in.
     c.width = c.height = Math.round(px * 1.32 * ICON_SCALE);
-    withCanvas(c.getContext("2d"), c.width, 0, 0, () => coinGlyph(c.width/2, c.width/2, px));
+    withCanvas(c.getContext("2d"), c.width, 0, 0,
+               () => coinGlyph(c.width/2, c.width/2, px * ICON_SCALE));
     return c;
   }
   function walletInto(el, label, px){
@@ -13909,13 +14222,17 @@
       // only the scale that is now the game's rather than a number that looked right.
       const rs = Math.round(cell);
       const S  = Math.round(rs / 0.56);
-      const SH = Math.round(rs*1.20);                 // just enough to hold tile + hat
+      // Room ABOVE him, and plenty of it. At 1.20 the frame was cut a hair over his hat, which
+      // was fine for a runner standing still and wrong for everything else the shop sells: a
+      // glow, a tall hat and every one of the leaping swaggers went straight out of the top of
+      // the picture. The tile still wants half a cell below his feet; the rest is headroom.
+      const SH = Math.round(rs*2.05);
       const fig = document.createElement("div"); fig.className = "shop-fig";
       fig.style.width = S + "px";                     // 1:1 with the bitmap — see .shop-fig
       const cv = document.createElement("canvas"); cv.width = S; cv.height = SH;
       fig.appendChild(cv);
       const g = cv.getContext("2d");
-      const foot = { x: S*0.50, y: Math.round(SH*0.52) };   // where his feet stand
+      const foot = { x: S*0.50, y: Math.round(SH*0.72) };   // where his feet stand
 
       // He runs on the spot for as long as the shop is open, rather than being frozen at
       // whatever millisecond the menu happened to be built on. A still frame can't show a
@@ -13952,9 +14269,28 @@
         }
         withCanvas(g, rs, 0, 0, () => paintTrail(tr, pts, rs*RUNNER.bodyH, ts));
       }
-      // ...and the runner himself, drawn by the game, mid-stride so the swagger reads
-      withCanvas(g, rs, 0, 0, () =>
-        paintRunner(foot.x, foot.y, rs, ts/RUNNER.stepMs, 0, true, ts, 0, true));
+      // ...and the runner himself, drawn by the game, mid-stride so the swagger reads.
+      //
+      // The LEAPING swaggers — Pogo, Splits, Flamingo, Bounding, Somersault, Backflip — are
+      // geared to ground covered rather than to a clock, so a figure running on the spot with a
+      // phase off `ts` never leaves the ground: half the swaggers in the shop were being sold by
+      // a picture of Classic. He travels here in the only sense that matters to `applyLeap` —
+      // the tile count climbs — and the phase is read back off the leap-adjusted param, exactly
+      // as the title screen's runner does it, so his legs stay geared to the jump.
+      withCanvas(g, rs, 0, 0, () => {
+        const tiles = (ts/RUNNER.stepMs) / (Math.PI*2*STRIDES_PER_TILE);
+        const param = applyLeap(tiles, true);
+        const n0 = { c:0, r:0 };
+        // His shadow lands on the tile and nowhere else — the same clip the board uses, in this
+        // canvas's own frame.
+        runnerShadowClip = () => {
+          withCanvas(g, rs, foot.x - rs/2, foot.y - rs/2, () =>
+            bodyPath(tileSurface(n0, { c:-1, r:0 }, { c:1, r:0 }), nodeCenter(n0)));
+        };
+        paintRunner(foot.x, foot.y, rs, param * Math.PI*2*STRIDES_PER_TILE, 0, true, ts, 0, true);
+        runnerShadowClip = null;
+        resetLeap();                        // the next thing drawn is not leaping
+      });
       };
       startShopFig(paintFig);
       menuBody.appendChild(fig);
@@ -14436,8 +14772,19 @@
                  onBoard: () => state.talismans.map(t=>({c:t.c,r:t.r,id:t.id,got:t.got})),
                  reset: () => { talUnlocked = new Set(); saveTalismans(talUnlocked); },
                  flash: (id) => flashTalisman(talById(id || TALISMANS[0].id)) },
+    // tiloid-lab.html drives this: how the charms are cut into the faces of the cube, and a
+    // seek into the moment they are on show.
+    sigil: (patch) => { if (patch) Object.assign(SIGIL, patch); return { ...SIGIL }; },
+    tiloid: (patch) => { if (patch) Object.assign(TILOID, patch); return { ...TILOID }; },
     // spare-lab.html drives this: the block, live, on the game's own tiles.
     spare: (patch) => { if (patch) Object.assign(SPARE, patch); return { ...SPARE }; },
+    // crumble-lab.html drives this: the Singularity's mouth, its swirl and its eye.
+    rift: (patch) => { if (patch) Object.assign(RIFT, patch); return { ...RIFT }; },
+    // pile-lab.html drives these: the heap block, and a fall on demand so there is a heap to
+    // look at. `attempts` is what decides how many rows it has, so the lab can set it and see
+    // the mound the tenth death builds without dying ten times.
+    pile: (patch) => { if (patch) Object.assign(PILE, patch); return { ...PILE }; },
+    fall: (n) => { if (n != null && state) state.attempts = n; startFall(false); },
     // icon-lab.html drives this: the icon, drawn with the game's own art at any size.
     icon: (g, S, opts) => drawIconInto(g, S, opts),
     // hammer-lab.html drives these: the beam block, and a swing on demand. The lab fires on a
@@ -14445,6 +14792,13 @@
     // neither of which the game itself would ever do.
     hammer: (patch) => { if (patch) Object.assign(HAMMER, patch); return { ...HAMMER }; },
     bell: (patch) => { if (patch) Object.assign(BELL, patch); return { ...BELL }; },
+    // magnet-lab.html drives these: the field, and the pull switched on by hand. The lab loops
+    // it, so this clears the charm's spent flag — which the game itself would never do.
+    magnet: (patch) => { if (patch) Object.assign(MAGNET, patch); return { ...MAGNET }; },
+    pull: (ms) => { const s = state; if (!s || s.status !== "play") return false;
+                    s.power.used.delete("magnet");
+                    s.power.kind = "magnet"; s.power.t = ms || 3000; s.power.armed = false;
+                    return true; },
     ring: () => { const s = state; if (!s || s.status !== "play") return false;
                   s.power.used.delete("pulse"); s.roar = null;
                   startRoar("pulse"); return true; },
@@ -14559,10 +14913,20 @@
   // Every beat is a timestamp in ms so the whole thing retimes by reading down this one
   // table; nothing below hard-codes a duration.
   const CINE = {
-    line1:  [  400,  1100,  2500,  3050],   // AT FIRST, THERE WAS NOTHING.
-    seed:   [ 3100,  5600],                 // a square shoulders its way in, shaking
+    // It stays up for the whole of the square's wind-up and goes on the FLASH that makes the
+    // Tiloid — the line and the thing it is describing leave together, which is what makes the
+    // flash an answer to it rather than an interruption of it.
+    line1:  [  400,  1100,  5300,  5650],   // LEGEND SPEAKS OF A COSMIC THRUM.
+    // It opens WITH the first line rather than a beat and a half after it. The line is about a
+    // thrum, and the square flickering through level one's colours is the thrum — saying it and
+    // showing it at the same moment is the whole of the opening. The wind-up is longer for it:
+    // `k` runs from here to `born`, so the judder and the quickening flicker now creep up over
+    // five seconds instead of two and a half, which is a rumble rather than a pop.
+    seed:   [  400,  5600],                 // a square shoulders its way in, shaking
     born:   5600,                           // ...and is the Tiloid, on a flash
-    line2:  [ 5750,  6300,  8300,  8850],   // UNTIL THE SACRED TILOID CAME INTO THE VOID.
+    // ...and the next line waits for it to clear. Both are set on the same line of the screen
+    // now, so an overlap is not a cross-fade, it is two sentences printed on top of each other.
+    line2:  [ 5950,  6450,  8300,  8850],   // GIVING RISE TO THE SACRED TILOID.
     spin:   [ 5600, 10250],                 // it turns, and swells toward a sphere and back
     line3:  [ 9000,  9500, 11300, 11850],   // IT UNFOLDED.
     unfold: [ 9700, 11500],                 // six faces peel off the solid and lie flat
@@ -14573,6 +14937,10 @@
     // it grows, so it is off in a corner for most of the move and arrives rather than being
     // approached. Pan, then push in.
     dive:   [19000, 20050, 21800],          // begin the pan | begin the zoom | inside it
+    // The dive used to be silent — the one long move in the story with nothing said over it.
+    // It is the moment the camera stops looking at the Tileverse and goes INTO one of its
+    // chapters, and that turn deserves saying out loud.
+    tundra: [19150, 19650, 21350, 21850],   // AND DEEP IN THE TILED TUNDRA.
     pixels: [20050, 22300],                 // the quilt subdivides with the ZOOM, not the pan
     line5:  [22100, 22600, 27200, 27750],   // ALGORITHMIC EMERGENCE GAVE RISE TO A RUNNER
     // Conway, at LENGTH. This was 800ms — fifteen generations at 55ms each, which is a boil
@@ -14594,13 +14962,14 @@
     end:    38100
   };
   const CINE_LINES = {
-    line1: "AT FIRST, THERE WAS NOTHING.",
-    line2: "UNTIL THE SACRED TILOID CAME INTO THE VOID.",
-    line3: "IT UNFOLDED.",
-    line4: "AND THE TILEVERSE WAS CREATED.",
-    line5: "ALGORITHMIC EMERGENCE\nGAVE RISE TO A RUNNER",
-    line6: "A BEING WITH ONE SACRED PURPOSE...",
-    line7: "TO RUN.",
+    line1:  "LEGEND SPEAKS OF A COSMIC THRUM.",
+    line2:  "GIVING RISE TO THE SACRED TILOID.",
+    line3:  "AN UNFOLDING.",
+    line4:  "AND THE BIRTH OF THE TILEVERSE.",
+    tundra: "AND DEEP IN THE TILED TUNDRA.",
+    line5:  "THE EMERGENCE OF THE RUNNER.",
+    line6:  "A BEING WITH ONE SACRED PURPOSE.",
+    line7:  "TO RUN.",
   };
   // The house card, ahead of everything. It buys its time by OFFSETTING the story rather than
   // by renumbering the table above: drawCine works in story time, `cineT - CINE_LEAD`, which
@@ -14612,30 +14981,31 @@
   // rather than throwing the whole thing away — someone who has seen the Tiloid a dozen times
   // can still want to watch the Tileverse build. Taking a tap past the last one ends it.
   //
-  // The story has ten beats; a tap stops at seven of them. Three are deliberately NOT landing
-  // places — the square rumbling in (3), the unfold (5) and the dive into level one (7). Each
-  // of those is the PAYOFF of the line before it rather than a chapter of its own, so a tap
-  // ought to carry you over it to the next thing that is said, not strand you at the top of an
-  // animation you have just chosen to hurry past. They all still play in full when the show
-  // runs of its own accord.
+  // The story has ten beats; a tap stops at eight of them. Two are deliberately NOT landing
+  // places — the square rumbling in (3) and the unfold (5). Each is the PAYOFF of the line
+  // before it rather than a chapter of its own, so a tap ought to carry you over it to the next
+  // thing that is said, not strand you at the top of an animation you have just chosen to hurry
+  // past. They both still play in full when the show runs of its own accord. The dive used to
+  // be a third of them; now that something is said over it, it is a place to stop.
   const CINE_STEPS = [
     0,                                    //  1. BIG MAN LITTLE presents
-    CINE_LEAD,                            //  2. AT FIRST, THERE WAS NOTHING.
+    CINE_LEAD,                            //  2. LEGEND SPEAKS OF A COSMIC THRUM.
                                           //  3. (the square rumbles in — played, never stopped at)
-    CINE_LEAD + CINE.born     - 320,      //  4. UNTIL THE SACRED TILOID CAME INTO THE VOID.
-                                          //  5. (IT UNFOLDED — played, never stopped at)
-    CINE_LEAD + CINE.line4[0] - 200,      //  6. AND THE TILEVERSE WAS CREATED.
-                                          //  7. (the dive into level one — played, never stopped at)
-    CINE_LEAD + CINE.line5[0] - 300,      //  8. ALGORITHMIC EMERGENCE GAVE RISE TO A RUNNER
-    CINE_LEAD + CINE.line6[0] - 200,      //  9. A BEING WITH ONE SACRED PURPOSE...
+    CINE_LEAD + CINE.born     - 320,      //  4. GIVING RISE TO THE SACRED TILOID.
+                                          //  5. (AN UNFOLDING — played, never stopped at)
+    CINE_LEAD + CINE.line4[0] - 200,      //  6. AND THE BIRTH OF THE TILEVERSE.
+    CINE_LEAD + CINE.tundra[0] - 200,     //  7. AND DEEP IN THE TILED TUNDRA. (the dive, now spoken
+                                          //     over — so it is a place a tap can stop)
+    CINE_LEAD + CINE.line5[0] - 300,      //  8. THE EMERGENCE OF THE RUNNER.
+    CINE_LEAD + CINE.line6[0] - 200,      //  9. A BEING WITH ONE SACRED PURPOSE.
     CINE_LEAD + CINE.line7[0] - 400,      // 10. TO RUN.
   ];
   const CINE_RUN_SPD = 0.0008;      // tiles per ms once he sets off — 0.8 tiles a second
   const CINE_LAY     = 190;         // ms between the two tiles that arrive to start him off
-  // Where along his first tile he is standing when he sets off. A tile is two background squares
-  // wide, so its centre is a seam and the nearest square centre is a quarter of a tile back —
-  // see cineFinalBox. The run picks up from exactly there.
-  const CINE_RUN_U0  = 0.25;
+  // Where along his first tile he is standing when he sets off — the middle of it, which is
+  // where cineFinalBox lands him. The run picks up from exactly there, so the handover from
+  // standing to running costs no movement at all.
+  const CINE_RUN_U0  = 0.50;
   // The size he is, and the size the tiles under him are, from the moment he forms. The dive
   // ends with level one filling the screen, so the tile he was made out of is far too big to
   // stand on; the world comes back to human scale as he arrives in it — and human scale here is
@@ -14728,11 +15098,13 @@
     // he runs on sit exactly two background squares deep, everywhere, for nothing.
     const want = viewH*0.66 - s0/2;
     const gy = y + Math.round((want - y)/h2)*h2;
-    // He forms in the dead CENTRE of a background square, not on the seam between two. The
-    // tile's own middle is a seam — a tile is exactly two squares wide — so the nearest centre
-    // is a quarter of a tile back from it, and that is where he lands: toward the BACK of the
-    // tile he arrives on, with the rest of it ahead of him to run into.
-    const spawnX = viewW/2 - s0/4;
+    // He forms in the MIDDLE of the tile he lands on. That is a seam in the backdrop — a tile is
+    // exactly two background squares wide — and he used to be set a quarter-tile back from it so
+    // that he formed on a square's own centre instead. It cost him the middle of his own tile to
+    // buy an alignment nothing can see now that the pixels he is made of collapse to a point
+    // before he appears, and a runner standing at the back edge of the tile he has just been
+    // given reads as having been put down beside it.
+    const spawnX = viewW/2;
     const spawnY = y + (Math.floor((viewH*0.34 - y)/h2) + 0.5)*h2;
     return { x, y, n, size, q: h2, groundY: gy + s0/2, spawnX, spawnY };
   }
@@ -14786,21 +15158,52 @@
   // Nine flat colours on a 4x4 lattice of corners — the same quilt a Tileverse tile wears,
   // painted into whatever shape the cinematic has bent it into. One routine serves the folded
   // cube and the flat tile alike, which is what lets a face MORPH from one into the other.
-  function cinePanel(pts, idx, alpha, shade){
+  // Any CSS colour as three channels, resolved by the browser and remembered. The chapter
+  // palettes are hsl() strings and a charm's colour is a hex, and mixing one into the other
+  // needs both in the same units.
+  const _colBuf = document.createElement("canvas").getContext("2d");
+  const _colMemo = new Map();
+  function toRGB(c) {
+    let v = _colMemo.get(c); if (v) return v;
+    _colBuf.fillStyle = "#000"; _colBuf.fillStyle = c;
+    const h = _colBuf.fillStyle;
+    v = h[0] === "#" ? [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]
+                     : (h.match(/\d+/g) || [0,0,0]).slice(0,3).map(Number);
+    _colMemo.set(c, v); return v;
+  }
+  const mixCol = (a, b, k) => {
+    const A = toRGB(a), B = toRGB(b);
+    return "rgb(" + Math.round(A[0] + (B[0]-A[0])*k) + "," +
+                    Math.round(A[1] + (B[1]-A[1])*k) + "," +
+                    Math.round(A[2] + (B[2]-A[2])*k) + ")";
+  };
+  // `palette`/`k` mix a second set of colours into the chapter's, cell by cell — the charm's
+  // material coming up over the level's. It is done as ONE panel rather than as a second panel
+  // laid over the first: two stacked panels means two sets of seam-strokes, and every cell
+  // overlapping its neighbours twice reads as a grid of dark lines nobody drew.
+  function cinePanel(pts, idx, alpha, shade, palette, k){
     if (alpha <= 0.004) return;
     const cols = genTheme(themeSeed(String(idx + 1))).colors;
     const N = LEVEL_SWATCH, P = N + 1;
     ctx.save();
     ctx.globalAlpha = alpha;
+    // A single DEVICE pixel. It was 1, which at two device pixels to the CSS pixel grew every
+    // cell by two pixels on each side — so neighbours overlapped by four, and on a cube a few
+    // hundred pixels across that is a visible lattice of overdraw rather than a closed seam.
+    // One device pixel is the least that can cover the hairline, and the least that can overlap.
+    ctx.lineWidth = 1/(dpr || 1);
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
       const a = pts[j*P+i], b = pts[j*P+i+1], c = pts[(j+1)*P+i+1], d = pts[(j+1)*P+i];
       ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
       ctx.lineTo(c[0], c[1]); ctx.lineTo(d[0], d[1]); ctx.closePath();
-      ctx.fillStyle = cols[(j*N + i) % cols.length];
+      const idc = (j*N + i);
+      let col = cols[idc % cols.length];
+      if (palette && k > 0.002) col = mixCol(col, palette[idc % palette.length], Math.min(1, k));
+      ctx.fillStyle = col;
       ctx.fill();
       // ...and stroked in its own colour. Two filled polygons sharing an edge leave a hairline
       // of whatever is behind them, and forty tiles of that reads as a grid nobody drew.
-      ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 1; ctx.stroke();
+      ctx.strokeStyle = col; ctx.stroke();
       if (shade > 0.002) { ctx.fillStyle = "rgba(0,0,0," + shade.toFixed(3) + ")"; ctx.fill(); }
     }
     ctx.restore();
@@ -14812,36 +15215,120 @@
   // and this is the first tile there ever was — the marks belong on it, and they go as it
   // unfolds, because a side that has lain down is a level now and not a charm.
   //
-  // The face is projected as a lattice and an etch is a flat 2D drawing, so it is laid on with
-  // an affine frame built from three of the face's corners — the origin and the two edges — so
-  // that the unit square IS the face and the mark foreshortens with it. Not a homography: a
-  // symbol on a face turned hard away is a little off, but by then that face is dark and a few
-  // pixels wide, and the ones being read are the ones facing us, which are right.
+  // The mark is drawn ONCE into a square of its own and then warped onto the face through the
+  // face's own lattice, cell by cell. It used to be laid on with a single affine frame built
+  // from three of the face's corners, which is exactly the wrong map for a quad in perspective:
+  // a square in an affine frame stays a parallelogram, so the mark sheared away from the face it
+  // was supposed to be cut into and read as a decal floating over it. Nine cells of affine is a
+  // piecewise approximation of the real projection, and at this size it is indistinguishable
+  // from one. Tune it in tiloid-lab.html.
+  const SIGIL = {
+    pad:    0.14,   // the panel's inset from the edge of the face
+    radius: 0.10,   // ...and its corner, as a share of the face
+    panelA: 0.55,   // how dark the panel is cut into the side
+    icon:   0.30,   // the mark's radius, as a share of the face
+    ink:    1.00,   // ...and how strongly it is drawn
+    warp:   1,      // 1 warps through the lattice, 0 is the old single flat frame
+    px:     192,    // the square the mark is drawn into before it is laid on
+  };
+  // Which side of a face we are looking at. A standing solid shows its OUTSIDE, and the outside
+  // of the Tiloid is the charms: each side is the material its badge is made of, with the badge
+  // cut into it. As a side falls it turns over, and what comes up is the INSIDE — a chapter's
+  // own quilt, with nothing written on it. That is the whole story of the unfold in one picture:
+  // the charms are what the solid was, and the levels are what it becomes.
+  const TILOID = {
+    outside: 0,      // 1 dresses the standing solid in the charms' own colours, and cuts their
+                     // marks into it; 0 leaves the sides as the chapters they are about to be
+    turn:    0.50,   // where in a face's fall the side we are looking at changes over
+    blend:   0.22,   // ...and how much of that fall the change takes
+    spread:  12,     // how far the nine squares of a charm's side step either side of its colour
+  };
   const CINE_SIGILS = ["magnet", "finger", "brake", "ankh", "pulse", "mush"];
+  // The charm's colour as a nine-patch, so a side of the solid reads as the same material the
+  // badge is made of rather than as one flat swatch. Stepped either side of the face colour on
+  // the same grid the chapter quilts use, which is what keeps the two kinds of side the same
+  // object seen from different angles.
+  function sigilPanelCols(def) {
+    const base = talFace(def), sp = TILOID.spread;
+    const out = [];
+    for (let j = 0; j < LEVEL_SWATCH; j++) for (let i = 0; i < LEVEL_SWATCH; i++)
+      out.push(shadeHex(base, Math.round((i - 1)*sp + (j - 1)*sp*0.55)));
+    return out;
+  }
+  // One canvas per charm, at SIGIL.px, holding the panel and the mark on a transparent ground.
+  // Rebuilt whenever any of the numbers that decide what is on it change, which is what makes
+  // the lab's sliders live.
+  let _sigilCache = new Map(), _sigilKey = "";
+  function sigilBitmap(def) {
+    const key = [SIGIL.pad, SIGIL.radius, SIGIL.panelA, SIGIL.icon, SIGIL.ink, SIGIL.px].join("|");
+    if (key !== _sigilKey) { _sigilCache = new Map(); _sigilKey = key; }
+    let c = _sigilCache.get(def.id);
+    if (c) return c;
+    const S = Math.max(32, Math.round(SIGIL.px));
+    c = document.createElement("canvas"); c.width = c.height = S;
+    const g = c.getContext("2d");
+    const old = ctx; ctx = g;                       // rrect and the etches draw into `ctx`
+    try {
+      g.save();
+      g.scale(S, S);                                // ...so everything below is in unit space
+      g.lineJoin = "round";
+      const ip = SIGIL.pad;
+      g.fillStyle = "rgba(9,6,20," + SIGIL.panelA + ")";
+      rrect(ip, ip, 1 - 2*ip, 1 - 2*ip, SIGIL.radius); g.fill();
+      g.globalAlpha = SIGIL.ink;
+      g.fillStyle = g.strokeStyle = talFace(def);
+      def.etch(g, 0.5, 0.5, SIGIL.icon);
+      g.restore();
+    } finally { ctx = old; }
+    _sigilCache.set(def.id, c);
+    return c;
+  }
   function cineFaceSigil(f, alpha) {
     if (alpha <= 0.01 || f.face == null) return;
     const def = talById(CINE_SIGILS[f.face % CINE_SIGILS.length]);
     if (!def || !def.etch) return;
-    const P = LEVEL_SWATCH + 1, p0 = f.pts[0], pu = f.pts[P-1], pv = f.pts[P*(P-1)];
+    const P = LEVEL_SWATCH + 1, N = LEVEL_SWATCH;
+    const p0 = f.pts[0], pu = f.pts[P-1], pv = f.pts[P*(P-1)];
     const ax = pu[0]-p0[0], ay = pu[1]-p0[1], bx = pv[0]-p0[0], by = pv[1]-p0[1];
     if (Math.abs(ax*by - ay*bx) < 16) return;          // edge-on: there is no face to write on
+    const img = sigilBitmap(def);
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.transform(ax, ay, bx, by, p0[0], p0[1]);
-    const ip = TAL.panelPad;                           // the same inset the badge's panel takes
-    ctx.fillStyle = "rgba(9,6,20," + TAL.panelA + ")";
-    rrect(ip, ip, 1 - 2*ip, 1 - 2*ip, 0.10); ctx.fill();
-    ctx.lineJoin = "round";
-    ctx.fillStyle = ctx.strokeStyle = talFace(def);
-    def.etch(ctx, 0.5, 0.5, 0.30);
+    if (SIGIL.warp < 0.5) {
+      // The old map, kept so the two can be put side by side: one frame for the whole face.
+      ctx.transform(ax, ay, bx, by, p0[0], p0[1]);
+      ctx.drawImage(img, 0, 0, 1, 1);
+    } else {
+      // ...and the real one: every cell of the face's own lattice gets its own frame, and the
+      // slice of the mark that belongs to it. Drawn a hair over its edges — the seam between two
+      // cells is a hairline of whatever is behind, the same way the quilt's own squares are.
+      for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+        const a = f.pts[j*P+i], b = f.pts[j*P+i+1], d = f.pts[(j+1)*P+i];
+        const cax = b[0]-a[0], cay = b[1]-a[1], cbx = d[0]-a[0], cby = d[1]-a[1];
+        if (Math.abs(cax*cby - cay*cbx) < 0.5) continue;
+        ctx.save();
+        ctx.transform(cax, cay, cbx, cby, a[0], a[1]);
+        ctx.beginPath(); ctx.rect(-0.002, -0.002, 1.004, 1.004); ctx.clip();
+        ctx.drawImage(img, -i, -j, N, N);            // the whole mark, over the whole face
+        ctx.restore();
+      }
+    }
     // ...and it takes the same darkening the quilt under it took, so a charm on a face turned
     // away goes into shadow with the face rather than floating over it, lit.
     if (f.shade > 0.002) {
+      // In the frame the FACE was drawn in — the one `f.pts` are expressed in — which is where
+      // we already are: the warp restores its own transform after every cell.
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.moveTo(f.pts[0][0], f.pts[0][1]);
+      for (const k of [P-1, P*P-1, P*(P-1)]) ctx.lineTo(f.pts[k][0], f.pts[k][1]);
+      ctx.closePath();
       ctx.fillStyle = "rgba(0,0,0," + f.shade.toFixed(3) + ")";
-      rrect(ip, ip, 1 - 2*ip, 1 - 2*ip, 0.10); ctx.fill();
+      ctx.fill();
     }
     ctx.restore();
   }
+
 
   // ---- the quilt, at any resolution, going anywhere -----------------------------------
   // The Tileverse tile wears a LEVEL_SWATCH x LEVEL_SWATCH quilt. Diving into one, that grid
@@ -15113,12 +15600,14 @@
     const T = {}, out = [];
     for (const id of N.order) {
       const F = N.faces[id];
-      if (F.parent < 0) T[id] = p => p;
+      let fold;
+      if (F.parent < 0) { T[id] = p => p; fold = V.uk; }   // the base never turns; it is already down
       else {
         const k  = cineC01((t - CINE.unfold[0] - (F.depth - 1)*each*0.85) / each);
         const th = (Math.PI/2) * (1 - cineSmooth(k));
         const up = T[F.parent];
         T[id] = p => up(cineRot(p, F.hp, F.ha, th));
+        fold = k;
       }
       const map = T[id], raw = [], pts = [];
       let zs = 0;
@@ -15138,7 +15627,8 @@
       const rx2 = nx*V.cry + nz*V.sry;  let rz = -nx*V.sry + nz*V.cry;
       const ry2 = ny*V.crx - rz*V.srx;      rz =  ny*V.srx + rz*V.crx;
       const lam = Math.abs(rx2*-0.22 + ry2*-0.30 + rz*-0.93);
-      out.push({ pts, z: zs/16, idx: F.cloud, shade: (1 - lam)*0.62*(1 - V.uk), num: V.uk, face: F.id });
+      out.push({ pts, z: zs/16, idx: F.cloud, shade: (1 - lam)*0.62*(1 - V.uk), num: V.uk,
+                 face: F.id, fold });
     }
     return out;
   }
@@ -15352,6 +15842,8 @@
     lines.forEach((ln, i) => ctx.fillText(ln, viewW/2, y0 + i*lead));
     ctx.restore();
   }
+
+
   function drawCine(ts){
     const t = cineT - CINE_LEAD;
     // The house card. It gets the bare cosmos to itself — the story has not started, so
@@ -15387,7 +15879,10 @@
     // from the first frame: a near-black field with a few stars in it is a far better picture
     // of "nothing" than a black rectangle, and the story reads better arriving IN a place.
     drawVoid(ts);
-    if (!cineCloud) { cineText(CINE_LINES.line1, viewH*0.46, cineEnv(t, CINE.line1), true); return; }
+    if (!cineCloud) {
+      cineText(CINE_LINES.line1, viewH*0.14, cineEnv(t, CINE.line1));
+      return;
+    }
     const C = cineCloud, cam = cineCam(t);
 
     let shake = 0;                                      // the arrivals punch the frame
@@ -15474,8 +15969,17 @@
       const mine = t >= CINE.pixels[0] ? C.cells[0] : null;
       for (const f of faces) {
         if (mine && f.idx === 0) continue;
-        cinePanel(f.pts, f.idx, cloudA, f.shade);
-        cineFaceSigil(f, cloudA*(1 - V.uk));       // ...and the charm cut into that side of it
+        // `side` runs 0 while the outside of this face is toward us and 1 once it has turned
+        // over. The charm's material is mixed INTO the chapter's quilt by that much rather than
+        // being a second panel laid over it, so there is one panel on screen however far through
+        // the turn we are — and the charm's mark rides the same number.
+        const side = TILOID.outside < 0.5 ? 1
+          : cineC01(((f.fold == null ? V.uk : f.fold) - (TILOID.turn - TILOID.blend/2)) /
+                    Math.max(0.001, TILOID.blend));
+        const def = f.face != null ? talById(CINE_SIGILS[f.face % CINE_SIGILS.length]) : null;
+        cinePanel(f.pts, f.idx, cloudA, f.shade,
+                  def ? sigilPanelCols(def) : null, 1 - side);
+        cineFaceSigil(f, cloudA * (1 - side));     // ...and the charm cut into that side of it
       }
       ctx.restore();
 
@@ -15531,10 +16035,27 @@
       const home = t >= CINE.dive[2];
       const R = home ? { bx:0, by:0, bw:viewW, bh:viewH } : { bx, by, bw:box, bh:box };
       const base = { ...R, ox:bx, oy:by, idx:0, tx:bx, ty:by, tileS:box, mix:k*0.85 };
-      if (xf < 1) cineQuiltPixels({ ...base, q:qC, mix:0, alpha:1 });
-      cineQuiltPixels({ ...base, q, alpha:xf, ts });
-      // ...and on that ground, the squares that walk in and become him.
-      if (t >= CINE.gather[0] && home) {
+      // Once we are home, the backdrop is CHAPTER ONE'S OWN — drawn by the game's own routine,
+      // from level one's own theme, at the very patch size it uses in play. The dive's field is
+      // a picture of a tile being subdivided, which is the right picture for the journey and the
+      // wrong one to arrive at: it kept inventing colours out of the palette that the chapter
+      // itself never shows, and the runner spent the last of the story standing on a ground that
+      // was not quite the ground he was about to run on. It cross-fades over a second, so the
+      // handover is a settling rather than a cut.
+      const arrive = home ? cineC01((t - CINE.dive[2]) / 1000) : 0;
+      if (arrive > 0) drawBackground(ts, genTheme(themeSeed("1")), false, "drift", CINE_RUN_TILE());
+      if (arrive < 1) {
+        ctx.save();
+        ctx.globalAlpha = 1 - arrive;
+        if (xf < 1) cineQuiltPixels({ ...base, q:qC, mix:0, alpha:1 });
+        cineQuiltPixels({ ...base, q, alpha:xf, ts });
+        ctx.restore();
+      }
+      // ...and on that ground, the squares that walk in and become him. Bounded at BOTH ends:
+      // the gather is over the instant he is standing there, and anything of it still on screen
+      // after that is a leftover rather than a part of him — a handful of light blue squares,
+      // exactly one background patch each, sitting in the quilt for the rest of the show.
+      if (t >= CINE.gather[0] && t < CINE.gather[1] && home) {
         const M = cineMoteSwarm(F);
         paintMotes(ctx, M.list, M.home, t - CINE.gather[0],
                    { ox:F.x, oy:F.y, w:F.q, col: lookItem("drip").body || RUNNER.body,
@@ -15554,9 +16075,9 @@
       // tile lifting off the back and flying to the front. That cycle already keeps exactly two
       // tiles ahead of him forever, so there is nothing to lay by hand once it has the wheel.
       const running = t > CINE.run;
-      // He does not start the path at its beginning: he is already a quarter of the way across
-      // his first tile, because that is where he landed. Starting from zero would jerk him back
-      // to the tile's leading edge on the frame he sets off.
+      // He does not start the path at its beginning: he is already halfway across his first
+      // tile, because that is where he landed. Starting from zero would jerk him back to the
+      // tile's leading edge on the frame he sets off.
       const u = running ? CINE_RUN_U0 + (t - CINE.run) * CINE_RUN_SPD : 0;
       // Path cell (0,0) is laid exactly where the plinth is, so the tile he landed on IS the
       // first tile of the path and the handover costs no movement at all.
@@ -15618,7 +16139,19 @@
         paintIntroRunner(introCellAt, u, m, ts, "cine", s0);
       } else {
         clearIntroWake("cine");                  // he has not run anywhere yet
-        paintRunner(FB.spawnX, cineMix(spawnY, groundY, fk*fk), s0, 0, 0, false, ts, 0);
+        // His shadow is cut to the tile that has just arrived under him, the same way the board
+        // and the title screen cut theirs — and until that tile arrives he has no shadow at all,
+        // because he is in mid-air over nothing. It used to fall on the quilt behind him the
+        // whole way down, which read as him sliding down a wall rather than dropping.
+        const landed = t >= CINE.plinth;
+        runnerShadowClip = landed ? () => {
+          withCanvas(ctx, m.s, m.x0, m.row0Y, () => {
+            const n0 = introCellAt(0);
+            bodyPath(tileSurface(n0, introCellAt(-1), introCellAt(1)), nodeCenter(n0));
+          });
+        } : null;
+        paintRunner(FB.spawnX, cineMix(spawnY, groundY, fk*fk), s0, 0, 0, false, ts, 0, landed);
+        runnerShadowClip = null;
       }
       ctx.globalAlpha = 1;
 
@@ -15642,10 +16175,11 @@
       }
     }
 
-    cineText(CINE_LINES.line1, viewH*0.46, cineEnv(t, CINE.line1), true);
+    cineText(CINE_LINES.line1, viewH*0.14, cineEnv(t, CINE.line1));
     cineText(CINE_LINES.line2, viewH*0.14, cineEnv(t, CINE.line2));
     cineText(CINE_LINES.line3, viewH*0.14, cineEnv(t, CINE.line3));
     cineText(CINE_LINES.line4, viewH*0.14, cineEnv(t, CINE.line4));
+    cineText(CINE_LINES.tundra, viewH*0.14, cineEnv(t, CINE.tundra));
     cineText(CINE_LINES.line5, viewH*0.14, cineEnv(t, CINE.line5));
     cineText(CINE_LINES.line6, viewH*0.14, cineEnv(t, CINE.line6));
     cineText(CINE_LINES.line7, viewH*0.14, cineEnv(t, CINE.line7));

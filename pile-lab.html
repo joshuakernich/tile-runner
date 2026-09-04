@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta http-equiv="Cache-Control" content="no-store"/>
+<title>Tile Runner — Pile Lab</title>
+<style>
+  :root{ --bg:#12102a; --panel:#1b1838; --line:#2b2850; --ink:#cfe9ff; --accent:#ff8f6d; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:10px 14px;border-bottom:1px solid var(--line);
+         display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;}
+  header h1{font-size:15px;margin:0 12px 0 0;font-weight:700;letter-spacing:.5px;}
+  #status{font-size:12px;opacity:.8;}
+  .app{display:grid;grid-template-columns:290px minmax(0,1fr);gap:14px;padding:14px;align-items:start;}
+  .rail{position:sticky;top:14px;display:flex;flex-direction:column;gap:12px;
+        max-height:calc(100vh - 28px);overflow:auto;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;}
+  .card h2{font-size:11px;letter-spacing:1px;opacity:.55;margin:0 0 8px;
+           font-weight:700;text-transform:uppercase;}
+  .row{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:12px;}
+  .row label{flex:0 0 84px;opacity:.85;}
+  .row input[type=range]{flex:1;min-width:0;accent-color:var(--accent);}
+  .row output{flex:0 0 46px;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent);}
+  button{background:#241f45;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+         padding:8px 12px;cursor:pointer;font:inherit;font-size:12px;width:100%;}
+  button:hover{border-color:var(--accent);}
+  button.prim{background:var(--accent);color:#2a1004;font-weight:700;border:none;}
+  .presets{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+  .presets button{padding:7px 0;font-size:11px;}
+  .deaths{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+  .deaths button{padding:7px 0;font-size:11px;}
+  .hint{font-size:11px;line-height:1.5;opacity:.65;}
+  .stage{display:flex;flex-direction:column;gap:8px;align-items:center;min-width:0;}
+  iframe{width:100%;max-width:520px;height:78vh;border:1px solid var(--line);
+         border-radius:12px;background:#000;display:block;}
+  .legend{font-size:11px;opacity:.7;line-height:1.6;max-width:520px;}
+  code{color:var(--accent);}
+  .warn{color:#ffd24a;}
+  textarea{width:100%;height:210px;background:#0d0b22;color:var(--ink);border:1px solid var(--line);
+           border-radius:8px;padding:8px;font:inherit;font-size:11px;line-height:1.5;resize:vertical;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Pile Lab</h1>
+  <span id="status">booting the game…</span>
+</header>
+
+<div class="app">
+  <aside class="rail">
+    <div class="card">
+      <h2>The profile</h2>
+      <div class="row"><label>peak</label><input id="shape" type="range" min="0" max="1" step="0.01" value="1.00"><output id="shapeOut">1.00</output></div>
+      <div class="row"><label>sharpness</label><input id="gamma" type="range" min="0.05" max="1.50" step="0.01" value="0.33"><output id="gammaOut">0.33</output></div>
+      <p class="hint">At <b>peak</b> 0 the heap is a straight-sided triangle — every row two
+        bodies narrower than the one below, which is what it always was. At 1 the silhouette
+        follows a Lorentzian: bodies are lost slowly at the bottom and then all at once near the
+        top, so it is a spire standing out of a long low skirt rather than a cone.
+        <b>sharpness</b> is the curve's half-width at half its height, as a share of the base's —
+        small is a needle with wide tails, large is a broad dome. The slider crossfades between
+        the two shapes, so anything in between is reachable.</p>
+    </div>
+
+    <div class="card">
+      <h2>How it is stacked</h2>
+      <div class="row"><label>rows</label><input id="rows" type="range" min="1" max="16" step="1" value="10"><output id="rowsOut">10</output></div>
+      <div class="row"><label>rows max</label><input id="rowsMax" type="range" min="1" max="20" step="1" value="8"><output id="rowsMaxOut">8</output></div>
+      <div class="row"><label>across</label><input id="stepX" type="range" min="0.04" max="0.60" step="0.01" value="0.13"><output id="stepXOut">0.13</output></div>
+      <div class="row"><label>up</label><input id="stepY" type="range" min="0.04" max="0.60" step="0.01" value="0.16"><output id="stepYOut">0.16</output></div>
+      <div class="row"><label>skirt</label><input id="skirt" type="range" min="0" max="14" step="1" value="0"><output id="skirtOut">0</output></div>
+      <div class="row"><label>summit at</label><input id="frame" type="range" min="0.20" max="1.20" step="0.01" value="0.34"><output id="frameOut">0.34</output></div>
+      <div class="row"><label>base past</label><input id="sink" type="range" min="0" max="3" step="0.05" value="0.00"><output id="sinkOut">0.00</output></div>
+      <p class="hint">Rows, each two bodies narrower than the one below it, stacked and offset
+        like brickwork — the triangle is the structure, not luck. <b>rows</b> is the heap at your
+        FIRST fall; it gains one every three attempts up to <b>rows max</b>, and the base widens
+        to match so it still comes to a point. <b>across</b> and <b>up</b> are the spacing, in
+        fractions of a cell: <i>this is the gapless knob</i> — take them below the body's own
+        width and height and the bodies overlap into a solid mass. <b>skirt</b> is how many
+        full-width rows carry on below the base and off the bottom of the frame, so the mountain
+        has no visible underside.
+        <br><br>Two things decide where in the frame it sits, and the lower of them wins.
+        <b>summit at</b> puts the peak that far down the view; <b>base past</b> pushes the bottom
+        row that many cells beyond the foot of the screen. With the <b>skirt</b> at 0 the base IS
+        the bottom of the mound, so it is <b>base past</b> that keeps it running off the edge
+        rather than floating above it — turn it up if you ever see sky underneath.</p>
+    </div>
+
+    <div class="card">
+      <h2>The bodies</h2>
+      <div class="row"><label>at the top</label><input id="sizeBase" type="range" min="0.20" max="2.00" step="0.01" value="0.94"><output id="sizeBaseOut">0.94</output></div>
+      <div class="row"><label>deeper</label><input id="sizeDepth" type="range" min="0" max="1.50" step="0.01" value="0.44"><output id="sizeDepthOut">0.44</output></div>
+      <div class="row"><label>variation</label><input id="sizeJit" type="range" min="0" max="0.60" step="0.01" value="0.08"><output id="sizeJitOut">0.08</output></div>
+      <div class="row"><label>wander ↔</label><input id="jitX" type="range" min="0" max="0.50" step="0.01" value="0.10"><output id="jitXOut">0.10</output></div>
+      <div class="row"><label>wander ↕</label><input id="jitY" type="range" min="0" max="0.50" step="0.01" value="0.08"><output id="jitYOut">0.08</output></div>
+      <div class="row"><label>hue from</label><input id="hue0" type="range" min="0" max="359" step="1" value="174"><output id="hue0Out">174</output></div>
+      <div class="row"><label>hue span</label><input id="hueSpan" type="range" min="0" max="360" step="1" value="360"><output id="hueSpanOut">360</output></div>
+      <div class="row"><label>saturation</label><input id="sat" type="range" min="0" max="1" step="0.01" value="0.17"><output id="satOut">0.17</output></div>
+      <div class="row"><label>lightness</label><input id="light" type="range" min="0.10" max="0.95" step="0.01" value="0.69"><output id="lightOut">0.69</output></div>
+      <div class="row"><label>light span</label><input id="lightSpan" type="range" min="0" max="1" step="0.01" value="0.28"><output id="lightSpanOut">0.28</output></div>
+      <div class="row"><label>hats</label><input id="hats" type="range" min="0" max="1" step="1" value="0"><output id="hatsOut">0</output></div>
+      <p class="hint">A body is one flat <b>hue</b> off the wheel and nothing else — no drip. The
+        shop's finishes glow, streak, facet and split down the middle, and thirty of those in one
+        heap read as a pile of special effects: the eye goes to the two that are lit instead of
+        to the mound. <b>hue from</b> and <b>hue span</b> cut the wheel down if you want a heap
+        in one family, and at <b>saturation</b> 0 the hue stops mattering altogether and the heap
+        is greys — in which case <b>light span</b> is the whole of the variety, spreading the
+        bodies either side of <b>lightness</b> from near-black to white. <b>hats</b> at 0 takes
+        the hats off too and leaves plain squares.
+        <br><br>Every body is drawn as a SQUARE WITH EYES — no legs, no kicks. A heap made
+        of running figures is mostly leg, and a leg is a thin line, so however tightly the rows
+        were packed the mound came out full of holes with a thicket of shins over them.
+        <b>at the top</b> is a body at the summit and <b>deeper</b> is how much bigger one at the
+        front of the base is; nothing here is in perspective, but that size ramp is the cheapest
+        way to say the peak is further away. <b>wander</b> is how far one may stray from its
+        place — enough to stop the stack looking stamped, and the first thing to turn down if you
+        are chasing gaps.</p>
+    </div>
+
+    <div class="card">
+      <h2>How they lie</h2>
+      <div class="row"><label>head-down</label><input id="upDown" type="range" min="0" max="1" step="0.01" value="0.78"><output id="upDownOut">0.78</output></div>
+      <div class="row"><label>lean</label><input id="tilt" type="range" min="0" max="3.14" step="0.02" value="1.20"><output id="tiltOut">1.20</output></div>
+      <p class="hint"><b>head-down</b> is the share of them lying the way you arrive — head first,
+        off the end of a chapter — and the rest lie any which way so the heap does not come out
+        combed. <b>lean</b> is how far off straight a head-down one may be. With no legs a body
+        turns about its own middle rather than swinging round a point below it, so a lean no
+        longer opens a hole beside it.</p>
+    </div>
+
+    <div class="card">
+      <h2>The cold</h2>
+      <div class="row"><label>starts at</label><input id="coldFrom" type="range" min="0" max="1" step="0.01" value="0.34"><output id="coldFromOut">0.34</output></div>
+      <div class="row"><label>ends at</label><input id="coldTo" type="range" min="0" max="1" step="0.01" value="0.86"><output id="coldToOut">0.86</output></div>
+      <p class="hint">The heap goes cold toward the foot of the screen: the bodies at the front
+        of the base sink into a dark blue and the ones near the summit keep their colour. It is
+        composited onto the BODIES only, so the sky between them stays the sky — painted over the
+        board it turned the pile into a blue rectangle with runners in it.</p>
+    </div>
+
+    <div class="card">
+      <h2>How many deaths in</h2>
+      <div class="deaths">
+        <button data-d="1">1st</button>
+        <button data-d="4">4th</button>
+        <button data-d="7">7th</button>
+        <button data-d="10">10th</button>
+      </div>
+      <p class="hint">The heap grows a row every three attempts, so it is a different mountain on
+        your first fall and your tenth. These stage the fall at that count without making you die
+        there — the scatter is a hash, not a random number, so the heap you get is the heap the
+        game would have built.</p>
+    </div>
+
+    <div class="card">
+      <h2>Somewhere to start</h2>
+      <div class="presets">
+        <button data-p="shipped">shipped</button>
+        <button data-p="gapless">gapless</button>
+        <button data-p="cone">cone</button>
+        <button data-p="needle">needle</button>
+        <button data-p="dome">dome</button>
+        <button data-p="ossuary">ossuary</button>
+      </div>
+      <p class="hint"><b>cone</b> the old mound, straight sides to a point · <b>needle</b> the
+        curve on the graph, a spire out of a long flat skirt · <b>gapless</b> packed until
+        nothing shows through · <b>dome</b> broad rather than sharp · <b>ossuary</b> plain
+        squares, one hue family, no hats.</p>
+    </div>
+
+    <div class="card">
+      <h2>Try it</h2>
+      <button id="again">Fall again</button>
+      <button id="reset" style="margin-top:6px">Reset to the shipped block</button>
+      <button id="restore" style="margin-top:6px">Restore my saved settings</button>
+      <button id="reload" style="margin-top:6px">Reload the game</button>
+    </div>
+
+    <div class="card">
+      <h2>Take it away</h2>
+      <button class="prim" id="copy">Copy PILE block</button>
+      <textarea id="out" readonly style="margin-top:8px"></textarea>
+    </div>
+  </aside>
+
+  <div class="stage">
+    <iframe id="game" src="index.html" title="Tile Runner"></iframe>
+    <p class="legend">
+      The runner is walked off the end of his track and left lying in the heap, on a loop, so the
+      mound is always on screen and always the one the game builds. Everyone in it is somebody
+      who got this far and no further — dressed out of the real shop, a drip and a hat each.
+      <br><br>
+      Nothing here is redrawn. The lab pushes the <code>PILE</code> block straight into the
+      running game through <code>__TR.pile()</code> and stages the fall with
+      <code>__TR.fall()</code>, so what you are looking at is the shipped renderer and not a copy
+      of it that could quietly drift. <span class="warn">This page must be SERVED</span> —
+      <code>file://</code> stops it reading the frame.
+    </p>
+  </div>
+</div>
+
+<script>
+// The lab drives the REAL game in the frame rather than redrawing any of it here — the same
+// rule radius-lab.html follows, and for the same reason: a lab that keeps its own copy of the
+// art is a lab that will one day be tuning something the game no longer draws.
+const $ = id => document.getElementById(id);
+const frame = $("game");
+let W = null;                                  // the game's window, once it is up
+// The game is a PWA with a service worker, and a service worker will happily hand this frame a
+// cached index.html — which means a lab can sit there tuning code the file on disk no longer
+// contains. A unique query per load can't match anything in that cache, so the frame always
+// gets what is actually on disk.
+const GAME_SRC = () => "index.html?lab=" + Date.now();
+
+const KEYS = ["shape","gamma","rows","rowsMax","stepX","stepY","skirt","frame","sink",
+              "sizeBase","sizeDepth","sizeJit","jitX","jitY",
+              "hue0","hueSpan","sat","light","lightSpan","hats",
+              "upDown","tilt","coldFrom","coldTo"];
+const INTS = { rows:1, rowsMax:1, skirt:1, hue0:1, hueSpan:1, hats:1 };
+let deaths = 1;                                // which attempt the staged fall is
+
+// A board he runs off the end of. The heap only exists at the bottom of a FALL, so the lab has
+// to kill him — and the quickest honest way is a stub of track with nothing after it.
+function specimen(){
+  const cols = 5, rows = 7;
+  return { n: 0, name: "PILE", cols, rows, cps: 1.2, intro: [],
+           start: [2, rows-1],
+           init: [[2, rows-2], [2, rows-3]],
+           goal: [cols-1, 0],
+           walls: [], stone: [], platforms: [], doors: [], keys: [],
+           coins: [], talismans: [], singularity: [], crumble: [], blocks: [], hazards: [] };
+}
+
+// Everything on this rail is written down as you move it and put back when you come back. A
+// tuning page you have to set up again every time you open it is a tuning page you stop opening
+// — and the settings you are part way through are worth more than the ones already shipped.
+// The presets are known starting points; "Restore" is YOUR last state.
+const SAVE_KEY = "tilerunner:pile-lab";
+function save(){ try { localStorage.setItem(SAVE_KEY, JSON.stringify(values())); } catch (e) {} }
+// `preferKept` is what the Restore BUTTON passes. A Reset applies the shipped block, and
+// applying anything writes the autosave — so by the time you reach for Restore your own tune is
+// no longer in it. Reset sets it aside first; the button looks there before the autosave, and
+// clears it once it has handed it back. Page load never looks there: after a Reset the page
+// should come up shipped rather than undo itself.
+function restore(preferKept){
+  let raw = null;
+  try { raw = (preferKept && localStorage.getItem(SAVE_KEY + ":kept")) || localStorage.getItem(SAVE_KEY); }
+  catch (e) {}
+  let v = null;
+  try { v = JSON.parse(raw || "null"); } catch (e) {}
+  if (!v || typeof v !== "object") return false;
+  for (const k of KEYS) if (typeof v[k] === "number") $(k).value = v[k];
+  if (preferKept) { try { localStorage.removeItem(SAVE_KEY + ":kept"); } catch (e) {} }
+  return true;
+}
+
+function values(){ const o = {}; for (const k of KEYS) o[k] = +$(k).value; return o; }
+function push(){
+  if (!W || !W.__TR || !W.__TR.pile) return;
+  try {
+    W.__TR.pile(values()); save();
+    $("status").textContent = "live — the heap at death " + deaths;
+    refreshOut();
+  } catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+}
+// Build the board, let him run off the end of it, and push the block once he is in the air —
+// the heap is drawn on the way down as well as once he has landed, so there is nothing to wait
+// for beyond the fall having started.
+function stage(){
+  if (!W || !W.__TR || !W.__TR.demo) return;
+  try {
+    W.__TR.ui.closeMenu();
+    W.__TR.demo(specimen(), "PILE");
+    clearCards();
+  } catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+}
+// A chapter opens with its card and, the first time, a card per mechanic it introduces. They
+// are the right thing in the game and the wrong thing here — the heap is the whole point of
+// this page — so the lab taps through them as they come, then pushes him off the end.
+function clearCards(){
+  let tries = 0;
+  (function tick(){
+    if (!W || !W.__TR) return;
+    const D = W.document;
+    const poem = D.getElementById("poem");
+    if (poem && poem.classList.contains("show"))
+      poem.dispatchEvent(new W.PointerEvent("pointerdown", { bubbles:true, pointerId: 1 }));
+    const mech = D.getElementById("mechpop");
+    if (mech && mech.classList.contains("show"))
+      mech.dispatchEvent(new W.MouseEvent("click", { bubbles:true }));
+    const s = W.__TR.state();
+    if (s && s.status === "play") { W.__TR.fall(deaths); setTimeout(push, 60); return; }
+    if (++tries > 400) return;      // ~24s: long enough to outlast the flag peek and the pan
+    setTimeout(tick, 60);
+  })();
+}
+
+// The block, written the way it is written in index.html, so it can be pasted over the top of
+// the real one without reformatting.
+function refreshOut(){
+  const v = values(), f = (n, d) => (+n).toFixed(d);
+  const L = (k, val, note) => "    " + (k + ":").padEnd(10) + String(val).padEnd(7) +
+                              (note ? "// " + note : "") + "\n";
+  $("out").value =
+    "  const PILE = {\n" +
+    L("shape",     f(v.shape,2) + ",",         "0 = straight-sided triangle, 1 = a peak with long tails") +
+    L("gamma",     f(v.gamma,2) + ",",         "how sharp that peak is — half-width at half height, share of the base") +
+    L("hue0",      Math.round(v.hue0) + ",",   "where on the colour wheel the bodies start") +
+    L("hueSpan",   Math.round(v.hueSpan) + ",","...and how much of it they use") +
+    L("sat",       f(v.sat,2) + ",",           "how strong those colours are — 0 is grey, and greys are what this is") +
+    L("light",     f(v.light,2) + ",",         "the middle of the range they are lit at") +
+    L("lightSpan", f(v.lightSpan,2) + ",",     "...and how far either side of it they spread, which is the variety") +
+    L("hats",      Math.round(v.hats) + ",",   "1 puts the hats back on; 0 leaves plain squares with eyes") +
+    L("rows",      Math.round(v.rows) + ",",   "rows at the first fall; one more every few attempts, up to `rowsMax`") +
+    L("rowsMax",   Math.round(v.rowsMax) + ",", "") +
+    L("stepX",     f(v.stepX,2) + ",",         "how far apart they sit across, as a fraction of a CELL") +
+    L("stepY",     f(v.stepY,2) + ",",         "...and up") +
+    L("jitX",      f(v.jitX,2) + ",",          "how far one may wander off its place, across") +
+    L("jitY",      f(v.jitY,2) + ",",          "...and up") +
+    L("sizeBase",  f(v.sizeBase,2) + ",",      "a body at the SUMMIT, as a fraction of a cell") +
+    L("sizeDepth", f(v.sizeDepth,2) + ",",     "...and how much bigger one at the front of the base is") +
+    L("sizeJit",   f(v.sizeJit,2) + ",",       "how much bodies vary among themselves") +
+    L("upDown",    f(v.upDown,2) + ",",        "the share of them lying head-down, the way you arrive") +
+    L("tilt",      f(v.tilt,2) + ",",          "how far off straight a head-down body may lean, in radians") +
+    L("skirt",     Math.round(v.skirt) + ",",  "rows carried on below the base, off the bottom of the frame") +
+    L("frame",     f(v.frame,2) + ",",         "where down the view the SUMMIT sits, as a share of it") +
+    L("sink",      f(v.sink,2) + ",",          "...and how far the BASE is pushed past the foot of it, in cells") +
+    L("coldFrom",  f(v.coldFrom,2) + ",",      "where down the screen the heap starts sinking into the dark") +
+    L("coldTo",    f(v.coldTo,2) + ",",        "...and how far under it goes by the foot of it") +
+    "  };";
+}
+
+const PRESETS = {
+  shipped: { shape:1.00, gamma:0.33, rows:10, rowsMax:8, stepX:0.13, stepY:0.16, jitX:0.10, jitY:0.08,
+             sizeBase:0.94, sizeDepth:0.44, sizeJit:0.08, upDown:0.78, tilt:1.20, skirt:0, frame:0.34, sink:0.00,
+             coldFrom:0.34, coldTo:0.86, hue0:174, hueSpan:360, sat:0.17, light:0.69, lightSpan:0.28, hats:0 },
+  // the old mound: straight sides, coming to a point
+  cone:    { shape:0.00, gamma:0.35, rows:7, rowsMax:10, stepX:0.22, stepY:0.23, jitX:0.10, jitY:0.08,
+             sizeBase:0.82, sizeDepth:0.46, sizeJit:0.08, upDown:0.58, tilt:1.20,
+             skirt:5, frame:0.62, sink:0.60, coldFrom:0.34, coldTo:0.86, hue0:0, hueSpan:360, sat:0, light:0.70, lightSpan:0.55, hats:0 },
+  // the curve on the graph: a needle out of a long flat skirt
+  needle:  { shape:1.00, gamma:0.16, rows:11, rowsMax:14, stepX:0.16, stepY:0.18, jitX:0.04, jitY:0.04,
+             sizeBase:0.76, sizeDepth:0.42, sizeJit:0.08, upDown:0.60, tilt:1.00,
+             skirt:6, frame:0.62, sink:0.60, coldFrom:0.34, coldTo:0.86, hue0:0, hueSpan:360, sat:0, light:0.70, lightSpan:0.55, hats:0 },
+  // packed until nothing shows through
+  gapless: { shape:1.00, gamma:0.42, rows:9, rowsMax:12, stepX:0.13, stepY:0.13, jitX:0.02, jitY:0.02,
+             sizeBase:0.90, sizeDepth:0.50, sizeJit:0.04, upDown:0.62, tilt:0.90,
+             skirt:6, frame:0.62, sink:0.60, coldFrom:0.34, coldTo:0.86, hue0:0, hueSpan:360, sat:0, light:0.70, lightSpan:0.55, hats:0 },
+  // a broad dome rather than a spire
+  dome:    { shape:1.00, gamma:0.95, rows:6, rowsMax:9, stepX:0.20, stepY:0.18, jitX:0.06, jitY:0.05,
+             sizeBase:0.92, sizeDepth:0.50, sizeJit:0.06, upDown:0.60, tilt:1.00,
+             skirt:7, frame:0.62, sink:0.60, coldFrom:0.28, coldTo:0.92, hue0:0, hueSpan:360, sat:0, light:0.70, lightSpan:0.55, hats:0 },
+  // plain squares with eyes, one hue family, no hats
+  ossuary: { shape:1.00, gamma:0.28, rows:13, rowsMax:16, stepX:0.10, stepY:0.11, jitX:0.03, jitY:0.03,
+             sizeBase:0.52, sizeDepth:0.30, sizeJit:0.06, upDown:0.66, tilt:1.30,
+             skirt:8, frame:0.62, sink:0.60, coldFrom:0.36, coldTo:0.88,
+             hue0:186, hueSpan:70, sat:0.34, light:0.70, lightSpan:0.30, hats:0 },
+};
+function apply(p){ for (const k of KEYS) { $(k).value = p[k]; sync(k); } push(); }
+function sync(k){
+  $(k + "Out").textContent = INTS[k] ? $(k).value : (+$(k).value).toFixed(2);
+}
+
+// The game boots into its title screen and its own rAF loop; wait for the debug surface to
+// exist rather than guessing at a delay.
+function attach(){
+  W = frame.contentWindow;
+  let tries = 0;
+  (function wait(){
+    if (W.__TR && W.__TR.demo && W.__TR.pile && W.__TR.fall) {
+      // Every mechanic marked as already seen, so the board comes up bare.
+      try { W.localStorage.setItem("tilerunner:seen", JSON.stringify(W.__TR.mechs())); } catch (e) {}
+      stage(); return;
+    }
+    if (++tries > 200) {
+      $("status").innerHTML = '<span class="warn">the game never came up — is this being SERVED? ' +
+        'file:// blocks the frame from being read.</span>';
+      return;
+    }
+    setTimeout(wait, 50);
+  })();
+}
+frame.addEventListener("load", attach);
+frame.src = GAME_SRC();
+
+KEYS.forEach(k => $(k).addEventListener("input", () => { sync(k); push(); }));
+document.querySelectorAll(".presets button").forEach(b =>
+  b.onclick = () => { apply(PRESETS[b.dataset.p]); $("status").textContent = "preset: " + b.dataset.p; });
+document.querySelectorAll(".deaths button").forEach(b =>
+  b.onclick = () => { deaths = +b.dataset.d; stage(); });
+
+$("again").onclick = stage;
+// Reset goes back to the SHIPPED block; Restore goes back to yours. A Reset that quietly threw
+// away a half-finished tune would make the pair useless, so the autosave is copied aside before
+// it is overwritten and Restore can still reach it afterwards.
+$("reset").onclick = () => {
+  try {
+    const had = localStorage.getItem(SAVE_KEY);
+    if (had) localStorage.setItem(SAVE_KEY + ":kept", had);
+  } catch (e) {}
+  apply(PRESETS.shipped);
+  $("status").textContent = "the shipped block, put back — Restore still has what you had";
+};
+$("restore").onclick = () => {
+  if (!restore(true)) { $("status").innerHTML = '<span class="warn">nothing saved yet</span>'; return; }
+  KEYS.forEach(sync); push();
+  $("status").textContent = "your saved settings, put back";
+};
+$("reload").onclick = () => { frame.src = GAME_SRC(); };
+$("copy").onclick = () => {
+  navigator.clipboard.writeText($("out").value).then(
+    () => $("status").textContent = "PILE block copied — paste it over the one in index.html",
+    () => $("status").innerHTML = '<span class="warn">clipboard refused — copy it out of the box below</span>');
+};
+// He lies in the heap for PILE_REST and then the words come up and the board is taken away —
+// which is right in the game and useless here, where the heap is the whole subject. The lab
+// holds the landing clock just short of that, so he stays lying in it and the mound is on
+// screen the whole time you are tuning. Nothing is frozen: the settle still runs, the heap is
+// still redrawn every frame, it simply never gets to the end of its rest.
+const HOLD_LAND = 1200;
+setInterval(() => {
+  if (!W || !W.__TR || !W.__TR.state) return;
+  const st = W.__TR.state();
+  if (!st) return;
+  if (st.status === "falling" && st.fall && st.fall.land != null && st.fall.land > HOLD_LAND)
+    st.fall.land = HOLD_LAND;
+  // ...and if it got away anyway — a reload, an ankh, a stray tap — put him back up the track.
+  if (st.status === "lose" || st.status === "win") stage();
+}, 400);
+
+const restored = restore(false);
+KEYS.forEach(sync);
+refreshOut();
+if (restored) $("status").textContent = "your last settings, put back";
+</script>
+</body>
+</html>

@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta http-equiv="Cache-Control" content="no-store"/>
+<title>Tile Runner — Magnet Lab</title>
+<style>
+  :root{ --bg:#12102a; --panel:#1b1838; --line:#2b2850; --ink:#cfe9ff; --accent:#ff8c8c; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:10px 14px;border-bottom:1px solid var(--line);
+         display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;}
+  header h1{font-size:15px;margin:0 12px 0 0;font-weight:700;letter-spacing:.5px;}
+  #status{font-size:12px;opacity:.8;}
+  .app{display:grid;grid-template-columns:280px minmax(0,1fr);gap:14px;padding:14px;align-items:start;}
+  .rail{position:sticky;top:14px;display:flex;flex-direction:column;gap:12px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;}
+  .card h2{font-size:11px;letter-spacing:1px;opacity:.55;margin:0 0 8px;
+           font-weight:700;text-transform:uppercase;}
+  .row{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:12px;}
+  .row label{flex:0 0 86px;opacity:.85;}
+  .row input[type=range]{flex:1;min-width:0;accent-color:var(--accent);}
+  .row output{flex:0 0 46px;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent);}
+  button{background:#233;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+         padding:8px 12px;cursor:pointer;font:inherit;font-size:12px;width:100%;}
+  button:hover{border-color:var(--accent);}
+  button.prim{background:#1c6;color:#04120a;font-weight:700;border:none;}
+  button.on{border-color:var(--accent);color:var(--accent);}
+  .opts{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+  .presets{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+  .presets button{padding:7px 0;font-size:11px;}
+  .hint{font-size:11px;line-height:1.5;opacity:.65;}
+  .stage{display:flex;flex-direction:column;gap:8px;align-items:center;min-width:0;}
+  iframe{width:100%;max-width:520px;height:78vh;border:1px solid var(--line);
+         border-radius:12px;background:#000;display:block;}
+  .legend{font-size:11px;opacity:.7;line-height:1.6;max-width:520px;}
+  code{color:var(--accent);}
+  .warn{color:#ffd24a;}
+  textarea{width:100%;height:180px;background:#0d0b22;color:var(--ink);border:1px solid var(--line);
+           border-radius:8px;padding:8px;font:inherit;font-size:11px;line-height:1.5;resize:vertical;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Magnet Lab</h1>
+  <span id="status">booting the game…</span>
+</header>
+
+<div class="app">
+  <aside class="rail">
+    <div class="card">
+      <h2>The pull</h2>
+      <button id="pull">Pull now</button>
+      <button id="loop" class="on" style="margin-top:6px">Pulling on a loop</button>
+      <p class="hint">The loop switches the Lodestone on every few seconds and puts the coins
+        back when it lets go, so the reach is always about to be tested. Turn it off to hold a
+        still frame, or wind <b>one trip</b> right up to watch a single ring crawl in.</p>
+    </div>
+
+    <div class="card">
+      <h2>The reach</h2>
+      <div class="row"><label>radius</label><input id="radius" type="range" min="0.5" max="5" step="0.05" value="2.50"><output id="radiusOut">2.50</output></div>
+      <div class="row"><label>quiet</label><input id="hole" type="range" min="0" max="1.5" step="0.05" value="0.60"><output id="holeOut">0.60</output></div>
+      <div class="row"><label>grid</label><input id="grid" type="range" min="1" max="8" step="1" value="4"><output id="gridOut">4</output></div>
+      <p class="hint"><b>radius</b> is what it draws <i>and</i> what it pulls at — one number, so
+        the picture cannot lie about what it took. <b>quiet</b> is the hole he stands in.
+        <b>grid</b> is squares per tile each way; at 4 the field is drawn out of quarter-tiles,
+        the same grain as the Hammer and the Bell.</p>
+    </div>
+
+    <div class="card">
+      <h2>The rings</h2>
+      <div class="row"><label>one trip</label><input id="ms" type="range" min="120" max="4000" step="20" value="840"><output id="msOut">840</output></div>
+      <div class="row"><label>rings</label><input id="rings" type="range" min="1" max="6" step="1" value="1"><output id="ringsOut">1</output></div>
+      <div class="row"><label>thickness</label><input id="band" type="range" min="0.04" max="1" step="0.01" value="0.13"><output id="bandOut">0.13</output></div>
+      <div class="row"><label>life</label><input id="ease" type="range" min="0.15" max="3" step="0.05" value="3.00"><output id="easeOut">3.00</output></div>
+      <p class="hint">Each ring starts at the rim and falls to the middle in <b>one trip</b>;
+        <b>rings</b> are spread evenly along that journey, so one leaves as another arrives.
+        <b>life</b> shapes how it fades in at the rim and out as it lands — below 1 it is up to
+        full almost at once and holds, above 1 it swells and dies away.</p>
+    </div>
+
+    <div class="card">
+      <h2>The weight</h2>
+      <div class="row"><label>ring</label><input id="ringA" type="range" min="0" max="1" step="0.01" value="0.56"><output id="ringAOut">0.56</output></div>
+      <div class="row"><label>wash</label><input id="wash" type="range" min="0" max="1" step="0.01" value="0.07"><output id="washOut">0.07</output></div>
+      <div class="opts">
+        <button data-chq="1">chequered</button>
+        <button data-chq="0">one tone</button>
+      </div>
+      <p class="hint">A square at the middle of a ring, and the flat <b>wash</b> the whole reach
+        sits under so it reads as an AREA rather than as two hoops travelling through nothing.
+        Set the wash to zero for rings alone.</p>
+    </div>
+
+    <div class="card">
+      <h2>Somewhere to start</h2>
+      <div class="presets">
+        <button data-p="shipped">shipped</button>
+        <button data-p="tide">tide</button>
+        <button data-p="ripple">ripple</button>
+        <button data-p="grip">grip</button>
+        <button data-p="halo">halo</button>
+        <button data-p="single">single</button>
+      </div>
+      <p class="hint"><b>tide</b> one slow thick ring · <b>ripple</b> four thin fast ones ·
+        <b>grip</b> hard rings, no wash · <b>halo</b> mostly wash, rings barely there ·
+        <b>single</b> one ring, one trip, nothing else.</p>
+    </div>
+
+    <div class="card">
+      <h2>Try it</h2>
+      <button id="coins">Put the coins back</button>
+      <button id="restore" style="margin-top:6px">Restore my saved settings</button>
+      <button id="reboard" style="margin-top:6px">Rebuild the board</button>
+      <button id="reload" style="margin-top:6px">Reload the game</button>
+    </div>
+
+    <div class="card">
+      <h2>Take it away</h2>
+      <button class="prim" id="copy">Copy MAGNET block</button>
+      <textarea id="out" readonly style="margin-top:8px"></textarea>
+    </div>
+  </aside>
+
+  <div class="stage">
+    <iframe id="game" title="Tile Runner"></iframe>
+    <p class="legend">
+      Coins are scattered in a grid around the runner, in and out of reach, and he crawls so he
+      stays put. What the Lodestone takes is what it drew over: the radius is one number and the
+      pull reads the same one, so the ring you are tuning is the boundary the coins obey.
+      <br><br>
+      Nothing is redrawn: the lab pushes the <code>MAGNET</code> block into the running game
+      through <code>__TR.magnet()</code> and switches the charm on through <code>__TR.pull()</code>,
+      so this is the shipped renderer and not a copy of it that could drift.
+      <span class="warn">This page must be SERVED</span> — <code>file://</code> stops it reading
+      the frame.
+    </p>
+  </div>
+</div>
+
+<script>
+// Same rule as the other labs: drive the REAL game rather than keeping a copy of the art here.
+const $ = id => document.getElementById(id);
+const frame = $("game");
+let W = null;
+// A service worker will happily hand this frame a cached index.html, which would mean tuning
+// code the file on disk no longer contains. A unique query can't match anything in that cache.
+const GAME_SRC = () => "index.html?lab=" + Date.now();
+let looping = true;
+
+const KEYS = ["radius", "hole", "grid", "ms", "rings", "band", "ease", "ringA", "wash"];
+let chequer = 1;
+
+// Everything on this rail is written down as you move it and put back when you come back.
+const SAVE_KEY = "tilerunner:magnet-lab";
+function save(){
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(values())); } catch (e) {}
+}
+function restore(){
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) {}
+  if (!v || typeof v !== "object") return false;
+  for (const k of KEYS) if (typeof v[k] === "number") $(k).value = v[k];
+  if (typeof v.chequer === "number") chequer = v.chequer;
+  return true;
+}
+
+// Coins on a lattice around him, near and far, so the boundary is a thing you can watch being
+// obeyed rather than a number you have to believe. He crawls up the middle of his own chain.
+const COIN_STEP = 1;
+function specimen(){
+  const cols = 9, rows = 13, mid = 4, base = rows - 5;
+  const coins = [];
+  for (let dc = -4; dc <= 4; dc += COIN_STEP)
+    for (let dr = -4; dr <= 4; dr += COIN_STEP) {
+      const c = mid + dc, r = base + dr;
+      if (c < 0 || r < 0 || c >= cols || r >= rows) continue;
+      if (c === mid && r >= rows - 5) continue;        // not on his own track
+      coins.push([c, r]);
+    }
+  return { n: 0, name: "MAGNET", cols, rows, cps: 0.4, intro: [],
+           start: [mid, rows - 1],
+           init: [[mid, rows-2], [mid, rows-3], [mid, rows-4], [mid, rows-5]],
+           goal: [mid, 0],
+           walls: [], stone: [], platforms: [], doors: [], keys: [],
+           coins, talismans: [], crumble: [], blocks: [], hazards: [] };
+}
+
+// A level's own `cps` is a starting pace the game re-derives on build, so it has to be written
+// onto the live clock — and rewritten, because every cleared tile ramps it back up.
+const CRAWL = 0.02;
+function crawl(){
+  if (!W || !W.__TR || !W.__TR.state) return;
+  const s = W.__TR.state();
+  if (!s || s.status !== "play") return;
+  if (Math.abs(s.cpsNow - CRAWL) < 1e-6) return;
+  s.cpsNow = CRAWL;
+  s.msPerCell = 1000 / CRAWL;
+}
+
+function values(){
+  const o = { chequer };
+  for (const k of KEYS) o[k] = +$(k).value;
+  return o;
+}
+function push(){
+  if (!W || !W.__TR || !W.__TR.magnet) return;
+  try {
+    W.__TR.magnet(values()); crawl(); save();
+    $("status").textContent = "live — " + (+$("radius").value).toFixed(2) + " tiles, " +
+      $("rings").value + " ring" + (+$("rings").value === 1 ? "" : "s") + " every " + $("ms").value + "ms";
+    refreshOut();
+  } catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+}
+function reboard(){
+  if (!W || !W.__TR || !W.__TR.demo) return;
+  try {
+    // The game boots behind a menu on its way to the Tileverse, and a paused game never leaves
+    // the flag peek, so the board would come up and sit there.
+    W.__TR.ui.closeMenu();
+    W.__TR.demo(specimen(), "MAGNET"); clearCards(); setTimeout(push, 60);
+  }
+  catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+}
+// A chapter opens with its card and, the first time, a card per mechanic it introduces. They are
+// the right thing in the game and the wrong thing here, so the lab taps them away.
+function clearCards(){
+  let tries = 0;
+  (function tick(){
+    if (!W || !W.__TR) return;
+    const D = W.document;
+    const poem = D.getElementById("poem");
+    if (poem && poem.classList.contains("show"))
+      poem.dispatchEvent(new W.PointerEvent("pointerdown", { bubbles:true, pointerId: 1 }));
+    const mech = D.getElementById("mechpop");
+    if (mech && mech.classList.contains("show"))
+      mech.dispatchEvent(new W.MouseEvent("click", { bubbles:true }));
+    const s = W.__TR.state();
+    if (s && s.status === "play") { push(); return; }
+    if (++tries > 400) return;      // ~24s: long enough to outlast the flag peek and the pan
+    setTimeout(tick, 60);
+  })();
+}
+// Coins back on the lattice without rebuilding the level — the board keeps its place, the pull
+// gets something to take again.
+function coinsBack(){
+  if (!W || !W.__TR || !W.__TR.state) return;
+  const s = W.__TR.state(); if (!s || s.status !== "play") return;
+  s.coinFly.length = 0;
+  for (const [c, r] of specimen().coins) s.coinCells.add(c + "," + r);
+}
+function pull(){
+  if (!W || !W.__TR || !W.__TR.pull) return;
+  coinsBack();
+  W.__TR.pull(2600);
+}
+
+// The block, written the way it is written in index.html, so it can be pasted over the top of
+// the real one without reformatting.
+function refreshOut(){
+  const v = values(), f = (n, d) => (+n).toFixed(d), i = n => Math.round(+n);
+  $("out").value =
+    "  const MAGNET = {\n" +
+    "    radius:  " + f(v.radius, 2) + ",   // the reach, in tiles\n" +
+    "    hole:    " + f(v.hole, 2)   + ",   // the quiet at the middle, where he stands\n" +
+    "    grid:    " + i(v.grid)      + ",      // squares per tile, each way\n" +
+    "    rings:   " + i(v.rings)     + ",      // how many rings are on their way in at any moment\n" +
+    "    ms:      " + i(v.ms)        + ",    // one ring's trip from the rim to him\n" +
+    "    band:    " + f(v.band, 2)   + ",   // how thick a ring is, as a share of the radius\n" +
+    "    ease:    " + f(v.ease, 2)   + ",   // its life: how it comes in at the rim and how it lands at the middle\n" +
+    "    ringA:   " + f(v.ringA, 2)  + ",   // a square at the middle of a ring\n" +
+    "    wash:    " + f(v.wash, 2)   + ",   // the flat wash over the whole reach, so it reads as an AREA and not a ring\n" +
+    "    chequer: " + v.chequer      + ",      // alternates the two tones square by square\n" +
+    "  };";
+}
+
+const PRESETS = {
+  shipped: { radius:2.50, hole:0.60, grid:4, ms:840,  rings:1, band:0.13, ease:3.00, ringA:0.56, wash:0.07, chequer:1 },
+  tide:    { radius:2.50, hole:0.30, grid:4, ms:1800, rings:1, band:0.55, ease:0.80, ringA:0.90, wash:0.14, chequer:1 },
+  ripple:  { radius:2.50, hole:0.25, grid:4, ms:520,  rings:4, band:0.10, ease:0.45, ringA:1.00, wash:0.06, chequer:1 },
+  grip:    { radius:2.50, hole:0.30, grid:4, ms:700,  rings:3, band:0.16, ease:0.35, ringA:1.00, wash:0.00, chequer:0 },
+  halo:    { radius:2.50, hole:0.30, grid:4, ms:1400, rings:2, band:0.40, ease:1.40, ringA:0.45, wash:0.28, chequer:1 },
+  single:  { radius:2.50, hole:0.35, grid:4, ms:1100, rings:1, band:0.22, ease:0.55, ringA:1.00, wash:0.00, chequer:0 },
+};
+function apply(p){
+  for (const k of KEYS) { $(k).value = p[k]; sync(k); }
+  setChequer(p.chequer);
+  push();
+}
+function sync(k){
+  const v = +$(k).value;
+  $(k + "Out").textContent = (k === "ms" || k === "grid" || k === "rings") ? v : v.toFixed(2);
+}
+function setChequer(v){
+  chequer = v;
+  document.querySelectorAll("[data-chq]").forEach(b => b.classList.toggle("on", +b.dataset.chq === v));
+}
+
+// The game boots into its title screen and its own rAF loop; wait for the debug surface to exist
+// rather than guessing at a delay.
+function attach(){
+  W = frame.contentWindow;
+  let tries = 0;
+  (function wait(){
+    if (W.__TR && W.__TR.demo && W.__TR.magnet && W.__TR.pull) {
+      try { W.localStorage.setItem("tilerunner:seen", JSON.stringify(W.__TR.mechs())); } catch (e) {}
+      reboard(); return;
+    }
+    if (++tries > 200) {
+      $("status").innerHTML = '<span class="warn">the game never came up — is this being SERVED? ' +
+        'file:// blocks the frame from being read.</span>';
+      return;
+    }
+    setTimeout(wait, 50);
+  })();
+}
+frame.addEventListener("load", attach);
+frame.src = GAME_SRC();
+
+KEYS.forEach(k => $(k).addEventListener("input", () => { sync(k); push(); }));
+// A wheel over a slider scrolls the rail; it does not drag the value.
+document.querySelectorAll("input[type=range]").forEach(el =>
+  el.addEventListener("wheel", (e) => { e.preventDefault(); window.scrollBy(0, e.deltaY); },
+                      { passive: false }));
+document.querySelectorAll("[data-chq]").forEach(b =>
+  b.onclick = () => { setChequer(+b.dataset.chq); push(); });
+document.querySelectorAll(".presets button").forEach(b =>
+  b.onclick = () => { apply(PRESETS[b.dataset.p]); $("status").textContent = "preset: " + b.dataset.p; });
+
+$("pull").onclick = pull;
+$("loop").onclick = () => {
+  looping = !looping;
+  $("loop").classList.toggle("on", looping);
+  $("loop").textContent = looping ? "Pulling on a loop" : "Loop off — pull with the button";
+};
+$("coins").onclick = coinsBack;
+$("restore").onclick = () => {
+  if (!restore()) { $("status").innerHTML = '<span class="warn">nothing saved yet</span>'; return; }
+  setChequer(chequer); KEYS.forEach(sync); push();
+  $("status").textContent = "your saved settings, put back";
+};
+$("reboard").onclick = reboard;
+$("reload").onclick = () => { frame.src = GAME_SRC(); };
+$("copy").onclick = () => {
+  navigator.clipboard.writeText($("out").value).then(
+    () => $("status").textContent = "MAGNET block copied — paste it over the one in index.html",
+    () => $("status").innerHTML = '<span class="warn">clipboard refused — copy it out of the box below</span>');
+};
+
+// The demo runs itself: a pull every few seconds with the coins put back first, the pace held
+// down, and the board rebuilt if the runner walks off the end of his chain.
+setInterval(() => {
+  if (!W || !W.__TR || !W.__TR.state) return;
+  const st = W.__TR.state();
+  if (!st) return;
+  if (st.status === "lose" || st.status === "win") { reboard(); return; }
+  if (st.status !== "play") return;
+  crawl();
+  if (looping && !(st.power && st.power.kind === "magnet" && st.power.t > 0)) pull();
+}, 3200);
+
+const restored = restore();
+setChequer(chequer);
+KEYS.forEach(sync);
+refreshOut();
+if (restored) $("status").textContent = "your last settings, put back";
+</script>
+</body>
+</html>

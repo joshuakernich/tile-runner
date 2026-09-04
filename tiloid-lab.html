@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta http-equiv="Cache-Control" content="no-store"/>
+<title>Tile Runner — Tiloid Lab</title>
+<style>
+  :root{ --bg:#12102a; --panel:#1b1838; --line:#2b2850; --ink:#cfe9ff; --accent:#7fe0c0; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:10px 14px;border-bottom:1px solid var(--line);
+         display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;}
+  header h1{font-size:15px;margin:0 12px 0 0;font-weight:700;letter-spacing:.5px;}
+  #status{font-size:12px;opacity:.8;}
+  .app{display:grid;grid-template-columns:280px minmax(0,1fr);gap:14px;padding:14px;align-items:start;}
+  .rail{position:sticky;top:14px;display:flex;flex-direction:column;gap:12px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;}
+  .card h2{font-size:11px;letter-spacing:1px;opacity:.55;margin:0 0 8px;
+           font-weight:700;text-transform:uppercase;}
+  .row{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:12px;}
+  .row label{flex:0 0 86px;opacity:.85;}
+  .row input[type=range]{flex:1;min-width:0;accent-color:var(--accent);}
+  .row output{flex:0 0 46px;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent);}
+  button{background:#233;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+         padding:8px 12px;cursor:pointer;font:inherit;font-size:12px;width:100%;}
+  button:hover{border-color:var(--accent);}
+  button.prim{background:#1c6;color:#04120a;font-weight:700;border:none;}
+  button.on{border-color:var(--accent);color:var(--accent);}
+  .opts{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+  .presets{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+  .presets button{padding:7px 0;font-size:11px;}
+  .hint{font-size:11px;line-height:1.5;opacity:.65;}
+  .stage{display:flex;flex-direction:column;gap:8px;align-items:center;min-width:0;}
+  iframe{width:100%;max-width:520px;height:78vh;border:1px solid var(--line);
+         border-radius:12px;background:#000;display:block;}
+  .legend{font-size:11px;opacity:.7;line-height:1.6;max-width:520px;}
+  code{color:var(--accent);}
+  .warn{color:#ffd24a;}
+  textarea{width:100%;height:230px;background:#0d0b22;color:var(--ink);border:1px solid var(--line);
+           border-radius:8px;padding:8px;font:inherit;font-size:11px;line-height:1.5;resize:vertical;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Tiloid Lab</h1>
+  <span id="status">booting the game…</span>
+</header>
+
+<div class="app">
+  <aside class="rail">
+    <div class="card">
+      <h2>The moment</h2>
+      <div class="row"><label>scrub</label><input id="at" type="range" min="5600" max="11800" step="20" value="8200"><output id="atOut">8200</output></div>
+      <button id="hold" class="on">Holding this frame</button>
+      <p class="hint">The whole life of the cube, from the flash that makes it to the last face
+        lying down. <b>Holding</b> keeps the story parked on the frame you have chosen so a
+        slider changes one picture rather than a moving one; let it go and it plays on.</p>
+    </div>
+
+    <div class="card">
+      <h2>The map</h2>
+      <div class="opts">
+        <button data-warp="1">warped</button>
+        <button data-warp="0">flat</button>
+      </div>
+      <p class="hint">A face in perspective is not a parallelogram, and <b>flat</b> — one affine
+        frame for the whole side, which is what this used to do — cannot draw anything but one.
+        The mark sheared off the face it was supposed to be cut into. <b>Warped</b> lays it on
+        through the face's own lattice, a cell at a time.</p>
+    </div>
+
+    <div class="card">
+      <h2>The two sides</h2>
+      <div class="opts">
+        <button data-out="1">charms outside</button>
+        <button data-out="0">chapters only</button>
+      </div>
+      <div class="row"><label>turns at</label><input id="turn" type="range" min="0" max="1" step="0.01" value="0.50"><output id="turnOut">0.50</output></div>
+      <div class="row"><label>over</label><input id="blend" type="range" min="0.02" max="1" step="0.01" value="0.22"><output id="blendOut">0.22</output></div>
+      <div class="row"><label>grain</label><input id="spread" type="range" min="0" max="40" step="1" value="12"><output id="spreadOut">12</output></div>
+      <p class="hint">The standing solid shows its OUTSIDE, and the outside is the charms: each
+        side is the material its badge is made of, with the badge cut into it. As a side falls it
+        turns over and the INSIDE comes up — a chapter's own quilt, with nothing written on it.
+        <b>turns at</b> is how far through that fall the change happens and <b>over</b> is how
+        much of the fall it takes. <b>grain</b> is how far the nine squares of a charm's side
+        step either side of its colour; at zero the side is one flat swatch.</p>
+    </div>
+
+    <div class="card">
+      <h2>The panel</h2>
+      <div class="row"><label>inset</label><input id="pad" type="range" min="0" max="0.4" step="0.005" value="0.14"><output id="padOut">0.14</output></div>
+      <div class="row"><label>corner</label><input id="radius" type="range" min="0" max="0.5" step="0.005" value="0.10"><output id="radiusOut">0.10</output></div>
+      <div class="row"><label>depth</label><input id="panelA" type="range" min="0" max="1" step="0.01" value="0.55"><output id="panelAOut">0.55</output></div>
+      <p class="hint">The panel the mark is pressed into, as a share of the face — how far in
+        from its edge, how round its corner, and how dark it is cut. At <b>depth</b> zero there
+        is no panel at all and the mark sits straight on the quilt.</p>
+    </div>
+
+    <div class="card">
+      <h2>The mark</h2>
+      <div class="row"><label>size</label><input id="icon" type="range" min="0.08" max="0.5" step="0.005" value="0.30"><output id="iconOut">0.30</output></div>
+      <div class="row"><label>ink</label><input id="ink" type="range" min="0.2" max="1" step="0.01" value="1.00"><output id="inkOut">1.00</output></div>
+      <div class="row"><label>drawn at</label><input id="px" type="range" min="48" max="512" step="16" value="192"><output id="pxOut">192</output></div>
+      <p class="hint"><b>drawn at</b> is the square the mark is rendered into before it is laid
+        on the face — its resolution. Too small and it softens on a face turned toward you; there
+        is no gain past the size that face ever occupies on screen.</p>
+    </div>
+
+    <div class="card">
+      <h2>Somewhere to start</h2>
+      <div class="presets">
+        <button data-p="shipped">shipped</button>
+        <button data-p="deep">deep cut</button>
+        <button data-p="plate">plate</button>
+        <button data-p="bare">bare</button>
+        <button data-p="big">big mark</button>
+        <button data-p="old">the old map</button>
+      </div>
+      <p class="hint"><b>deep cut</b> a darker, tighter panel · <b>plate</b> a wide shallow one ·
+        <b>bare</b> no panel, the mark straight on the side · <b>big mark</b> filling the face ·
+        <b>the old map</b> the flat frame, for comparison.</p>
+    </div>
+
+    <div class="card">
+      <h2>Try it</h2>
+      <button id="restore">Restore my saved settings</button>
+      <button id="replay" style="margin-top:6px">Play it from the flash</button>
+      <button id="reload" style="margin-top:6px">Reload the game</button>
+    </div>
+
+    <div class="card">
+      <h2>Take it away</h2>
+      <button class="prim" id="copy">Copy SIGIL block</button>
+      <textarea id="out" readonly style="margin-top:8px"></textarea>
+    </div>
+  </aside>
+
+  <div class="stage">
+    <iframe id="game" title="Tile Runner"></iframe>
+    <p class="legend">
+      The opening cinematic, parked on the cube. Six faces, six charms, in the badges' own
+      language: an inscribed panel with the icon raised out of it in the charm's face colour.
+      They go as the solid unfolds, because a side that has lain down is a level now and not a
+      charm — scrub toward the end to watch them let go.
+      <br><br>
+      Nothing is redrawn: the lab pushes the <code>SIGIL</code> block into the running game
+      through <code>__TR.sigil()</code> and scrubs the story with <code>__TR.cine()</code>, so
+      this is the shipped renderer and not a copy of it that could drift.
+      <span class="warn">This page must be SERVED</span> — <code>file://</code> stops it reading
+      the frame.
+    </p>
+  </div>
+</div>
+
+<script>
+// Same rule as the other labs: drive the REAL game rather than keeping a copy of the art here.
+const $ = id => document.getElementById(id);
+const frame = $("game");
+let W = null;
+// A service worker will happily hand this frame a cached index.html, which would mean tuning
+// code the file on disk no longer contains. A unique query can't match anything in that cache.
+const GAME_SRC = () => "index.html?lab=" + Date.now();
+let holding = true;
+
+// `px` is an integer; everything else is a share of the face.
+const KEYS = ["pad", "radius", "panelA", "icon", "ink", "px"];
+const TKEYS = ["turn", "blend", "spread"];
+let warp = 1, outside = 0;
+
+// Everything on this rail is written down as you move it and put back when you come back.
+const SAVE_KEY = "tilerunner:tiloid-lab";
+function save(){
+  try { localStorage.setItem(SAVE_KEY,
+    JSON.stringify({ ...values(), ...tvalues(), at:+$("at").value })); } catch (e) {}
+}
+function restore(){
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) {}
+  if (!v || typeof v !== "object") return false;
+  for (const k of KEYS.concat(TKEYS)) if (typeof v[k] === "number") $(k).value = v[k];
+  if (typeof v.warp === "number") warp = v.warp;
+  if (typeof v.outside === "number") outside = v.outside;
+  if (typeof v.at === "number") $("at").value = v.at;
+  return true;
+}
+
+function values(){
+  const o = { warp };
+  for (const k of KEYS) o[k] = +$(k).value;
+  return o;
+}
+// The two-sides block is its own thing in the game — it is about the SOLID, not about the mark.
+function tvalues(){
+  const o = { outside };
+  for (const k of TKEYS) o[k] = +$(k).value;
+  return o;
+}
+// CINE_LEAD — the house card's 3300ms — sits in front of the story, and the scrub is in STORY
+// time because that is what the beat table is written in.
+const LEAD = 3300;
+function push(){
+  if (!W || !W.__TR || !W.__TR.sigil) return;
+  try {
+    W.__TR.sigil(values());
+    if (W.__TR.tiloid) W.__TR.tiloid(tvalues());
+    $("status").textContent = "live — " + (warp ? "warped through the lattice" : "one flat frame") +
+      (outside ? ", charms outside" : ", chapters only");
+    refreshOut(); save();
+  } catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+}
+function seek(){
+  if (!W || !W.__TR || !W.__TR.cine) return;
+  try { W.__TR.cine(LEAD + (+$("at").value)); } catch (e) {}
+}
+
+function refreshOut(){
+  const v = values(), tv = tvalues(), f = (n, d) => (+n).toFixed(d), i = n => Math.round(+n);
+  $("out").value =
+    "  const SIGIL = {\n" +
+    "    pad:    " + f(v.pad, 2)    + ",   // the panel's inset from the edge of the face\n" +
+    "    radius: " + f(v.radius, 2) + ",   // ...and its corner, as a share of the face\n" +
+    "    panelA: " + f(v.panelA, 2) + ",   // how dark the panel is cut into the side\n" +
+    "    icon:   " + f(v.icon, 2)   + ",   // the mark's radius, as a share of the face\n" +
+    "    ink:    " + f(v.ink, 2)    + ",   // ...and how strongly it is drawn\n" +
+    "    warp:   " + v.warp         + ",      // 1 warps through the lattice, 0 is the old single flat frame\n" +
+    "    px:     " + i(v.px)        + ",    // the square the mark is drawn into before it is laid on\n" +
+    "  };\n\n" +
+    "  const TILOID = {\n" +
+    "    outside: " + tv.outside      + ",      // 1 dresses the standing solid in the charms' own colours; 0 is the old look\n" +
+    "    turn:    " + f(tv.turn, 2)   + ",   // where in a face's fall the side we are looking at changes over\n" +
+    "    blend:   " + f(tv.blend, 2)  + ",   // ...and how much of that fall the change takes\n" +
+    "    spread:  " + i(tv.spread)    + ",     // how far the nine squares of a charm's side step either side of its colour\n" +
+    "  };";
+}
+
+const PRESETS = {
+  shipped: { pad:0.14, radius:0.10, panelA:0.55, icon:0.30, ink:1.00, px:192, warp:1 },
+  deep:    { pad:0.20, radius:0.06, panelA:0.78, icon:0.26, ink:1.00, px:192, warp:1 },
+  plate:   { pad:0.07, radius:0.22, panelA:0.34, icon:0.32, ink:0.92, px:256, warp:1 },
+  bare:    { pad:0.14, radius:0.10, panelA:0.00, icon:0.34, ink:1.00, px:192, warp:1 },
+  big:     { pad:0.06, radius:0.10, panelA:0.45, icon:0.44, ink:1.00, px:256, warp:1 },
+  old:     { pad:0.14, radius:0.10, panelA:0.55, icon:0.30, ink:1.00, px:192, warp:0 },
+};
+function apply(p){
+  for (const k of KEYS) { $(k).value = p[k]; sync(k); }
+  setWarp(p.warp);
+  if (p.outside != null) setOutside(p.outside);
+  push();
+}
+function sync(k){
+  const v = +$(k).value;
+  $(k + "Out").textContent = (k === "px" || k === "spread") ? v : v.toFixed(2);
+}
+function setOutside(v){
+  outside = v;
+  document.querySelectorAll("[data-out]").forEach(b => b.classList.toggle("on", +b.dataset.out === v));
+}
+function setWarp(v){
+  warp = v;
+  document.querySelectorAll("[data-warp]").forEach(b => b.classList.toggle("on", +b.dataset.warp === v));
+}
+
+// The game boots into its title screen and its own rAF loop; wait for the debug surface to exist
+// rather than guessing at a delay.
+function attach(){
+  W = frame.contentWindow;
+  let tries = 0;
+  (function wait(){
+    if (W.__TR && W.__TR.sigil && W.__TR.cine) {
+      try { W.localStorage.removeItem("tilerunner:cine"); } catch (e) {}
+      push(); seek(); return;
+    }
+    if (++tries > 200) {
+      $("status").innerHTML = '<span class="warn">the game never came up — is this being SERVED? ' +
+        'file:// blocks the frame from being read.</span>';
+      return;
+    }
+    setTimeout(wait, 50);
+  })();
+}
+frame.addEventListener("load", attach);
+frame.src = GAME_SRC();
+
+KEYS.concat(TKEYS).forEach(k => $(k).addEventListener("input", () => { sync(k); push(); }));
+document.querySelectorAll("[data-out]").forEach(b =>
+  b.onclick = () => { setOutside(+b.dataset.out); push(); });
+$("at").addEventListener("input", () => { $("atOut").textContent = $("at").value; seek(); save(); });
+// A wheel over a slider scrolls the rail; it does not drag the value.
+document.querySelectorAll("input[type=range]").forEach(el =>
+  el.addEventListener("wheel", (e) => { e.preventDefault(); window.scrollBy(0, e.deltaY); },
+                      { passive: false }));
+document.querySelectorAll("[data-warp]").forEach(b =>
+  b.onclick = () => { setWarp(+b.dataset.warp); push(); });
+document.querySelectorAll(".presets button").forEach(b =>
+  b.onclick = () => { apply(PRESETS[b.dataset.p]); $("status").textContent = "preset: " + b.dataset.p; });
+
+$("hold").onclick = () => {
+  holding = !holding;
+  $("hold").classList.toggle("on", holding);
+  $("hold").textContent = holding ? "Holding this frame" : "Letting it play";
+  if (holding) seek();
+};
+$("replay").onclick = () => { holding = false; $("hold").classList.remove("on");
+  $("hold").textContent = "Letting it play";
+  if (W && W.__TR && W.__TR.cine) W.__TR.cine(LEAD + 5500); };
+$("restore").onclick = () => {
+  if (!restore()) { $("status").innerHTML = '<span class="warn">nothing saved yet</span>'; return; }
+  setWarp(warp); setOutside(outside); KEYS.concat(TKEYS).forEach(sync);
+  $("atOut").textContent = $("at").value; push(); seek();
+  $("status").textContent = "your saved settings, put back";
+};
+$("reload").onclick = () => { frame.src = GAME_SRC(); };
+$("copy").onclick = () => {
+  navigator.clipboard.writeText($("out").value).then(
+    () => $("status").textContent = "SIGIL block copied — paste it over the one in index.html",
+    () => $("status").innerHTML = '<span class="warn">clipboard refused — copy it out of the box below</span>');
+};
+
+// Parked, unless you have let it go: the story runs on its own clock, so holding a frame means
+// putting it back on that frame. Often enough that it never visibly drifts, rarely enough that
+// it is not fighting the animation for the canvas.
+setInterval(() => { if (holding) seek(); }, 220);
+
+const restored = restore();
+setWarp(warp);
+setOutside(outside);
+KEYS.concat(TKEYS).forEach(sync);
+$("atOut").textContent = $("at").value;
+refreshOut();
+if (restored) $("status").textContent = "your last settings, put back";
+</script>
+</body>
+</html>

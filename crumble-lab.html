@@ -1,204 +1,400 @@
-<!doctype html>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Tile Runner · Crumble Lab</title>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta http-equiv="Cache-Control" content="no-store"/>
+<title>Tile Runner — Singularity Lab</title>
 <style>
-  :root { --panel:#17142b; --line:#2a2450; --ink:#e8e6ff; --dim:#9a94c8; --accent:#7dff6b; }
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { background:#0d0b1a; color:var(--ink); font:13px ui-monospace,Menlo,monospace;
-         display:grid; grid-template-columns:minmax(0,1fr) 290px; gap:14px; padding:14px; min-height:100vh; }
-  h1 { font-size:13px; letter-spacing:2px; text-transform:uppercase; color:var(--dim); margin-bottom:8px; }
-  h2 { font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--dim); margin:12px 0 4px; }
-  canvas#stage { border:1px solid var(--line); border-radius:8px; width:100%; height:auto; display:block; }
-  aside { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px;
-          overflow:auto; max-height:calc(100vh - 28px); }
-  label { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:5px 0; font-size:11px; }
-  input[type=range] { width:140px; }
-  .val { color:var(--accent); min-width:46px; text-align:right; }
-  button { font:inherit; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
-           background:#241f45; color:var(--ink); border:1px solid var(--line); border-radius:6px;
-           padding:7px 9px; cursor:pointer; }
-  button.prim { background:var(--accent); color:#0d2a08; border-color:transparent; }
-  .row { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
-  .note { font-size:10px; line-height:1.5; color:var(--dim); margin-top:10px; }
+  :root{ --bg:#0d0b1a; --panel:#17142b; --line:#2a2450; --ink:#cfe9ff; --accent:#5aa8ff; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:10px 14px;border-bottom:1px solid var(--line);
+         display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;}
+  header h1{font-size:15px;margin:0 12px 0 0;font-weight:700;letter-spacing:.5px;}
+  #status{font-size:12px;opacity:.8;}
+  .app{display:grid;grid-template-columns:290px minmax(0,1fr);gap:14px;padding:14px;align-items:start;}
+  .rail{position:sticky;top:14px;display:flex;flex-direction:column;gap:12px;
+        max-height:calc(100vh - 28px);overflow:auto;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;}
+  .card h2{font-size:11px;letter-spacing:1px;opacity:.55;margin:0 0 8px;
+           font-weight:700;text-transform:uppercase;}
+  .row{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:12px;}
+  .row label{flex:0 0 84px;opacity:.85;}
+  .row input[type=range]{flex:1;min-width:0;accent-color:var(--accent);}
+  .row output{flex:0 0 46px;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent);}
+  button{background:#241f45;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+         padding:8px 12px;cursor:pointer;font:inherit;font-size:12px;width:100%;}
+  button:hover{border-color:var(--accent);}
+  button.prim{background:var(--accent);color:#04122a;font-weight:700;border:none;}
+  .presets{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+  .presets button{padding:7px 0;font-size:11px;}
+  .hint{font-size:11px;line-height:1.5;opacity:.65;}
+  .stage{display:flex;flex-direction:column;gap:8px;align-items:center;min-width:0;}
+  iframe{width:100%;max-width:520px;height:78vh;border:1px solid var(--line);
+         border-radius:12px;background:#000;display:block;}
+  .legend{font-size:11px;opacity:.7;line-height:1.6;max-width:520px;}
+  code{color:var(--accent);}
+  .warn{color:#ffd24a;}
+  textarea{width:100%;height:190px;background:#0d0b22;color:var(--ink);border:1px solid var(--line);
+           border-radius:8px;padding:8px;font:inherit;font-size:11px;line-height:1.5;resize:vertical;}
 </style>
+</head>
+<body>
 
-<main>
-  <h1>Crumble tile — the dark drawn inward</h1>
-  <canvas id="stage" width="880" height="440"></canvas>
-  <div class="row">
-    <button class="prim" id="copy">Copy RIFT block</button>
-    <button id="strip">Filmstrip</button>
-    <button id="restoreBtn">Restore</button>
+<header>
+  <h1>Singularity Lab</h1>
+  <span id="status">booting the game…</span>
+</header>
+
+<div class="app">
+  <aside class="rail">
+    <div class="card">
+      <h2>The well</h2>
+      <div class="row"><label>outer</label><input id="p1" type="range" min="0.40" max="1.00" step="0.01" value="0.75"><output id="p1Out">0.75</output></div>
+      <div class="row"><label>middle</label><input id="p2" type="range" min="0.20" max="1.00" step="0.01" value="0.60"><output id="p2Out">0.60</output></div>
+      <div class="row"><label>floor</label><input id="p3" type="range" min="0.05" max="1.00" step="0.01" value="0.45"><output id="p3Out">0.45</output></div>
+      <div class="row"><label>outer ink</label><input id="a1" type="range" min="0" max="1" step="0.01" value="0.34"><output id="a1Out">0.34</output></div>
+      <div class="row"><label>middle ink</label><input id="a2" type="range" min="0" max="1" step="0.01" value="0.60"><output id="a2Out">0.60</output></div>
+      <div class="row"><label>floor ink</label><input id="a3" type="range" min="0" max="1" step="0.01" value="1.00"><output id="a3Out">1.00</output></div>
+      <div class="row"><label>grain</label><input id="grain" type="range" min="0" max="2" step="0.01" value="2.00"><output id="grainOut">2.00</output></div>
+      <div class="row"><label>tremble</label><input id="tremble" type="range" min="0" max="0.06" step="0.001" value="0.010"><output id="trembleOut">0.010</output></div>
+      <p class="hint">Three black plates, each inset further into the tile than the last, so the
+        hole has a floor you can see down to instead of being one flat square. Each darkens what
+        is already under it — the step edges are what tell you there is a bottom.
+        <b>outer</b> is the edge of the plates; the sub-tiles above them use the whole cell.
+        Either way nothing this tile draws reaches past its own square, whatever you set — a
+        Singularity can never touch the tile next door. <b>grain</b> is one sheet of the game's own paper over the whole hole; put it
+        under the plates instead and each step carries its own texture, which reads as three
+        sheets rather than one thing with a bottom. <b>tremble</b> is how hard the
+        <i>floor</i> shakes; everything else is scaled off it by size, so the smaller a shape is
+        the harder it moves and the outer plate never moves at all. A sub-tile, smaller than any
+        plate, gets more of it than the floor does. It runs on its own clock, deliberately not
+        the draw's.</p>
+    </div>
+
+    <div class="card">
+      <h2>The draw</h2>
+      <div class="row"><label>grid</label><input id="grid" type="range" min="2" max="10" step="1" value="8"><output id="gridOut">8</output></div>
+      <div class="row"><label>how many</label><input id="n" type="range" min="1" max="16" step="1" value="4"><output id="nOut">4</output></div>
+      <div class="row"><label>one trip ms</label><input id="ms" type="range" min="400" max="3000" step="20" value="720"><output id="msOut">720</output></div>
+      <div class="row"><label>ease</label><input id="ease" type="range" min="0.30" max="4" step="0.05" value="0.75"><output id="easeOut">0.75</output></div>
+      <div class="row"><label>opacity</label><input id="peak" type="range" min="0" max="1" step="0.01" value="0.22"><output id="peakOut">0.22</output></div>
+      <p class="hint">Sub-tiles the size of one square of a <b>grid</b> cut across the
+        <i>whole cell</i> — the tile's own edge, not the well's — appearing on a square of its rim
+        and pulled smoothly in to the middle. The grid sets where a sub-tile comes from and how
+        big it is; it is not a track it steps along, so the pull is a slide rather than a march.
+        Which rim square one comes in on is picked afresh every trip, so the pattern never comes
+        round.
+        <b>ease</b> above 1 dawdles at the rim then lets go; below 1 leaves at once and creeps
+        the last of the way in. <b>opacity</b> is only where a sub-tile <i>appears</i> — it always
+        lands at the floor's own, whatever that is, so it arrives rather than winking out.</p>
+    </div>
+
+    <div class="card">
+      <h2>The glow</h2>
+      <div class="row"><label>strength</label><input id="glowA" type="range" min="0" max="1" step="0.01" value="1.00"><output id="glowAOut">1.00</output></div>
+      <div class="row"><label>reach</label><input id="glowR" type="range" min="0.10" max="1.60" step="0.01" value="0.71"><output id="glowROut">0.71</output></div>
+      <p class="hint">White at the middle going to yellow at the edge, behind everything else —
+        the one warm thing on a tile that is otherwise pure absence. It is drawn before the
+        clip, so what falls inside the well is buried under the three plates and what falls
+        outside is all of it that escapes. <b>reach</b> is a fraction of a whole CELL, so past
+        0.50 the glow spills over the tile's edge and onto its neighbours; below that it stays
+        in, and only the plates dim it.</p>
+    </div>
+
+    <div class="card">
+      <h2>Somewhere to start</h2>
+      <div class="presets">
+        <button data-p="shipped">shipped</button>
+        <button data-p="hungry">hungry</button>
+        <button data-p="ponder">ponder</button>
+        <button data-p="inkwell">inkwell</button>
+        <button data-p="beacon">beacon</button>
+        <button data-p="plates">plates only</button>
+      </div>
+      <p class="hint"><b>hungry</b> a fine grid, ten at once, quick · <b>ponder</b> coarse and
+        slow, two trips at a time · <b>inkwell</b> no light gets out at all · <b>beacon</b> the
+        glow well past the tile's edge, lighting its neighbours · <b>plates only</b> nothing being
+        drawn in, for reading the well itself.</p>
+    </div>
+
+    <div class="card">
+      <h2>Try it</h2>
+      <button id="reset">Reset to the shipped block</button>
+      <button id="restore" style="margin-top:6px">Restore my saved settings</button>
+      <button id="reboard" style="margin-top:6px">Rebuild the board</button>
+      <button id="reload" style="margin-top:6px">Reload the game</button>
+    </div>
+
+    <div class="card">
+      <h2>Take it away</h2>
+      <button class="prim" id="copy">Copy RIFT block</button>
+      <textarea id="out" readonly style="margin-top:8px"></textarea>
+    </div>
+  </aside>
+
+  <div class="stage">
+    <iframe id="game" src="index.html" title="Tile Runner"></iframe>
+    <p class="legend">
+      Six Singularities on a three-column board, at real size, with the runner crawling up the
+      middle so the pair beside him are always the same size they are in a level. They sit on the
+      bare floor: a Singularity is not a tile, it is the absence of one, which is why the tile you
+      cross it on is the price of crossing.
+      <br><br>
+      Nothing here is redrawn. The lab pushes the <code>RIFT</code> block straight into the
+      running game through <code>__TR.rift()</code>, so what you are looking at is the shipped
+      renderer and not a copy of it that could quietly drift.
+      <span class="warn">This page must be SERVED</span> — <code>file://</code> stops it reading
+      the frame.
+    </p>
   </div>
-  <p class="note">Left: on the board at real size, on the track it eats. Right: the same tile blown up.
-     The squares are one function of time and index — no particles, no state — so it costs the same
-     whether one is on screen or twenty, and it can never drift out of step with itself.</p>
-</main>
-
-<aside>
-  <h2>the swarm</h2>
-  <label>squares <input type="range" id="n" min="1" max="10" value="4"><span class="val" id="nv"></span></label>
-  <h2>the swirl</h2>
-  <label>turns in <input type="range" id="turns" min="0" max="200" value="55"><span class="val" id="turnsv"></span></label>
-  <label>period ms <input type="range" id="ms" min="400" max="3000" value="1500"><span class="val" id="msv"></span></label>
-  <label>ease <input type="range" id="ease" min="60" max="300" value="150"><span class="val" id="easev"></span></label>
-  <h2>the squares</h2>
-  <label>start size <input type="range" id="big" min="60" max="200" value="110"><span class="val" id="bigv"></span></label>
-  <h2>the eye</h2>
-  <label>eye <input type="range" id="hole" min="20" max="95" value="60"><span class="val" id="holev"></span></label>
-  <label>off centre <input type="range" id="drift" min="0" max="40" value="17"><span class="val" id="driftv"></span></label>
-  <label>tremble <input type="range" id="tremble" min="0" max="60" value="14"><span class="val" id="tremblev"></span></label>
-  <h2>the dark</h2>
-  <label>opacity at the eye <input type="range" id="peak" min="10" max="100" value="100"><span class="val" id="peakv"></span></label>
-  <label>tint <input type="range" id="tint" min="0" max="100" value="0"><span class="val" id="tintv"></span></label>
-  <label>halo <input type="range" id="halo" min="0" max="100" value="60"><span class="val" id="halov"></span></label>
-  <p class="note">Frozen at one instant so it can be read. Everything here is a fraction of a CELL,
-     so it scales with the board rather than with the screen.</p>
-</aside>
+</div>
 
 <script>
+// The lab drives the REAL game in the frame rather than redrawing any of it here — the same
+// rule radius-lab.html follows, and for the same reason: a lab that keeps its own copy of the
+// art is a lab that will one day be tuning something the game no longer draws. This page used
+// to be that lab, with its own drawRift() sitting a hundred lines away from the real one.
 const $ = id => document.getElementById(id);
-const cv = $("stage"), ctx = cv.getContext("2d");
+const frame = $("game");
+let W = null;                                  // the game's window, once it is up
+// The game is a PWA with a service worker, and a service worker will happily hand this frame a
+// cached index.html — which means a lab can sit there tuning code the file on disk no longer
+// contains. A unique query per load can't match anything in that cache, so the frame always
+// gets what is actually on disk.
+const GAME_SRC = () => "index.html?lab=" + Date.now();
 
-// the game's own colours for this tile
-const HOT = "#ffa848", PALE = "#ffe2b0", VOID = "#0a0713", HALO = "78,44,128";
-const TRACK = "#e8a13c", RAIL = "#f5d9b0", DEEP = "#8c3b2e", BOARD = "#243a1e";
+const KEYS = ["p1","p2","p3","a1","a2","a3","grain","tremble",
+              "grid","n","ms","ease","peak","glowA","glowR"];
+const INTS = { n:1, ms:1, grid:1 };     // shown whole rather than to two places
 
-const P = () => ({
-  n:+$("n").value, drift:+$("drift").value/100,
-  turns:+$("turns").value/100, ms:+$("ms").value, ease:+$("ease").value/100,
-  big:+$("big").value/100, peak:+$("peak").value/100, tint:+$("tint").value/100,
-  tremble:+$("tremble").value/1000,
-  hole:+$("hole").value/100, halo:+$("halo").value/100,
-});
-
-// Every square is CENTRED on the tile and turns on the spot as it shrinks. There is no orbit:
-// the swirl is the rotation, and the fall is the scale. A square starts larger than the tile,
-// closes on the eye, and the instant it matches the eye it is gone — swallowed rather than
-// faded. `drift` lets them wander a hair off centre so the stack breathes instead of nesting
-// like a set of rings.
-function drawRift(g, x, y, cell, ts, p, gone) {
-  const a = gone ? 0.35 : 1;
-  const eye = cell * p.hole;                       // the black square in the middle
-  const start = cell * p.big;                      // where a square comes in at
-  g.save(); g.translate(x, y);
-  if (p.halo > 0) {                                // the pull, as a bruise in the floor
-    const s2 = cell*0.5;
-    const h = g.createRadialGradient(0,0,s2*0.3,0,0,s2*1.2);
-    h.addColorStop(0,   "rgba("+HALO+",0)");
-    h.addColorStop(0.6, "rgba("+HALO+","+(p.halo*a)+")");
-    h.addColorStop(1,   "rgba("+HALO+",0)");
-    g.fillStyle = h; g.beginPath(); g.arc(0,0,s2*1.2,0,Math.PI*2); g.fill();
-  }
-  for (let i = 0; i < p.n; i++) {
-    // its own place in the fall, 0 at full size, 1 at the eye — evenly spaced, looping
-    const k = ((ts / p.ms) + i/p.n) % 1;
-    const e = Math.pow(k, p.ease);
-    const sz = start + (eye - start) * e;          // 110% of a tile down to exactly the eye
-    if (sz <= eye + 0.5) continue;                 // it has arrived; the eye has it now
-    const ang = e * p.turns * Math.PI*2 + i*0.4;   // the swirl IS this
-    const off = cell * p.drift * (1 - e);          // a hair off centre, closing as it lands
-    const ox = Math.cos(i*2.4 + e*3.1) * off, oy = Math.sin(i*2.4 + e*3.1) * off;
-    g.save();
-    // Invisible where it comes in, solid as it lands. The tile does not throw matter out — it
-    // draws the dark IN, and a square you cannot see at the rim that is at full strength by the
-    // time it matches the eye is what that looks like. `peak` is that landing opacity: at 1 the
-    // square and the eye become the same black at the same instant, which is what makes the
-    // hand-off invisible rather than a swap.
-    g.globalAlpha = a * p.peak * e;
-    g.translate(ox, oy);
-    g.rotate(ang);
-    // Almost black, but not quite the same almost-black twice: the hue walks round the wheel
-    // square to square at a lightness low enough that you read it as colour in the dark rather
-    // than as colour.
-    const hue = Math.round((i / p.n) * 360 + e * 40) % 360;
-    g.fillStyle = "hsl(" + hue + "," + Math.round(p.tint*100) + "%," + (4 + p.tint*7).toFixed(1) + "%)";
-    g.fillRect(-sz/2, -sz/2, sz, sz);
-    g.restore();
-  }
-  // The eye, over everything: a hole, last — and never still. Two sine terms at frequencies
-  // that do not divide into each other, so the shake never repeats and never falls into a
-  // rhythm you could tap along to. It is the one thing on the tile that does not move in the
-  // swirl's time, which is what makes it read as something straining rather than something
-  // animating.
-  const tr = cell * p.tremble;
-  const jx = (Math.sin(ts/47) + Math.sin(ts/31.3)*0.6) * tr;
-  const jy = (Math.cos(ts/41) + Math.cos(ts/27.7)*0.6) * tr;
-  g.globalAlpha = a;
-  g.fillStyle = VOID;
-  g.fillRect(-eye/2 + jx, -eye/2 + jy, eye, eye);
-  g.restore();
+// Three columns, so the cell comes out large enough to actually read, with the track up the
+// middle and the holes down both sides. None of them sits ON the track: the runner crossing a
+// Singularity loses the tile to it, which is the right thing in a level and would take the
+// board away here every twenty seconds.
+function specimen(){
+  const cols = 3, rows = 9;
+  return { n: 0, name: "SINGULARITY", cols, rows, cps: 0.05, intro: [],
+           start: [1, rows-1],
+           init: [[1, rows-2], [1, rows-3], [1, rows-4], [1, rows-5], [1, rows-6]],
+           goal: [1, 0],
+           singularity: [[0,2],[2,2],[0,4],[2,4],[0,6],[2,6]],
+           walls: [], stone: [], platforms: [], doors: [], keys: [],
+           coins: [], talismans: [], crumble: [], blocks: [], hazards: [] };
 }
 
-function board(g, x, y, cell) {                       // a scrap of track for scale
-  g.fillStyle = "rgba(220,226,255,0.30)";
-  g.fillRect(x-cell*1.5, y-cell/2, cell*3, cell);
-  g.fillStyle = DEEP;  g.fillRect(x-cell*1.5, y+cell*0.04, cell*3, cell*0.46);
-  g.fillStyle = TRACK; g.fillRect(x-cell*1.5, y-cell*0.06, cell*3, cell*0.12);
-  g.fillStyle = RAIL;  g.fillRect(x-cell*1.5, y-cell*0.09, cell*3, cell*0.035);
+// A level's own `cps` is a starting pace the game re-derives on build, so setting it in the
+// specimen doesn't stick — the pace has to be written onto the live clock, and rewritten,
+// because every cleared tile ramps it back up by RAMP_PER_TILE.
+const CRAWL = 0.05;
+function crawl(){
+  if (!W || !W.__TR || !W.__TR.state) return;
+  const s = W.__TR.state();
+  if (!s || s.status !== "play") return;
+  if (Math.abs(s.cpsNow - CRAWL) < 1e-6) return;
+  s.cpsNow = CRAWL;
+  s.msPerCell = 1000 / CRAWL;
 }
 
-function render(ts) {
-  const p = P();
-  for (const k of ["n","turns","ms","ease","big","drift","hole","halo","peak","tint","tremble"])
-    $(k+"v").textContent = (k==="n"||k==="arms"||k==="ms") ? $(k).value : (+$(k).value/100).toFixed(2);
-  ctx.setTransform(1,0,0,1,0,0);
-  ctx.fillStyle = BOARD; ctx.fillRect(0,0,cv.width,cv.height);
-  const cellS = 96;
-  board(ctx, 220, 220, cellS);
-  drawRift(ctx, 220, 220, cellS, ts, p, false);
-  drawRift(ctx, 660, 220, 300, ts, p, false);
-  requestAnimationFrame(render);
-}
-document.querySelectorAll("input").forEach(el => el.addEventListener("input", () => {}));
-$("copy").onclick = () => {
-  const p = P();
-  const txt = "  const RIFT = {\n" +
-    Object.entries(p).map(([k,v]) => "    " + (k+":").padEnd(8) + " " + v + ",").join("\n") + "\n  };";
-  navigator.clipboard && navigator.clipboard.writeText(txt);
-  $("copy").textContent = "copied"; setTimeout(()=>$("copy").textContent="Copy RIFT block", 1200);
-};
-$("strip").onclick = () => {
-  const N=6, w=300, out=document.createElement("canvas");
-  out.width=w*3; out.height=w*2;
-  const og=out.getContext("2d"), p=P();
-  const tmp=document.createElement("canvas"); tmp.width=tmp.height=300;
-  const tg=tmp.getContext("2d");
-  for(let i=0;i<N;i++){
-    tg.setTransform(1,0,0,1,0,0); tg.fillStyle=BOARD; tg.fillRect(0,0,300,300);
-    drawRift(tg,150,150,240, i/N*p.ms, p, false);
-    og.drawImage(tmp,(i%3)*w,Math.floor(i/3)*w,w,w);
-    og.strokeStyle="rgba(255,255,255,0.12)"; og.strokeRect((i%3)*w,Math.floor(i/3)*w,w,w);
-  }
-  window.__strip = out.toDataURL("image/png");
-};
-
-// Everything on this page is written down as you move it and put back when you come back. A
+// Everything on this rail is written down as you move it and put back when you come back. A
 // tuning page you have to set up again every time you open it is a tuning page you stop opening
 // — and the settings you are part way through are worth more than the ones already shipped.
+// The presets are known starting points; "Restore" is YOUR last state.
 const SAVE_KEY = "tilerunner:crumble-lab";
 function save(){
-  const v = {};
-  document.querySelectorAll("input").forEach(el => {
-    if (el.id) v[el.id] = (el.type === "checkbox") ? el.checked : el.value;
-  });
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(v)); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(values())); } catch (e) {}
 }
-function restore(){
+// `preferKept` is what the Restore BUTTON passes. A Reset applies the shipped block, and
+// applying anything writes the autosave — so by the time you reach for Restore your own tune is
+// no longer in it. Reset sets it aside first; the button looks there before the autosave, and
+// clears it once it has handed it back, so a second Restore means the ordinary thing again.
+// Page load never looks there: after a Reset the page should come up shipped, not undo itself.
+function restore(preferKept){
+  let raw = null;
+  try {
+    raw = (preferKept && localStorage.getItem(SAVE_KEY + ":kept")) || localStorage.getItem(SAVE_KEY);
+  } catch (e) {}
   let v = null;
-  try { v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) {}
+  try { v = JSON.parse(raw || "null"); } catch (e) {}
   if (!v || typeof v !== "object") return false;
-  for (const id in v) {
-    const el = document.getElementById(id);
-    if (!el) continue;
-    if (el.type === "checkbox") el.checked = !!v[id]; else el.value = v[id];
-  }
+  for (const k of KEYS) if (typeof v[k] === "number") $(k).value = v[k];
+  if (preferKept) { try { localStorage.removeItem(SAVE_KEY + ":kept"); } catch (e) {} }
   return true;
 }
-document.addEventListener("input", save, true);
 
-document.getElementById("restoreBtn").onclick = () => { restore(); };
-restore();
-requestAnimationFrame(render);
+function values(){
+  const o = {};
+  for (const k of KEYS) o[k] = +$(k).value;
+  return o;
+}
+function push(){
+  if (!W || !W.__TR || !W.__TR.rift) return;
+  try {
+    W.__TR.rift(values()); crawl(); save();
+    $("status").textContent = "live — one fall every " + Math.round(+$("ms").value) + "ms";
+    refreshOut();
+  } catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+}
+function reboard(){
+  if (!W || !W.__TR || !W.__TR.demo) return;
+  try {
+    // The game may be sitting behind a menu — it boots into one on the way to the Tileverse —
+    // and a paused game never leaves the flag peek, so the board would come up and stay there.
+    W.__TR.ui.closeMenu();
+    W.__TR.demo(specimen(), "SINGULARITY"); clearCards(); setTimeout(push, 60);
+  }
+  catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+}
+// A chapter opens with its card and, the first time, a card per mechanic it introduces. They
+// are the right thing in the game and the wrong thing here — the board is the whole point of
+// this page — so the lab taps through them as they come.
+function clearCards(){
+  let tries = 0;
+  (function tick(){
+    if (!W || !W.__TR) return;
+    const D = W.document;
+    const poem = D.getElementById("poem");
+    if (poem && poem.classList.contains("show"))
+      poem.dispatchEvent(new W.PointerEvent("pointerdown", { bubbles:true, pointerId: 1 }));
+    const mech = D.getElementById("mechpop");
+    if (mech && mech.classList.contains("show"))
+      mech.dispatchEvent(new W.MouseEvent("click", { bubbles:true }));
+    const s = W.__TR.state();
+    if (s && s.status === "play") { push(); return; }
+    if (++tries > 400) return;      // ~24s: long enough to outlast the flag peek and the pan
+    setTimeout(tick, 60);
+  })();
+}
+
+// The block, written the way it is written in index.html, so it can be pasted over the top of
+// the real one without reformatting.
+function refreshOut(){
+  const v = values(), f = (n, d) => (+n).toFixed(d);
+  const L = (k, val, note) => "    " + (k + ":").padEnd(9) + String(val).padEnd(7) +
+                              (note ? "// " + note : "") + "\n";
+  $("out").value =
+    "  const RIFT = {\n" +
+    "    // THE WELL — three black plates, each inset further into the tile space than the last, so\n" +
+    "    // the hole has a floor you can see down to rather than being one flat black square. There\n" +
+    "    // is no colour anywhere in this tile: what a Singularity is, is an absence.\n" +
+    L("p1",      f(v.p1,2) + ",",         "the outermost, as a fraction of the CELL — and the edge of everything") +
+    L("p2",      f(v.p2,2) + ",",         "the middle step") +
+    L("p3",      f(v.p3,2) + ",",         "the floor, and where a sub-tile lands") +
+    L("a1",      f(v.a1,2) + ",",         "how black each plate is") +
+    L("a2",      f(v.a2,2) + ",",         "") +
+    L("a3",      f(v.a3,2) + ",",         "") +
+    L("grain",   f(v.grain,2) + ",",      "the paper the whole hole is printed on") +
+    L("tremble", f(v.tremble,3) + ",",    "how hard the floor shakes, fraction of a cell") +
+    "    // THE DRAW — sub-tiles the size of one square of a grid cut across the whole cell,\n" +
+    "    // appearing on the tile's own rim and pulled smoothly in to the middle.\n" +
+    L("grid",    Math.round(v.grid) + ",","sub-tiles to a side") +
+    L("n",       Math.round(v.n) + ",",   "how many are being drawn in at once") +
+    L("ms",      Math.round(v.ms) + ",",  "one sub-tile's whole journey in") +
+    L("ease",    f(v.ease,2) + ",",       "slow to leave the rim, then it lets go") +
+    L("peak",    f(v.peak,2) + ",",       "its opacity where it appears; it lands at the floor's own") +
+    "    // THE GLOW behind the whole thing — the light the hole has not finished swallowing.\n" +
+    L("glowA",   f(v.glowA,2) + ",",      "how bright it is at the middle") +
+    L("glowR",   f(v.glowR,2) + ",",      "how far it reaches, fraction of a CELL — over 0.5 and it spills past the tile") +
+    "  };";
+}
+
+const PRESETS = {
+  shipped:  { p1:0.75, p2:0.60, p3:0.45, a1:0.34, a2:0.60, a3:1.00, grain:2.00, tremble:0.010,
+              grid:8, n:4, ms:720, ease:0.75, peak:0.22, glowA:1.00, glowR:0.71 },
+  // a fine grid, many sub-tiles, quick — the hole is visibly eating
+  hungry:   { p1:0.90, p2:0.66, p3:0.34, a1:0.30, a2:0.45, a3:0.70, grain:1.20, tremble:0.020,
+              grid:6, n:10, ms:800, ease:1.60, peak:0.20, glowA:0.75, glowR:0.80 },
+  // coarse and slow: four big sub-tiles a side, one trip at a time
+  ponder:   { p1:0.86, p2:0.60, p3:0.30, a1:0.40, a2:0.55, a3:0.75, grain:1.40, tremble:0.010,
+              grid:4, n:2, ms:2600, ease:2.40, peak:0.10, glowA:0.35, glowR:0.55 },
+  // no light gets out at all
+  inkwell:  { p1:1.00, p2:0.70, p3:0.36, a1:0.75, a2:0.90, a3:1.00, grain:1.10, tremble:0.016,
+              grid:4, n:4, ms:1500, ease:1.50, peak:0.60, glowA:0.00, glowR:0.62 },
+  // the glow well past the tile's edge, lighting its neighbours
+  beacon:   { p1:0.70, p2:0.48, p3:0.24, a1:0.55, a2:0.70, a3:0.90, grain:1.60, tremble:0.040,
+              grid:5, n:6, ms:1100, ease:2.00, peak:0.00, glowA:0.90, glowR:1.30 },
+  // the plates alone, nothing being drawn in — for reading the well itself
+  plates:   { p1:0.75, p2:0.50, p3:0.25, a1:0.35, a2:0.35, a3:0.35, grain:2.00, tremble:0.060,
+              grid:4, n:1, ms:1500, ease:3.00, peak:0.00, glowA:0.55, glowR:0.62 },
+};
+function apply(p){
+  for (const k of KEYS) { $(k).value = p[k]; sync(k); }
+  push();
+}
+function sync(k){
+  $(k + "Out").textContent = INTS[k] ? $(k).value
+                           : (k === "tremble") ? (+$(k).value).toFixed(3)
+                           : (+$(k).value).toFixed(2);
+}
+
+// The game boots into its title screen and its own rAF loop; wait for the debug surface to
+// exist rather than guessing at a delay.
+function attach(){
+  W = frame.contentWindow;
+  let tries = 0;
+  (function wait(){
+    if (W.__TR && W.__TR.demo && W.__TR.rift) {
+      // Every mechanic marked as already seen, so the board comes up bare. The cards are the
+      // right thing in the game and the wrong thing here, and tapping them away afterwards is
+      // a race against a camera pan that is easy to lose.
+      try { W.localStorage.setItem("tilerunner:seen", JSON.stringify(W.__TR.mechs())); } catch (e) {}
+      reboard(); return;
+    }
+    if (++tries > 200) {
+      $("status").innerHTML = '<span class="warn">the game never came up — is this being SERVED? ' +
+        'file:// blocks the frame from being read.</span>';
+      return;
+    }
+    setTimeout(wait, 50);
+  })();
+}
+frame.addEventListener("load", attach);
+frame.src = GAME_SRC();
+
+KEYS.forEach(k => $(k).addEventListener("input", () => { sync(k); push(); }));
+document.querySelectorAll(".presets button").forEach(b =>
+  b.onclick = () => { apply(PRESETS[b.dataset.p]); $("status").textContent = "preset: " + b.dataset.p; });
+
+// The rail saves itself as you move it; this is for after you have wandered off into the
+// presets and want back what you actually had.
+$("restore").onclick = () => {
+  if (!restore(true)) { $("status").innerHTML = '<span class="warn">nothing saved yet</span>'; return; }
+  KEYS.forEach(sync); push();
+  $("status").textContent = "your saved settings, put back";
+};
+// Reset goes back to the SHIPPED block; Restore goes back to yours. A Reset that quietly threw
+// away a half-finished tune would make the pair useless, so the autosave is copied aside before
+// it is overwritten and Restore can still reach it afterwards.
+$("reset").onclick = () => {
+  try {
+    const had = localStorage.getItem(SAVE_KEY);
+    if (had) localStorage.setItem(SAVE_KEY + ":kept", had);
+  } catch (e) {}
+  apply(PRESETS.shipped);
+  $("status").textContent = "the shipped block, put back — Restore still has what you had";
+};
+$("reboard").onclick = reboard;
+// If the runner runs out of track while you are tuning, the fall takes the board away and
+// leaves you looking at a heap. Put it back.
+setInterval(() => {
+  if (!W || !W.__TR || !W.__TR.state) return;
+  const st = W.__TR.state();
+  if (st && (st.status === "lose" || st.status === "win")) reboard();
+  else crawl();
+}, 1200);
+$("reload").onclick = () => { frame.src = GAME_SRC(); };
+$("copy").onclick = () => {
+  navigator.clipboard.writeText($("out").value).then(
+    () => $("status").textContent = "RIFT block copied — paste it over the one in index.html",
+    () => $("status").innerHTML = '<span class="warn">clipboard refused — copy it out of the box below</span>');
+};
+
+const restored = restore(false);
+KEYS.forEach(sync);
+refreshOut();
+if (restored) $("status").textContent = "your last settings, put back";
 </script>
+</body>
+</html>
