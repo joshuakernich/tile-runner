@@ -433,7 +433,11 @@
      are in before you have read a word. Everything after that arrives on its own delay, set in
      JS because the timings run off the verse's own line count. */
   #poem-text .ln, #poem-by, #poem-tap { animation:poem-line 520ms ease-out both; }
-  @keyframes poem-line { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+  /* `translate`, the independent property — NOT `transform`. This animation is worn by the
+     fall's heading, which is rotated by the rule every heading in the game shares, and a
+     keyframe ending in `transform:none` silently threw that rotation away: the word came up
+     straight on a fall and leaning on a pause. Animating `translate` leaves `transform` alone. */
+  @keyframes poem-line { from { opacity:0; translate:0 6px; } to { opacity:1; translate:0 0; } }
   #poem-text { display:flex; flex-direction:column; gap:0.25rem; }
   #poem-text .ln { margin:0; }
   #poem-n {
@@ -712,14 +716,14 @@
   #menu-body .tv-back .l1 { font-size:12px; letter-spacing:2px; }
   /* ...and what the screen IS saying, in the middle of it. */
   #menu-body .big-word { text-align:center; }
-  /* A pause is one word on an empty screen, so it takes the TITLE size. A fall is a heading
-     with a line under it and a heap behind it, so it takes the heading size every other heading
-     in the game is set at — the two are different jobs and only one of them is a title. */
-  /* The id is needed: `.menu-card h2` sets 18px from further down the sheet and beats a bare
-     class, which is what silently shrank this to a caption. 46px is the size the game's own
-     headings are — the same one the fixed banner across the top uses. */
-  #menu-body .big-word { font-size:46px; text-wrap:balance; }
-  #menu.paused #menu-body .big-word { font-size:min(72px, 16vw); }
+  /* A pause and a fall say their word at the SAME size and the same angle. They used to differ
+     — a pause took the title size and a fall the smaller heading size, on the argument that one
+     is a title and the other a heading with a line under it — but you see the two back to back,
+     and a word that changes size between them reads as two screens rather than one screen
+     wearing two faces, which is the whole design of this menu.
+     The id is needed: `.menu-card h2` sets 18px from further down the sheet and beats a bare
+     class, which is what silently shrank this to a caption. */
+  #menu-body .big-word { font-size:min(72px, 16vw); text-wrap:balance; }
   .menu-push { flex:1 1 auto; min-height:var(--chq2); }
   /* THREE times the give of the one above it, which lands whatever sits between them about a
      third of the way down rather than halfway. A fall's words want to be high on the screen:
@@ -1371,6 +1375,7 @@
 </div>
 
 <script src="levels.js"></script>
+<script src="copy.js"></script>
 <script>
 (() => {
   "use strict";
@@ -1391,6 +1396,12 @@
   // `n` is the editor's label for a level; the game indexes by position and ignores it.
   const LEVELS = (typeof LEVELS_DATA !== "undefined" ? LEVELS_DATA : [])
                    .map(L => { const { n, ...rest } = L; return rest; });
+  // ---------- Copy --------------------------------------------------------
+  // Every line the game says that is not part of a level: the mechanic cards, and the headings
+  // and bylines on a fall, a pause and a clear. It lives in copy.js and nowhere else — same
+  // arrangement as levels.js, same reason, and the same COPY tab in level-editor.html writes
+  // it. The verses on the chapter cards are NOT here; they belong to their level.
+  const COPY = (typeof COPY_DATA !== "undefined" ? COPY_DATA : {});
 
   // ---------- DOM ---------------------------------------------------------
   const canvas = document.getElementById("game");
@@ -3111,7 +3122,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.11";                    // shown on the title & pause screens
+  const VERSION = "v10.12";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -5162,26 +5173,9 @@
   }
 
   // ---------- New-mechanic intro pop-ups ---------------------------------
-  const MECHS = {
-    tile:   { name:"Track Tiles", desc:"The runner never stops! Drag cleared tiles to lay track ahead." },
-    key:    { name:"Colour Key", desc:"Grab a coloured key and every padlock of its colour springs open." },
-    flag:   { name:"The Exit", desc:"Lay a tile on the flag to finish the chapter." },
-    wall:   { name:"Wall Entity", desc:"Passive entities whose noble purpose is simply to get in the way" },
-    stone:  { name:"Stone Block", desc:"Tap to smash it, then build through the gap." },
-    boost:  { name:"Boost", desc:"Grab it for a short burst of speed. Keep those tiles flowing!" },
-    singularity:{ name:"Singularity", desc:"A vortex in the floor. Crossing it swallows that tile for good — spend wisely." },
-    slow:   { name:"Slow", desc:"Grab it and the runner drags for a few seconds — plan around it." },
-    switch: { name:"Buttons & Doors", desc:"Tap the arcade buttons to slide their door open. Follow the wires — some doors need EVERY linked button pressed." },
-    monster:{ name:"Flying Menace", desc:"A little monster flitting to and fro. Time your run so the runner never touches it!" },
-    hunter: { name:"The Hunter", desc:"A malevolent tile entity. It is coming for you. Keep moving." },
-    slider: { name:"Sliding Platform", desc:"The wall only opens where this platform sits. Drag it along its rail to line up the crossing, then build across it." },
-    block:  { name:"Movable Block", desc:"A heavy block plugging the tunnel. Drag it aside along its rail to clear the way, then build through." },
-    platform:{ name:"Fixed Rail", desc:"Rail already bolted to the chapter. You can't build on it — but run your path into one of its open ends and the runner rides across for FREE, no tile spent. It only connects at its drawn ends." },
-    mdoor:  { name:"Sliding Door", desc:"Slide it open by dragging BOTH panels apart — push each side away from the centre." },
-    // ---- tutorial prompts for the hand-built levels ----
-    recycle:  { name:"Drag Tiles", desc:"The runner never stops! Drag cleared tiles to lay track ahead." },
-    turn:     { name:"Take a Turn", desc:"Lay a tile to the SIDE of the runner's path and it turns to follow. Steer it toward the flag." },
-  };
+  // The mechanic cards, out of copy.js. `name` and `desc` are the whole of a card; the KEY is
+  // what a level's `intro` list names, which is why levelMechs() below still speaks in keys.
+  const MECHS = COPY.mechs || {};
   function levelMechs(L) {
     // A level whose monsters are ALL hunters gets the hunter card even if its data still asks
     // for the generic one. The editor was writing "monster" long before this animal had a name
@@ -7448,37 +7442,12 @@
   }
   // Finishing a level earns you a compliment. Sort of. Split by whether you got it
   // first go or wore it down, because the backhand lands differently either way.
-  const WIN_QUIPS = [
-    "First go. Don't get used to it.",
-    "Clean. Suspiciously clean.",
-    "That was almost elegant.",
-    "You made it look harder than it was.",
-    "Textbook — if the textbook had typos.",
-    "Efficient. Not the word I'd have picked, but efficient.",
-    "Nicely done. The flag was getting bored.",
-    "Great instincts. We'll work on the pace.",
-    "Barely a wasted tile. Barely.",
-    "Confidence like that can't be taught. Timing can.",
-    "Smooth. Ish.",
-    "The runner never doubted you. Not out loud.",
-    "Solid work, by the standards you've set.",
-    "You had a plan the whole time. Obviously.",
-  ];
-  const WIN_QUIPS_RETRY = [
-    "Got there in the end. Emphasis on 'end'.",
-    "Persistence is a kind of talent.",
-    "That's the one. We'll ignore the others.",
-    "Practice makes… this.",
-    "Beautiful. Let's never speak of the attempts.",
-    "You wore it down. That counts.",
-    "Whichever try that was, it's the one that counts.",
-    "The floor forgives you.",
-    "A masterclass in trial and error. Mostly error.",
-    "Took a few goes, but the last one was lovely.",
-    "Every failure taught you something. Allegedly.",
-    "Worth the wait. For you, anyway.",
-  ];
+  const WIN_QUIPS = COPY.winQuips || [""];
+  const WIN_QUIPS_RETRY = COPY.winQuipsRetry || [""];
   const pickQuip = a => a[(Math.random() * a.length) | 0];
+  // ...and a PAUSE gets one too. A clear and a fall both say something; the screen in between
+  // said one word and nothing else, which made it the only place in the game with no voice.
+  const PAUSE_QUIPS = COPY.pauseQuips || [""];
 
   function endWin(relic) {
     state.status = "win";
@@ -7515,9 +7484,9 @@
     // campaign deserves saying out loud rather than being answered with a map.
     if (!last) { winStart(false); return; }
     state.end = { kind:"win", last,
-      title: last ? "That's All of Them" : "Chapter Clear",
+      title: last ? (COPY.winTitleLast || "") : (COPY.winTitle || ""),
       byline: last
-        ? "All " + LEVELS.length + " chapters. You've run out of track — and excuses."
+        ? String(COPY.winBylineLast || "").replace("{n}", LEVELS.length)
         : pickQuip(att > 1 ? WIN_QUIPS_RETRY : WIN_QUIPS) };
     openMenu("main");
   }
@@ -8831,17 +8800,9 @@
   // FELL_STEP, then the pair, then the way out. Slow enough to read as one part arriving after
   // another rather than as a stagger.
   const FELL_HEAD = 320, FELL_STEP = 260;
-  const LOSE_QUIPS = [
-    "Are you high?",
-    "Physics 1. You 0.",
-    "If at first you don't succeed, give up.",
-    "Have you tried trying?",
-    "Where were you when a tile was needed?",
-    "Death is just another state of being.",
-    "If you stare into the abyss long enough, the abyss stares back.",
-  ];
-  const LOSE_TITLES = ["You Fell", "Wipeout!", "Splat.", "Down You Go", "Ouch.", "Gap Year"];
-  let _lastQuip = -1;
+  const LOSE_QUIPS = COPY.loseQuips || [""];
+  const LOSE_TITLES = COPY.loseTitles || [""];
+  let _lastQuip = -1, _lastPause = -1;
   function showLose() {
     state.status = "lose";
     Sound.levelMusicStop();        // ...and with a fall, too
@@ -14017,6 +13978,7 @@
     // the honest signal that there is more below.
   }
   function closeMenu() { stopShopFig(); stopRelics(); shopPreview = null; endCeremony();
+                         if (state) state.pauseQuip = null;   // the next pause gets its own line
                          paused = false; menuReturn = null; menuEl.classList.remove("show");
                          document.body.classList.remove("menu-open");
                          Sound.ambient(cineActive ? "intro" : titleActive ? "title" : null); }
@@ -14600,6 +14562,15 @@
       // and one way out; the rest of the game is on the other side of the way out.
       title.textContent = "";
       title.className = "";
+      // The line is chosen ONCE per pause and kept on the run. buildMenu is called again every
+      // time anything on this screen changes — every settings toggle rebuilds it — and a quip
+      // that re-rolled on each of those would read as the game muttering to itself.
+      if (state && !state.pauseQuip) {
+        let i = (Math.random() * PAUSE_QUIPS.length) | 0;
+        if (i === _lastPause) i = (i + 1) % PAUSE_QUIPS.length;   // never the same one twice
+        _lastPause = i;
+        state.pauseQuip = PAUSE_QUIPS[i];
+      }
     }
     // RESUME only where there is a run to go back to. On an end screen it would be a lie, and
     // it is also the only thing that closes the menu — which is why an ending cannot be
@@ -14616,13 +14587,26 @@
       menuBody.appendChild(tileverseLockup());
       menuBody.appendChild(menuPush());
       const word = document.createElement("h2"); word.className = "big-word";
-      word.textContent = "Paused";
+      word.textContent = COPY.pauseTitle || "Paused";
       menuBody.appendChild(word);
+      // The same byline a fall wears, in the same place under the same heading — this screen is
+      // the third face of one screen, and a line of its own set differently would give the game
+      // away as three.
+      if (state && state.pauseQuip) {
+        const by = document.createElement("p"); by.className = "menu-byline";
+        setByline(by, state.pauseQuip);
+        menuBody.appendChild(by);
+        balanceByline(by);
+      }
       menuBody.appendChild(menuPush());
-      // ...and the two that carry on, side by side at the foot.
+      // ...and the two that carry on, side by side at the foot. RESTART on the left and RESUME
+      // on the right, which is the pair a FALL uses the other way round on purpose: there the
+      // left-hand seat holds the one that gives up on the run. Here the answer you almost always
+      // mean is "carry on", so it takes the right-hand seat under the writing thumb and the one
+      // that throws the attempt away is the one you have to reach across for.
       const row = document.createElement("div"); row.className = "menu-row";
-      row.appendChild(btn("Resume", closeMenu));
       row.appendChild(btn("Restart", () => { loadLevel(levelIdx); closeMenu(); }));
+      row.appendChild(btn("Resume", closeMenu));
       menuBody.appendChild(row);
       return;
     }

@@ -259,13 +259,28 @@ function levelsFrom(file, marker) {
     if (!read("sw.js").includes('"./levels.js"'))
       bad("sw.js does not precache levels.js — the game would be empty offline");
     else ok("sw.js precaches levels.js");
+    // copy.js is the same arrangement as levels.js and needs the same three guarantees: the
+    // game loads it, the game has not grown its own copy of it back, and it is cached offline.
+    // A game that boots with no copy is a game whose cards and end screens are blank.
+    {
+      const src = read("index.html");
+      if (!src.includes('<script src="copy.js">'))
+        bad("index.html no longer loads copy.js — the cards and end screens would be blank");
+      else if (/\n\s*const MECHS = \{\s*\n/.test(src) ||
+               /\n\s*const (LOSE|PAUSE|WIN)_QUIPS[A-Z_]* = \[\s*\n/.test(src))
+        bad("index.html has grown its own inline copy of the writing again");
+      else ok("index.html reads copy.js directly");
+      if (!read("sw.js").includes('"./copy.js"'))
+        bad("sw.js does not precache copy.js — the cards would be blank offline");
+      else ok("sw.js precaches copy.js");
+    }
 
     // ---- per-level sanity ----
     // Read the live keys out of MECHS rather than keeping a list here. A hand-kept copy is a
     // third place to remember, and it only ever fails the day someone adds a card.
-    const mechBlock = (read("index.html").match(/const MECHS = \{[\s\S]*?\n  \};/) || [""])[0];
-    const VALID_INTRO = new Set([...mechBlock.matchAll(/^    (\w+)\s*:/gm)].map(m => m[1]));
-    if (VALID_INTRO.size < 10) bad("could not read the MECHS keys out of index.html");
+    const mechBlock = (read("copy.js").match(/mechs: \{[\s\S]*?\n  \},/) || [""])[0];
+    const VALID_INTRO = new Set([...mechBlock.matchAll(/^    "(\w+)"\s*:/gm)].map(m => m[1]));
+    if (VALID_INTRO.size < 10) bad("could not read the mech keys out of copy.js");
     const problems = [];
     truth.forEach((L, i) => {
       const n = i + 1;

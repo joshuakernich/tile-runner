@@ -109,6 +109,30 @@
   /* Four fixed rails plus the map. The breakpoint was 1100 when there were three; at that width
      a fourth leaves the map about 360px, which is not a map. Below this everything stacks. */
   @media (max-width:1320px){ .app{grid-template-columns:1fr;} .rail{position:static;max-height:none;} }
+  /* ---- the tab bar, and the second view it switches to ------------------------------
+     The editor grew a second job: the writing. It is the same tool — the same file-handle
+     machinery, the same autosave, the same Save button — pointed at a different file, so it
+     lives behind a tab rather than in a page of its own that would have to grow all of that
+     again. */
+  .tabs{display:flex;gap:6px;margin-left:auto;}
+  .tabs button{background:#0d0b22;color:var(--ink);border:1px solid var(--line);border-radius:20px;
+               padding:4px 14px;cursor:pointer;font:inherit;font-size:11px;letter-spacing:1px;
+               text-transform:uppercase;}
+  .tabs button.on{background:var(--accent);color:#04121a;border-color:transparent;font-weight:700;}
+  #copyview{display:none;padding:14px;max-width:980px;}
+  body.copy #copyview{display:block;}
+  body.copy .app{display:none;}
+  #copyview h2{font-size:11px;letter-spacing:1px;text-transform:uppercase;opacity:.55;margin:0 0 8px;}
+  #copyview .card{margin-bottom:14px;}
+  #copyview .fld{display:block;margin:0 0 10px;}
+  #copyview .fld > span{display:block;font-size:11px;opacity:.7;margin-bottom:3px;}
+  #copyview input[type=text]{width:100%;}
+  #copyview textarea{height:auto;min-height:64px;white-space:pre-wrap;}
+  #copyview .mech{border-top:1px solid var(--line);padding-top:10px;margin-top:10px;}
+  #copyview .mech:first-of-type{border-top:0;padding-top:0;margin-top:0;}
+  #copyview .key{font-size:11px;color:var(--accent);letter-spacing:1px;text-transform:uppercase;}
+  #copyview .two{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  @media (max-width:900px){ #copyview .two{grid-template-columns:1fr;} }
 </style>
 </head>
 <body>
@@ -117,6 +141,10 @@
   <span class="pill" id="shipped">levels.js: …</span>
   <span class="pill" id="auto">autosave: on</span>
   <span class="pill" id="status">ready</span>
+  <div class="tabs">
+    <button id="tabLevels" class="on">Levels</button>
+    <button id="tabCopy">Copy</button>
+  </div>
 </header>
 
 <div class="app">
@@ -317,7 +345,77 @@
 
 </div>
 
+<section id="copyview">
+  <div class="card">
+    <h2>What this is</h2>
+    <div class="hint">Every line of writing the game says that is <b>not</b> part of a level —
+      the cards that introduce a mechanic, and the headings and lines on a fall, a pause and a
+      clear. It lives in <code>copy.js</code>, which the game loads exactly the way it loads
+      <code>levels.js</code>. The verses on the chapter cards are <i>not</i> here: those belong
+      to their level, and you edit them on the Levels tab.
+      <br><br>Lists are one entry per line. Blank lines are dropped.</div>
+  </div>
+
+  <div class="card">
+    <h2>Mechanic cards</h2>
+    <div class="hint" style="margin-bottom:10px">Shown once, the first time a chapter uses the
+      thing. The <b>key</b> is what a level's <code>intro</code> list names — it is not copy, so
+      it is not editable here; renaming one would orphan every level that asks for it.</div>
+    <div id="mechList"></div>
+  </div>
+
+  <div class="two">
+    <div class="card">
+      <h2>A fall</h2>
+      <label class="fld"><span>headings — one per line, picked at random</span>
+        <textarea id="cLoseTitles" rows="7"></textarea></label>
+      <label class="fld"><span>lines — one per line, never the same one twice running</span>
+        <textarea id="cLoseQuips" rows="9"></textarea></label>
+    </div>
+    <div class="card">
+      <h2>A pause</h2>
+      <label class="fld"><span>heading — always this one</span>
+        <input type="text" id="cPauseTitle" maxlength="40"></label>
+      <label class="fld"><span>lines — one per pause, never the same one twice running</span>
+        <textarea id="cPauseQuips" rows="16"></textarea></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>A clear</h2>
+    <div class="two">
+      <label class="fld"><span>heading</span><input type="text" id="cWinTitle" maxlength="40"></label>
+      <label class="fld"><span>heading, on the very last chapter</span>
+        <input type="text" id="cWinTitleLast" maxlength="40"></label>
+    </div>
+    <label class="fld"><span>line on the very last chapter — <code>{n}</code> becomes how many chapters there are</span>
+      <input type="text" id="cWinBylineLast" maxlength="140"></label>
+    <div class="two">
+      <label class="fld"><span>lines — first go</span>
+        <textarea id="cWinQuips" rows="9"></textarea></label>
+      <label class="fld"><span>lines — after more than one attempt</span>
+        <textarea id="cWinQuipsRetry" rows="9"></textarea></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Save</h2>
+    <div class="rowbtns">
+      <button class="act prim" id="cSave">Save to copy.js</button>
+      <button class="act" id="cPick">Choose file…</button>
+      <button class="act" id="cDl">Download</button>
+      <button class="act" id="cCopy">Copy full copy.js</button>
+      <button class="act" id="cReload">Reload copy.js</button>
+      <button class="act danger" id="cReset">Reset to shipped</button>
+    </div>
+    <div class="hint" style="margin-top:8px">Same machinery as the Levels tab: choose the file
+      once and every Save after that overwrites it in place. The two tabs keep <b>separate</b>
+      file handles, so pointing one at the wrong file cannot clobber the other.</div>
+  </div>
+</section>
+
 <script src="levels.js"></script>
+<script src="copy.js"></script>
 <script>
 const LSKEY = "tilerunner_editor_v2";
 let autoAvail = true, autoTimer = null;
@@ -2081,6 +2179,194 @@ if(!FS_OK){ $("saveFs").textContent="Download levels.js"; $("pickFs").disabled=t
 // Recover the handle early, so the Save click never has to await IndexedDB before opening a
 // picker — some browsers only honour a picker call while the gesture is still live.
 idbGet("levelsHandle").then(h=>{ if(h){ fsHandle=h; $("saveFs").title="writes over "+h.name; } });
+
+
+// ================= the COPY tab =====================================================
+// The same tool pointed at a different file. copy.js holds every line of writing the game says
+// that is not part of a level; it is loaded by the <script src> above exactly the way levels.js
+// is, so what this edits and what the game reads cannot drift apart.
+//
+// The list fields are one entry per line. That is not a shortcut — prose is edited in bulk, and
+// a row of single-line inputs with add/remove buttons is a worse tool for writing quips than a
+// box you can paste a dozen lines into.
+const COPY_SHIPPED = (typeof COPY_DATA !== "undefined") ? COPY_DATA : {};
+const COPY_KEY = "tilerunner:editor:copy";
+const LIST_FIELDS = { cLoseTitles:"loseTitles", cLoseQuips:"loseQuips", cPauseQuips:"pauseQuips",
+                      cWinQuips:"winQuips", cWinQuipsRetry:"winQuipsRetry" };
+const TEXT_FIELDS = { cPauseTitle:"pauseTitle", cWinTitle:"winTitle",
+                      cWinTitleLast:"winTitleLast", cWinBylineLast:"winBylineLast" };
+let copyDraft = null;
+
+const linesOf = t => String(t == null ? "" : t).split("\n").map(x => x.trim()).filter(Boolean);
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+
+// The mech rows are built from the KEYS of the shipped file, always — a key is not copy, and a
+// draft that had somehow lost one should show it back rather than quietly drop a card.
+function buildMechRows(){
+  const host = $("mechList"); host.innerHTML = "";
+  for (const k of Object.keys(COPY_SHIPPED.mechs || {})) {
+    const row = document.createElement("div"); row.className = "mech";
+    row.innerHTML =
+      '<div class="key">' + k + '</div>' +
+      '<label class="fld"><span>heading</span>' +
+        '<input type="text" data-mech="' + k + '" data-f="name" maxlength="40"></label>' +
+      '<label class="fld"><span>line</span>' +
+        '<textarea rows="2" data-mech="' + k + '" data-f="desc"></textarea></label>';
+    host.appendChild(row);
+  }
+  host.querySelectorAll("[data-mech]").forEach(el =>
+    el.addEventListener("input", () => { readCopyForm(); saveCopyDraft(); setStatus("copy edited"); }));
+}
+
+function fillCopyForm(){
+  for (const id in TEXT_FIELDS) $(id).value = copyDraft[TEXT_FIELDS[id]] || "";
+  for (const id in LIST_FIELDS) $(id).value = (copyDraft[LIST_FIELDS[id]] || []).join("\n");
+  document.querySelectorAll("[data-mech]").forEach(el => {
+    const m = copyDraft.mechs[el.dataset.mech] || {};
+    el.value = m[el.dataset.f] || "";
+  });
+}
+function readCopyForm(){
+  for (const id in TEXT_FIELDS) copyDraft[TEXT_FIELDS[id]] = $(id).value;
+  for (const id in LIST_FIELDS) copyDraft[LIST_FIELDS[id]] = linesOf($(id).value);
+  document.querySelectorAll("[data-mech]").forEach(el => {
+    const k = el.dataset.mech;
+    copyDraft.mechs[k] = copyDraft.mechs[k] || { name:"", desc:"" };
+    copyDraft.mechs[k][el.dataset.f] = el.value;
+  });
+}
+function saveCopyDraft(){ try { localStorage.setItem(COPY_KEY, JSON.stringify(copyDraft)); } catch(e){} }
+
+// The file, written the way copy.js is written, comments and all — it is a file a person reads,
+// not a blob, and a save that stripped the explanations would make it one.
+function copyFile(){
+  const q = v => JSON.stringify(String(v));
+  const list = (key, arr) => "  " + key + ": [\n" +
+    arr.map(x => "    " + q(x) + ",").join("\n") + "\n  ],\n";
+  let out = "";
+  out += "// Tile Runner copy — every line of writing the game says that is NOT part of a level.\n";
+  out += "// Edited in level-editor.html (the COPY tab), which writes this file the same way it writes\n";
+  out += "// levels.js. The verses on the chapter cards are NOT here: they belong to their level and live\n";
+  out += "// in levels.js with it.\n//\n";
+  out += "// Loaded two ways, and it has to answer to both: `require()` from Node (tools/check.mjs) and a\n";
+  out += "// plain <script src> from the game and the editor, which is why this is a global and not an\n";
+  out += "// ES module.\n";
+  out += "var COPY_DATA = {\n";
+  out += "  // The card that introduces a mechanic the first time a chapter uses one. `name` is the\n";
+  out += "  // heading, `desc` the line under it. The KEY is what a level's `intro` list names, so\n";
+  out += "  // renaming one orphans every level that asks for it — change the text, not the key.\n";
+  out += "  mechs: {\n";
+  for (const k of Object.keys(copyDraft.mechs)) {
+    const m = copyDraft.mechs[k];
+    out += "    " + q(k) + ": { name: " + q(m.name) + ",\n" +
+           " ".repeat(6 + q(k).length + 2) + "desc: " + q(m.desc) + " },\n";
+  }
+  out += "  },\n";
+  out += "  // A FALL. The heading is picked from these and the line under it from the next\n";
+  out += "  // list — both fresh every death, and never the same one twice running.\n";
+  out += list("loseTitles", copyDraft.loseTitles);
+  out += "  // ...and what it says under that heading.\n";
+  out += list("loseQuips", copyDraft.loseQuips);
+  out += "  // A PAUSE. One heading, always — it is a state rather than an event, and a state that\n";
+  out += "  // renamed itself every time you stopped would read as a different screen each time.\n";
+  out += "  pauseTitle: " + q(copyDraft.pauseTitle) + ",\n";
+  out += "  // ...but the line under it is drawn from these, one per pause.\n";
+  out += list("pauseQuips", copyDraft.pauseQuips);
+  out += "  // A CLEAR. Two headings, and which you get depends on whether there is any campaign left.\n";
+  out += "  winTitle: " + q(copyDraft.winTitle) + ",\n";
+  out += "  winTitleLast: " + q(copyDraft.winTitleLast) + ",\n";
+  out += "  // `winBylineLast` takes {n}, which is filled in with how many chapters there are.\n";
+  out += "  winBylineLast: " + q(copyDraft.winBylineLast) + ",\n";
+  out += "  // first go\n";
+  out += list("winQuips", copyDraft.winQuips);
+  out += "  // ...and after more than one attempt.\n";
+  out += list("winQuipsRetry", copyDraft.winQuipsRetry);
+  out += "};\n";
+  out += 'if (typeof module !== "undefined") module.exports = COPY_DATA;\n';
+  return out;
+}
+
+// Its OWN file handle, under its own key. One shared handle would mean pointing the editor at
+// levels.js on the Levels tab and then writing the copy over it on this one.
+let copyHandle = null;
+async function copyPick(){
+  if(!FS_OK){ setStatus("this browser can't write files directly — use Download"); return null; }
+  try{
+    copyHandle = await window.showSaveFilePicker({ suggestedName:"copy.js",
+      types:[{description:"JavaScript", accept:{"text/javascript":[".js"]}}] });
+    await idbSet("copyHandle", copyHandle);
+    setStatus("copy target set — " + copyHandle.name);
+    return copyHandle;
+  }catch(e){ if(e && e.name==="AbortError") return null; setStatus("couldn't set target: "+e.message); return null; }
+}
+async function copySave(){
+  readCopyForm(); saveCopyDraft();
+  if(!FS_OK){ copyDownload(); setStatus("this browser can't write files directly — downloaded instead"); return; }
+  try{
+    if(!copyHandle) copyHandle = await copyPick();
+    if(!copyHandle) return;
+    if(!await grant(copyHandle)){ setStatus("permission denied — press Save again to retry"); return; }
+    const ws = await copyHandle.createWritable();
+    await ws.write(copyFile()); await ws.close();
+    setStatus("wrote the copy to " + copyHandle.name + " — reload the game to see it");
+  }catch(e){ if(e && e.name==="AbortError") return; setStatus("save failed: "+e.message); }
+}
+function copyDownload(){
+  const blob=new Blob([copyFile()],{type:"text/javascript"}); const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download="copy.js"; a.click();
+}
+
+// A fresh read of copy.js, so the FILE is the authority rather than whatever this page was
+// loaded with — the same reason the Levels tab re-reads levels.js.
+async function copyReload(){
+  try{
+    const res = await fetch("copy.js?ts=" + Date.now(), {cache:"no-store"});
+    const txt = await res.text();
+    const fn = new Function(txt + "; return COPY_DATA;");
+    const data = fn();
+    if(!data || !data.mechs) throw new Error("no COPY_DATA in it");
+    copyDraft = clone(data); fillCopyForm(); saveCopyDraft();
+    setStatus("reloaded copy.js");
+  }catch(e){ setStatus("couldn't read copy.js — " + e.message); }
+}
+
+function copyInit(){
+  let draft = null;
+  try { draft = JSON.parse(localStorage.getItem(COPY_KEY) || "null"); } catch(e){}
+  copyDraft = (draft && draft.mechs) ? draft : clone(COPY_SHIPPED);
+  // A draft written before a card existed is missing it; the shipped keys are the truth about
+  // WHICH cards there are, so fill any gap rather than losing a card off the tab.
+  copyDraft.mechs = copyDraft.mechs || {};
+  for (const k in (COPY_SHIPPED.mechs || {}))
+    if (!copyDraft.mechs[k]) copyDraft.mechs[k] = clone(COPY_SHIPPED.mechs[k]);
+  buildMechRows(); fillCopyForm();
+}
+[...Object.keys(LIST_FIELDS), ...Object.keys(TEXT_FIELDS)].forEach(id =>
+  $(id).addEventListener("input", () => { readCopyForm(); saveCopyDraft(); setStatus("copy edited"); }));
+$("cSave").onclick = copySave;
+$("cPick").onclick = async () => { await copyPick(); };
+$("cDl").onclick = () => { readCopyForm(); copyDownload(); setStatus("downloaded copy.js"); };
+$("cCopy").onclick = () => { readCopyForm(); copy(copyFile()); setStatus("full copy.js copied"); };
+$("cReload").onclick = copyReload;
+$("cReset").onclick = () => {
+  if(!confirm("Throw away your edits to the copy and go back to what is in copy.js on disk?")) return;
+  copyDraft = clone(COPY_SHIPPED); fillCopyForm(); saveCopyDraft(); setStatus("copy reset to shipped");
+};
+if(!FS_OK){ $("cSave").textContent="Download copy.js"; $("cPick").disabled=true;
+            $("cPick").title="needs a Chromium browser"; }
+idbGet("copyHandle").then(h=>{ if(h){ copyHandle=h; $("cSave").title="writes over "+h.name; } });
+
+// ---- the tabs themselves ----
+function showTab(which){
+  document.body.classList.toggle("copy", which === "copy");
+  $("tabCopy").classList.toggle("on", which === "copy");
+  $("tabLevels").classList.toggle("on", which !== "copy");
+  try { localStorage.setItem("tilerunner:editor:tab", which); } catch(e){}
+}
+$("tabLevels").onclick = () => showTab("levels");
+$("tabCopy").onclick   = () => showTab("copy");
+copyInit();
+try { if (localStorage.getItem("tilerunner:editor:tab") === "copy") showTab("copy"); } catch(e){}
 
 $("copyOne2").onclick=()=>{ commit(); copy($("out").value); setStatus("level JSON copied"); };
 // Play the level you are looking at, in the real game, without saving it first: park the DRAFT

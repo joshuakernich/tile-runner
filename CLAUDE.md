@@ -46,7 +46,8 @@ bump and installed home-screen copies keep serving the old icons and manifest.
 | `index.html` | The whole game. `const LEVELS = [ … ]` near the top; `const RUNNER = { … }` above `drawRunner`; the `Sound` module around line 300. |
 | `sw.js` | Service worker. Bump `CACHE` every ship. |
 | `levels.js` | The campaign, and the only copy of it. Loaded by the game and the editor as a `<script src>`, and by Node via `require()`. |
-| `level-editor.html` | Visual level editor. Level list on the left (drag to reorder — that renumbers the campaign), map in the middle (drag its edges to resize), tool matrix on the right. **Save to levels.js** writes the real file via the File System Access API. Autosaves drafts to `localStorage`. |
+| `copy.js` | Every line the game **says** that is not part of a level: the mechanic cards, and the headings and bylines on a fall, a pause and a clear. Same dual-format arrangement as `levels.js`, same reasons, and edited on the editor's **Copy** tab. Chapter verses are *not* here — they belong to their level. |
+| `level-editor.html` | Visual level editor, on two tabs. **Levels: Level list on the left (drag to reorder — that renumbers the campaign), map in the middle (drag its edges to resize), tool matrix on the right. **Save to levels.js** writes the real file via the File System Access API. **Copy:** every line of writing outside the levels — mech cards, fall, pause, clear — writing `copy.js` through the same machinery under its own file handle. Both tabs autosave drafts to `localStorage`. |
 | `runner-lab.html` | Live editor for the runner. A slider per `RUNNER` key, onion skin, stride scrub, guides, real-size previews standing on real track. **Copy RUNNER block** → paste wholesale. |
 | `icon-lab.html` | App-icon composer. Hands the **running game** a canvas and a size and lets it paint the icon with the board's own routines — the cosmos, two tiles and the runner mid-stride — so the icon can't drift from the game. Exports `icon-1024/512/192/180.png` named for the manifest. `tools/check.mjs` fails if this page ever grows its own copy of the art again. |
 | `music-lab.html` | Backing-track editor with per-level overrides and a piano roll. Not yet wired into the game. |
@@ -83,6 +84,11 @@ They're meant to be pasted between each other whole, never hand-patched. Drift i
 happily shows you a runner the game no longer draws. `tools/check.mjs` diffs both. (icon-lab used
 to carry a third copy; it now asks the game to draw the icon instead, and the checker fails if a
 copy ever reappears there.)
+
+**The writing lives in `copy.js`, the levels in `levels.js`.** Neither has a second copy. The
+game loads both with a plain `<script src>`, so it must be **served**; both must stay in `sw.js`'s
+precache or an offline launch comes up with an empty campaign and blank cards. `tools/check.mjs`
+guards the wiring for both and fails if `index.html` grows its own `MECHS` or `*_QUIPS` back.
 
 **Level data now lives in ONE file.** `levels.js` is loaded by both `index.html` and
 `level-editor.html` with a plain `<script src>`, so there is nothing to keep in sync — the old
