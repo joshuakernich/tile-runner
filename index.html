@@ -3122,7 +3122,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.12";                    // shown on the title & pause screens
+  const VERSION = "v10.13";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -5678,10 +5678,15 @@
   }
 
   // tap a stone tile to smash it (opens the cell for a path tile)
-  function breakStone(c, r) {
+  // `all` takes the whole stone however much of it is left, rather than a layer of it. A tap
+  // chips; the Hammer does not chip. It drops hp straight to nothing so the shatter below runs
+  // ONCE — stepping it down in a loop would stack a crunch and a burst of shards per remaining
+  // layer, and a three-hit stone would go off three times louder than a one-hit stone standing
+  // beside it.
+  function breakStone(c, r, all) {
     const st = state.stones.get(key(c, r));
     if (!st) return;
-    st.hp -= 1; st.hit = 1;                          // register a tap; deeper crack (see drawStone)
+    st.hp = all ? 0 : st.hp - 1; st.hit = 1;         // register a tap; deeper crack (see drawStone)
     haptic(st.hp > 0 ? 10 : 18);
     const wx = (c + 0.5) * cell, wy = (r + 0.5) * cell;
     if (st.hp > 0) {                                 // chip it — a few shards, a small knock
@@ -6392,7 +6397,7 @@
     band:    0.13,   // how thick a ring is, as a share of the radius
     ease:    3.00,   // its life: how it comes in at the rim and how it lands at the middle
     ringA:   0.56,   // a square at the middle of a ring
-    wash:    0.07,   // the flat wash over the whole reach, so it reads as an AREA and not a ring
+    wash:    0,      // the flat wash over the whole reach — off, so only the rings mark it
     chequer: 1,      // alternates the two tones square by square
   };
   const MAGNET_TONE = { mid: "rgba(255,140,140,", rim: "rgba(255,236,236," };
@@ -6621,14 +6626,15 @@
       try { Sound.roar && Sound.roar(R.kind); } catch(_){}
       haptic([12, 26, 60]);
     }
-    // Each tile of the beam hits as it ARRIVES, so what breaks the rock is the thing you can
-    // see reaching it — one damage apiece, the same as a tap, which is what lets a three-hit
-    // stone stand there cracked with the line lying across it.
+    // Each tile of the beam hits as it ARRIVES, so what breaks the rock is the thing you can see
+    // reaching it — and it takes the WHOLE stone, however many layers were left in it. It used
+    // to do one damage apiece, the same as a tap, which left a three-hit stone standing there
+    // cracked with the line lying right across it: the Hammer of God, and the rock shrugged.
     if (R.fired && R.beam) {
       const want = Math.min(R.beam.length, Math.floor((R.t - ROAR.wind) / R.step) + 1);
       while (R.hit < want) {
         const b = R.beam[R.hit++];
-        if (s.stones.has(key(b.c, b.r))) breakStone(b.c, b.r);
+        if (s.stones.has(key(b.c, b.r))) breakStone(b.c, b.r, true);
       }
     }
     // the ground goes while he is shouting, and settles as he does
