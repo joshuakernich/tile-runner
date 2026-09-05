@@ -3122,7 +3122,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.14";                    // shown on the title & pause screens
+  const VERSION = "v10.15";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -14274,18 +14274,44 @@
       // the picture. The tile still wants half a cell below his feet; the rest is headroom.
       const SH = Math.round(rs*2.05);
       const fig = document.createElement("div"); fig.className = "shop-fig";
-      fig.style.width = S + "px";                     // 1:1 with the bitmap — see .shop-fig
-      const cv = document.createElement("canvas"); cv.width = S; cv.height = SH;
+      fig.style.width = S + "px";
+      // The BOARD is drawn at device resolution; this was drawn at one device pixel per CSS
+      // pixel, so the very same tile at the very same size came out soft here and crisp in play.
+      // The bitmap is cut at ICON_SCALE and shown at S, which is the arrangement every other
+      // canvas in the menus uses, and the whole picture is scaled once at the top of the paint
+      // so nothing below has to know.
+      const cv = document.createElement("canvas");
+      cv.width = S*ICON_SCALE; cv.height = SH*ICON_SCALE;
+      cv.style.width = S + "px"; cv.style.height = SH + "px";
       fig.appendChild(cv);
       const g = cv.getContext("2d");
       const foot = { x: S*0.50, y: Math.round(SH*0.72) };   // where his feet stand
+      // ...and the picture is pulled UP by the empty room above the tile, so the tile sits one
+      // grid square under the heading instead of a whole cell below it. The room is still THERE
+      // — a tall hat, a glow, a leaping swagger all still have it to draw into — it simply
+      // overlaps the heading now rather than pushing the whole picture down the screen. It is
+      // exactly `foot.y - rs/2`: the top of the tile, which is the highest thing an ordinary
+      // outfit paints.
+      fig.style.marginTop = -(Math.round(foot.y - rs/2)) + "px";
+      // ...but never so far up that the headroom is cut off. #menu clips at overflow:hidden, so
+      // a pull-up bigger than the room above it would take the top off the very hats this space
+      // exists for. Measured after layout rather than reasoned about: the heading's height is
+      // itself measured in a rAF just above, and on a short screen there may be less room than
+      // the picture wants. Whatever it cannot have, it gives back.
+      requestAnimationFrame(() => {
+        const top = fig.getBoundingClientRect().top;
+        if (top < 0) fig.style.marginTop =
+          (parseFloat(fig.style.marginTop) - top) + "px";
+      });
 
       // He runs on the spot for as long as the shop is open, rather than being frozen at
       // whatever millisecond the menu happened to be built on. A still frame can't show a
       // swagger — a hop, a roll and a lotus all look like standing there — and the whole
       // point of the picture is to show what you are buying in motion.
       const paintFig = (ts) => {
-      g.clearRect(0, 0, S, SH);
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.clearRect(0, 0, cv.width, cv.height);
+      g.setTransform(ICON_SCALE, 0, 0, ICON_SCALE, 0, 0);   // ...then draw in CSS pixels
       // The game's own pane, body and rail, in whatever track skin is worn — so the track
       // is on show here too rather than being represented by a stand-in.
       withCanvas(g, rs, foot.x - rs/2, foot.y - rs/2, () => {
