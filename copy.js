@@ -46,6 +46,11 @@ var COPY_DATA = {
     "turn": { name: "Take a Turn",
               desc: "Lay a tile to the SIDE of the path to steer toward the flag." },
   },
+  // The card that offers the TILE SHOP, shown once, the first time there is a shop to go to.
+  // Same shape as a mechanic card because it is one — a heading and a line — except that this
+  // one carries a door through to the shop itself.
+  shopIntro: { name: "The Tile Shop",
+               desc: "Time to spend those hard-earned pennies on some new drip." },
   // A FALL. The heading is picked from these and the line under it from the next
   // list — both fresh every death, and never the same one twice running.
   loseTitles: [
@@ -121,7 +126,7 @@ var COPY_DATA = {
   ],
   // ...and after more than one attempt.
   winQuipsRetry: [
-    "Got there in the end. Emphasis on 'end'.",
+    "Got there in the end.",
     "Persistence is a kind of talent.",
     "That's the one. We'll ignore the others.",
     "Practice makes… this.",

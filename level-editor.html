@@ -364,6 +364,17 @@
     <div id="mechList"></div>
   </div>
 
+  <div class="card">
+    <h2>The tile shop prompt</h2>
+    <div class="hint" style="margin-bottom:10px">Shown once, the first time there is a shop to
+      go to. It is a mechanic card in every way except that this one carries a door straight
+      through to the shop.</div>
+    <label class="fld"><span>heading</span>
+      <input type="text" id="cShopName" maxlength="40"></label>
+    <label class="fld"><span>line</span>
+      <textarea id="cShopDesc" rows="3"></textarea></label>
+  </div>
+
   <div class="two">
     <div class="card">
       <h2>A fall</h2>
@@ -2204,7 +2215,7 @@ function clone(o){ return JSON.parse(JSON.stringify(o)); }
 // draft that had somehow lost one should show it back rather than quietly drop a card.
 function buildMechRows(){
   const host = $("mechList"); host.innerHTML = "";
-  for (const k of Object.keys(COPY_SHIPPED.mechs || {})) {
+  for (const k of Object.keys(COPY_TRUTH.mechs || {})) {
     const row = document.createElement("div"); row.className = "mech";
     row.innerHTML =
       '<div class="key">' + k + '</div>' +
@@ -2220,6 +2231,8 @@ function buildMechRows(){
 
 function fillCopyForm(){
   for (const id in TEXT_FIELDS) $(id).value = copyDraft[TEXT_FIELDS[id]] || "";
+  $("cShopName").value = (copyDraft.shopIntro || {}).name || "";
+  $("cShopDesc").value = (copyDraft.shopIntro || {}).desc || "";
   for (const id in LIST_FIELDS) $(id).value = (copyDraft[LIST_FIELDS[id]] || []).join("\n");
   document.querySelectorAll("[data-mech]").forEach(el => {
     const m = copyDraft.mechs[el.dataset.mech] || {};
@@ -2228,6 +2241,7 @@ function fillCopyForm(){
 }
 function readCopyForm(){
   for (const id in TEXT_FIELDS) copyDraft[TEXT_FIELDS[id]] = $(id).value;
+  copyDraft.shopIntro = { name: $("cShopName").value, desc: $("cShopDesc").value };
   for (const id in LIST_FIELDS) copyDraft[LIST_FIELDS[id]] = linesOf($(id).value);
   document.querySelectorAll("[data-mech]").forEach(el => {
     const k = el.dataset.mech;
@@ -2262,6 +2276,11 @@ function copyFile(){
            " ".repeat(6 + q(k).length + 2) + "desc: " + q(m.desc) + " },\n";
   }
   out += "  },\n";
+  out += "  // The card that offers the TILE SHOP, shown once, the first time there is a shop to go to.\n";
+  out += "  // Same shape as a mechanic card because it is one — a heading and a line — except that this\n";
+  out += "  // one carries a door through to the shop itself.\n";
+  out += "  shopIntro: { name: " + q(copyDraft.shopIntro.name) + ",\n" +
+         "               desc: " + q(copyDraft.shopIntro.desc) + " },\n";
   out += "  // A FALL. The heading is picked from these and the line under it from the next\n";
   out += "  // list — both fresh every death, and never the same one twice running.\n";
   out += list("loseTitles", copyDraft.loseTitles);
@@ -2325,23 +2344,50 @@ async function copyReload(){
     const fn = new Function(txt + "; return COPY_DATA;");
     const data = fn();
     if(!data || !data.mechs) throw new Error("no COPY_DATA in it");
-    copyDraft = clone(data); fillCopyForm(); saveCopyDraft();
+    COPY_TRUTH = data;
+    copyDraft = clone(data); buildMechRows(); fillCopyForm(); saveCopyDraft();
     setStatus("reloaded copy.js");
   }catch(e){ setStatus("couldn't read copy.js — " + e.message); }
 }
 
-function copyInit(){
+// The <script src="copy.js"> above is subject to the browser's cache and to the game's service
+// worker, either of which can hand this page a copy.js older than the one on disk — and a
+// baseline that is behind the file is how a field silently comes up blank and then gets SAVED
+// blank over the real one. So the shipped baseline is re-read here, cache-busted, exactly the
+// way the Levels tab re-reads levels.js. The <script> tag is only the fallback.
+async function freshShipped(){
+  try {
+    const res = await fetch("copy.js?ts=" + Date.now(), { cache:"no-store" });
+    const data = new Function((await res.text()) + "; return COPY_DATA;")();
+    if (data && data.mechs) return data;
+  } catch(e){}
+  return COPY_SHIPPED;
+}
+let COPY_TRUTH = COPY_SHIPPED;
+function copyFillGaps(){
+  // Whatever the draft is missing, the FILE is the truth about — which cards there are, and
+  // which fields they have. A draft written before a field existed simply has no opinion on it.
+  copyDraft.mechs = copyDraft.mechs || {};
+  for (const k in (COPY_TRUTH.mechs || {}))
+    if (!copyDraft.mechs[k]) copyDraft.mechs[k] = clone(COPY_TRUTH.mechs[k]);
+  // ...and a shopIntro that is present but EMPTY is repaired too, not just a missing one: that
+  // is what a draft saved from a stale baseline looks like, and it is indistinguishable from
+  // someone deliberately clearing both fields. Restoring is the kinder of the two mistakes —
+  // clearing them again is one edit, whereas losing the card takes you to the file to get it
+  // back. It is repaired on LOAD only, so a blanking still holds while you are working.
+  const si = copyDraft.shopIntro;
+  if (!si || (!si.name && !si.desc))
+    copyDraft.shopIntro = clone(COPY_TRUTH.shopIntro || { name:"", desc:"" });
+}
+async function copyInit(){
   let draft = null;
   try { draft = JSON.parse(localStorage.getItem(COPY_KEY) || "null"); } catch(e){}
-  copyDraft = (draft && draft.mechs) ? draft : clone(COPY_SHIPPED);
-  // A draft written before a card existed is missing it; the shipped keys are the truth about
-  // WHICH cards there are, so fill any gap rather than losing a card off the tab.
-  copyDraft.mechs = copyDraft.mechs || {};
-  for (const k in (COPY_SHIPPED.mechs || {}))
-    if (!copyDraft.mechs[k]) copyDraft.mechs[k] = clone(COPY_SHIPPED.mechs[k]);
+  COPY_TRUTH = await freshShipped();
+  copyDraft = (draft && draft.mechs) ? draft : clone(COPY_TRUTH);
+  copyFillGaps();
   buildMechRows(); fillCopyForm();
 }
-[...Object.keys(LIST_FIELDS), ...Object.keys(TEXT_FIELDS)].forEach(id =>
+["cShopName", "cShopDesc", ...Object.keys(LIST_FIELDS), ...Object.keys(TEXT_FIELDS)].forEach(id =>
   $(id).addEventListener("input", () => { readCopyForm(); saveCopyDraft(); setStatus("copy edited"); }));
 $("cSave").onclick = copySave;
 $("cPick").onclick = async () => { await copyPick(); };
@@ -2350,7 +2396,7 @@ $("cCopy").onclick = () => { readCopyForm(); copy(copyFile()); setStatus("full c
 $("cReload").onclick = copyReload;
 $("cReset").onclick = () => {
   if(!confirm("Throw away your edits to the copy and go back to what is in copy.js on disk?")) return;
-  copyDraft = clone(COPY_SHIPPED); fillCopyForm(); saveCopyDraft(); setStatus("copy reset to shipped");
+  copyDraft = clone(COPY_TRUTH); fillCopyForm(); saveCopyDraft(); setStatus("copy reset to shipped");
 };
 if(!FS_OK){ $("cSave").textContent="Download copy.js"; $("cPick").disabled=true;
             $("cPick").title="needs a Chromium browser"; }

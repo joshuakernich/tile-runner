@@ -3122,7 +3122,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.13";                    // shown on the title & pause screens
+  const VERSION = "v10.14";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -5238,10 +5238,9 @@
     if (seen.has(SHOP_INTRO_KEY)) return;
     seen.add(SHOP_INTRO_KEY); saveSeen(seen);
     const pop = document.getElementById("mechpop");
-    document.getElementById("mech-name").textContent = "The Tile Shop";
-    document.getElementById("mech-desc").textContent =
-      "Every coin you carry out of a chapter is spending money. None of it changes how you " +
-      "run — all of it changes who is running.";
+    const si = COPY.shopIntro || { name:"", desc:"" };
+    document.getElementById("mech-name").textContent = si.name || "";
+    document.getElementById("mech-desc").textContent = si.desc || "";
     const cv = document.getElementById("mech-icon"), g = cv.getContext("2d");
     g.clearRect(0, 0, cv.width, cv.height);
     withCanvas(g, cv.width, 0, 0, () => coinGlyph(cv.width/2, cv.width/2, cv.width*0.52));
@@ -7970,8 +7969,35 @@
   // the near ones pass in FRONT of the far ones. That crossing is the whole illusion: without
   // it, two ellipses of badges read as a flat pattern rather than as something turning.
   const ATOM_PX = 46, ATOM_MS = 3400;
-  let _atomRaf = 0;
+  let _atomRaf = 0, _atomPad = null;
   function stopAtom() { if (_atomRaf) cancelAnimationFrame(_atomRaf); _atomRaf = 0; }
+  // A locked charm, drained — WITHOUT ctx.filter, which Safari did not have before 17.4 and
+  // silently ignores rather than throwing, so on an older iPhone every charm you had not found
+  // was orbiting in full colour alongside the ones you had.
+  //
+  // The rack already solves this with `source-atop` and a flat fill, but the rack gives each
+  // charm a canvas of its own; these six share one, and a source-atop fill would take every
+  // charm already drawn under it as well. So the locked one is drawn on a scratch canvas, greyed
+  // there where it is the only thing, and stamped back. One drawImage and one fill per locked
+  // charm — no getImageData, nothing read back off the GPU.
+  //
+  // Partial alpha rather than the rack's near-opaque silhouette: this is meant to read as the
+  // same charm with the colour drained out of it, so what is under the grey still shows.
+  function drawCharmDrained(g, S, draw) {
+    if (!_atomPad || _atomPad.width !== S) {
+      _atomPad = document.createElement("canvas");
+      _atomPad.width = _atomPad.height = S;
+    }
+    const pg = _atomPad.getContext("2d");
+    pg.setTransform(1, 0, 0, 1, 0, 0);
+    pg.clearRect(0, 0, S, S);
+    draw(pg);
+    pg.globalCompositeOperation = "source-atop";
+    pg.fillStyle = "rgba(104,108,132,0.80)";
+    pg.fillRect(0, 0, S, S);
+    pg.globalCompositeOperation = "source-over";
+    g.drawImage(_atomPad, 0, 0);
+  }
   function startAtom(cv) {
     stopAtom();
     const S = cv.width, g = cv.getContext("2d");
@@ -7994,8 +8020,10 @@
         g.save();
         // Not yours yet: it still goes round, in grey, so what is missing is as plain as what
         // is not. A charm left OUT of the orbit would just look like a smaller set.
-        if (!talUnlocked.has(p.def.id)) g.filter = "grayscale(1) brightness(0.62)";
-        p.def.draw(g, p.x, p.y, rad*(0.70 + 0.30*(p.z*0.5 + 0.5)));
+        const size = rad*(0.70 + 0.30*(p.z*0.5 + 0.5));
+        const one = (into) => p.def.draw(into, p.x, p.y, size);
+        if (talUnlocked.has(p.def.id)) one(g);
+        else drawCharmDrained(g, S, one);
         g.restore();
       }
       _atomRaf = requestAnimationFrame(paint);
@@ -8006,10 +8034,56 @@
   // The map's scale on the interlevel screen. Pulled out of drawWin because the hit test needs
   // exactly the same number: a tap has to land on the square you can see, and two copies of this
   // sum would drift apart the first time either was touched.
+  // GREYING WITHOUT ctx.filter. `ctx.filter` is not available on Safari before 17.4, and an
+  // unsupported assignment to it is silently ignored rather than throwing — so on an older
+  // iPhone every locked chapter on the map came up in full colour while the same build looked
+  // right on a desktop. Nothing about the map said it was locked.
+  //
+  // So the drain is done to the COLOURS instead. Any CSS colour goes in — the level palettes
+  // are hsl() strings, which is why the game's hex tinting could not be used here — and canvas
+  // itself does the parsing: assigning to fillStyle and reading it back normalises whatever it
+  // was to #rrggbb. Cached, because a palette is a handful of strings asked for every frame.
+  let _drainPad = null, _drainMemo = new Map();
+  function drainColour(col, grey, bright) {
+    const memo = col + "|" + grey.toFixed(2) + "|" + bright.toFixed(2);
+    const had = _drainMemo.get(memo);
+    if (had) return had;
+    if (!_drainPad) _drainPad = document.createElement("canvas").getContext("2d");
+    _drainPad.fillStyle = "#000";
+    _drainPad.fillStyle = col;                       // canvas parses it for us...
+    const hex = _drainPad.fillStyle;                 // ...and hands it back normalised
+    let r = 0, g = 0, b = 0;
+    if (hex[0] === "#" && hex.length >= 7) {
+      r = parseInt(hex.slice(1,3),16); g = parseInt(hex.slice(3,5),16); b = parseInt(hex.slice(5,7),16);
+    } else {
+      const m = hex.match(/[\d.]+/g) || [0,0,0];
+      r = +m[0]; g = +m[1]; b = +m[2];
+    }
+    // The same weights the browser's own grayscale() filter uses, so the look does not shift on
+    // the machines where the filter DID work.
+    const lum = 0.2126*r + 0.7152*g + 0.0722*b;
+    const mix = (v) => Math.max(0, Math.min(255, Math.round((v + (lum - v)*grey) * bright)));
+    const out = "rgb(" + mix(r) + "," + mix(g) + "," + mix(b) + ")";
+    if (_drainMemo.size > 4000) _drainMemo.clear();
+    _drainMemo.set(memo, out);
+    return out;
+  }
+  // How big one chapter is drawn. Off the HEIGHT alone, deliberately.
+  //
+  // It used to be the smaller of the two axes — enough to fit the whole map on screen, width and
+  // height. On a desktop the height term already won, so nothing changes there; on a portrait
+  // PHONE the width term won and halved every square, and the map came up as a field of specks.
+  // Fitting across was never needed: this is a camera you drag, rubber-banded to bounds that let
+  // the outermost square sit in the middle of the screen, so nothing goes out of reach when the
+  // map is wider than the viewport. Fitting DOWN still matters — a map taller than the screen
+  // has no landmark to drag back to.
+  //
+  // For the 8x9 map the 44 chapters make: 84px on an 819x841 desktop either way, and 42 -> 81 on
+  // a 375x812 phone.
   function winMapFit() {
     const cells = mapCells();
-    const mCols = Math.max(...cells.map(p => p.c)) + 1, mRows = Math.max(...cells.map(p => p.r)) + 1;
-    return Math.min(viewW/(mCols + 1), viewH/(mRows + 1));
+    const mRows = Math.max(...cells.map(p => p.r)) + 1;
+    return viewH/(mRows + 1);
   }
   // Which chapters you may go to: everything cleared, and the first one you have not. The same
   // rule drawMap colours by, so what is lit is exactly what is pressable.
@@ -8098,9 +8172,10 @@
       // was quietly returning black for every square past the frontier. This is also exactly
       // what the menu's own map does to a locked tile, so the two agree.
       ctx.save();
-      if (lit < 1) ctx.filter = "grayscale(" + (1 - lit).toFixed(3) + ") brightness(" + (1 - 0.45*(1 - lit)).toFixed(3) + ")";
+      const grey = 1 - lit, bright = 1 - 0.45*(1 - lit);
       for (let k = 0; k < q*q; k++) {
-        ctx.fillStyle = cols[k % cols.length];
+        const base = cols[k % cols.length];
+        ctx.fillStyle = lit < 1 ? drainColour(base, grey, bright) : base;
         ctx.fillRect(x + (k % q)*qs - 0.5, y + Math.floor(k/q)*qs - 0.5, qs + 1, qs + 1);
       }
       // ...and the paper over it, the same grain every other surface in the game wears. A
@@ -8108,7 +8183,8 @@
       // and it was the one flat-printed surface in a game where everything else is on paper.
       // Inside the grey filter with the quilt, so an unreached chapter's paper is drained along
       // with its colours rather than staying bright over a tile that has gone quiet.
-      grainFill(x, y, w, w, TILE.bodyGrain);
+      // The grain is monochrome already, so draining it is only the brightness half.
+      grainFill(x, y, w, w, TILE.bodyGrain * bright);
       ctx.restore();
       ctx.restore();
       // The chapter's NUMBER, on every square you have been let into. Without them the pan from
@@ -8344,8 +8420,10 @@
     // Map beats. Everything from here is drawn from scratch: the cosmos, the map, the level
     // shrinking into its own square, and the words.
     const cells = mapCells();
-    const mCols = Math.max(...cells.map(p => p.c)) + 1, mRows = Math.max(...cells.map(p => p.r)) + 1;
-    const Sfit = Math.min(viewW/(mCols + 1), viewH/(mRows + 1));
+    // ONE source for the square size. This used to work the formula out again for itself, a
+    // hundred lines from winMapFit's copy of it — and hit-testing reads winMapFit, so any drift
+    // between the two would put the square you tap somewhere other than the square you see.
+    const Sfit = winMapFit();
     const S0 = Math.max(win.cellFit*COLS, win.cellFit*ROWS);     // one square covering the board
     const here = cells[P.idx] || { c:0, r:0 };
     const there = (P.next === INTRO_CELL ? introMapCell() : cells[P.next]) || here;
