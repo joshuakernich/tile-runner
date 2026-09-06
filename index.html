@@ -269,8 +269,18 @@
     position:fixed; left:0; right:0; bottom:0; height:calc(var(--chq) * 13);
     z-index:33; pointer-events:none; display:none;
     background:linear-gradient(to top,
-      rgba(5,4,13,0.94) 0%, rgba(5,4,13,0.86) 26%, rgba(5,4,13,0.52) 62%, rgba(5,4,13,0) 100%); }
+      rgba(5,4,13,0.72) 0%, rgba(5,4,13,0.60) 26%, rgba(5,4,13,0.32) 62%, rgba(5,4,13,0) 100%); }
   #winfade.show { display:block; animation:poem-in 260ms ease-out both; }
+  /* ...and the same thing at the TOP, for the same reason: the heading and the two doors sit on
+     whatever chapter happens to be up there, and a map that scrolls under them was arriving at
+     every colour in the campaign behind the same white lettering. Shallower than the foot — there
+     is a heading to clear up here, not a button to stand on. */
+  #winfadetop {
+    position:fixed; left:0; right:0; top:0; height:calc(var(--chq) * 11);
+    z-index:33; pointer-events:none; display:none;
+    background:linear-gradient(to bottom,
+      rgba(5,4,13,0.72) 0%, rgba(5,4,13,0.58) 30%, rgba(5,4,13,0.28) 64%, rgba(5,4,13,0) 100%); }
+  #winfadetop.show { display:block; animation:poem-in 260ms ease-out both; }
   /* ...and the paper over it, masked to the same fall, so the ground under the button is the
      same material as everything else in the game rather than a flat wash of black. */
   #winfade::after {
@@ -1353,6 +1363,7 @@
     <button id="win-shop"><span class="wt-ico"></span><span class="wt-lbl">Tile<br>Shop</span></button>
   </div>
 </div>
+<div id="winfadetop"></div>
 <div id="winfade"></div>
 <div id="winui">
   <button id="win-next">Play Chapter</button>
@@ -3122,7 +3133,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.15";                    // shown on the title & pause screens
+  const VERSION = "v10.16";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -7398,12 +7409,20 @@
     }
     f.t += dt; f.vy += FALL_G * dt;
     f.x += f.vx * dt; f.y += f.vy * dt; f.angle += f.va * dt;
+    // ...and STEERED onto the spot he is going to land on. His sideways speed used to decide
+    // where he came down entirely, and the heap's landing spot only decided how high he stopped
+    // — so he arrived somewhere off to one side of the peak he was supposed to be lying on, by
+    // a different amount every time. He is drawn toward it as he falls, at `aim`, so the last
+    // of the correction is spent long before he arrives.
+    const spot = pileLandSpot();
+    if (PILE.aim > 0) f.x += (spot.x - f.x) * (1 - Math.pow(1 - PILE.aim, dt/16));
     // The heap. He does not fall forever and he does not vanish either — he lands on everyone
     // who came before him, which is the joke, and it is only a joke if you see him arrive.
     // He lands on the SUMMIT, not on the floor the heap is built up from — otherwise he ends
     // the fall buried in the middle of it with bodies drawn over his head.
-    if (f.y >= pileLandSpot().y) {
+    if (f.y >= spot.y) {
       f.land = 0; f.vy = 0; f.vx *= 0.2; f.va = 0;
+      f.x = spot.x;                  // ...and exactly on it, whatever the last frame did
       // HEAD FIRST. Turned all the way over, his feet end up at the anchor and everything else
       // is drawn below it — so anchoring him at the summit buries the head in the heap and
       // leaves the legs sticking out of the top of it, which is the whole picture.
@@ -7560,75 +7579,60 @@
   // tightly the rows were packed the mound came out full of holes with a thicket of shins
   // across them. Squares stack; runners do not.
   const PILE = {
-    shape:    1.00,  // 0 = straight-sided triangle, 1 = a peak with long tails
-    gamma:    0.33,  // how sharp that peak is — half-width at half height, share of the base
+    // THE PYRAMID. One more body on every row down: 1 at the summit, 2 under it, and so on. No
+    // shape parameter and nothing to tune about the silhouette — a pyramid is a pyramid, and the
+    // only thing that makes it read as a heap rather than as masonry is the wander below.
+    rows:     10,    // rows at the first fall; one more every few attempts, up to `rowsMax`
+    rowsMax:  8,
+    stepX:    0.19,  // how far apart they sit across, as a fraction of a CELL
+    stepY:    0.16,  // ...and up
+    jitX:     0.10,  // how far one may wander off its place, across
+    jitY:     0.08,  // ...and up
+    sizeBase: 1.00,  // a body at the SUMMIT, as a fraction of a cell
+    sizeDepth:0.00,  // ...and how much bigger one at the front of the base is
+    sizeJit:  0.08,  // how much bodies vary among themselves
     hue0:     174,   // where on the colour wheel the bodies start
     hueSpan:  360,   // ...and how much of it they use
     sat:      0.17,  // how strong those colours are — 0 is grey, and greys are what this is
     light:    0.69,  // the middle of the range they are lit at
     lightSpan:0.28,  // ...and how far either side of it they spread, which is the variety
     hats:     0,     // 1 puts the hats back on; 0 leaves plain squares with eyes
-    rows:     10,    // rows at the first fall; one more every few attempts, up to `rowsMax`
-    rowsMax:  8,
-    stepX:    0.13,  // how far apart they sit across, as a fraction of a CELL
-    stepY:    0.16,  // ...and up
-    jitX:     0.10,  // how far one may wander off its place, across
-    jitY:     0.08,  // ...and up
-    sizeBase: 0.94,  // a body at the SUMMIT, as a fraction of a cell
-    sizeDepth:0.44,  // ...and how much bigger one at the front of the base is
-    sizeJit:  0.08,  // how much bodies vary among themselves
-    upDown:   0.78,  // the share of them lying head-down, the way you arrive
-    tilt:     1.20,  // how far off straight a head-down body may lean, in radians
     skirt:    0,     // rows carried on below the base, off the bottom of the frame
-    frame:    0.34,  // where down the view the SUMMIT sits, as a share of it
+    frame:    0.33,  // where down the view the SUMMIT sits, as a share of it
     sink:     0.00,  // ...and how far the BASE is pushed past the foot of it, in cells
-    coldFrom: 0.34,  // where down the screen the heap starts sinking into the dark
-    coldTo:   0.86,  // ...and how far under it goes by the foot of it
+    // WHERE HE LANDS. `landX` and `landY` nudge the spot in CELLS from where the arithmetic puts
+    // it; `aim` is how hard he is steered onto it on the way down — see tickFall, where his
+    // sideways drift used to decide this instead.
+    landX:    -0.15,
+    landY:    -0.45,
+    aim:      1.00,
   };
   // The heap's geometry, in one place: the tap that lands him on the summit and the drawing
   // that builds the summit have to agree about where it is.
-  //
-  // The BASE is wide enough to leave the screen on both sides, and the row count follows from
-  // it rather than being chosen — a stack that loses two bodies a row only comes to a POINT if
-  // it has half as many rows as its base is wide. Picking the two independently is what gave
-  // the first version a plateau with the flanks still off-screen.
   const pileMidX = () => (state.fall && state.fall.px != null) ? state.fall.px : worldW/2;
   const F0x = () => (state.fall ? state.fall.x : worldW/2);   // where the impact was, this frame
-  // Where he comes down: NOT the apex, but one or two places down the flank of it. Landing
-  // dead on the point is a stunt; landing just off it, on the slope, is a fall. `d` is how many
-  // places out he lands, and the height follows from the heap's own arithmetic — a body `d`
-  // steps from the middle is covered by every row that still has 2d+1 columns in it.
+  // Where he comes down: NOT the apex, but one or two places down the flank of it. Landing dead
+  // on the point is a stunt; landing just off it, on the slope, is a fall. `d` is how many
+  // places out he lands, and `landX`/`landY` nudge the whole thing from there.
   function pileLandSpot() {
     const G = pileGeom();
     const d = 1 + ((state.attempts || 1) & 1);
     const side = (state.fall && state.fall.vx < 0) ? -1 : 1;
-    // The highest row that still reaches `d` places out from the middle. This used to be the
-    // triangle's own arithmetic — rows - d — which was exact while the mound WAS a triangle and
-    // silently wrong the moment it stopped being one. Ask the profile instead.
+    // The highest row that still reaches `d` places out from the middle, asked of the profile
+    // rather than worked out from a shape it might no longer have.
     let row = 0;
     for (let r = G.rows - 1; r >= 0; r--) {
       if ((pileCols(r, G) - 1) / 2 >= d) { row = r; break; }
     }
     // ...and high enough above that row for the legs to clear the bodies lying on it. He is
     // drawn BEHIND the heap, so level with the local surface is out of sight entirely.
-    return { x: pileMidX() + side*d*G.stepX - cell*0.22,
-             y: pileY() - row*G.stepY - cell*0.55 };
+    return { x: pileMidX() + side*d*G.stepX - cell*0.22 + cell*PILE.landX,
+             y: pileY() - row*G.stepY - cell*0.55 + cell*PILE.landY };
   }
-  // How wide row `r` is, in bodies. A straight-sided heap loses two a row and comes to a point,
-  // which is a triangle; a LORENTZIAN loses them slowly at the bottom and then all at once near
-  // the top, which is a peak with tails — a spire standing out of a long low skirt. `shape`
-  // crossfades between the two so the old mound is still reachable, and `gamma` is how sharp
-  // that spire is: the curve's half-width at half its height, as a share of the base's.
-  function pileCols(r, G) {
-    if (r <= 0) return G.cols;                       // the base, and the skirt below it
-    const half0 = (G.cols - 1) / 2;
-    const straight = half0 - r;
-    // height at this row: 0 at the base and exactly 1 at the summit, so the top row is a point
-    const h = (r + 1) / G.rows;
-    const lor = h >= 1 ? 0 : PILE.gamma * half0 * Math.sqrt(1/h - 1);
-    const half = straight + (Math.min(half0, lor) - straight) * PILE.shape;
-    return Math.max(1, Math.round(Math.max(0, half)) * 2 + 1);
-  }
+  // How wide row `r` is, in bodies. A PYRAMID: one more on every row down, so the summit is a
+  // single body, the row under it two, and the base is as wide as the heap is tall. Rows below
+  // the base — the skirt — simply keep widening at the same rate and run off the frame.
+  function pileCols(r, G) { return Math.max(1, G.rows - r); }
   function pileGeom() {
     // Squeezed toward the middle: a narrow step across packs the bodies into each other, so the
     // mountain is a dense mass at the centre of the screen rather than a thin slope spread the
@@ -7638,7 +7642,7 @@
     // gave a heap twenty-odd rows tall — far more of it than the moment needs. Seven rows, and
     // a base exactly wide enough that losing two columns a row brings it to a point.
     const rows = Math.min(PILE.rowsMax, PILE.rows + Math.floor(((state.attempts || 1) - 1)/3));
-    return { stepX, stepY, rows, cols: rows*2 + 1 };
+    return { stepX, stepY, rows, cols: rows };   // a pyramid: the base is as wide as it is tall
   }
   // Him, then the heap over the top of him. Once he is DOWN he is part of it, and the heap
   // gives off no light: a Radium or a Sun drip lying in the pile bloomed over everyone around
@@ -7650,49 +7654,15 @@
     try { drawRunner(ts); } finally { _noGlow = 0; }
     drawFallPile(ts);
   }
-  // The heap goes COLD toward the foot of the screen: the bodies at the front of the base sink
-  // into a dark blue, and the ones near the summit keep their colour. It reads as depth —
-  // everything down there is further under, and further away from whatever light there is —
-  // and it stops the bottom third of a fail screen being the loudest thing on it.
-  //
-  // Done on a layer of its own, because the wash has to land on the BODIES and nothing else: a
-  // gradient painted straight over the board would tint the cosmos between them and the pile
-  // would come out as a blue rectangle with runners in it. Composited `source-atop`, so it
-  // only marks what the heap actually covers.
-  const PILE_COLD = "26,42,88";       // the dark blue it fades to
-  const PILE_COLD_FROM = () => PILE.coldFrom;   // ...where it starts down the screen,
-  const PILE_COLD_TO = () => PILE.coldTo;       // ...and how far under it goes by the foot
-  let _pileLayer = null;
+  // No wash over it. The heap used to sink into a dark blue toward the foot of the screen,
+  // composited source-atop on a layer of its own so it landed on the BODIES and not on the sky
+  // between them. That whole layer is gone: the bodies are greys already, and a gradient over
+  // greys is a gradient over nothing much — it cost a full-screen canvas, a second clear and a
+  // composite every frame of every fall to say what their own colour was already saying.
   function drawFallPile(ts) {
     if (state.status !== "falling" && state.status !== "lose") return;
-    if (!_pileLayer || _pileLayer.width !== canvas.width || _pileLayer.height !== canvas.height) {
-      _pileLayer = document.createElement("canvas");
-      _pileLayer.width = canvas.width; _pileLayer.height = canvas.height;
-    }
-    const lay = _pileLayer, g = lay.getContext("2d");
-    g.setTransform(1, 0, 0, 1, 0, 0);
-    g.clearRect(0, 0, lay.width, lay.height);
-    // The board's own transform, whatever the caller had set up — the heap is drawn in world
-    // space and the layer has to stand in exactly the same place.
-    g.setTransform(ctx.getTransform());
-    const was = ctx; ctx = g;
     _noGlow = 1;                    // nothing in the heap gives off light — see the flag
-    try { paintFallPile(ts); } finally { _noGlow = 0; ctx = was; }
-    g.setTransform(1, 0, 0, 1, 0, 0);
-    g.globalCompositeOperation = "source-atop";
-    const gd = g.createLinearGradient(0, 0, 0, lay.height);
-    gd.addColorStop(0, "rgba(" + PILE_COLD + ",0)");
-    gd.addColorStop(PILE_COLD_FROM(), "rgba(" + PILE_COLD + ",0)");
-    gd.addColorStop(1, "rgba(" + PILE_COLD + "," + PILE_COLD_TO() + ")");
-    g.fillStyle = gd;
-    g.fillRect(0, 0, lay.width, lay.height);
-    g.globalCompositeOperation = "source-over";
-    // ...and back onto the board, device pixel for device pixel: the layer already carries the
-    // camera, so it must not be put through it a second time.
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(lay, 0, 0);
-    ctx.restore();
+    try { paintFallPile(ts); } finally { _noGlow = 0; }
   }
   function paintFallPile(ts) {
     const y0 = pileY(), s = cell;
@@ -7751,8 +7721,9 @@
         // More than half of them are UPSIDE DOWN — legs in the air, head in the heap. That is
         // how you arrive here: head first, off the end of a chapter, the same way he just did.
         // The rest lie any which way, so the heap does not come out combed.
-        const ang = (j5 < PILE.upDown ? Math.PI + (j4 - 0.5)*PILE.tilt : j4*Math.PI*2)
-                  + shove * 0.5 * (x >= F0x() ? 1 : -1);
+        // Any which way. There is no telling how a body landed on a heap of bodies, and a
+        // heap where most of them agreed on an angle read as a pattern rather than as a pile.
+        const ang = j4*Math.PI*2 + shove * 0.5 * (x >= F0x() ? 1 : -1);
         // Bigger toward the BOTTOM. Nothing about a heap is in perspective, but a body at the
         // front of the base being half again the size of one at the peak is the cheapest way to
         // say that the peak is further away — and it makes the mountain read as one object
@@ -7921,6 +7892,7 @@
     winNextQuilt(nx, idx);
     el.classList.add("show");
     const fd = document.getElementById("winfade"); if (fd) fd.classList.add("show");
+    const ft = document.getElementById("winfadetop"); if (ft) ft.classList.add("show");
     const top = document.getElementById("wintop");
     if (top) {
       // Built on the way in rather than in the markup, and rebuilt EVERY time: the cog takes
@@ -7961,6 +7933,7 @@
   function hideWinUI() {
     const el = document.getElementById("winui"); if (el) el.classList.remove("show");
     const fd = document.getElementById("winfade"); if (fd) fd.classList.remove("show");
+    const ft = document.getElementById("winfadetop"); if (ft) ft.classList.remove("show");
     const top = document.getElementById("wintop"); if (top) top.classList.remove("show");
     stopAtom();
   }
@@ -8458,7 +8431,10 @@
       litK = 1; ring = 1 - k;
       P.black = k;
     }
-    drawVoid(ts);                                 // the cosmos: what the levels hang in
+    // The cosmos, parallaxing with the map. Its patch size is not set here any more — see
+    // voidCell, which pieces the sky to the map's own sub-tile on EVERY screen.
+    voidPar = { x: cx0 * S * VOID_PARALLAX, y: cy0 * S * VOID_PARALLAX };
+    try { drawVoid(ts); } finally { voidPar = null; }   // ...and only for this frame
     const opts = { glowIdx: P.idx, glow, glowA, ringIdx: P.next, ring };
     if (P.ph === "pan" || P.ph === "wait" || P.ph === "whip") { opts.litIdx = P.next; opts.lit = litK; }
     drawMap(ts, S, cx0, cy0, opts);
@@ -8520,7 +8496,8 @@
     g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, _winFrame.width, _winFrame.height);
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     const was = ctx; ctx = g;
-    try { draw(ts); } finally { ctx = was; }
+    bgNoSky = 1;                       // the level, not the sky it is standing in — see bgNoSky
+    try { draw(ts); } finally { ctx = was; bgNoSky = 0; }
     return _winFrame;
   }
   // The route, cast back across the board as fixed track: the same platform surface a level's
@@ -8638,7 +8615,30 @@
   // wound `cell` down to. The cosmos is what the levels hang in: it is not part of any one of
   // them, and a starfield that shrinks along with the board it is behind turns the pull-back
   // into the whole universe being sucked away rather than one level receding into it.
-  const voidCell = () => (win && win.cell0) || cell;
+  // THE COSMOS BEHIND THE MAP. On the Tileverse it is not a drifting backdrop on a clock of its
+  // own — it is the stuff the chapters hang in, so it moves WITH them, and slower, because it is
+  // further away. `voidPar` carries that offset and the patch size for the frames the map owns;
+  // it is null everywhere else and the cosmos goes back to drifting.
+  //
+  // PARALLAX is the share of the map's own movement the cosmos takes. At 1 it would be welded to
+  // the map and the depth would be gone; at 0 it is a painted backdrop that happens to be behind
+  // something moving. A third of it is enough to read as distance.
+  const VOID_PARALLAX = 0.35;
+  // ...and the sky keeps its own slow drift under that, at this share of the pace it wanders at
+  // on the title screen. A backdrop that only moves when you drag it is a picture; one that is
+  // always going, gently, is a place.
+  const VOID_DRIFT = 0.45;
+  let voidPar = null, voidWas = null, quiltWas = null;
+  // ONE SIZE, EVERYWHERE, AND IT NEVER ZOOMS. The cosmos used to be pieced off `cell` — half a
+  // board tile — which meant it grew and shrank with every zoom the game does: the fall's push
+  // in, the win's pull back, a level with a different board size. The sky is the one thing in
+  // the game that is not in the scene; it is what the scene is standing in front of, and a
+  // backdrop that scales with the foreground is a painted flat, not a distance.
+  //
+  // The size it settles on is the MAP's own sub-tile at rest — winMapFit()/LEVEL_SWATCH, which
+  // is viewH/10/3 — so the Tileverse's ground and every other screen's are pieced to the same
+  // square. It depends on the viewport and nothing else, so it changes only when the window does.
+  const voidCell = () => viewH / 15;      // ...and drawPatchwork halves it: viewH/30 per patch
   const drawVoid = ts => drawBackground(ts, VOID_THEME, true, "drift", voidCell());
   // The TILEVERSE button, wearing the cosmos the Tileverse hangs in — the same eight hues on the
   // same 45-degree ping-pong that drawVoid paints, so the button is a window onto where it goes
@@ -8939,8 +8939,8 @@
       // but nothing of the level is drawn behind a menu any more, only its ground, and a still
       // field of squares behind a card reads as a screenshot rather than as a place. Scrolling
       // gently on, it stays the same kind of thing the cosmos and the title screen are.
-      drawBackground(ts, (state && state.bgTheme) || undefined, false, "drift");
-    else drawBoardBackdrop(ts, shx, shy);     // the level's quilt, bounded by the level
+      drawVoid(ts);
+    else drawBoardBackdrop(ts, shx, shy);     // sky, then the level's quilt over it
     // pause / win / death: show ONLY the level background (a clean replica) behind the card
     if (endScreen || menuOpen) {
       // A FALL keeps its heap. The menu that comes up after one is standing over the place he
@@ -12647,11 +12647,14 @@
   const BG_GLINT_MS   = 7200;                // one breath, per patch
   const BG_GLINT_A    = 0.10;                // peak strength
   let bgScrollX = 0, bgScrollY = 0, bgScrollK = 0, bgScrollTs = 0;
-  function bgScrollOffset(ts, active) {
+  // `rate` scales the pace without touching the WRAP: the offset is accumulated and taken
+  // modulo the pattern period, so it loops seamlessly however slowly it is going. Scaling the
+  // returned value instead would put a jump in at every wrap.
+  function bgScrollOffset(ts, active, rate) {
     const dt = bgScrollTs ? Math.min(120, ts - bgScrollTs) : 0;
     bgScrollTs = ts;
     bgScrollK += ((active ? 1 : 0) - bgScrollK) * Math.min(1, dt / 600);
-    const v = BG_SCROLL_CPS * (cell || 90) * bgScrollK * dt / 1000;
+    const v = BG_SCROLL_CPS * (cell || 90) * bgScrollK * (rate == null ? 1 : rate) * dt / 1000;
     const per = patchPeriodPx || 1;
     bgScrollX = (bgScrollX + v) % per;
     bgScrollY = (bgScrollY + v*0.45) % per;
@@ -12722,7 +12725,31 @@
     // Drifting: the cosmos and the title, which have no board to be nailed to, and which move
     // ALWAYS rather than only while the game is paused. A still starfield is a painted one.
     const weld = mode !== "drift";
-    const off = weld ? { x: camX, y: camY } : bgScrollOffset(ts, true);
+    // ...and the map is a third case: not welded to a board and not drifting on a clock, but
+    // parallaxing behind something the player is dragging. See voidPar.
+    // Three cases now. Welded to a board; drifting on its own clock with nothing to be nailed
+    // to; or — on the map — BOTH: the parallax says where the map has been dragged to, and the
+    // drift carries on underneath it so the sky is never quite still even when your hands are.
+    // Slower than the title's, because there is something else moving on this screen and the
+    // sky is meant to be the thing behind it rather than another thing competing for the eye.
+    let off, drift = null;
+    if (voidPar) {
+      drift = bgScrollOffset(ts, true, VOID_DRIFT);
+      off = { x: voidPar.x + drift.x, y: voidPar.y + drift.y };
+    } else if (weld) {
+      off = { x: camX, y: camY };
+    } else {
+      off = bgScrollOffset(ts, true);
+    }
+    // What the last paint used — see __TR.cosmos. The two layers are recorded SEPARATELY: the
+    // board's quilt is painted over the cosmos in the same frame, so one slot would only ever
+    // report whichever went on last, which is never the one you are asking about.
+    const rec = { mode: voidPar ? "parallax+drift" : weld ? "welded" : "drift",
+                  x: off.x, y: off.y, patchPx: w,
+                  par: voidPar ? { x: voidPar.x, y: voidPar.y } : null,
+                  drift: drift ? { x: drift.x, y: drift.y } : null,
+                  alpha: bgAlpha };
+    if (weld && !voidPar) quiltWas = rec; else voidWas = rec;
     ctx.save();
     ctx.translate(-off.x, -off.y);
     ctx.fillStyle = patchPat;
@@ -12732,9 +12759,10 @@
     // scroll offset had to be covered. The offset moves the fill, it does not enlarge it, and
     // the period is not a small number: on a 1024x1300 board it painted 11.5 megapixels a frame
     // to show 1.3 — nearly nine times over, and worse the bigger the screen.
+    ctx.globalAlpha = bgAlpha;
     ctx.fillRect(off.x, off.y, viewW, viewH);
     ctx.restore();
-    drawGlints(ts, off, patchStepPx || w);   // the quilt's real step, so a glint fills a patch
+    drawGlints(ts, off, patchStepPx || w, bgAlpha);   // the quilt's real step, so a glint fills a patch
     if (stars) drawWorldStars(ts, off);      // ...and whatever it is hangs in a sky
   }
   // The glisten. Each patch on screen is identified by its position in the endless quilt,
@@ -12774,38 +12802,68 @@
   // Two full-screen backdrop passes would be wasteful, and on most levels the board covers the
   // viewport entirely — so the cosmos is drawn only where the board is NOT, through an even-odd
   // clip, and skipped altogether when there is no such place.
+  // ONE BACKDROP. The cosmos is behind everything the game draws, on every screen, and each
+  // screen is a thing laid ON it rather than a place with a ground of its own. A level used to
+  // bring its own quilt in its chapter's colours, clipped to the board, with the cosmos showing
+  // around the outside — two grounds, one inside the other, and the seam between them was the
+  // only thing saying where the board stopped.
+  //
+  // What is lost with it: that seam. The board's edge is no longer drawn by the ground changing
+  // colour at it. What is gained is that the Tileverse, the title, the opening, a level, a pause
+  // and a fall are now demonstrably the same place, which is the thing the map has been claiming
+  // all along.
+  // The MIDDLE DISTANCE, and how much of it there is.
+  const QUILT_A = 0.55;
+  // ...and the one case where the sky is left OUT. The win sequence shrinks a picture of the
+  // whole frame down into the level's square on the map, and that picture used to be taken with
+  // the cosmos in it — so the sky was captured and carried down into the square along with the
+  // level, while the real sky behind carried on standing still. Two skies, one of them shrinking.
+  //
+  // With this set the shot is the level and nothing else: its own quilt at FULL strength (it is
+  // becoming a solid tile on the map, so it should arrive as one) and clear glass everywhere the
+  // board is not, which lets the real cosmos show through unmoved.
+  let bgNoSky = 0;
   function drawBoardBackdrop(ts, shx, shy) {
+    // Three layers, and they are three DISTANCES. The cosmos is the furthest thing there is: it
+    // never zooms, it drifts on its own, and every screen in the game stands on it. The level's
+    // own quilt comes back over it as the middle ground — the chapter's colours, welded to the
+    // board so it sits still under the tiles standing on it, clipped to where the level actually
+    // is, and translucent so the sky carries on behind it rather than being boxed out by it. The
+    // tiles and the runner are the near ground, drawn after.
+    //
+    // The board's EDGE comes back with it: the quilt stops where the level stops, and the sky
+    // showing around it is the thing that says where you may build.
+    if (!bgNoSky) drawVoid(ts);
     const bx = -Math.round(camX - (shx || 0)), by = -Math.round(camY - (shy || 0));
-    const inset = bx > 0.5 || by > 0.5 || bx + worldW < viewW - 0.5 || by + worldH < viewH - 0.5;
-    if (inset) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, 0, viewW, viewH);
-      ctx.rect(bx, by, worldW, worldH);
-      ctx.clip("evenodd");                    // everywhere the board is not
-      drawVoid(ts);
-      ctx.restore();
-    }
     ctx.save();
     ctx.beginPath(); ctx.rect(bx, by, worldW, worldH); ctx.clip();
-    drawBackground(ts);
+    drawBackground(ts, undefined, false, undefined, undefined, bgNoSky ? 1 : QUILT_A);
     ctx.restore();
   }
   // `mode` is how the quilt is anchored. "weld" pins it to the BOARD — it is the level's own
   // ground, so it must sit still relative to the tiles standing on it. "drift" lets it scroll
   // under its own steam, which is what the cosmos and the title screen want.
-  function drawBackground(ts, themeOverride, stars, mode, cellPx) {
+  // How solid the backdrop is painted. Every alpha inside is multiplied by it, rather than the
+  // caller wrapping the lot in one globalAlpha — which would not work, because the routine sets
+  // and resets globalAlpha several times of its own accord and would simply overwrite it.
+  let bgAlpha = 1;
+  function drawBackground(ts, themeOverride, stars, mode, cellPx, alpha) {
     if (!grainPattern) buildPaper();
-    drawPatchwork(ts, themeOverride, stars, mode, cellPx);       // pieced quilt of muted patches
-    ctx.globalAlpha = 0.22; ctx.fillStyle = "#0a0817";            // lighter wash -> unify without deepening
-    ctx.fillRect(0, 0, viewW, viewH); ctx.globalAlpha = 1;
-    if (!grainScreen || grainScreenW !== viewW || grainScreenH !== viewH) buildGrainScreen();
-    ctx.drawImage(grainScreen, 0, 0, viewW, viewH);               // paper grain (pre-rasterised, one blit)
-    if (state && state.beatPulse > 0.02) {                        // soft bloom on each beat
-      ctx.globalAlpha = state.beatPulse * 0.10;
-      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, viewW, viewH);
+    const was = bgAlpha; bgAlpha = (alpha == null ? 1 : alpha);
+    try {
+      drawPatchwork(ts, themeOverride, stars, mode, cellPx);     // pieced quilt of muted patches
+      ctx.globalAlpha = 0.22 * bgAlpha; ctx.fillStyle = "#0a0817"; // lighter wash -> unify without deepening
+      ctx.fillRect(0, 0, viewW, viewH); ctx.globalAlpha = 1;
+      if (!grainScreen || grainScreenW !== viewW || grainScreenH !== viewH) buildGrainScreen();
+      ctx.globalAlpha = bgAlpha;
+      ctx.drawImage(grainScreen, 0, 0, viewW, viewH);             // paper grain (pre-rasterised, one blit)
       ctx.globalAlpha = 1;
-    }
+      if (state && state.beatPulse > 0.02) {                      // soft bloom on each beat
+        ctx.globalAlpha = state.beatPulse * 0.10 * bgAlpha;
+        ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, viewW, viewH);
+        ctx.globalAlpha = 1;
+      }
+    } finally { bgAlpha = was; }
   }
 
   // frosted-glass tile: full cell, rounded corners, no margin
@@ -14872,6 +14930,10 @@
     tiloid: (patch) => { if (patch) Object.assign(TILOID, patch); return { ...TILOID }; },
     // spare-lab.html drives this: the block, live, on the game's own tiles.
     spare: (patch) => { if (patch) Object.assign(SPARE, patch); return { ...SPARE }; },
+    // What the cosmos is being drawn at RIGHT NOW: its parallax offset while the map owns the
+    // frame, and the patch size that follows from it. Reading this is the only way to tell a
+    // backdrop that is parallaxing from one that is drifting on a clock, since both move.
+    cosmos: () => ({ sky: voidWas && { ...voidWas }, quilt: quiltWas && { ...quiltWas } }),
     // crumble-lab.html drives this: the Singularity's mouth, its swirl and its eye.
     rift: (patch) => { if (patch) Object.assign(RIFT, patch); return { ...RIFT }; },
     // pile-lab.html drives these: the heap block, and a fall on demand so there is a heap to
