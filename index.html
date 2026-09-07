@@ -190,7 +190,10 @@
        is margin around a bar that is itself about 5px tall. Giving most of it back puts the
        charms on the bottom edge where a thumb already is, while still leaving a dozen pixels
        so a press does not turn into a home swipe. On anything with no inset this is flush. */
-    bottom:max(2px, calc(env(safe-area-inset-bottom) - 22px));
+    /* Named, because the DIP below has to know it: a charm is "half visible" only if what it
+       drops by is half its own height PLUS however far the strip is standing off the edge. */
+    --lift:max(2px, calc(env(safe-area-inset-bottom) - 22px));
+    bottom:var(--lift);
     pointer-events:none;                 /* the strip is a layout box; only the charms take taps */
   }
   #power.on { display:flex; }
@@ -226,7 +229,7 @@
        as a toolbar, a few degrees apart reads as things you collected. The tilt lives in a
        custom property so :active can add its nudge without throwing the rotation away. */
     transform:rotate(var(--tilt, 0deg));
-    transition:opacity 0.18s, transform 0.12s;
+    transition:opacity 0.18s, transform 0.12s, translate 0.22s cubic-bezier(.4,0,.2,1);
   }
   /* No size here on purpose. A charm's box has to match the bitmap drawn into it or it goes
      soft, so both come from PW_PX in buildPowerRack and are set inline. */
@@ -234,8 +237,15 @@
   #power .pw:active { transform:rotate(var(--tilt, 0deg)) translateY(2px); }
   /* running: a bar draining under the one that is up */
   #power .pw-bar { position:absolute; left:12%; bottom:2px; height:3px; width:0; background:var(--goal); }
-  /* one power per level: once any has fired, the rest have nothing left to give */
-  #power .pw.dim { opacity:0.30; cursor:default; }
+  /* A charm you cannot use DIPS below the edge of the screen instead of going pale. Half of it
+     is still there — so you can see what you are carrying, and that it is out of reach — and it
+     rises when it becomes yours to press. Grey read as "broken"; sunk reads as "not now", which
+     is what a charm spent for the level, or held back for a fall, actually is.
+     Exactly half: its own height, plus however far the strip stands off the bottom edge.
+     On `translate` rather than `transform`, and for a reason — the transform carries each
+     charm's own hanging angle and the press nudge, and a dip written into it would throw the
+     rotation away the moment the class landed. */
+  #power .pw.dim { translate:0 calc(50% + var(--lift)); cursor:default; }
   #power .pw.live { opacity:1; }
   /* armed and waiting to be aimed (the Hammer) */
   #power .pw.armed canvas { filter:drop-shadow(0 0 6px var(--goal)); }
@@ -3126,6 +3136,66 @@
     // Everything the level's music runs through, pulled down while something is closing on
     // him. Ramped rather than set: a step change in a bus gain is a click.
     let duckNow = 1;
+    // ---- the Ankh's choir -----------------------------------------------------------------
+    // A HELD voice, which is the thing this module has never had. Everything else here is an
+    // event with a decay on it; the Ankh is a passage, and it has to still be sounding three
+    // seconds later while he is carried back to the board. So this one starts and stops rather
+    // than firing: choir(true) on the way in, choir(false) when the light goes.
+    //
+    // Six detuned saws through three bandpass formants. That is the whole trick of a synthetic
+    // voice — a sawtooth has every harmonic in it, and a pair of resonant peaks around 730 and
+    // 1090 Hz is what the mouth does to make an "ah". Without them this is an organ.
+    //
+    // The chord is open — root, fifth, octave, third and fifth above — so no two notes sit close
+    // enough to beat against each other, and nothing in it resolves anywhere. It arrives over
+    // most of a second, which is why it reads as something you have been let into rather than
+    // something that was switched on.
+    let choirNodes = null;
+    function choir(on) {
+      if (!ac) return;
+      if (!on) {
+        const V = choirNodes; choirNodes = null;
+        if (!V) return;
+        const t = ac.currentTime;
+        V.out.gain.cancelScheduledValues(t);
+        V.out.gain.setTargetAtTime(0.0001, t, 0.16);
+        for (const o of V.stop) { try { o.stop(t + 1.1); } catch(_) {} }
+        return;
+      }
+      if (choirNodes || muted || ac.state !== "running") return;
+      const t = ac.currentTime;
+      const out = ac.createGain();
+      out.gain.setValueAtTime(0.0001, t);
+      out.gain.exponentialRampToValueAtTime(0.19, t + 0.85);
+      out.connect(master); out.connect(sendBus);          // ...and a long tail into the room
+      const sum = ac.createGain(); sum.gain.value = 0.15;
+      for (const [hz, q, amp] of [[730, 7, 1], [1090, 9, 0.70], [2600, 11, 0.20]]) {
+        const bp = ac.createBiquadFilter(); bp.type = "bandpass";
+        bp.frequency.value = hz; bp.Q.value = q;
+        const g = ac.createGain(); g.gain.value = amp;
+        sum.connect(bp); bp.connect(g); g.connect(out);
+      }
+      const voices = [];
+      for (const [semi, det] of [[0,-5],[0,6],[7,-4],[12,5],[16,-6],[19,4]]) {
+        const o = ac.createOscillator();
+        o.type = "sawtooth";
+        o.frequency.setValueAtTime(BASE * Math.pow(2, semi/12), t);
+        o.detune.setValueAtTime(det, t);
+        o.connect(sum); o.start(t); voices.push(o);
+      }
+      // ...and two slow wobbles at rates that do not divide into each other, so the swell never
+      // quite comes round to where it was. A pad that repeats is a pad you notice.
+      const vib = ac.createOscillator(), vibG = ac.createGain();
+      vib.frequency.value = 4.6; vibG.gain.value = 5;                  // cents of vibrato
+      vib.connect(vibG);
+      for (const o of voices) vibG.connect(o.detune);
+      vib.start(t);
+      const swell = ac.createOscillator(), swellG = ac.createGain();
+      swell.frequency.value = 0.31; swellG.gain.value = 0.045;
+      swell.connect(swellG); swellG.connect(out.gain);
+      swell.start(t);
+      choirNodes = { out, stop: voices.concat([vib, swell]) };
+    }
     function duck(amount) {
       if (!ac || !musicBus) return;
       const target = Math.max(0.12, 1 - Math.max(0, Math.min(1, amount)) * 0.88);
@@ -3137,7 +3207,7 @@
     function isMuted() { return muted; }
     return { unlock, clearTile, smash, roar, win, lose, fall, death, boost, slow, coin, coinBank, key, doorOpen,
              slide, clack, tap, tapBig, power, warp, vortex, crunch, growl, trapWind,
-             tileDrop, tileLaid, ceremony, swallow, heartbeat, duck,
+             tileDrop, tileLaid, ceremony, swallow, heartbeat, duck, choir,
              ambient,
              swish, introGather, introFlash, rumble, flap, life, claim, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
              levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, setMusicGate,
@@ -3165,7 +3235,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.17";                    // shown on the title & pause screens
+  const VERSION = "v10.18";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -6487,6 +6557,10 @@
     // a power. The charm is spent either way, so letting go of it early costs nothing.
     if (s && def && def.id === "brake" && s.rest) { endRest(); return true; }
     if (!s || (s.status !== "play" && !grace) || !def || s.power.used.has(def.id)) return false;
+    // The rack's rule, enforced where it counts. Half of a dipped charm is still on the screen
+    // and still takes a tap, so "it looks unreachable" is not the same as being unreachable —
+    // the Ankh is the fall's charm and nothing else is, in both directions.
+    if ((def.id === "ankh") !== grace) return false;
     s.power.used.add(def.id);
     // Every charm marks itself with a pulse on the runner's cell — except the Hammer, whose
     // whole statement is the circle.
@@ -6514,14 +6588,13 @@
     // "slows the heart and body" was always describing — the old version just scaled his pace
     // for half a second, which you felt as a stutter rather than as a rest.
     if (def.id === "brake")  { startRest();         return true; }
-    // The Ankh does nothing at all when pressed. It latches, and `startFall` spends it. Its own
-    // flag, not the effect slot, so pressing anything else afterwards leaves it waiting.
-    // Caught in the air, it does its work now. Pressed while running, it waits for the fall
-    // that may never come.
-    if (def.id === "ankh")   {
-      if (grace) { s.ankhGrace = 0; reviveRunner(); } else s.power.ankh = true;
-      return true;
-    }
+    // The Ankh is only ever pressed IN THE AIR now — the guard above is what makes that true —
+    // so it does its work on the spot. It used to be pressable while running, where it latched
+    // and did nothing you could see until a fall that might never come; arming a charm against
+    // a death you have not had yet is a bet, not a decision, and the rack could not show you
+    // the difference. (state.power.ankh, the latch it used to set, is left where it is: endRun
+    // still reads it, and it is simply never true any more.)
+    if (def.id === "ankh")   { startAnkhRise(); return true; }
 
     // ...and what is left is a timed effect, which takes the slot.
     s.power.kind = def.id;
@@ -6864,6 +6937,9 @@
   // starts `clear` tiles in front of his feet whatever the stride, and the Bell keeps a hole at
   // the middle of its circle for him to stand in. The z-order is safe because the geometry is.
   function drawCharmFx(ts) {
+    // ...and the Ankh's, which is the one charm effect that is not a thing done TO the board —
+    // it is around HIM, off the edge of it, so it answers to the fall rather than to a roar.
+    drawAnkhSwirl(ts);
     const R = state && state.roar; if (!R || !R.fired) return;
     if (R.kind === "finger") drawHammerBeam();
     else if (R.kind === "pulse") drawBellSweep();
@@ -7355,6 +7431,182 @@
   // the fall fires as he runs off the END of it — so putting runT back to 0 stands him at its
   // centre rather than half over the edge. The hold is a factor of zero on his pace, the same
   // stop the Hands of Time uses, so nothing else in the game has to know about it.
+  // ---------- The Ankh: caught in the air ---------------------------------
+  // Every other charm happens ON the board. This one takes him off it, so it plays as a passage
+  // rather than as an effect: he stops falling, folds into the lotus, a light turns around him,
+  // and he is carried back and set down on the tile he ran off the end of. It used to be a
+  // single frame — flash, and he was standing again — which spent the rarest thing in the game
+  // in less time than it takes to read its name.
+  //
+  // Five beats, each waiting on the last rather than on one shared clock, so any of them can be
+  // retimed without shifting the rest.
+  const ANKH = {
+    hold:    1250,   // held where he was caught, the light gathering round him
+    float:   1250,   // ...carried back to the board
+    flash:    260,   // the light goes, all at once
+    drop:     260,   // ...and the last of the way is a fall, because it should be
+    rebuild: 1000,   // a beat standing on the tile, to put the track back together
+    rise:     1.15,  // how far above the tile he is brought before the drop, in tiles
+    lift:     0.34,  // ...and how far he drifts up while he is held, in tiles
+    radius:   1.45,  // how far the light reaches, in tiles
+    hole:     0.36,  // ...and the still middle he sits in, in tiles
+    grid:     4,     // squares per tile, each way — the world's own quarter-tiles
+    spinMs:   820,   // one turn of the light
+    arms:     3,     // how many arms turn in it
+    tail:     0.42,  // how much of an arm is still lit behind its leading edge
+    ease:     1.35,  // the shape of that fade — above 1 falls away fast behind it
+    rimA:     0.55,  // brightness at the rim
+    innerA:   0.92,  // ...and against the still middle
+    low:      0.05,  // what is left of a square between the arms
+    rainbow:  0.20,  // how far the tone is pulled round the hue wheel as an arm turns
+    hue0:     150,   // where that hue starts, in degrees
+    hueSpan:  120,   // ...and how far round it travels over one turn
+  };
+  const ANKH_TONE = [126, 224, 200];        // the charm's own green, #7ee0c8
+  // Where he is going, worked out FRESH every frame rather than stored: the fall's zoom is still
+  // easing under all of this, and a world point captured before it would be pointing at the
+  // wrong part of a board that has changed size since.
+  function ankhTarget(idx) {
+    const at = visualAt(idx);
+    const a = visualAt(idx - 0.08), b = visualAt(idx + 0.08);
+    let tx = b.x - a.x, ty = b.y - a.y;
+    const m = Math.hypot(tx, ty) || 1; tx /= m; ty /= m;
+    // Up the TILE'S OWN normal, not up the screen. A corner tile's surface can be facing any
+    // direction, and a runner lowered vertically onto a wall-hugging platform lands on his ear.
+    return { lx: at.x, ly: at.y, la: Math.atan2(ty, tx),
+             px: at.x + ty*cell*ANKH.rise, py: at.y - tx*cell*ANKH.rise };
+  }
+  // The short way round. Turning him from the angle he was tumbling at to the angle the tile
+  // lies at by plain subtraction sends him the long way round about half the time.
+  const angShort = (from, to) =>
+    ((to - from + Math.PI) % (Math.PI*2) + Math.PI*2) % (Math.PI*2) - Math.PI;
+  function startAnkhRise() {
+    const s = state, f = s.fall;
+    if (!f) { reviveRunner(); return; }        // caught before he was falling: just put him back
+    s.ankhGrace = 0;
+    f.vx = 0; f.vy = 0; f.va = 0;              // he stops. That is the whole of the first beat.
+    f.ankh = { beat: "hold", t: 0, idx: clamp(s.runIdx, 0, s.path.length - 1),
+               x0: f.x, y0: f.y, a0: f.angle, fx: f.x, fy: f.y, fa: f.angle };
+    Sound.duck(1);                             // the level's tune stands down for all of it
+    Sound.choir(true);
+    Sound.power("ankh");
+    haptic([10, 30, 10, 30, 18]);
+  }
+  function tickAnkh(dt) {
+    const s = state, f = s.fall, A = f && f.ankh; if (!A) return;
+    A.t += dt;
+    const T = ankhTarget(A.idx);
+    if (A.beat === "hold") {
+      // Held exactly where he was caught, drifting a little upward as the light gathers. The
+      // stillness IS the beat: he was falling a moment ago and now he is not, and nothing else
+      // in the game stops like that.
+      f.x = A.x0;
+      f.y = A.y0 - easeOut(Math.min(1, A.t/ANKH.hold))*cell*ANKH.lift;
+      if (A.t >= ANKH.hold) {
+        A.beat = "float"; A.t = 0;
+        A.fx = f.x; A.fy = f.y; A.fa = f.angle;
+      }
+      return;
+    }
+    if (A.beat === "float") {
+      const k = easeBoth(Math.min(1, A.t/ANKH.float));
+      f.x = A.fx + (T.px - A.fx)*k;
+      f.y = A.fy + (T.py - A.fy)*k;
+      f.angle = A.fa + angShort(A.fa, T.la)*k;   // ...squaring up to the tile as he comes
+      if (A.t >= ANKH.float) { A.beat = "flash"; A.t = 0; Sound.introFlash(); Sound.choir(false); }
+      return;
+    }
+    if (A.beat === "flash") {
+      f.x = T.px; f.y = T.py; f.angle = T.la;
+      if (A.t >= ANKH.flash) { A.beat = "drop"; A.t = 0; }
+      return;
+    }
+    // ...and he FALLS the last of the way. Being set down gently onto the tile would say the
+    // charm put him back; dropping the last tile's worth says he is on his own again.
+    const k = easeIn(Math.min(1, A.t/ANKH.drop));
+    f.x = T.px + (T.lx - T.px)*k;
+    f.y = T.py + (T.ly - T.py)*k;
+    f.angle = T.la;
+    if (A.t >= ANKH.drop) ankhLand();
+  }
+  function ankhLand() {
+    const s = state, f = s.fall, A = f.ankh;
+    // The tile he came off is LAID AGAIN. He ran its length and it freed up behind him — that
+    // is the whole mechanic — so without this he is set down on the empty square he fell
+    // through. Same move the Rewind makes: the node stops being spent and its tile is active
+    // there once more, which is what puts the platform back under his feet.
+    const nd = s.path[A.idx];
+    if (nd && nd.kind === "tile" && nd.tileId != null) {
+      const t = s.tiles[nd.tileId];
+      if (t && t.status !== "active") { t.c = nd.c; t.r = nd.r; t.status = "active"; t.spare = false; }
+      nd.exited = false;
+    }
+    s.status = "play";
+    s.fall = null;
+    s.ankhGrace = 0;
+    s.runIdx = A.idx; s.runT = 0;
+    s.combo = 0;
+    s.power.armed = false; s.power.kind = null; s.power.t = 0;
+    // A beat standing on it before he goes. He is on one square with no track in front of him,
+    // and a run that resumed on the frame he touched down would be a second fall.
+    s.hold = ANKH.rebuild;
+    if (nd) { spawnLight(nd.c, nd.r, 1.4, 700); spawnPop(nd.c, nd.r, "#7ee0c8"); }
+    s.shake = Math.max(s.shake, cell*0.14);
+    markOccDirty(); updateReadyHud(); linkParkedTiles();
+    Sound.choir(false);
+    Sound.duck(0);                    // ...and the level's tune comes back up under him
+    Sound.life(0.7);
+    haptic([14, 40, 14]);
+  }
+  // The light that turns around him: the same quarter-tile squares off the world's own grid the
+  // Bell rings through, but as ARMS that keep turning rather than one hand going round once —
+  // and not clipped to the board, because he is nowhere near it.
+  function drawAnkhSwirl(ts) {
+    const s = state, f = s && s.fall, A = f && f.ankh;
+    if (!A || A.beat === "drop") return;
+    // It gathers over the first half of the hold and is gone with the flash — the flash IS the
+    // light leaving, so there is nothing left to draw behind it.
+    const env = A.beat === "hold"  ? Math.min(1, A.t/(ANKH.hold*0.55))
+              : A.beat === "flash" ? Math.max(0, 1 - A.t/ANKH.flash) : 1;
+    if (env <= 0.01) return;
+    const rad = ANKH.radius*cell, hole = ANKH.hole*cell;
+    const n = Math.max(1, Math.round(ANKH.grid)), q = cell/n;
+    const arms = Math.max(1, Math.round(ANKH.arms));
+    const turn = ts / Math.max(1, ANKH.spinMs);
+    const spanR = Math.max(1e-3, rad - hole);
+    const i0 = Math.floor((f.x - rad)/q), i1 = Math.ceil((f.x + rad)/q);
+    const j0 = Math.floor((f.y - rad)/q), j1 = Math.ceil((f.y + rad)/q);
+    ctx.save();
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
+      const sx = i*q + q/2 - f.x, sy = j*q + q/2 - f.y;
+      const d = Math.hypot(sx, sy);
+      if (d > rad || d < hole) continue;              // the reach, and the stillness he sits in
+      const ang = ((Math.atan2(sy, sx) + Math.PI/2)/(Math.PI*2) % 1 + 1) % 1;
+      const since = ((turn - ang)*arms % 1 + 1) % 1;  // how long ago an arm went past
+      const k = Math.pow(Math.max(0, 1 - since/Math.max(0.01, ANKH.tail)), ANKH.ease);
+      const rd = clamp((d - hole)/spanR, 0, 1);       // 0 against the middle, 1 at the rim
+      const band = ANKH.innerA + (ANKH.rimA - ANKH.innerA)*rd;
+      const a = env * (ANKH.low + (band - ANKH.low)*k);
+      if (a <= 0.012) continue;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = charmTone(ANKH_TONE, 0.95, ang, ANKH.rainbow, ANKH.hue0, ANKH.hueSpan);
+      ctx.fillRect(i*q, j*q, q + 0.5, q + 0.5);
+    }
+    // ...and the flash itself, which is the light letting go rather than another thing arriving.
+    if (A.beat === "flash") {
+      const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, rad*1.5);
+      const w = Math.pow(Math.max(0, 1 - A.t/ANKH.flash), 0.6);
+      g.addColorStop(0, "rgba(255,255,255," + (0.95*w).toFixed(3) + ")");
+      g.addColorStop(0.45, "rgba(190,255,235," + (0.45*w).toFixed(3) + ")");
+      g.addColorStop(1, "rgba(126,224,200,0)");
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = g;
+      ctx.fillRect(f.x - rad*1.5, f.y - rad*1.5, rad*3, rad*3);
+    }
+    ctx.restore();
+  }
+
   function reviveRunner() {
     const s = state;
     // It can now be called mid-tumble, so it has to put the run back rather than merely
@@ -7448,17 +7700,27 @@
   // anyway, so it needs no correction of its own.
   function tickFallZoom(dt) {
     const f = state.fall; if (!f || !f.cell0) return;
-    const want = f.cell0 * FALL_ZOOM;
-    const nc = cell + (want - cell) * Math.min(1, dt/520);
+    // The fall pushes IN; the Ankh walks that back out. He is being returned to the board, and
+    // a board still held at the fall's magnification is not the board he left.
+    const A = f.ankh;
+    const want = f.cell0 * (A ? 1 : FALL_ZOOM);
+    const nc = cell + (want - cell) * Math.min(1, dt/(A ? 700 : 520));
     const k = nc / cell;
     if (!(k > 0) || Math.abs(k - 1) < 1e-7) return;
     cell = nc; worldW = cell*COLS; worldH = cell*ROWS;
     zoomWorldPoints(k);
     f.x *= k; f.y *= k; f.vx *= k; f.vy *= k; f.floor *= k; f.px *= k;
+    // ...including everywhere the passage remembers him being. These are world pixels like any
+    // other and would otherwise be left pointing at a board that has changed size under them.
+    if (A) { A.x0 *= k; A.y0 *= k; A.fx *= k; A.fy *= k; }
     camX *= k; camY *= k;
   }
   function tickFall(dt) {
     const f = state.fall;
+    // Caught. Gravity, the clock and the backstop below all belong to a fall that is no longer
+    // happening — the charm is flying him now. Returning here rather than guarding each of them
+    // is what keeps `f.t` from advancing, which is what stops the backstop firing mid-passage.
+    if (f.ankh) { tickAnkh(dt); return; }
     if (f.land != null) {                      // down. Lie there a moment, then say so.
       f.land += dt;
       // The zoom is still running under him, and the heap is measured in cells — so its summit
@@ -7526,6 +7788,21 @@
   // would stop the fall being followed at all.
   function tickFallCam(dt) {
     const f = state.fall; if (!f) return;
+    // Caught: the camera comes back with him. Everything below frames the HEAP — which is where
+    // he was going and is no longer — so during the passage it follows him instead, and stops
+    // short of the board's edges the way the playing camera does. Without this he is carried
+    // home to a tile the frame is still looking a screen and a half beneath.
+    if (f.ankh) {
+      // On HIM, and deliberately not clamped to the board. He is caught in the air below the
+      // last tile — outside the world by a screen or more — and a camera held inside the board's
+      // own bounds simply cannot look at him: the whole passage played off the bottom of the
+      // frame. He is carried back onto the board by the end of it, so the clamp comes back with
+      // him when updateCamera takes over on landing.
+      const k = Math.min(1, dt/220);
+      camX += ((f.x - viewW/2) - camX)*k;
+      camY += ((f.y - viewH/2) - camY)*k;
+      return;
+    }
     // Two framings, and the LOWER of them wins. The first puts the summit `frame` of the way
     // down the view, which is what the camera has always done. The second puts the base row past
     // the foot of the screen by `sink` cells — and that is the one that matters once the skirt
@@ -7699,6 +7976,16 @@
   // The heap's geometry, in one place: the tap that lands him on the summit and the drawing
   // that builds the summit have to agree about where it is.
   const pileMidX = () => (state.fall && state.fall.px != null) ? state.fall.px : worldW/2;
+  // Where body `c` of a row of `cols` stands, across the heap. ONE formula: the heap that draws
+  // the bodies and the landing spot that has to agree with the one it leaves out both go
+  // through here, so they cannot describe the same place two different ways.
+  const pileBodyX = (mid, c, cols, stepX, j1) =>
+    mid + (c - (cols - 1)/2)*stepX + (j1 - 0.5)*cell*PILE.jitX;
+  // ...and the jitter the SUMMIT body gets. Every body in the heap is nudged sideways by a draw
+  // off the seeded sequence, and paintFallPile walks the rows from the TOP down — so the summit
+  // is the first body it draws and this is the first number that sequence yields. Same seed,
+  // same draw, every heap in the game: it is a constant, worked out once here.
+  const PILE_SUMMIT_J1 = mulberry32(PILE_SEED)();
   const F0x = () => (state.fall ? state.fall.x : worldW/2);   // where the impact was, this frame
   // Where he comes down: NOT the apex, but one or two places down the flank of it. Landing dead
   // on the point is a stunt; landing just off it, on the slope, is a fall. `d` is how many
@@ -7708,9 +7995,13 @@
   // down the flank on the argument that landing dead on the point is a stunt; but the point is
   // the one spot on a heap of bodies that is unmistakably HIS, and arriving in the gap the
   // pyramid left is a better joke than arriving beside it.
+  // ...and it takes that body's place EXACTLY. This used to hand back the un-jittered centre
+  // while the body it was standing in for had been nudged aside like every other body in the
+  // heap — so he came down a tenth of a cell from the hole the pyramid had actually left him,
+  // beside his own grave rather than in it. Same offsets, same formula, one body's worth apart.
   function pileLandSpot() {
     const G = pileGeom();
-    return { x: pileMidX() + cell*PILE.landX,
+    return { x: pileBodyX(pileMidX(), 0, 1, G.stepX, PILE_SUMMIT_J1) + cell*PILE.landX,
              y: pileY() - (G.rows - 1)*G.stepY + cell*PILE.landY };
   }
   // How wide row `r` is, in bodies. A PYRAMID: one more on every row down, so the summit is a
@@ -7745,6 +8036,7 @@
   // composite every frame of every fall to say what their own colour was already saying.
   function drawFallPile(ts) {
     if (state.status !== "falling" && state.status !== "lose") return;
+    if (state.fall && state.fall.ankh) return;      // he is not going to the heap after all
     _noGlow = 1;                    // nothing in the heap gives off light — see the flag
     try { paintFallPile(ts); } finally { _noGlow = 0; }
   }
@@ -7781,7 +8073,7 @@
       for (let c = 0; c < cols; c++, k++) {
         const j1 = rnd(), j2 = rnd(), j3 = rnd(), j4 = rnd(), j5 = rnd();
         const fit = pileOutfit(rnd);
-        let x = pileMidX() + (c - (cols - 1)/2)*stepX + (j1 - 0.5)*s*PILE.jitX;
+        let x = pileBodyX(pileMidX(), c, cols, stepX, j1);
         let y = y0 - r*stepY + (j2 - 0.5)*s*PILE.jitY;
         let shove = 0;
         if (hit > 0.004) {
@@ -7816,7 +8108,8 @@
         // The SUMMIT is left empty. He lands there — it is his place on the heap, and a body
         // already lying in it means he comes down on top of somebody rather than into the gap
         // the pyramid left for him. The random draws above still happen for it, so leaving it
-        // out does not reshuffle a single body below.
+        // out does not reshuffle a single body below — and because it is drawn FIRST, its own
+        // j1 is the constant pileLandSpot reads as PILE_SUMMIT_J1 to stand exactly here.
         if (!(r === rows - 1))
           paintRunner(x, y, s*(PILE.sizeBase + depth*PILE.sizeDepth + j3*PILE.sizeJit),
                       j4*6, ang, false, ts, 0, false, fit);
@@ -8709,7 +9002,9 @@
       ctx.scale(sc, sc);
       if (q.kind === "coin") drawCoin(0, 0, ts);
       else if (q.kind === "key") drawKey(0, 0, ts, q.color);
-      else if (q.kind === "lock") drawLock(0, 0, ts);
+      // The door's OWN lock, in the door's own colour. It used to be drawLock — a different
+      // padlock built from four inks, none of them the key's.
+      else if (q.kind === "lock") drawPadlock(0, 0, cell*0.5, q.color || getVar("--accent"), false);
       else if (q.kind === "tal") {
         const d = talById(q.id), R = cell*0.30;
         if (d) { talHook(ctx, 0, 0, R, d); d.draw(ctx, 0, 0, R); }
@@ -9273,6 +9568,20 @@
     // in the HUD. Everything the HUD writes now takes fs2.
     return { m, fs, fs2: Math.max(9, Math.round(fs*0.52)), h: uiGrid() * 3 };
   }
+  // Whether the glass has anything to say. Both plates ask this rather than each carrying its
+  // own list of statuses, so they can never disagree about when the HUD is up.
+  //
+  // It goes the INSTANT he lands. The HUD reports on a run that is still happening; once he is
+  // in the heap it is not — a speed reading standing over a body lying in a pile is the
+  // instrument panel of a crashed aeroplane still calling out the airspeed. It stays up for the
+  // FALL itself, which is still the run, and only the landing takes it. (The pause button has
+  // already gone by then — see updatePauseBtn, which drops it the moment the fall begins.)
+  const hudLive = () => {
+    const s = state;
+    if (!s || (s.status !== "play" && s.status !== "falling" && s.status !== "vortex")) return false;
+    // ...and it keeps out of the Ankh's passage too, which is a cutscene however it is stored.
+    return !(s.fall && (s.fall.land != null || s.fall.ankh));
+  };
   function syncHudChrome() {
     const P = hudPlate(), root = document.documentElement.style;
     root.setProperty("--hud-h", P.h + "px");
@@ -9281,22 +9590,25 @@
   // live runner speed, top-left (screen space). Shown as cells/second on a dark pill.
   function drawSpeedHud() {
     const s = state;
-    if (!s || (s.status !== "play" && s.status !== "falling" && s.status !== "vortex")) return;
+    if (!hudLive()) return;
     const factor = s.liveFactor != null ? s.liveFactor : 1;
     const cps = 1000 * factor / (s.msPerCell || 1000);      // cells per second
     const P = hudPlate(), m = P.m, fs = P.fs;
     ctx.save();
     ctx.textBaseline = "middle";
-    const label = "SPEED", val = cps.toFixed(3), unit = " tiles/s";   // three decimals — the per-tile ramp is small
-    // Same size as the label and the unit beside it. The number keeps its weight and its
-    // colour — it is still the one bright thing on the plate — and gives up its height.
+    // No "SPEED" in front of it any more. The unit says what the number is — a figure reading
+    // "0.800 tiles/s" is not a figure anybody needs told is a speed — and the word was the
+    // widest thing on the plate, spending a third of the box saying nothing the rest of it
+    // did not already say.
+    const val = cps.toFixed(3), unit = " tiles/s";   // three decimals — the per-tile ramp is small
+    // Same size as the unit beside it. The number keeps its weight and its colour — it is
+    // still the one bright thing on the plate — and gives up its height.
     const smallF = "700 " + P.fs2 + "px " + UI_FONT;
     const bigF   = "900 " + P.fs2 + "px " + UI_FONT;
-    ctx.font = smallF; const lw = ctx.measureText(label).width;
     ctx.font = bigF;   const vw = ctx.measureText(val).width;
     ctx.font = smallF; const uw = ctx.measureText(unit).width;
-    const padX = Math.round(fs*0.55), gap = Math.round(fs*0.4);
-    const boxW = padX*2 + lw + gap + vw + uw, boxH = P.h;
+    const padX = Math.round(fs*0.55);
+    const boxW = padX*2 + vw + uw, boxH = P.h;
     // Square plate, matching the DOM buttons (which carry no radius at all) — and matching the
     // pause button's box exactly, since both take their height from hudPlate(). No outline:
     // the plate is dark enough against the board to be its own edge, and the hairline it used
@@ -9305,19 +9617,16 @@
     ctx.fillStyle = "rgba(10,8,22,0.62)"; ctx.fill();
     const midY = m + boxH/2;
     ctx.textAlign = "left";
-    ctx.font = smallF;
-    ctx.fillStyle = "rgba(214,218,240,0.78)";
-    ctx.fillText(label, m + padX, midY + 1);
     ctx.font = bigF;
     // The RAIL, not the earth. The number is the one bright thing on this plate and the rail is
     // the design's own bright line — the colour of the track he is running on, in the readable
     // sense. The earth colour is the dark ground under it: on Midnight or Blood that is nearly
     // black, which put a black number on a near-black plate.
     ctx.fillStyle = (typeof curRail === "function") ? curRail() : "#ffd24a";
-    ctx.fillText(val, m + padX + lw + gap, midY + 1);      // ...on the same line as the rest of it
-    ctx.font = smallF;                                                // unit in a smaller dim suffix
+    ctx.fillText(val, m + padX, midY + 1);
+    ctx.font = smallF;                                                // ...and the unit as a dim suffix
     ctx.fillStyle = "rgba(214,218,240,0.66)";
-    ctx.fillText(unit, m + padX + lw + gap + vw, midY + 1);
+    ctx.fillText(unit, m + padX + vw, midY + 1);
     ctx.restore();
   }
   // What this run has found, top centre, on the speedo's own plate. It answers a question the
@@ -9331,7 +9640,7 @@
   // at the wrong place the moment the count reached ten. Returns null when there is no counter.
   function coinHudBox() {
     const s = state;
-    if (!s || (s.status !== "play" && s.status !== "falling" && s.status !== "vortex")) return null;
+    if (!hudLive()) return null;
     if (!((s.L && s.L.coins) || []).length) return null;
     const P = hudPlate();
     const txt = String(s.coinsShown || 0), font = "900 " + P.fs2 + "px " + UI_FONT;
@@ -10990,16 +11299,28 @@
       ctx.stroke();
       ctx.restore();
     }
-    // ---- the lock, built whole on its own layer -----------------------------------------
-    // Shackle AND body go down together at full strength, then the keyhole is cut out of the
-    // pair, and the finished silhouette is composited ONCE. Drawing the two straight onto the
-    // board meant the leg overlapping the body double-painted: at 50% that seam is plainly two
-    // shapes stacked rather than one lock. Merged first, the whole thing fades as one object.
-    //
-    // An arc alone floats. A shackle is an arc with two LEGS running down into the body — that
-    // join is what makes it read as a padlock rather than a croquet hoop.
+    drawPadlock(x, y, s, color, open);
+    ctx.restore();
+  }
+  // THE padlock. One object in one colour — the door's colour — and the only one in the game:
+  // the victory replay used to mark an opened door with a different lock entirely (drawLock, a
+  // pale body on a dark plate under a pulsing red shackle), so the thing you had just watched
+  // yourself open was commemorated by something that looked nothing like it. It reads the key's
+  // own colour off the pick, which notePick has always recorded and the replay was throwing away.
+  //
+  // Shackle AND body go down together at full strength, then the keyhole is cut out of the
+  // pair, and the finished silhouette is composited ONCE. Drawing the two straight onto the
+  // board meant the leg overlapping the body double-painted: at 50% that seam is plainly two
+  // shapes stacked rather than one lock. Merged first, the whole thing fades as one object.
+  //
+  // An arc alone floats. A shackle is an arc with two LEGS running down into the body — that
+  // join is what makes it read as a padlock rather than a croquet hoop.
+  //
+  // `s` is its scale — half a cell on a door. Drawn about (x, y) in whatever transform is
+  // current, so the replay can drop one in already translated and scaled.
+  function drawPadlock(x, y, s, color, open) {
     const shR = s*0.15, bodyTop = y - s*0.02, shCy = y - s*0.13, legY = bodyTop - shCy;
-    const S = Math.ceil(cell), sc = doorScratch;
+    const S = Math.max(8, Math.ceil(s*2)), sc = doorScratch;
     if (sc.width !== S) { sc.width = sc.height = S; }
     const g = sc.getContext("2d");
     // The scratch canvas is reused, and the last pass left it in destination-out. Reset the
@@ -11008,7 +11329,7 @@
     const ox = x - S/2, oy = y - S/2;            // the layer is centred on the lock
     g.translate(-ox, -oy);
     g.strokeStyle = color; g.fillStyle = color;
-    g.lineWidth = Math.max(3, cell*0.06); g.lineCap = "round";
+    g.lineWidth = Math.max(3, s*0.12); g.lineCap = "round";
     g.save();
     // Open: the shackle is MIRRORED about the leg that stays in the body, not tilted. Flipping
     // it keeps the arc upright — still plainly the same shackle — while carrying the far leg
@@ -11034,8 +11355,11 @@
     g.beginPath(); g.arc(x, y + s*0.14, s*0.065, 0, Math.PI*2); g.fill();
     g.fillRect(x - s*0.028, y + s*0.14, s*0.056, s*0.12);
     // Once the key is in hand the lock is spent — still there, because the runner has yet to
-    // reach it, but faded off the board as one piece.
-    ctx.globalAlpha = open ? 0.5 : 1;
+    // reach it, but faded off the board as one piece. MULTIPLIED into whatever alpha the caller
+    // is already fading at, not assigned over the top of it — the replay drops these in on a
+    // fade of its own.
+    ctx.save();
+    ctx.globalAlpha *= open ? 0.5 : 1;
     ctx.drawImage(sc, ox, oy);
     ctx.restore();
   }
@@ -11708,7 +12032,14 @@
       // Buried head first, kicking. The stride is what draws a kick, so he is "moving" — on a
       // phase of his own that winds down to a stop rather than on the level's, which stopped
       // with him.
-      if (f.land != null) {
+      if (f.ankh) {
+        // Caught. The lotus is already in here for the Millstone's sit, and it is the right
+        // shape for this too — legs folded, nothing kicking, held. Reusing it rather than
+        // growing a second folded pose is the whole reason it is a flag and not a special case.
+        moving = false; phaseOver = 0;
+        _restFold = 1;
+      }
+      else if (f.land != null) {
         // Down, and still. The legs used to go on kicking and wind down to a halt; he lands on
         // the summit square now, so what says he has stopped is the pose rather than a timer.
         moving = false; phaseOver = 0;
@@ -13595,7 +13926,6 @@
   }
   // the floating pause/menu button only shows during active play (hidden on the
   // title, during the intro/cam-pan, while falling, on win/lose, and while paused).
-  let _pauseVis = null;
   // ---------- the talisman button ----------------------------------------
   // Redrawn from state every frame like the pause button, rather than being poked at from
   // half a dozen places. The icon is only repainted when the worn talisman changes — it is
@@ -13643,16 +13973,31 @@
     const live = !titleActive && !paused && state &&
                  (state.status === "play" || state.status === "vortex" ||
                   (state.status === "falling" && state.ankhGrace > 0));
-    const ids = live ? TALISMANS.filter(t => talLive(t) && talUnlocked.has(t.id)).map(t => t.id) : [];
+    // ...with the ANKH at the right-hand end, always. It is the odd one out on this rack — the
+    // only charm that answers a fall, and the one the whole row inverts around when he starts
+    // falling — so it gets a place of its own rather than whichever slot in the middle of the
+    // row it happens to have been declared into. Stable sort, so the other five keep their
+    // declaration order behind it.
+    const ids = live ? TALISMANS.filter(t => talLive(t) && talUnlocked.has(t.id)).map(t => t.id)
+                                .sort((a, b) => (a === "ankh") - (b === "ankh")) : [];
     if (!ids.length) { if (_powerCls !== "off") { powerEl.className = ""; _powerCls = "off"; } return; }
     if (ids.join(",") !== _rackIds) buildPowerRack(ids);
     if (_powerCls !== "on") { powerEl.className = "on"; _powerCls = "on"; }
     const p = state.power;
+    // The fall belongs to the ANKH. He is in the air with the offer open, and that is the one
+    // moment the Ankh is worth anything and the one moment nothing else is — so the rack says
+    // so: everything else dips out of reach and the Ankh, which has been sitting half-sunk all
+    // level, comes up. One charm, one moment.
+    const grace = state.status === "falling" && state.ankhGrace > 0;
     // One is spent per level, so once any has fired they ALL go dim — except the one that is
     // running, which keeps its drain bar, and the Hammer while it waits to be aimed.
     [...powerEl.children].forEach((b, i) => {
       const id = ids[i], mine = p.kind === id;
       const bar = b.lastChild;
+      // Within reach exactly when it is this moment's charm: the Ankh in the air, everything
+      // else on the ground. Written as one comparison so the two can never both be true or
+      // both be false — the rule IS that they are opposites.
+      const reach = (id === "ankh") === grace;
       let cls = "pw";
       // The Millstone never reaches the effect slot — it is a sit, with a clock of its own —
       // but it IS running, and while it is, its own button is the way out of it. So it gets the
@@ -13663,8 +14008,11 @@
         bar.style.width = Math.max(0, 1 - state.rest.t/restTotal(state.rest))*100 + "%"; }
       else if (mine && p.t > 0) { cls = "pw live";
         bar.style.width = Math.max(0, Math.min(1, p.t / (p.ms || 1)))*100 + "%"; }
-      else if (id === "ankh" && p.ankh) { cls = "pw armed"; bar.style.width = "0"; }
-      else { if (p.used.has(id)) cls = "pw dim"; bar.style.width = "0"; }
+      else { bar.style.width = "0"; }
+      // ...and out of reach either because it is not this moment's charm, or because it is
+      // already spent. A charm still RUNNING keeps its live look under the dip — it is doing
+      // its work whether or not you can press it again.
+      if (!reach || p.used.has(id)) cls += " dim";
       if (b.className !== cls) b.className = cls;
     });
   }
@@ -13672,8 +14020,13 @@
     const pf = document.getElementById("pauseFloat"); if (!pf) return;
     const show = !titleActive && !paused && state &&
                  (state.status === "play" || state.status === "vortex");
+    // Against the ELEMENT, not against a remembered value. This used to cache what it last
+    // wrote and skip the write when the new answer matched it — but half a dozen other places
+    // set this button's display directly, and any one of them left the cache saying "hidden"
+    // over a button that was on the screen. From then on every frame agreed with the cache and
+    // nothing put it right. Reading an inline style costs no layout; the cache bought nothing.
     const v = show ? "" : "none";
-    if (v !== _pauseVis) { pf.style.display = v; _pauseVis = v; }
+    if (pf.style.display !== v) pf.style.display = v;
   }
   // Nothing. Pausing used to lay a 12% black over the whole frame; with the menu standing on
   // the level's own backdrop that wash was darkening the thing it was meant to sit on.
