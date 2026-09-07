@@ -265,12 +265,22 @@
      happens to be there is a button whose legibility is decided by the level behind it. Pinned
      to the FOOT rather than to the button, so it reads as the edge of the picture going dark
      rather than as a plate the button is sitting on. */
+  /* ONE set of stops for both ends of the frame — see #winfadetop, which is the same wash the
+     other way up. They used to be two hand-written lists a few percent apart, which is a
+     difference nobody chose and nobody could see; the visible difference was the paper that
+     only the foot wore, and that has gone. */
+  :root { --fade-stops:
+      rgba(5,4,13,0.72) 0%, rgba(5,4,13,0.58) 30%, rgba(5,4,13,0.28) 64%, rgba(5,4,13,0) 100%; }
   #winfade {
     position:fixed; left:0; right:0; bottom:0; height:calc(var(--chq) * 13);
     z-index:33; pointer-events:none; display:none;
-    background:linear-gradient(to top,
-      rgba(5,4,13,0.72) 0%, rgba(5,4,13,0.60) 26%, rgba(5,4,13,0.32) 62%, rgba(5,4,13,0) 100%); }
+    background:linear-gradient(to top, var(--fade-stops)); }
   #winfade.show { display:block; animation:poem-in 260ms ease-out both; }
+  /* ...and the same gradient on a FALL, which needs it for the same reason: two buttons sitting
+     on whatever the heap and the sky happen to be doing behind them. It drops below #menu there
+     — on the Tileverse the buttons are the map's own floating chrome and the fade belongs over
+     the board, but here the buttons are the menu's, so the fade has to go under them. */
+  #winfade.under { z-index:29; }
   /* ...and the same thing at the TOP, for the same reason: the heading and the two doors sit on
      whatever chapter happens to be up there, and a map that scrolls under them was arriving at
      every colour in the campaign behind the same white lettering. Shallower than the foot — there
@@ -278,19 +288,14 @@
   #winfadetop {
     position:fixed; left:0; right:0; top:0; height:calc(var(--chq) * 11);
     z-index:33; pointer-events:none; display:none;
-    background:linear-gradient(to bottom,
-      rgba(5,4,13,0.72) 0%, rgba(5,4,13,0.58) 30%, rgba(5,4,13,0.28) 64%, rgba(5,4,13,0) 100%); }
+    background:linear-gradient(to bottom, var(--fade-stops)); }
   #winfadetop.show { display:block; animation:poem-in 260ms ease-out both; }
-  /* ...and the paper over it, masked to the same fall, so the ground under the button is the
-     same material as everything else in the game rather than a flat wash of black. */
-  #winfade::after {
-    content:""; position:absolute; inset:0; opacity:0.22;
-    background-image:url("data:image/svg+xml;utf8,\
-<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'>\
-<filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/>\
-</filter><rect width='140' height='140' filter='url(%23n)'/></svg>");
-    -webkit-mask-image:linear-gradient(to top, #000 0%, rgba(0,0,0,0.55) 55%, transparent 100%);
-            mask-image:linear-gradient(to top, #000 0%, rgba(0,0,0,0.55) 55%, transparent 100%); }
+  /* The foot used to carry a sheet of paper grain on top of the wash — mid-grey noise at 0.22,
+     heaviest exactly where the wash was darkest. It was meant to make the ground under the
+     button the same material as everything else in the game; what it actually did was lift the
+     bottom of the frame to a milky grey while the head of the frame went properly black, so the
+     two ends of the same picture did not look like the same picture. Gone: both ends are now
+     one gradient, and the material under it is the cosmos, which is already on paper. */
   /* The three doors off the interlevel screen, along the top: the charms on the left, the shop
      and the settings on the right with the cog in the corner. They are up here and not in the
      stack at the foot because the foot has ONE answer on it — the chapter you are about to
@@ -2231,6 +2236,33 @@
       }
     }
     // Key pickup: a bright rising three-note sparkle.
+    // The coin LANDING in the counter — not the taking of it, which is `coin` above. Small and
+    // dry on purpose: it fires once per coin as it arrives, and the Lodestone can bank a dozen
+    // of them inside a second. Two partials a hair apart, gone in under a tenth of a second.
+    //
+    // ...and it CLIMBS. A run of these at one pitch is a stutter; each one landing a tone above
+    // the last turns a fistful of coins into a phrase that goes somewhere. The ladder resets
+    // itself once they stop arriving, so a coin picked up on its own is always the bottom note.
+    let bankAt = -1e9, bankStep = 0;
+    const BANK_LADDER = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
+    function coinBank() {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime;
+      bankStep = (t0 - bankAt > 0.45) ? 0 : Math.min(BANK_LADDER.length - 1, bankStep + 1);
+      bankAt = t0;
+      const semi = 36 + BANK_LADDER[bankStep];
+      for (const [mul, amp, dur] of [[1, 0.085, 0.085], [2.02, 0.036, 0.055]]) {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "sine";
+        o.frequency.setValueAtTime(BASE * Math.pow(2, semi/12) * mul, t0);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(amp, t0 + 0.003);
+        g.gain.exponentialRampToValueAtTime(0.0004, t0 + dur);
+        o.connect(g); g.connect(master); g.connect(sendBus);
+        o.start(t0); o.stop(t0 + dur + 0.04);
+      }
+    }
+
     function key() {
       if (muted || !ac || ac.state !== "running") return;
       const t0 = ac.currentTime;
@@ -3103,7 +3135,7 @@
       musicBus.gain.setTargetAtTime(target, ac.currentTime, 0.12);
     }
     function isMuted() { return muted; }
-    return { unlock, clearTile, smash, roar, win, lose, fall, death, boost, slow, coin, key, doorOpen,
+    return { unlock, clearTile, smash, roar, win, lose, fall, death, boost, slow, coin, coinBank, key, doorOpen,
              slide, clack, tap, tapBig, power, warp, vortex, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck,
              ambient,
@@ -3133,7 +3165,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.16";                    // shown on the title & pause screens
+  const VERSION = "v10.17";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -3463,6 +3495,20 @@
   const BEST_KEY = "tilerunner:best";
   function loadBest(){ try { return JSON.parse(localStorage.getItem(BEST_KEY)) || {}; } catch(_){ return {}; } }
   function saveBest(o){ try { localStorage.setItem(BEST_KEY, JSON.stringify(o)); } catch(_){} }
+  // Two different questions the map asks about a chapter, and they stopped being the same one
+  // when Skip started leaving a mark. DONE is "you reached the flag" — it colours the square in
+  // and it is what the campaign counts. PASSED is "you are no longer here", which a clear does
+  // and so does giving up on it: the frontier moves either way, so the next chapter opens off a
+  // skip exactly as it opens off a win. A chapter that was passed without being done wears a
+  // cross instead of its number — see drawMap.
+  const bestDone = (best, k) => { const b = best["L" + k]; return !!(b && (b.done || b.stars)); };
+  const bestSkipped = (best, k) => { const b = best["L" + k]; return !!(b && b.skipped) && !bestDone(best, k); };
+  const bestPassed = (best, k) => bestDone(best, k) || bestSkipped(best, k);
+  function bestFurthest(best) {
+    let f = -1;
+    for (let k = 0; k < LEVELS.length; k++) if (bestPassed(best, k)) f = k;
+    return f;
+  }
   const SET_KEY = "tilerunner:settings";
   function loadSettings(){
     let o; try { o = JSON.parse(localStorage.getItem(SET_KEY)) || {}; } catch(_){ o = {}; }
@@ -3752,18 +3798,6 @@
         for (const [x,y,r] of [[-0.10,-0.34,0.05],[0.06,-0.62,0.038],[-0.02,-0.86,0.03]]) {
           g.beginPath(); g.arc(bw*x, byTop+bw*y, bw*r, 0, 7); g.fill(); } } },
 
-    { id:"gnome", name:"Gnome", cost:10, col:"#c0392b",
-      draw(g,s,bw,byTop,col){ const H=bw*0.5;
-        g.fillStyle=col;
-        g.beginPath();                                             // short, fat, and flopping
-        g.moveTo(-H, byTop+bw*0.04);
-        g.lineTo( H, byTop+bw*0.04);
-        g.quadraticCurveTo(H*0.9, byTop-bw*0.52, -H*0.20, byTop-bw*0.60);
-        g.quadraticCurveTo(-H*0.55, byTop-bw*0.34, -H, byTop+bw*0.04);
-        g.closePath(); g.fill();
-        g.fillStyle="#f4f6ff";                                     // the bobble on the end
-        g.beginPath(); g.arc(-H*0.24, byTop-bw*0.60, bw*0.09, 0, 7); g.fill(); } },
-
     // The ears are HIS colour, not a hat's: they are meant to read as part of him, the way a
     // cat's are, rather than as something strapped on. They take the whole finish, so a metal
     // or a gradient runs on up into them — a fill lives in user space, so it simply continues.
@@ -3859,45 +3893,50 @@
     { id:"chicken", name:"Chicken", cost:20, col:"#e04141",
       draw(g,s,bw,byTop,col){
         const H = bw*0.5, base = byTop + bw*0.03;
-        // LUMPS, front to back: the biggest over his brow and each one behind it smaller, set
+        // A comb drawn as THICK ROUNDED LINES, one per mound. Each is a single stroke standing
+        // on the brow: the round cap gives it its dome, and the line's width is the mound's own
+        // width — so a mound is one measurement rather than an ellipse whose height and width
+        // have to be kept in step by hand. Front to back, each one narrower than the last, set
         // close enough to bite into the one in front. A comb is a ridge of flesh, not a row of
-        // teeth — the overlap is what makes the outline read as one piece with notches cut into
-        // it rather than as four separate bumps standing in a line. His local +x is the way he
-        // is travelling, so the big end is the leading end.
-        // Each lump is TALLER than it is wide, which is what lets them sit side by side across
-        // one head and still show as separate crests: circles wide enough to reach that height
-        // would have to overlap so far that the outline came out as one smooth wedge.
-        const N = 3, RX = bw*0.31, SHRINK = 0.21, TALL = 1.80, LAP = 0.78, SIT = 0.42;
-        // The leading crest is RAKED FORWARD — a comb grows over the brow, it does not stand
-        // to attention — and only that one: the two behind it stay upright, so what the lean
-        // says is "this end is the front" rather than "the whole thing is falling over".
-        const LEAN = 0.30;
-        const lean = k => (k === 0 ? LEAN : 0);
-        // How far a leaning lump reaches sideways. A tilted ellipse is WIDER than its own rx,
-        // so measuring the chain by rx alone would hang the front of the comb off his face.
-        const ext = (rx, th) => Math.hypot(rx*Math.cos(th), rx*TALL*Math.sin(th));
+        // teeth: the overlap is what makes the outline read as one piece with notches cut into
+        // it. His local +x is the way he is travelling, so the big end is the leading end.
+        const N = 3, RX = bw*0.27, SHRINK = 0.21, TALL = 1.80, LAP = 0.78;
+        // The leading mound STARTS UPRIGHT AND CURVES FORWARD. Its control point sits directly
+        // above where it is rooted, which is what makes it leave the brow vertically before it
+        // bends — a curve that leaned from the ground up would be a horn, not a flop. FLOP is
+        // how far past the front of the head the tip is thrown, in half-widths; it is the one
+        // part of the comb that hangs outside the head, which is the whole point of it.
+        const FLOP = 0.90;
         const rad = [];
         for (let k = 0; k < N; k++) rad.push(RX*(1 - k*SHRINK));
-        // How far apart they would sit at LAP, and then the one scale that makes that chain
-        // span the head exactly — front lump's leading edge on one side, back lump's trailing
-        // edge on the other — whatever the radii come out at. Sizing the gaps and the width
-        // independently is how a hat ends up hanging off the side of his face.
+        // How far apart they would sit at LAP, and then the one scale that makes that chain span
+        // the head exactly — the front mound's leading edge on one side, the back mound's
+        // trailing edge on the other. Sizing the gaps and the width independently is how a hat
+        // ends up hanging off the side of his face. It is the front mound's ROOT that is
+        // measured, never its tip: the tip is meant to be out past the head.
         const gap = []; let span = 0;
         for (let k = 0; k < N - 1; k++) { const gg = (rad[k] + rad[k+1])*LAP; gap.push(gg); span += gg; }
-        const want = (H - ext(rad[0], lean(0))) - (ext(rad[N-1], lean(N-1)) - H);
+        const want = (H - rad[0]) - (rad[N-1] - H);
         const kx = span > 0 ? want/span : 1;
         g.save();
-        // Nothing hangs below the head: the comb is rooted in it, not sitting on it.
-        g.beginPath(); g.rect(-bw, byTop - bw*2, bw*2, base - (byTop - bw*2)); g.clip();
-        g.fillStyle = col;
-        g.beginPath();                       // one path, filled once: the union IS the comb
-        let x = H - ext(rad[0], lean(0));
+        // Nothing hangs BELOW the head — the comb is rooted in it, not sitting on it — but the
+        // box is wide enough for the flop to reach out past the brow, which is where it is going.
+        g.beginPath(); g.rect(-bw*1.6, byTop - bw*2, bw*3.2, base - (byTop - bw*2)); g.clip();
+        g.strokeStyle = col; g.lineCap = "round"; g.lineJoin = "round";
+        let x = H - rad[0];
         for (let k = 0; k < N; k++) {
-          const r = rad[k], cy = base - r*SIT, th = lean(k);
-          g.moveTo(x + r, cy); g.ellipse(x, cy, r, r*TALL, th, 0, Math.PI*2);
+          const r = rad[k];
+          // The cap adds `r` past the end of the line, so the line stops that far short of the
+          // height the mound is meant to reach.
+          const top = base - (r*TALL - r);
+          g.lineWidth = r*2;
+          g.beginPath();
+          g.moveTo(x, base);
+          if (k === 0) g.quadraticCurveTo(x, base - (base - top)*0.72, H + FLOP*r, top);
+          else         g.lineTo(x, top);
+          g.stroke();
           if (k < N - 1) x -= gap[k]*kx;
         }
-        g.fill();
         g.restore(); } },
 
     // THE HORN, and nothing else. The pink mane under it was the bigger shape of the two and
@@ -3960,19 +3999,6 @@
         g.globalAlpha = 1;
         g.restore(); } },
 
-    { id:"saiyan", name:"Super Saiyan", cost:30, col:"#ffd24a",
-      draw(g,s,bw,byTop,col){ const H=bw*0.5;
-        g.fillStyle=col;
-        // Nine spikes off one base line, tallest in the middle — the flare is the whole look,
-        // so the tips go a long way up while the BASE stays exactly a head across.
-        const tip = [0.34, 0.62, 0.86, 1.10, 1.26, 1.10, 0.86, 0.62, 0.34];
-        const lean = [-0.55, -0.42, -0.28, -0.13, 0, 0.13, 0.28, 0.42, 0.55];
-        for (let k=0;k<9;k++){ const x0 = -H + (k/8)*bw, w = bw*0.075;
-          g.beginPath();
-          g.moveTo(x0 - w*0.5, byTop+bw*0.06);
-          g.lineTo(x0 + w*0.5, byTop+bw*0.06);
-          g.lineTo(x0 + bw*lean[k]*0.5, byTop - bw*tip[k]);
-          g.closePath(); g.fill(); } } },
   ];
   HATS.forEach(h => { if (h.id === "none") return;
     // A square face, like the drip cards: the head is only here to hang the hat on, and a
@@ -4654,6 +4680,9 @@
       // may never come, and it must not be clobbered by the next charm you press.
       power: { used: new Set(), kind: null, t: 0, ms: 0, armed: false, ankh: false },
       coinFly: [],                          // coins on their way to him, pulled by the Magnet
+      coinRun: [],                          // ...and coins on their way from him to the counter
+      coinsShown: 0,                        // what the counter is SAYING, which lags coinsGot
+      coinHudPop: -1e9,                     // when the counter last took one
       loop: null,                           // a circuit he is going round, once we are sure
       vortex: null,                         // ...and what happens to the world when he is
       singularity: new Set((L.singularity||[]).map(c=>key(c[0],c[1]))),
@@ -5974,6 +6003,25 @@
   }
   // Returns false when the tap was not on a rail, or was on one that cannot move, so the tap
   // can go on to mean whatever else it might have meant.
+  // A cell the player's own track is standing on RIGHT NOW — a laid tile he has not yet left
+  // behind, or a pane parked on the board. A movable wall may not be dragged ACROSS one: it is a
+  // wall, and a wall that slides through the track you have built is not blocking anything.
+  function trackAt(c, r) {
+    return (state.path || []).some(n => n.kind === "tile" && !n.exited && n.c === c && n.r === r)
+        || (state.tiles || []).some(x => (x.status === "parked" || x.status === "active") &&
+                                          x.c === c && x.r === r);
+  }
+  // How far a movable wall may travel from where it is standing: outward along its rail in both
+  // directions, stopping at the first cell the track is on. Derived from its CURRENT cell every
+  // time it is asked, so a fast drag cannot fling it past a blocker between two frames — the
+  // furthest it can get in one step is the first thing in its way.
+  function blockSpan(b) {
+    const cur = Math.round(b.pos);
+    let lo = cur, hi = cur;
+    while (lo - 1 >= b.lo) { const p = railCell(b, lo - 1); if (trackAt(p.c, p.r)) break; lo--; }
+    while (hi + 1 <= b.hi) { const p = railCell(b, hi + 1); if (trackAt(p.c, p.r)) break; hi++; }
+    return { lo, hi };
+  }
   function slideTo(c, r) {
     if (state.status !== "play") return false;
     for (const { obj, block } of railPieces()) {
@@ -5982,11 +6030,11 @@
       if (target === Math.round(obj.pos)) continue;     // a tap on the piece itself is a grab, not a call
       const here = railCell(obj, Math.round(obj.pos));
       if (state.path.some(n => n.c === here.c && n.r === here.r)) return false;   // locked under the track
-      if (block) {                                      // ...and a block may not land on live track
-        const t = railCell(obj, target);
-        const free = !state.path.some(n => n.kind === "tile" && !n.exited && n.c === t.c && n.r === t.r)
-                  && !state.tiles.some(x => (x.status === "parked" || x.status === "active") && x.c === t.c && x.r === t.r);
-        if (!free) return false;
+      // ...and a block may not land on live track, NOR pass through it on the way. Testing only
+      // where it lands let a tap send one straight across the middle of a laid route.
+      if (block) {
+        const R = blockSpan(obj);
+        if (target < R.lo || target > R.hi) return false;
       }
       startSlide(obj, target);
       return true;
@@ -6412,6 +6460,19 @@
   };
   const MAGNET_TONE = { mid: "rgba(255,140,140,", rim: "rgba(255,236,236," };
   const COIN_FLY_MS = 240;     // how long a pulled coin takes to reach him
+  // ...and the run from there to the counter at the top of the screen. A coin used to be
+  // answered by a card that popped up over the board saying what you now had, which is a
+  // caption: it told you the number rather than showing you the coin becoming it. This is the
+  // same information as a MOVE — the coin flares where you took it, races up to the counter,
+  // and the counter goes up as it lands.
+  const COINRUN = {
+    flash:   140,   // ms flaring where it was taken, before it sets off
+    fly:     380,   // ...then this long racing to the counter
+    pop:    1.75,   // how far it swells in the flare, multiples of its own width
+    bow:    0.55,   // how much the flight bows upward before it sweeps across, 0 = a straight line
+    stagger:  75,   // ms between coins when a fistful arrives at once, so the number ticks
+    bump:    240,   // how long the counter jumps for as one lands
+  };
   // Press the button: the worn talisman gives up its one power for this level.
   // A level still allows ONE power — that has always been the balance — but which one is now
   // decided at the moment you use it rather than committed to in a menu beforehand.
@@ -7040,6 +7101,18 @@
   // particular power does per-tick. The Finger has no clock, so it is absent from here.
   function tickPower(dt) {
     const s = state;
+    // Coins on their way to the COUNTER. They are ticked here and land here — not in the
+    // drawing — so the number goes up exactly once per coin however the frame rate wanders.
+    if (s.coinRun && s.coinRun.length) {
+      for (const f of s.coinRun) f.t += dt;
+      for (const f of s.coinRun) if (!f.done && f.t - f.delay >= COINRUN.flash + COINRUN.fly) {
+        f.done = true;
+        s.coinsShown = (s.coinsShown || 0) + 1;
+        s.coinHudPop = performance.now();
+        Sound.coinBank();                    // ...the little sound of it going in
+      }
+      s.coinRun = s.coinRun.filter(f => !f.done);
+    }
     if (s.coinFly.length) {                       // coins already in flight, wherever from
       for (const f of s.coinFly) f.t += dt;
       for (const f of s.coinFly) if (f.t >= COIN_FLY_MS && !f.done) { f.done = true; grabCoin(f.c, f.r, true); }
@@ -7083,15 +7156,19 @@
     // still counts up as you go, because the number it shows is what you WOULD walk away with,
     // and a run where the figure never moved would be a run with nothing to lose.
     s.purse += COIN_TILES;
-    // A coin the Magnet reeled in was collected AT THE RUNNER, not where it had been lying —
-    // it flew the whole way to him and the cell it left is empty by now. Firing the tally at
-    // its old address popped the number up over bare ground somewhere off across the board,
-    // and with a fistful arriving at once they scattered. Fractional cell coordinates, because
-    // he is between cells more often than not and the card should leave from where he IS.
-    if (flew && s.status === "play" && s.path && s.path.length) {
-      const rp = visualAt(s.runIdx + s.runT);
-      showTally(rp.x/cell - 0.5, rp.y/cell - 0.5);
-    } else showTally(c, r);
+    // ...and the coin itself sets off for the counter — see drawCoinRuns. Where it leaves from
+    // is where it was TAKEN: a coin the Magnet reeled in was taken AT THE RUNNER, having flown
+    // the whole way to him, and the cell it had been lying in is bare ground by now.
+    {
+      const rp = (flew && s.status === "play" && s.path && s.path.length)
+        ? visualAt(s.runIdx + s.runT) : null;
+      // A fistful arriving at once goes up in single file rather than as one lump, so the
+      // counter ticks. Capped, or the Magnet's twelfth coin would leave nearly a second late.
+      s.coinRun.push({ wx: rp ? rp.x : (c + 0.5)*cell,
+                       wy: rp ? rp.y - cell*0.3 : (r + 0.5)*cell,
+                       w0: cell*COIN.size, t: 0, done: false,
+                       delay: Math.min(5, s.coinRun.length) * COINRUN.stagger });
+    }
     if (!flew) { spawnPop(c, r, "#ffd24a"); spawnLight(c, r); }
     notePick("coin", c, r);
     Sound.coin(); haptic(6);
@@ -7363,8 +7440,6 @@
   // whole scene scales together and the bodies stay the size of the runner lying on them.
   const PILE_DROP = 1.35, PILE_REST = 2200, FALL_ZOOM = 1.35;
   const PILE_SKIRT = () => PILE.skirt;      // rows of heap carried on below the base, off-frame
-  const WRIGGLE_MS = 1700;                  // how long the legs go on kicking once he is in
-  const LAND_SPRING = 700;                  // ...and how long the impact takes to settle out
   const pileY = () => (state.fall && state.fall.floor != null) ? state.fall.floor
                                                                : worldH + viewH*PILE_DROP;
   // The drop pushes IN on him. Everything on the board is measured in `cell`, so growing it is
@@ -7393,17 +7468,20 @@
       // that is what leaves a pair of legs kicking out of the top of a pile that has closed over
       // the rest of him — level with the crest, the summit row covers the legs too and he goes
       // missing altogether.
+      // LOCKED, the instant he arrives. He used to slide the last of the way onto the spot and
+      // tip about on a damped wobble, on the argument that it read as being caught by something
+      // soft — but he is landing in the one gap the pyramid left for him, and a body settling
+      // into its place over the next half second reads as the heap not being sure where he goes.
+      // He goes there. The heap is measured in cells and the zoom is still running under it, so
+      // this is re-applied every frame rather than set once at the moment of contact.
       const spot = pileLandSpot();
-      f.y = spot.y; f.x += (spot.x - f.x) * Math.min(1, dt/160);
-      // The landing has a bit of give in it: he tips over on impact and springs back to where
-      // he ends up, on a damped wobble rather than a slide, so it reads as him being caught by
-      // something soft rather than being placed there.
-      const k = Math.min(1, f.land/LAND_SPRING);
-      f.angle = f.rest + Math.exp(-k*5.2) * Math.sin(k*Math.PI*2.6) * 0.55;
-      // ...and the legs kick, and give up. The phase advances at a rate that runs down to
-      // nothing over WRIGGLE_MS, so the kicking slows to a halt rather than being switched off
-      // — he stops because he has stopped, not because a timer said so.
-      f.wrig += dt * Math.max(0, 1 - f.land/WRIGGLE_MS);
+      // Re-read every frame, not stored at the moment of contact: the heap is measured in cells
+      // and the zoom is still running under it, so the summit moves while he lies on it — and it
+      // is the only way `tilt` and `splay` can be tuned in the lab against a body already down.
+      f.rest = Math.PI + PILE.tilt;
+      f.x = spot.x; f.y = spot.y; f.angle = f.rest;
+      // No kicking. The legs used to go on flailing and wind down to a halt; he is not
+      // struggling, he has arrived, and the splayed pose says that better than a timer did.
       if (f.land >= PILE_REST && !(state.ankhGrace > 0)) showLose();
       return;
     }
@@ -7426,9 +7504,12 @@
       // HEAD FIRST. Turned all the way over, his feet end up at the anchor and everything else
       // is drawn below it — so anchoring him at the summit buries the head in the heap and
       // leaves the legs sticking out of the top of it, which is the whole picture.
-      f.rest = Math.PI + (f.vx >= 0 ? 0.20 : -0.20);
+      // Straight over: head buried in the heap, legs in the air. It used to be tipped a fifth of
+      // a radian to whichever way he was travelling, which read as him having toppled; landing
+      // on the summit he goes in square, and `tilt` is what turns him off that — applied in the
+      // landed branch above, so it can be moved while he is lying there.
+      f.rest = Math.PI + PILE.tilt;
       f.angle = f.rest;
-      f.wrig = 0;
       state.shake = Math.max(state.shake || 0, cell*0.18);
       Sound.thud ? Sound.thud() : Sound.clack();
       haptic(18);
@@ -7582,8 +7663,8 @@
     // THE PYRAMID. One more body on every row down: 1 at the summit, 2 under it, and so on. No
     // shape parameter and nothing to tune about the silhouette — a pyramid is a pyramid, and the
     // only thing that makes it read as a heap rather than as masonry is the wander below.
-    rows:     10,    // rows at the first fall; one more every few attempts, up to `rowsMax`
-    rowsMax:  8,
+    rows:     7,     // rows at the first fall; one more every few attempts, up to `rowsMax`
+    rowsMax:  10,
     stepX:    0.19,  // how far apart they sit across, as a fraction of a CELL
     stepY:    0.16,  // ...and up
     jitX:     0.10,  // how far one may wander off its place, across
@@ -7603,9 +7684,17 @@
     // WHERE HE LANDS. `landX` and `landY` nudge the spot in CELLS from where the arithmetic puts
     // it; `aim` is how hard he is steered onto it on the way down — see tickFall, where his
     // sideways drift used to decide this instead.
-    landX:    -0.15,
-    landY:    -0.45,
+    landX:    -0.10,
+    landY:    -0.30,
     aim:      1.00,
+    // ...and how he LIES once he is there. `tilt` is turned from straight over, in radians, so
+    // 0 is head dead down; `splay` is how far his feet are thrown apart, as a fraction of him.
+    tilt:     -0.24,
+    splay:    0.08,
+    // ...and the two ankles, set apart. Each is how far THAT foot turns AWAY from the middle,
+    // in radians, so a positive pair opens outward and a negative one folds it in.
+    bendFore: -0.72,
+    bendAft:  -1.20,
   };
   // The heap's geometry, in one place: the tap that lands him on the summit and the drawing
   // that builds the summit have to agree about where it is.
@@ -7614,20 +7703,15 @@
   // Where he comes down: NOT the apex, but one or two places down the flank of it. Landing dead
   // on the point is a stunt; landing just off it, on the slope, is a fall. `d` is how many
   // places out he lands, and `landX`/`landY` nudge the whole thing from there.
+  // THE SUMMIT, exactly. The pyramid's top row holds one body and paintFallPile leaves it out —
+  // this is where it would have been, and he takes its place. He used to land a place or two
+  // down the flank on the argument that landing dead on the point is a stunt; but the point is
+  // the one spot on a heap of bodies that is unmistakably HIS, and arriving in the gap the
+  // pyramid left is a better joke than arriving beside it.
   function pileLandSpot() {
     const G = pileGeom();
-    const d = 1 + ((state.attempts || 1) & 1);
-    const side = (state.fall && state.fall.vx < 0) ? -1 : 1;
-    // The highest row that still reaches `d` places out from the middle, asked of the profile
-    // rather than worked out from a shape it might no longer have.
-    let row = 0;
-    for (let r = G.rows - 1; r >= 0; r--) {
-      if ((pileCols(r, G) - 1) / 2 >= d) { row = r; break; }
-    }
-    // ...and high enough above that row for the legs to clear the bodies lying on it. He is
-    // drawn BEHIND the heap, so level with the local surface is out of sight entirely.
-    return { x: pileMidX() + side*d*G.stepX - cell*0.22 + cell*PILE.landX,
-             y: pileY() - row*G.stepY - cell*0.55 + cell*PILE.landY };
+    return { x: pileMidX() + cell*PILE.landX,
+             y: pileY() - (G.rows - 1)*G.stepY + cell*PILE.landY };
   }
   // How wide row `r` is, in bodies. A PYRAMID: one more on every row down, so the summit is a
   // single body, the row under it two, and the base is as wide as the heap is tall. Rows below
@@ -7729,8 +7813,13 @@
         // say that the peak is further away — and it makes the mountain read as one object
         // rather than as a stack of identical stickers.
         const depth = rows > 1 ? 1 - Math.max(0, r)/(rows - 1) : 1;
-        paintRunner(x, y, s*(PILE.sizeBase + depth*PILE.sizeDepth + j3*PILE.sizeJit),
-                    j4*6, ang, false, ts, 0, false, fit);
+        // The SUMMIT is left empty. He lands there — it is his place on the heap, and a body
+        // already lying in it means he comes down on top of somebody rather than into the gap
+        // the pyramid left for him. The random draws above still happen for it, so leaving it
+        // out does not reshuffle a single body below.
+        if (!(r === rows - 1))
+          paintRunner(x, y, s*(PILE.sizeBase + depth*PILE.sizeDepth + j3*PILE.sizeJit),
+                      j4*6, ang, false, ts, 0, false, fit);
         ctx.restore();
       }
     }
@@ -7748,8 +7837,12 @@
     fit:   700,    // pull back until the whole level is on screen
     hold:  240,    // ...a beat, so the pull-back lands before anything else starts
     rest:  560,    // ...and another with the finished route standing there
-    out:  1200,    // the level shrinks into its square on the map
+    out:   640,    // the level DIVES into its square on the map — the whip below, in reverse
+    hand:  0.80,   // ...holding solid until this far down, then handing over to the map square
+    mapIn: 2.2,    // ...and how late the rest of the map arrives behind it (higher = later)
                    // (LEVEL N COMPLETE has no duration: it waits for a tap — see tickWin)
+    beat:  620,    // ...except on a SKIP, which is not something to be congratulated on: it
+                   // holds this long on the cross and moves itself on
     pan:   950,    // over to the next square, which colours up
     whip:  520,    // and into it, to black
     fade:  480,    // out of black, into the next level
@@ -7779,6 +7872,32 @@
     hideWinUI();
   }
   function winEnd() { win = null; hideWinUI(); }
+  // Giving up on a chapter, played as a MOVE rather than as a cut. Skip used to load the next
+  // level out from under you the instant you pressed it, which made the one you had just quit
+  // vanish without ever being answered — you were somewhere else before you had finished being
+  // here. It now leaves by the map's own door: the level is ABANDONED — gone the moment you
+  // press it, not pulled back from and not shown one last time — and what you are left looking
+  // at is its square on the map, filling the screen, wearing its cross. That zooms out to the
+  // Tileverse, holds a beat, and pans to the next chapter.
+  //
+  // Everything a clear does to make something of itself, this does not do: no pull-back, no
+  // route cast back across the board, no heading, no tally, no fanfare, and no tap to continue
+  // — a screen that asks you to acknowledge having given up is a screen making a ceremony of
+  // it. It moves itself on.
+  function winSkip() {
+    const nx = Math.min(LEVELS.length - 1, levelIdx + 1);
+    // Remembered as PASSED, never as done: the frontier moves so the next chapter opens, and
+    // the square keeps its colour but wears a cross. A chapter already cleared and replayed is
+    // left alone — you cannot un-finish something by walking away from it a second time.
+    { const best = loadBest();
+      if (!bestDone(best, levelIdx)) { best["L" + levelIdx] = { skipped: true }; saveBest(best); } }
+    win = { ph: "out", t: 0, last: false, skip: true, idx: levelIdx, next: nx,
+            route: [], laid: 0, cell0: cell, black: 0, shine: 0,
+            picks: [], coins: 0, coinsTotal: 0, clock: 0, pickSnd: -1e9,
+            cellFit: Math.max(4, Math.min(viewW/(COLS + 2), viewH/(ROWS + 2))), stepMs: 40 };
+    hideWinUI();
+    Sound.warp(true);
+  }
   // The Tileverse, opened on its own rather than as the tail of a victory. The interlevel beat
   // — drag the cloud, pick a chapter, play it — IS the map now, so every way in lands on the
   // same place instead of on a grid of buttons that said the same thing less well. It is the
@@ -7789,12 +7908,9 @@
   // that is the right answer for a brand new player and for nobody else.
   function lastPlayed() {
     const best = loadBest();
-    const done = k => { const b = best["L" + k]; return !!(b && (b.done || b.stars)); };
-    let furthest = -1;
-    for (let k = 0; k < LEVELS.length; k++) if (done(k)) furthest = k;
-    const frontier = clamp(furthest + 1, 0, LEVELS.length - 1);
+    const frontier = clamp(bestFurthest(best) + 1, 0, LEVELS.length - 1);
     const at = settings.at;
-    return (typeof at === "number" && at >= 0 && at < LEVELS.length && (done(at) || at <= frontier))
+    return (typeof at === "number" && at >= 0 && at < LEVELS.length && (bestPassed(best, at) || at <= frontier))
       ? at : frontier;
   }
   function openTileverse() {
@@ -7812,9 +7928,16 @@
   // A tap anywhere moves the paused beat on. Returns true when it took the tap, so the board's
   // own pointer handling can leave it alone.
   function winTap() {
-    if (!win || win.ph !== "name" || win.t < 700) return false;   // not until it has arrived
+    // A skip's pause is not a prompt and does not answer to one: it runs itself down. Taking
+    // the tap here would also fire the shop on the way out of a chapter you walked away from.
+    if (!win || win.ph !== "name" || win.skip || win.t < 700) return false;   // not until it has arrived
     Sound.unlock(); Sound.tapBig();
     win.ph = "pan"; win.t = 0;
+    // The shop offers itself HERE — on the tap that moves you on, before the camera has fetched
+    // the next chapter and before it has coloured up. It used to come with the win UI, which put
+    // it over the chapter you had just finished while its name was still on the screen: an
+    // errand interrupting the moment rather than something to do on the way to the next one.
+    maybeShopIntro();
     return true;
   }
   // On the interlevel screen the whole board is the map's handle: press anywhere that is not one
@@ -7891,7 +8014,8 @@
                      : (b && (b.done || b.stars) ? "Replay Chapter " : "Play Chapter ") + (idx + 1));
     winNextQuilt(nx, idx);
     el.classList.add("show");
-    const fd = document.getElementById("winfade"); if (fd) fd.classList.add("show");
+    const fd = document.getElementById("winfade");
+    if (fd) { fd.classList.add("show"); fd.classList.remove("under"); }   // over the board here
     const ft = document.getElementById("winfadetop"); if (ft) ft.classList.add("show");
     const top = document.getElementById("wintop");
     if (top) {
@@ -7928,7 +8052,6 @@
       }
       top.classList.add("show");
     }
-    maybeShopIntro();
   }
   function hideWinUI() {
     const el = document.getElementById("winui"); if (el) el.classList.remove("show");
@@ -8062,11 +8185,8 @@
   // rule drawMap colours by, so what is lit is exactly what is pressable.
   function winOpen(i) {
     const best = loadBest();
-    const done = k => { const b = best["L" + k]; return !!(b && (b.done || b.stars)); };
-    if (done(i)) return true;
-    let furthest = -1;
-    for (let k = 0; k < LEVELS.length; k++) if (done(k)) furthest = k;
-    return i <= furthest + 1;
+    if (bestPassed(best, i)) return true;         // ...including one you gave up on: go back to it
+    return i <= bestFurthest(best) + 1;
   }
   // Which square is under a point on screen, or null. The inverse of mapRect, which centres
   // square p at viewW/2 + (p.c - cx0)*S.
@@ -8118,9 +8238,16 @@
   // be something the camera can fly through, and a grid of buttons is not.
   function drawMap(ts, S, cx0, cy0, opts) {
     const cells = mapCells(), best = loadBest(), o = opts || {};
-    const isDone = k => { const b = best["L" + k]; return !!(b && (b.done || b.stars)); };
-    let furthest = -1;
-    for (let k = 0; k < LEVELS.length; k++) if (isDone(k)) furthest = k;
+    // How present the map is. The win sequence's dive brings it up late — see drawWin — and
+    // this cannot be an outer globalAlpha the caller sets, because four things in here set
+    // globalAlpha absolutely and canvas REPLACES rather than multiplies. So the whole body runs
+    // under it and those four multiply by it: A on the plain fills, A*theirs everywhere else.
+    const A = o.alpha == null ? 1 : o.alpha;
+    if (A <= 0.002) return;
+    ctx.save();
+    ctx.globalAlpha = A;
+    const isDone = k => bestDone(best, k);
+    const furthest = bestFurthest(best);
     // No gap between squares. The menu's map spaces them out because it is a list of places you
     // can press; this one is a PLACE — the cosmos seen close up — and the levels are the ground
     // of it, so they meet edge to edge with nothing showing between.
@@ -8157,7 +8284,7 @@
       // Inside the grey filter with the quilt, so an unreached chapter's paper is drained along
       // with its colours rather than staying bright over a tile that has gone quiet.
       // The grain is monochrome already, so draining it is only the brightness half.
-      grainFill(x, y, w, w, TILE.bodyGrain * bright);
+      grainFill(x, y, w, w, TILE.bodyGrain * bright * A);
       ctx.restore();
       ctx.restore();
       // The chapter's NUMBER, on every square you have been let into. Without them the pan from
@@ -8173,12 +8300,12 @@
       const numK = clamp((base*0.50 - S) / (base*0.15), 0, 1) * lit;
       if (numK > 0.02 && S > 18) {
         ctx.save();
-        ctx.globalAlpha = numK;
+        ctx.globalAlpha = A * numK;
         ctx.fillStyle = "#ffffff";
         // A chapter you went PAST rather than finished wears a cross instead of its number. It
         // is still open and still playable — the number is not information you need about a
         // place you have already been let into, and "unfinished" is.
-        if (!isDone(i) && i < furthest) {
+        if (!isDone(i) && (bestSkipped(best, i) || i < furthest)) {
           const m = S*0.075, mx = x + w/2, my = y + w/2;
           ctx.strokeStyle = "#ffffff"; ctx.lineWidth = Math.max(2, S*0.042); ctx.lineCap = "round";
           ctx.beginPath();
@@ -8238,7 +8365,7 @@
         const q = LEVEL_SWATCH, qs = S/q, vc = VOID_THEME.colors;
         ctx.save();
         ctx.save();
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = A;
         rrect(R.x, R.y, S, S, r); ctx.clip();
         for (let k = 0; k < q*q; k++) {
           ctx.fillStyle = vc[k % vc.length];
@@ -8249,7 +8376,7 @@
         // chapter numbers beside it — it is the square's label, and a label that dwarfs every
         // other label on the map reads as a button someone dropped onto it.
         const m = S*0.145, cx1 = R.x + S/2 - m*0.12, cy1 = R.y + S/2;
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = A;
         ctx.fillStyle = "#ffffff";
         ctx.beginPath();
         ctx.moveTo(cx1 - m*0.80, cy1 - m); ctx.lineTo(cx1 + m*1.02, cy1);
@@ -8265,6 +8392,7 @@
         ctx.restore();
       }
     }
+    ctx.restore();
   }
   // The heading, in the same extruded gold the title screen and the menus use.
   function winHeading(text, y, size, k) {
@@ -8323,11 +8451,16 @@
       P.flashT = (P.flashT || 0) + dt;
       if (done(WIN.rest)) { P.ph = "out"; P.t = 0; Sound.warp(true); }
     } else if (P.ph === "out") {
-      if (done(WIN.out)) { P.ph = "name"; P.t = 0; Sound.warp(false); Sound.win(); }
+      // ...and no fanfare on the way in. Landing on a chapter you walked away from should not
+      // sound like landing on one you finished; the warp's own tail is the whole of it.
+      if (done(WIN.out)) { P.ph = "name"; P.t = 0; Sound.warp(false); if (!P.skip) Sound.win(); }
     } else if (P.ph === "name") {
       // Holds. The level you just finished is on the screen with its name on it, and moving on
       // from that is YOUR decision — the sequence has been running on its own long enough by
       // this point, and a beat you can sit in is what turns a cutscene into a moment.
+      // A SKIP is not that. There is nothing here to sit with and nothing to acknowledge, so it
+      // rests just long enough for the cross to land and takes itself on.
+      if (P.skip && done(WIN.beat)) { P.ph = "pan"; P.t = 0; }
     } else if (P.ph === "wait") {
       // A chapter you have just chosen is brought to the middle rather than cut to — the map is
       // a place, and the camera moves across it. Dragging cancels it: your hand outranks it.
@@ -8401,11 +8534,29 @@
     const here = cells[P.idx] || { c:0, r:0 };
     const there = (P.next === INTRO_CELL ? introMapCell() : cells[P.next]) || here;
     let S = Sfit, cx0 = here.c, cy0 = here.r, shotK = 0, shotT = 0, litK = 1, glow = 0, glowA = 1, ring = 0;
+    let mapA = 1;
     if (P.ph === "out") {
-      const k = easeBoth(Math.min(1, P.t / WIN.out));
+      // A DIVE, not a descent. easeOut is the exact mirror of the easeIn the whip goes IN on,
+      // so leaving a chapter and arriving at one are one move run in opposite directions: this
+      // breaks away from the board fast and settles onto its square. It used to be easeBoth
+      // over nearly twice as long, which crawled through the middle of the shrink — and the
+      // middle is where the map's other chapters are already on screen at full strength with
+      // nothing to do, so the beat read as a slow reveal of a grid rather than as a pull-out.
+      const u = Math.min(1, P.t / WIN.out);
+      const k = easeOut(u);
       S = S0 + (Sfit - S0)*k;
       shotT = k;                                            // ...from the whole screen to a square
-      shotK = 1 - Math.max(0, (k - 0.72)/0.28);             // handing over at the end of it
+      // The level holds SOLID nearly all the way down and hands over at the last moment, on the
+      // raw clock rather than the eased one: read off k, an ease that is 72% done a third of the
+      // way through starts the fade almost as soon as the dive has begun.
+      shotK = P.skip ? 0 : 1 - Math.max(0, (u - WIN.hand)/(1 - WIN.hand));
+      // ...and the map comes UP to meet it. At full strength from the first frame the chapters
+      // either side are a lit grid sitting behind a shrinking picture for the whole move;
+      // arriving late, they are the thing the dive lands in.
+      // ...but on a SKIP the map is all there is. There is no level being handed over, so
+      // nothing to bring the map up BEHIND — it is on screen from the first frame, one square
+      // of it filling the view, and the zoom is the whole of the move.
+      mapA = P.skip ? 1 : Math.pow(u, WIN.mapIn);
     } else if (P.ph === "name") {
       glow = 0.35 + P.t/900;
       P.shine = glow;                          // where the shine had got to when you tapped
@@ -8435,8 +8586,14 @@
     // voidCell, which pieces the sky to the map's own sub-tile on EVERY screen.
     voidPar = { x: cx0 * S * VOID_PARALLAX, y: cy0 * S * VOID_PARALLAX };
     try { drawVoid(ts); } finally { voidPar = null; }   // ...and only for this frame
-    const opts = { glowIdx: P.idx, glow, glowA, ringIdx: P.next, ring };
+    const opts = { glowIdx: P.idx, glow, glowA, ringIdx: P.next, ring, alpha: mapA };
     if (P.ph === "pan" || P.ph === "wait" || P.ph === "whip") { opts.litIdx = P.next; opts.lit = litK; }
+    // ...and until then it is GREY. Finishing a chapter opens the next one, so the map's own
+    // rule — everything cleared, plus the first you have not — lights it the instant you arrive,
+    // and it was already in colour behind the words naming the chapter you just did. It is not
+    // yours until you have said you are moving on: it colours up during the PAN, which is the
+    // camera going to fetch it.
+    else if (P.ph === "out" || P.ph === "name") { opts.litIdx = P.next; opts.lit = 0; }
     drawMap(ts, S, cx0, cy0, opts);
     // ...and the level itself, shrinking from the whole screen into that one square. The rect
     // is walked from one to the other and the picture is drawn to COVER it, so the level never
@@ -8459,16 +8616,21 @@
     // One line at a time, the way the opening card does it. Both lines landing together is a
     // sign appearing; the number arriving and then the word for what happened to it is the
     // sequence telling you, which is what it has been doing all the way through.
-    const outK = P.ph === "pan" ? Math.max(0, 1 - P.t/(WIN.pan*0.45)) : (P.ph === "name" ? 1 : 0);
+    // ...and none of it on a skip. The cross on the square says what happened; a gold heading
+    // over the top of it saying so again is the screen congratulating you on quitting.
+    const outK = P.skip ? 0
+               : P.ph === "pan" ? Math.max(0, 1 - P.t/(WIN.pan*0.45)) : (P.ph === "name" ? 1 : 0);
     if (outK > 0) {
       const size = Math.min(46, viewW*0.11);
       const inK = (at) => P.ph === "name" ? Math.min(1, Math.max(0, (P.t - at)/260)) : 1;
       winHeading("Chapter " + (P.idx + 1), viewH*0.16, size, inK(0)*outK);
-      winHeading("Complete", viewH*0.16 + size*1.15, size, inK(340)*outK);
-      // ...and what you came away with, arriving after the words that name it.
-      drawCoinTally(ts, viewH*0.16 + size*2.35, inK(640)*outK);
+      winHeading(P.skip ? "Skipped" : "Complete", viewH*0.16 + size*1.15, size, inK(340)*outK);
+      // ...and what you came away with, arriving after the words that name it. A skip came away
+      // with nothing — the purse is forfeit on a fall — and a tally reading zero under the word
+      // is the screen rubbing it in.
+      if (!P.skip) drawCoinTally(ts, viewH*0.16 + size*2.35, inK(640)*outK);
     }
-    if (P.ph === "name" && P.t > 900) {                 // ...and last of all, the way out
+    if (P.ph === "name" && !P.skip && P.t > 900) {     // ...and last of all, the way out
       ctx.save();
       ctx.globalAlpha = Math.min(1, (P.t - 900)/380) * (0.55 + 0.45*Math.sin(P.t/380));
       ctx.fillStyle = "#bfc6e0";
@@ -8555,6 +8717,20 @@
       ctx.restore();
     }
   }
+  // The coin, in miniature and flat: the board's own coin is a lit object that floats, rocks
+  // and carries a shadow, and one of those shrunk to the height of a line of type reads as a
+  // smudge. `x` is its left edge and `y` its middle, which is how text is placed beside it.
+  // One copy, shared by the victory tally and the level's own HUD counter.
+  // Its corner is the GAME's corner — tileR, the one radius every square thing in the game
+  // takes and the one radius-lab.html tunes. It used to carry a rounding of its own (0.26 of
+  // its width, and half that on the inner panel), which at the shipped radius of zero made it
+  // the only rounded object on a screen of square ones.
+  function hudCoin(x, y, w) {
+    const ip = w*0.26;                                   // the inscribed panel's inset
+    rrect(x, y - w/2, w, w, tileR(w)); ctx.fillStyle = "#ffd24a"; ctx.fill();
+    rrect(x + ip, y - w/2 + ip, w - ip*2, w - ip*2, tileR(w - ip*2));
+    ctx.fillStyle = "#c98d13"; ctx.fill();
+  }
   // The count, as it climbs. It is drawn on the GLASS rather than on the board — a tally is
   // something the game is telling you, so it does not shrink into the map with the level.
   function drawCoinTally(ts, y, alpha) {
@@ -8569,10 +8745,7 @@
     ctx.letterSpacing = UI_TRACK;
     const tw = ctx.measureText(txt).width, cw = h*0.86;
     const x0 = viewW/2 - (cw + gap + tw)/2;
-    // The coin, in miniature and flat: the board's own coin is a lit object with a shadow under
-    // it, and one of those at HUD size reads as a smudge.
-    rrect(x0, y - cw/2, cw, cw, cw*0.26); ctx.fillStyle = "#ffd24a"; ctx.fill();
-    rrect(x0 + cw*0.26, y - cw*0.24, cw*0.48, cw*0.48, cw*0.12); ctx.fillStyle = "#c98d13"; ctx.fill();
+    hudCoin(x0, y, cw);
     ctx.fillStyle = "#f4f1ff";
     ctx.fillText(txt, x0 + cw + gap, y);
     ctx.restore();
@@ -9063,6 +9236,8 @@
         drawOffscreenArrow((state.goal.c+0.5)*cell, (state.goal.r+0.5)*cell, "#ffffff", "flag");   // white flag
     }
     drawSpeedHud();
+    drawCoinHud();
+    drawCoinRuns(shx, shy);      // ...and whatever is on its way to it, over the top of it
     drawCeremony(ts);                   // over the board and under nothing: it IS the screen
     drawTalismanFlash(16, ts);
     drawVortex(ts);                     // ...and the whirlpool, over the top of everything
@@ -9092,7 +9267,11 @@
     // whatever the type came out at. Both the pause button and the speedo take this — one
     // through a CSS variable and one directly — so pinning it to the grid pins the pair, and
     // they cannot line up with each other but not with everything else.
-    return { m, fs, h: uiGrid() * 3 };
+    // ...and ONE type size across both plates. `fs` is the plate's own scale — what its height
+    // and padding are worked out from — and was also being used directly as the speed number's
+    // font size, which is why that one figure was set three times larger than every other word
+    // in the HUD. Everything the HUD writes now takes fs2.
+    return { m, fs, fs2: Math.max(9, Math.round(fs*0.52)), h: uiGrid() * 3 };
   }
   function syncHudChrome() {
     const P = hudPlate(), root = document.documentElement.style;
@@ -9109,8 +9288,10 @@
     ctx.save();
     ctx.textBaseline = "middle";
     const label = "SPEED", val = cps.toFixed(3), unit = " tiles/s";   // three decimals — the per-tile ramp is small
-    const smallF = "700 " + Math.round(fs*0.52) + "px " + UI_FONT;
-    const bigF   = "900 " + fs + "px " + UI_FONT;
+    // Same size as the label and the unit beside it. The number keeps its weight and its
+    // colour — it is still the one bright thing on the plate — and gives up its height.
+    const smallF = "700 " + P.fs2 + "px " + UI_FONT;
+    const bigF   = "900 " + P.fs2 + "px " + UI_FONT;
     ctx.font = smallF; const lw = ctx.measureText(label).width;
     ctx.font = bigF;   const vw = ctx.measureText(val).width;
     ctx.font = smallF; const uw = ctx.measureText(unit).width;
@@ -9133,11 +9314,95 @@
     // sense. The earth colour is the dark ground under it: on Midnight or Blood that is nearly
     // black, which put a black number on a near-black plate.
     ctx.fillStyle = (typeof curRail === "function") ? curRail() : "#ffd24a";
-    ctx.fillText(val, m + padX + lw + gap, midY);
+    ctx.fillText(val, m + padX + lw + gap, midY + 1);      // ...on the same line as the rest of it
     ctx.font = smallF;                                                // unit in a smaller dim suffix
     ctx.fillStyle = "rgba(214,218,240,0.66)";
     ctx.fillText(unit, m + padX + lw + gap + vw, midY + 1);
     ctx.restore();
+  }
+  // What this run has found, top centre, on the speedo's own plate. It answers a question the
+  // board cannot: the coins you have already taken are gone from it, so without this the only
+  // record of them is a number that appears for a second and dissolves.
+  //
+  // Only on a level that HAS coins. A plate reading zero for four minutes on a level with
+  // nothing to find is a counter for a thing that is not in the level.
+  // Where the counter is, worked out ONCE. The plate's width depends on how many digits the
+  // number has, so the flight cannot do this sum for itself — a second copy would start aiming
+  // at the wrong place the moment the count reached ten. Returns null when there is no counter.
+  function coinHudBox() {
+    const s = state;
+    if (!s || (s.status !== "play" && s.status !== "falling" && s.status !== "vortex")) return null;
+    if (!((s.L && s.L.coins) || []).length) return null;
+    const P = hudPlate();
+    const txt = String(s.coinsShown || 0), font = "900 " + P.fs2 + "px " + UI_FONT;
+    ctx.save(); ctx.font = font; const tw = ctx.measureText(txt).width; ctx.restore();
+    const cw = Math.round(P.fs2 * 1.15), gap = Math.round(P.fs2*0.55), padX = Math.round(P.fs*0.55);
+    const w = padX*2 + cw + gap + tw;
+    const x = Math.round((viewW - w)/2);
+    return { x, y: P.m, w, h: P.h, midY: P.m + P.h/2,
+             iconX: x + padX, iconW: cw, textX: x + padX + cw + gap, txt, font };
+  }
+  function drawCoinHud() {
+    const B = coinHudBox(); if (!B) return;
+    ctx.save();
+    // It JUMPS as one lands. The number changing is the whole point of the flight, and a digit
+    // quietly swapping for the next one is the one thing on the screen that would not have
+    // moved. About the plate's own centre, so it grows in place rather than shunting sideways.
+    const age = performance.now() - (state.coinHudPop || -1e9);
+    if (age >= 0 && age < COINRUN.bump) {
+      const k = 1 + 0.16*(1 - easeOutBack(age/COINRUN.bump));
+      const px = B.x + B.w/2, py = B.midY;
+      ctx.translate(px, py); ctx.scale(k, k); ctx.translate(-px, -py);
+    }
+    ctx.textBaseline = "middle";
+    rrect(B.x, B.y, B.w, B.h, 0);
+    ctx.fillStyle = "rgba(10,8,22,0.62)"; ctx.fill();
+    hudCoin(B.iconX, B.midY, B.iconW);
+    ctx.textAlign = "left";
+    ctx.font = B.font;
+    ctx.fillStyle = "#f4f1ff";
+    ctx.fillText(B.txt, B.textX, B.midY + 1);
+    ctx.restore();
+  }
+  // The run itself, in SCREEN space: it starts on the board and finishes on the glass, so it
+  // cannot live inside the board transform — the world point it left is converted here with
+  // the same expression draw() moves the board by, camera shake included.
+  function drawCoinRuns(shx, shy) {
+    const s = state; if (!s || !s.coinRun || !s.coinRun.length) return;
+    const B = coinHudBox(); if (!B) return;
+    const ox = Math.round(camX - shx), oy = Math.round(camY - shy);
+    const x1 = B.iconX + B.iconW/2, y1 = B.midY;
+    for (const f of s.coinRun) {
+      const t = f.t - f.delay;
+      if (t < 0) continue;                                   // still queued behind the one ahead
+      const x0 = f.wx - ox, y0 = f.wy - oy;
+      if (t < COINRUN.flash) {
+        // It FLARES where it was taken, and does not move. A coin that sets off the instant you
+        // touch it reads as having been knocked away rather than picked up — the beat of it
+        // sitting there swelling is what makes the run afterwards read as the coin going
+        // somewhere on purpose.
+        const g = Math.sin(Math.PI * (t/COINRUN.flash));
+        const w = f.w0 * (1 + (COINRUN.pop - 1)*g);
+        ctx.save();
+        hudCoin(x0 - w/2, y0, w);
+        ctx.globalAlpha = 0.9*g; ctx.fillStyle = "#fffdf2";
+        rrect(x0 - w/2, y0 - w/2, w, w, tileR(w)); ctx.fill();
+        ctx.restore();
+        continue;
+      }
+      // ...and then it RACES. Squared, so it leaves slowly and arrives fast: eased the other
+      // way it drifts in and lands like a feather, which is not what a coin being banked does.
+      const u = Math.min(1, (t - COINRUN.flash)/COINRUN.fly), e = u*u;
+      // Bowed upward rather than straight: the counter is at the top of the screen and a coin
+      // taken near it would otherwise travel almost sideways. One control point, pulled to the
+      // counter's own height, so the coin rises out of the board and then sweeps across.
+      const cxp = x0 + (x1 - x0)*0.18, cyp = y0 + (y1 - y0)*COINRUN.bow;
+      const m = 1 - e;
+      const px = m*m*x0 + 2*m*e*cxp + e*e*x1;
+      const py = m*m*y0 + 2*m*e*cyp + e*e*y1;
+      const w = f.w0 + (B.iconW - f.w0)*e;
+      hudCoin(px - w/2, py, w);
+    }
   }
   // The tile tally. Deliberately NOT a permanent HUD: the number only changes at the instant
   // you collect something, so a counter sitting there the rest of the time is one more thing
@@ -10202,7 +10467,7 @@
   // GLOSS that gives it a lit side, a RIM along the top edge, a SWEEP that travels across
   // the face on a timer, and a SPARK that twinkles off one corner. Tune them in coin-lab.html.
   const COIN = {
-    size:     0.34,   // fraction of a cell
+    size:     0.30,   // fraction of a cell
     float:    0.07,   // bob height, fraction of a cell
     floatMs:  620,    // one full bob
     rock:     0.08,   // lazy rotation, radians
@@ -10213,7 +10478,7 @@
     sweepMs:  2200,   // how often it crosses
     spark:    0.80,   // corner twinkle strength
     sparkMs:  2600,   // how often it twinkles
-    panelPad: 0.15,   // the inscribed square's inset, fraction of the coin
+    panelPad: 0.18,   // the inscribed square's inset, fraction of the coin
     panelA:   1.00,   // ...and how solidly it is filled, in COIN_EDGE
   };
   // The darker gold the coin is extruded on. The inscribed panel is filled with the SAME
@@ -11443,12 +11708,15 @@
       // Buried head first, kicking. The stride is what draws a kick, so he is "moving" — on a
       // phase of his own that winds down to a stop rather than on the level's, which stopped
       // with him.
-      if (f.land != null && f.wrig != null) {
-        moving = f.land < WRIGGLE_MS; phaseOver = f.wrig/95;   // slow, small strokes
-        _scurry = moving ? 1 : 0;
+      if (f.land != null) {
+        // Down, and still. The legs used to go on kicking and wind down to a halt; he lands on
+        // the summit square now, so what says he has stopped is the pose rather than a timer.
+        moving = false; phaseOver = 0;
         _deadEyes = 1;                       // he has joined the heap; he gets the heap's face
+        _deadSplay = 1;                      // ...and his legs are thrown wide — see paintRunner
       }
       resetLeap();                                   // he is not leaping, he is going down
+
     } else {
       const ri = runnerInfo(); sx = ri.sx; sy = ri.sy; angle = ri.angle;   // sets the leap flags
       moving = state.status === "play";      // the runner is always moving now
@@ -11507,7 +11775,7 @@
     paintRunner(sx, sy, s, phase, angle, moving, ts, (state.status === "squash") ? squashK() : 0,
                 state.status !== "falling");
     runnerShadowClip = null;      // every other caller — the lover, the shop, the opening — has no board
-    _restFold = 0; _scurry = 0; _deadEyes = 0;
+    _restFold = 0; _scurry = 0; _deadEyes = 0; _deadSplay = 0;
     resetLeap();
 
   }
@@ -11544,6 +11812,8 @@
   // ...and how far a leaping swagger has him off the track, 0..1. Same reasoning: paintRunner
   // is called from places that have no path to leap along.
   let _leapLift = 0, _leapPose = 0, _leapFoot = 1, _leapAir = 0;
+  // Set while the one body lying at the summit is drawn; PILE.splay is how wide.
+  let _deadSplay = 0;
   // The level-start FORM. His body arrives one background patch across and with no legs at all,
   // and these three are what let the intro say so without a second copy of the character
   // sitting in it: two multipliers on the body box and one on the leg. Everything else about
@@ -11832,7 +12102,11 @@
       // every leap — which is the whole of "he lands on them in turn".
       const open = w.leapAlt ? 0.45 + 0.55*Math.max(0, _leapPose) : Math.max(0, _leapPose);
       const sp = w.leapSplit ? s*w.leapSplit*open*(w.leapAlt ? _leapFoot : 1) : 0;
-      const reach = swing + sp;
+      // ...and one more case: lying in the heap, where the legs are thrown WIDE. It is the whole
+      // of what says he landed head first rather than merely stopped — a pair of legs in the air
+      // at the top of a pile of bodies. It goes in as extra stride reach, the same arithmetic
+      // the run and the straddle already use, so the knees and the kicks keep working.
+      const reach = swing + sp + (_deadSplay ? s*PILE.splay : 0);
       for (const [hx, fx, fy0] of [[backHip, reach, lift(phase)], [frontHip, -reach, lift(phase + Math.PI)]]) {
         const fy = (fy0 - fx*sinL) / cosL;
         const k = RUNNER.knees ? solveKnee(hx, hipY, fx, fy, RUNNER.kneeBend, RUNNER.kneeSplit, kneeLead) : null;
@@ -11879,6 +12153,14 @@
     if (shoe.draw) for (const [fx, fy] of feet) {
       ctx.save(); ctx.translate(fx, fy);
       if (moving && w.lean) ctx.rotate(-w.lean);
+      // ...except once he is lying in the heap, where the ankles GIVE. A foot held flat while the
+      // rest of him is upside down on a mound of bodies is the one part of him still standing to
+      // attention. Each foot has its OWN angle and each turns AWAY from the middle, so the sign
+      // means the same thing on both sides: positive opens the pair out, negative folds it in.
+      if (_deadSplay) {
+        const away = fx >= 0 ? 1 : -1;
+        ctx.rotate((fx >= 0 ? PILE.bendFore : PILE.bendAft) * away);
+      }
       shoe.draw(ctx, s, shoe.col || finish, finish);
       ctx.restore();
     }
@@ -13196,7 +13478,9 @@
     }
     if (state.blockDrag) { e.preventDefault();
       const { x, y } = screenXY(e); const wx = x + camX, wy = y + camY, b = state.blockDrag.b;
-      b.pos = clamp((b.axis === "h" ? wx : wy)/cell - 0.5, b.lo, b.hi); markOccDirty();
+      // Clamped to what is REACHABLE, not to the rail's ends: the track in the way is a stop.
+      const R = blockSpan(b);
+      b.pos = clamp((b.axis === "h" ? wx : wy)/cell - 0.5, R.lo, R.hi); markOccDirty();
       const nc = Math.round(b.pos);   // a scrape each time the wall ratchets into a new cell
       if (state.blockDrag.lastCell !== nc) {
         if (state.blockDrag.lastCell !== undefined) {
@@ -13729,7 +14013,12 @@
     // ribbon has to leave him at the height it will be drawn at.
     const tr = lookItem("trail");
     if (tr.cols && s.trail) {
-      s.trail = wakeAge(s.trail, dt);
+      // The ribbon goes the moment he lands. Not cut — AGED, hard: the same fade it has always
+      // died of, run at TRAIL_DIE times the speed, so the tail thins and vanishes on its own
+      // curve instead of a whole streamer being switched off in one frame. He has stopped; the
+      // wake should stop with him rather than hang over the heap.
+      const down = s.fall && s.fall.land != null;
+      s.trail = wakeAge(s.trail, dt * (down ? TRAIL_DIE : 1));
       s.trailT -= dt;
       // Sampled while he is falling too. Cutting the trail off the instant he leaves the
       // track left the ribbon hanging in mid-air at the lip while he dropped away from it —
@@ -13751,6 +14040,7 @@
   // A long streamer — a few tiles of it. The sample interval is loosened to match, since
   // the path between tiles is straight and there is nothing for extra points to describe.
   const TRAIL_MS = 2600, TRAIL_EVERY = 45;
+  const TRAIL_DIE = 14;                   // how much faster it ages once he is down
   const TRAIL_MIN = 0.035;                 // closest two samples may be laid, in cells
   // Age a wake and drop what has expired. Trivial, and shared anyway: the board is not the
   // only runner with a trail, and two copies of a lifetime are two lifetimes.
@@ -14277,6 +14567,13 @@
     menuEl.classList.toggle("top", !!(
       screen === "shop" || screen.indexOf("shop:") === 0 || screen === "levels" || fell));
     menuEl.classList.toggle("fell", !!fell);
+    // The foot of a fall gets the Tileverse's gradient under its pair of buttons. Toggled with
+    // the screen rather than added once: every other menu turns it back off, and the win UI owns
+    // the same element when there is no menu up at all.
+    {
+      const fd = document.getElementById("winfade");
+      if (fd) { fd.classList.toggle("show", !!fell); fd.classList.toggle("under", !!fell); }
+    }
     // A PAUSE is the same shape as a fall: the whole frame, with its answer at the foot. The
     // difference is that a pause has somewhere to go back TO, so the pair at the bottom is
     // resume and restart rather than skip and retry.
@@ -14799,7 +15096,9 @@
     let skipBtn = null;
     if (end && end.kind === "lose" && levelIdx < LEVELS.length - 1) {
       skipBtn = btn("Skip", () => {
-        levelIdx = levelIdx + 1; loadLevel(levelIdx); closeMenu();
+        // The next level is NOT loaded here. winSkip plays the way out and the whip at the end
+        // of it does the loading, the same as a clear — see winSkip.
+        closeMenu(); winSkip();
       });
       skipBtn.classList.add("rust");
     }

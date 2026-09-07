@@ -54,8 +54,8 @@
   <aside class="rail">
     <div class="card">
       <h2>How it is stacked</h2>
-      <div class="row"><label>rows</label><input id="rows" type="range" min="1" max="16" step="1" value="10"><output id="rowsOut">10</output></div>
-      <div class="row"><label>rows max</label><input id="rowsMax" type="range" min="1" max="20" step="1" value="8"><output id="rowsMaxOut">8</output></div>
+      <div class="row"><label>rows</label><input id="rows" type="range" min="1" max="16" step="1" value="7"><output id="rowsOut">7</output></div>
+      <div class="row"><label>rows max</label><input id="rowsMax" type="range" min="1" max="20" step="1" value="10"><output id="rowsMaxOut">10</output></div>
       <div class="row"><label>across</label><input id="stepX" type="range" min="0.04" max="0.60" step="0.01" value="0.19"><output id="stepXOut">0.19</output></div>
       <div class="row"><label>up</label><input id="stepY" type="range" min="0.04" max="0.60" step="0.01" value="0.16"><output id="stepYOut">0.16</output></div>
       <div class="row"><label>skirt</label><input id="skirt" type="range" min="0" max="14" step="1" value="0"><output id="skirtOut">0</output></div>
@@ -110,9 +110,13 @@
 
     <div class="card">
       <h2>Where he lands</h2>
-      <div class="row"><label>across</label><input id="landX" type="range" min="-3" max="3" step="0.05" value="-0.15"><output id="landXOut">-0.15</output></div>
-      <div class="row"><label>up</label><input id="landY" type="range" min="-3" max="3" step="0.05" value="-0.45"><output id="landYOut">-0.45</output></div>
+      <div class="row"><label>across</label><input id="landX" type="range" min="-3" max="3" step="0.05" value="-0.10"><output id="landXOut">-0.10</output></div>
+      <div class="row"><label>up</label><input id="landY" type="range" min="-3" max="3" step="0.05" value="-0.30"><output id="landYOut">-0.30</output></div>
       <div class="row"><label>aim</label><input id="aim" type="range" min="0" max="1" step="0.01" value="1.00"><output id="aimOut">1.00</output></div>
+      <div class="row"><label>tilt</label><input id="tilt" type="range" min="-1.6" max="1.6" step="0.02" value="-0.24"><output id="tiltOut">-0.24</output></div>
+      <div class="row"><label>splay</label><input id="splay" type="range" min="0" max="0.60" step="0.01" value="0.08"><output id="splayOut">0.08</output></div>
+      <div class="row"><label>ankle fore</label><input id="bendFore" type="range" min="-1.2" max="1.2" step="0.02" value="-0.72"><output id="bendForeOut">-0.72</output></div>
+      <div class="row"><label>ankle aft</label><input id="bendAft" type="range" min="-1.2" max="1.2" step="0.02" value="-1.20"><output id="bendAftOut">-1.20</output></div>
       <p class="hint"><b>across</b> and <b>up</b> nudge the spot in whole CELLS from where the
         arithmetic puts it — one or two places down the flank of the peak, because landing dead on
         the point is a stunt and landing just off it is a fall.
@@ -120,7 +124,17 @@
         sideways speed used to decide where he landed entirely and the heap only decided how high
         he stopped, so he arrived off the peak by a different amount every time. He is now drawn
         toward the spot as he falls: at 0 he keeps the old drift and only snaps at the last
-        instant, at 1 he is steered hard and the snap is invisible.</p>
+        instant, at 1 he is steered hard and there is nothing left to snap.
+        <br><br>...and how he LIES once he is there. He goes in head first, straight over, into
+        the one gap the pyramid left for him — <b>tilt</b> turns him off that, in radians, and
+        <b>splay</b> is how far his feet are thrown apart. A pair of legs in the air at the top of
+        a heap of bodies is the whole of what says he landed head down rather than merely
+        stopped; too wide and it is a gymnast, too narrow and he is a post. The two <b>ankle</b> sliders are the feet, set apart: how far
+        each turns off the floor, in radians. A foot held flat while the rest of him is upside
+        down on a mound of bodies is the one part of him still standing to attention. Each turns
+        AWAY from the middle, so the sign means the same thing on both sides — positive opens the
+        pair out, negative folds it in. <b>fore</b> is his leading foot and <b>aft</b> his
+        trailing one; lying head down they are swapped left-for-right on screen.</p>
     </div>
 
     <div class="card">
@@ -199,7 +213,7 @@ const GAME_SRC = () => "index.html?lab=" + Date.now();
 const KEYS = ["rows","rowsMax","stepX","stepY","skirt","frame","sink",
               "sizeBase","sizeDepth","sizeJit","jitX","jitY",
               "hue0","hueSpan","sat","light","lightSpan","hats",
-              "landX","landY","aim"];
+              "landX","landY","aim","tilt","splay","bendFore","bendAft"];
 const INTS = { rows:1, rowsMax:1, skirt:1, hue0:1, hueSpan:1, hats:1 };
 let deaths = 1;                                // which attempt the staged fall is
 
@@ -314,33 +328,41 @@ function refreshOut(){
     L("landX",     f(v.landX,2) + ",",         "") +
     L("landY",     f(v.landY,2) + ",",         "") +
     L("aim",       f(v.aim,2) + ",",           "") +
+    "    // ...and how he LIES once he is there. `tilt` is turned from straight over, in radians, so\n" +
+    "    // 0 is head dead down; `splay` is how far his feet are thrown apart, as a fraction of him.\n" +
+    L("tilt",      f(v.tilt,2) + ",",          "") +
+    L("splay",     f(v.splay,2) + ",",         "") +
+    "    // ...and the two ankles, set apart. Each is how far THAT foot turns AWAY from the middle,\n" +
+    "    // in radians, so a positive pair opens outward and a negative one folds it in.\n" +
+    L("bendFore",  f(v.bendFore,2) + ",",      "") +
+    L("bendAft",   f(v.bendAft,2) + ",",       "") +
     "  };";
 }
 
 const PRESETS = {
-  shipped: { rows:10, rowsMax:8, stepX:0.19, stepY:0.16, jitX:0.10, jitY:0.08,
-             sizeBase:1.00, sizeDepth:0.00, sizeJit:0.08, skirt:0, frame:0.33, sink:0.00,
-             hue0:174, hueSpan:360, sat:0.17, light:0.69, lightSpan:0.28, hats:0, landX:-0.15, landY:-0.45, aim:1.00 },
+  shipped: { rows:7, rowsMax:10, stepX:0.19, stepY:0.16, jitX:0.10, jitY:0.08,
+             sizeBase:1.00, sizeDepth:0.00, sizeJit:0.08, skirt:0, frame:0.33, sink:0.00, landX:-0.10, landY:-0.30,
+             aim:1.00, tilt:-0.24, splay:0.08, bendFore:-0.72, bendAft:-1.20, hue0:174, hueSpan:360, sat:0.17, light:0.69, lightSpan:0.28, hats:0 },
   // packed hard: the pyramid as a solid mass, barely any wander
   masonry: { rows:11, rowsMax:11, stepX:0.11, stepY:0.13, jitX:0.02, jitY:0.02,
              sizeBase:0.98, sizeDepth:0.40, sizeJit:0.03, skirt:2, frame:0.34, sink:0.20,
-             hue0:174, hueSpan:360, sat:0.17, light:0.69, lightSpan:0.28, hats:0, landX:0.00, landY:0.00, aim:0.18 },
+             hue0:174, hueSpan:360, sat:0.17, light:0.69, lightSpan:0.28, hats:0, landX:0.00, landY:0.00, aim:0.18, tilt:0.00, splay:0.18, bendFore:0.45, bendAft:0.45, tilt:0.00, splay:0.18, bendFore:0.45, bendAft:0.45 },
   // loose: plenty of wander, so the courses break up
   rubble:  { rows:9, rowsMax:9, stepX:0.18, stepY:0.20, jitX:0.22, jitY:0.16,
              sizeBase:0.88, sizeDepth:0.48, sizeJit:0.18, skirt:1, frame:0.34, sink:0.10,
-             hue0:174, hueSpan:360, sat:0.17, light:0.69, lightSpan:0.28, hats:0, landX:0.00, landY:0.00, aim:0.18 },
+             hue0:174, hueSpan:360, sat:0.17, light:0.69, lightSpan:0.28, hats:0, landX:0.00, landY:0.00, aim:0.18, tilt:0.00, splay:0.18, bendFore:0.45, bendAft:0.45, tilt:0.00, splay:0.18, bendFore:0.45, bendAft:0.45 },
   // tall and narrow
   spire:   { rows:14, rowsMax:14, stepX:0.10, stepY:0.15, jitX:0.05, jitY:0.05,
              sizeBase:0.80, sizeDepth:0.34, sizeJit:0.08, skirt:2, frame:0.30, sink:0.20,
-             hue0:174, hueSpan:360, sat:0.17, light:0.69, lightSpan:0.28, hats:0, landX:0.00, landY:0.00, aim:0.18 },
+             hue0:174, hueSpan:360, sat:0.17, light:0.69, lightSpan:0.28, hats:0, landX:0.00, landY:0.00, aim:0.18, tilt:0.00, splay:0.18, bendFore:0.45, bendAft:0.45, tilt:0.00, splay:0.18, bendFore:0.45, bendAft:0.45 },
   // low and wide
   mesa:    { rows:6, rowsMax:6, stepX:0.20, stepY:0.15, jitX:0.08, jitY:0.06,
              sizeBase:1.00, sizeDepth:0.50, sizeJit:0.08, skirt:3, frame:0.40, sink:0.40,
-             hue0:174, hueSpan:360, sat:0.17, light:0.69, lightSpan:0.28, hats:0, landX:0.00, landY:0.00, aim:0.18 },
+             hue0:174, hueSpan:360, sat:0.17, light:0.69, lightSpan:0.28, hats:0, landX:0.00, landY:0.00, aim:0.18, tilt:0.00, splay:0.18, bendFore:0.45, bendAft:0.45, tilt:0.00, splay:0.18, bendFore:0.45, bendAft:0.45 },
   // no wander at all — the bare pyramid, for reading the courses
   courses: { rows:10, rowsMax:10, stepX:0.13, stepY:0.16, jitX:0.00, jitY:0.00,
              sizeBase:0.94, sizeDepth:0.44, sizeJit:0.00, skirt:0, frame:0.34, sink:0.00,
-             hue0:174, hueSpan:360, sat:0.17, light:0.69, lightSpan:0.28, hats:0, landX:0.00, landY:0.00, aim:0.18 },
+             hue0:174, hueSpan:360, sat:0.17, light:0.69, lightSpan:0.28, hats:0, landX:0.00, landY:0.00, aim:0.18, tilt:0.00, splay:0.18, bendFore:0.45, bendAft:0.45, tilt:0.00, splay:0.18, bendFore:0.45, bendAft:0.45 },
 };
 function apply(p){ for (const k of KEYS) { $(k).value = p[k]; sync(k); } push(); }
 function sync(k){
