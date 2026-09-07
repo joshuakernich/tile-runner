@@ -33,9 +33,19 @@
   .lv.over{border-top:2px solid var(--accent);}
   .lv .num{font-weight:700;min-width:22px;}
   .lv .dim{opacity:.5;}
-  .lv .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .lv .nm{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .lv .star{color:#ffb454;}
-  .lv .grip{margin-left:auto;opacity:.35;letter-spacing:-1px;}
+  /* What is IN a chapter, without opening it. The list was forty rows of a number and a name,
+     and the questions you actually ask of it — which ones have a verse, which are rich, which
+     hold a charm, which have no exit — all needed a click each to answer. Pushed right as one
+     group so the names still line up down the left edge. */
+  .lv .meta{margin-left:auto;display:flex;align-items:center;gap:5px;flex:0 0 auto;}
+  .lv .b{font-size:10px;line-height:1;opacity:.85;}
+  .lv .b.poem{color:#8fd8ff;}
+  .lv .b.coin{color:#ffd24a;font-variant-numeric:tabular-nums;}
+  .lv .b.flag{color:#e8e6ff;}
+  .lv .b.tal{font-size:11px;}
+  .lv .grip{margin-left:5px;opacity:.35;letter-spacing:-1px;flex:0 0 auto;}
 
   /* ---- tool matrix (right) ---- */
   /* Three across rather than two, and square: the icon is what you aim at, and shrinking the
@@ -2032,6 +2042,37 @@ function isDirty(n){
   const emb=EMBEDDED.find(x=>x.n===n);
   return !!(edited[n] && (!emb || JSON.stringify(edited[n])!==JSON.stringify(emb)));
 }
+// The badges down the right of each row. Read off the STORED level exactly as levels.js holds
+// it — `poem` a string, `coins` a list of cells, `talismans` a list of [c,r,id], `goal` present
+// or not — so a row cannot claim something the file does not contain.
+//
+// A level with no goal is not a level missing its flag: it is a talisman maze, where the charm
+// IS the exit. That is the one case where the ABSENCE of the flag badge is the information.
+const esc = t => String(t).replace(/[<&>"]/g, "");
+function lvMeta(l){
+  const out = [];
+  if (l.poem && String(l.poem).trim())
+    out.push("<span class='b poem'>&#10077;</span>");
+  const coins = (l.coins || []).length;
+  if (coins) out.push("<span class='b coin'>&#9642;" + coins + "</span>");
+  if (l.goal) out.push("<span class='b flag'>&#9873;</span>");
+  for (const t of (l.talismans || [])) {
+    const col = TAL_COL[t && t[2]] || "#cfd8ff";
+    out.push("<span class='b tal' style='color:" + col + "'>&#9670;</span>");
+  }
+  return out.length ? "<span class='meta'>" + out.join("") + "</span>" : "";
+}
+// ...and the same again in words, for the hover. The glyphs are small and a colour is not a
+// name — the tooltip is where the charm actually says which one it is.
+function lvMetaTitle(l){
+  const bits = [];
+  if (l.poem && String(l.poem).trim()) bits.push("verse");
+  const coins = (l.coins || []).length;
+  if (coins) bits.push(coins + " coin" + (coins === 1 ? "" : "s"));
+  bits.push(l.goal ? "flag" : "no exit — talisman maze");
+  for (const t of (l.talismans || [])) bits.push(esc((t && t[2]) || "talisman"));
+  return bits.length ? "\n" + bits.join(" · ") : "";
+}
 let dragFrom=null;
 function rebuildLevelList(){
   const box=$("lvlist"); if(!box) return;
@@ -2045,8 +2086,9 @@ function rebuildLevelList(){
     const label = l.name ? "<span class='nm'>"+l.name.replace(/[<&]/g,"")+"</span>"
                          : "<span class='dim'>"+l.cols+"×"+l.rows+"</span>";
     el.innerHTML="<span class='num'>"+l.n+"</span>"+label+
-                 (isDirty(l.n)?"<span class='star'>*</span>":"")+"<span class='grip'>≡</span>";
-    el.title = (l.name ? l.name+" — " : "") + l.cols+"×"+l.rows;
+                 (isDirty(l.n)?"<span class='star'>*</span>":"")+
+                 lvMeta(l)+"<span class='grip'>≡</span>";
+    el.title = (l.name ? l.name+" — " : "") + l.cols+"×"+l.rows + lvMetaTitle(l);
     el.onclick=()=>{ if(L && +el.dataset.n===L.n) return; loadLevel(+el.dataset.n); };
     el.addEventListener("dragstart",ev=>{ dragFrom=i; el.classList.add("drag");
       ev.dataTransfer.effectAllowed="move"; try{ev.dataTransfer.setData("text/plain",String(i));}catch(e){} });
