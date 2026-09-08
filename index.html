@@ -51,8 +51,18 @@
     --font: "SquareFont", "Fraunces", ui-serif, Georgia, serif;
   }
   * { margin:0; padding:0; box-sizing:border-box; }
+  /* ...PLUS THE STATUS BAR, on the one platform that needs it. viewport-fit=cover with
+     black-translucent moves the document UP so it starts at the top of the glass — but iOS goes
+     on laying it out against a viewport that is the glass LESS the status bar, so the page comes
+     up short at the FOOT by exactly the top inset and the system paints the strip. It is a known
+     bug and the documented fix is to make the document that much taller:
+     https://dev.to/karmasakshi/make-your-pwas-look-handsome-on-ios-1o08
+     --vh-fix is that height, MEASURED (see edgeShort) rather than assumed, because on anything
+     whose viewport is already right — every desktop, every Android, and iOS Safari with its own
+     chrome — adding to it would hang the foot of the app off the bottom of the screen. */
   html, body {
     height:100%; width:100%; overflow:hidden;
+    min-height:calc(100dvh + var(--vh-fix, 0px));
     background:var(--bg); color:var(--ink);
     font-family:var(--font);
     -webkit-user-select:none; user-select:none;
@@ -73,7 +83,12 @@
      The sides keep theirs. The manifest locks this to portrait, where they are zero anyway, and
      in a landscape browser the notch is beside the board rather than over it. */
   #app {
-    position:fixed; inset:0; display:flex; flex-direction:column; align-items:center;
+    /* ABSOLUTE, not fixed. A fixed box is clipped to the viewport, and the viewport is the short
+       thing here — which is why a red test band hung below it did not paint. In the flow of a
+       document that is now the full height of the glass, the board reaches the bottom of it. */
+    position:absolute; top:0; left:0; right:0;
+    height:calc(100dvh + var(--vh-fix, 0px));
+    display:flex; flex-direction:column; align-items:center;
     padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left);
   }
   header { text-align:center; padding:10px 0 6px; width:100%; }
@@ -788,17 +803,6 @@
   #a2hs .a2hs-acts button { padding:8px 10px; font-size:10px; letter-spacing:1px; box-shadow:2px 2px 0 var(--shadow); }
   #a2hs .a2hs-x { background:transparent; border-color:transparent; box-shadow:none; color:var(--dim); padding:6px 8px; }
   #a2hs .a2hs-x:active { transform:none; }
-
-  /* TEMPORARY, with EDGE_PROBE. screen.height is 62 taller than innerHeight on the phone, and
-     the question this answers is whether that 62 is paintable: a green hairline is laid on the
-     bottom edge of the layout viewport and a red band is hung BELOW it. Red in the strip means
-     the surface goes on past the viewport and the board can be made to cover it; no red means
-     the strip is outside the web view and belongs to iOS. */
-  #edge-probe { position:fixed; left:0; right:0; bottom:0; height:0; z-index:9999;
-                pointer-events:none; display:none; }
-  body.edge-probe #edge-probe { display:block; }
-  #edge-probe i { position:absolute; left:0; right:0; bottom:0; height:4px; background:#00ff66; }
-  #edge-probe b { position:absolute; left:0; right:0; bottom:-140px; height:140px; background:#ff2d2d; }
 
   /* colorblind-friendly palette (Okabe–Ito) */
   .cb { --accent:#d55e00; --goal:#009e73; --runner:#56b4e9; }
@@ -1745,7 +1749,6 @@
 </style>
 </head>
 <body>
-<div id="edge-probe"><i></i><b></b></div>
 <div id="app">
   <div id="board-wrap"><canvas id="game"></canvas></div>
   <button id="pauseFloat" aria-label="Menu"><span></span><span></span></button>
@@ -3946,7 +3949,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.28";                    // shown on the title & pause screens
+  const VERSION = "v10.29";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -6584,8 +6587,26 @@
   // ask for this rather than read `cell` — see the shop, whose whole job is to show you that.
   const playCell = () =>
     Math.round(clamp(Math.min(viewW / VIEW_COLS, viewH / VIEW_ROWS), MIN_CELL, MAX_CELL) * 0.9);
+  // HOW SHORT THE DOCUMENT IS OF THE GLASS, and it is only ever iOS. In a home-screen web app
+  // with viewport-fit=cover and a translucent status bar, the layout viewport is the screen LESS
+  // the status bar while the SURFACE is the whole screen — so innerHeight comes up exactly one
+  // top inset short and the system paints the strip that is left. Gated three ways, because
+  // adding height anywhere it is not needed hangs the foot of the app off the screen:
+  //   - only in a standalone web app (in a browser, screen.height is the DEVICE and the gap is
+  //     the browser chrome, which would be an enormous overshoot)
+  //   - only when there IS a gap
+  //   - and only when that gap is the top inset, which is the shape of this particular bug
+  function edgeShort() {
+    if (!window.screen || !window.innerHeight) return 0;
+    const standalone = (window.matchMedia && matchMedia("(display-mode: standalone)").matches)
+                       || window.navigator.standalone === true;
+    if (!standalone) return 0;
+    const gap = Math.round(window.screen.height - window.innerHeight);
+    return (gap > 0 && gap <= Math.ceil(safeArea().t) + 1) ? gap : 0;
+  }
   function computeLayout() {
     const wrap = document.getElementById("board-wrap");
+    document.documentElement.style.setProperty("--vh-fix", edgeShort() + "px");
     // DOES THE BOX ACTUALLY REACH THE GLASS? #app is position:fixed; inset:0, which ought to
     // mean the whole screen — and at the top it does, which is why the cosmos now goes under the
     // notch. At the BOTTOM, an iOS home-screen web app resolves that same inset:0 against the
@@ -12593,9 +12614,14 @@
   }
   // How far the canvas sits inside the window at each end — #app's own padding, measured rather
   // than restated, so this keeps working whatever that rule decides to do next.
+  // SIGNED, both of them. It used to clamp at zero, which was right while the canvas could only
+  // ever sit inside the viewport. With --vh-fix the board deliberately runs PAST the foot of the
+  // viewport to cover the strip, so this comes back negative down there — and it has to, or the
+  // painted prompts would follow the board over the edge while every DOM button stayed behind at
+  // the viewport foot, which is the exact drift --foot-lift exists to prevent.
   function canvasGap() {
     const r = canvas.getBoundingClientRect();
-    return { top: Math.max(0, r.top), bottom: Math.max(0, window.innerHeight - r.bottom) };
+    return { top: r.top, bottom: window.innerHeight - r.bottom };
   }
   // ...and the middle of the line, in canvas pixels from the top: the lift, plus half a button.
   const footTextY = () => viewH - (footLift() + uiGrid()*1.5);
@@ -21465,43 +21491,7 @@
     ctx.font = "900 " + Math.round(Math.min(viewW*0.032, 14)) + "px " + UI_FONT;
     ctx.fillText(VERSION, viewW - viewW*0.05, viewH - viewH*0.02);
     ctx.globalAlpha = 1;
-    drawEdgeProbe();
   }
-  // ---- TEMPORARY: what the frame thinks its own edges are -------------------------------
-  // The strip under the home indicator has survived two fixes that both measure correctly on
-  // every screen this can be run on, which means the thing being measured is not the thing that
-  // is wrong. This prints the numbers on the device itself. One constant turns it off, and it
-  // comes out the moment the answer is in.
-  const EDGE_PROBE = true;
-  function drawEdgeProbe() {
-    if (!EDGE_PROBE) return;
-    const vv = window.visualViewport, S = safeArea();
-    const ap = document.getElementById("app").getBoundingClientRect();
-    const cr = canvas.getBoundingClientRect();
-    const wr = document.getElementById("board-wrap").getBoundingClientRect();
-    const R = (n) => Math.round(n);
-    const standalone = (window.matchMedia && matchMedia("(display-mode: standalone)").matches)
-                       || window.navigator.standalone === true;
-    document.body.classList.add("edge-probe");
-    const lines = [
-      "ih " + R(window.innerHeight) + "  sh " + R(screen.height) +
-        "  SHORT " + R(screen.height - window.innerHeight),
-      "st " + R(S.t) + "  sb " + R(S.b) + "  appB " + R(ap.bottom) + "  canB " + R(cr.bottom),
-      "green line = viewport foot / red = past it",
-    ];
-    const size = Math.max(9, Math.round(Math.min(viewW*0.030, 13)));
-    ctx.save();
-    ctx.globalAlpha = 0.92; ctx.fillStyle = "#8fff9e";
-    ctx.textAlign = "left"; ctx.textBaseline = "bottom";
-    ctx.letterSpacing = "0px";
-    ctx.font = "900 " + size + "px " + UI_FONT;
-    // Bottom LEFT, and low: the strip in question is right under it, so one photograph carries
-    // both the numbers and the thing they are supposed to explain.
-    let y = viewH - size*7.5;
-    for (let i = lines.length - 1; i >= 0; i--) { ctx.fillText(lines[i], viewW*0.04, y); y -= size*1.35; }
-    ctx.restore();
-  }
-
   // one word of the title, rendered as chunky extruded 3D text with a pop-in
   function drawTitleWord(word, X, y, size, appearLocal, ts){
     if (appearLocal < 0) return;
