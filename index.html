@@ -478,10 +478,25 @@
      mid-grey and the last thing that wore it at strength turned the black it sat on to a milky
      grey. It is baked into the SVG at 0.14 rather than layered over the top, because a CSS
      background layer cannot carry an opacity of its own. */
-  #wintop #win-tal, #wintop #win-shop { position:relative; isolation:isolate; }
-  #wintop #win-tal::before, #wintop #win-shop::before {
+  /* ...and the ANSWER at the foot wants the same thing for the same reason. #winfade already
+     runs a linear wash up from the bottom edge, but that is the edge of the picture going
+     dark — it is even across the width, and the button is not: it is one object in the middle
+     of a map that carries a different palette under every chapter, and the words on it were
+     being read against whatever colour happened to be behind them. This is a pool of dark
+     around the button itself, which is a different job from the frame going dark.
+     Listed with the doors rather than written out again: it is the same recipe, and the only
+     thing it needs of its own is a size. */
+  #wintop #win-tal, #wintop #win-shop, #winui #win-next { position:relative; isolation:isolate; }
+  #wintop #win-tal::before, #wintop #win-shop::before, #winui #win-next::before {
     content:""; position:absolute; z-index:-1; pointer-events:none;
-    left:50%; top:50%; width:230%; height:210%; transform:translate(-50%,-50%);
+    /* MUCH bigger, and sized against the SCREEN rather than the button. At 230% of a small
+       button it was a neat oval sitting behind each door with a visible end to it, which reads
+       as a plate laid on the cosmos — the thing it is meant to be is the dark the doors are
+       standing in, and dark has no edge. Wider than the viewport and taller than the header, so
+       what you see of it is the middle: it runs off both sides and off the top, and the only
+       boundary anywhere near the screen is the one where it has already faded to nothing.
+       #wintop does not clip (no overflow rule), so the overflow is real rather than cut. */
+    left:50%; top:50%; width:150vw; height:62vh; transform:translate(-50%,-50%);
     background-image:
       url("data:image/svg+xml;utf8,\
 <svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'>\
@@ -530,6 +545,11 @@
   }
   /* ...but not the arrow on it. image-rendering inherits, and the chip is drawn at twice its
      size and scaled down — pixelated turned the one round-capped thing in the row to gravel. */
+  /* Wider than the viewport, so it has no ends anywhere you can see them, and deep enough that
+     the button sits in the MIDDLE of it rather than on top of it — a pool with the thing in
+     the middle reads as somewhere it is standing, and one that stops just past the plate
+     reads as a shadow the plate is casting. */
+  #winui #win-next::before { width:170vw; height:46vh; }
   #winui #win-next canvas { image-rendering:auto; }
   #poem {
     position:fixed; inset:0; display:none; flex-direction:column;
@@ -1494,6 +1514,14 @@
   /* ...and NOTHING else scrolls. The shop is a fixed frame with one moving part in it; the page
      itself sliding under the pinned button was the whole reason the button had to be pinned. */
   #menu.wide { overflow:hidden; }
+  /* THE ORRERY PAGE DOES NOT SCROLL. Its canvas is deliberately wider than the column it sits
+     in — the Bell-sized light behind a featured charm has to spill past the edges, and the side
+     spill is pulled back out of the flow with a negative margin. A negative margin takes the
+     space back but a browser still counts the painted overflow as somewhere you can scroll to,
+     so the whole screen slid sideways under a thumb that missed a charm. There is nothing off
+     the edge to go and look at: it is light.
+     `overscroll-behavior` as well as `overflow`, or the gesture is handed up to the page. */
+  #menu.orrery-page { overflow:hidden; overscroll-behavior:none; touch-action:none; }
   /* ...so the 80px kept clear under the rack for the pinned button is dead space now. The rack
      already stops short of the button by its own measurement; the reserve only pushed the card
      past the bottom of the screen and gave the page something to scroll.
@@ -1813,7 +1841,10 @@
   const CAM_BOTTOM_PAD = 1;
   const TRACK_T = 0.44;        // platform thickness as fraction of cell (hangs below centre)
   const SAMPLE_D = 0.42;       // tangent smoothing window (path-param units)
-  const FALL_G = 0.0022, FALL_MS = 850;   // gravity fall on lose
+  // SLOWER. He used to be gone almost before you had registered that he had gone, which left
+  // the Ankh's window — the one moment in the game you are asked to react rather than plan —
+  // as a reflex test rather than a decision. Two-thirds the gravity over half again the time.
+  const FALL_G = 0.0014, FALL_MS = 1250;  // gravity fall on lose
   // Running into a wall reads differently to running off a ledge, so it gets its own
   // beat: the runner concertinas against the face, then peels off and falls.
   const SQUASH_MS = 260;                  // how long the squash holds before gravity
@@ -2623,6 +2654,35 @@
         src.start(t); src.stop(t + 0.46);
       }
     }
+    // THE PURSE GOING. A handful of coins thrown out of him as he lands on the heap — the same
+    // bell a pickup rings, struck two to five times over a fifth of a second and scattered in
+    // pitch, so it is plainly the same object and plainly several of them. Quieter than a
+    // pickup each, because a pickup is one coin arriving and this is a lot of them leaving, and
+    // the loud thing at that moment is the thud.
+    //
+    // How many strikes follows how many actually came out, so a run that found two coins does
+    // not sound like one that found twenty.
+    function coinSpill(n) {
+      if (muted || !ac || ac.state !== "running" || !(n > 0)) return;
+      const t0 = ac.currentTime;
+      const k = Math.max(2, Math.min(5, Math.round(1 + n*0.5)));
+      for (let i = 0; i < k; i++) {
+        const t = t0 + (i/k)*0.15 + Math.random()*0.035;
+        // Each one a few semitones off the others, so they ring as a scatter and not as one
+        // note played louder.
+        const up = ((i*5) % 7) - 3;
+        for (const [semi, amp, ring] of [[24, 1.00, 0.9], [31, 0.55, 1.4], [40, 0.30, 1.8]]) {
+          const o = ac.createOscillator(), g = ac.createGain();
+          o.type = "sine";
+          o.frequency.setValueAtTime(BASE * Math.pow(2, (semi + up)/12), t);
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(0.055*amp, t + 0.004);
+          g.gain.exponentialRampToValueAtTime(0.0004, t + 0.09 + 0.45*ring);
+          o.connect(g); g.connect(master); g.connect(sendBus);
+          o.start(t); o.stop(t + 0.14 + 0.5*ring);
+        }
+      }
+    }
     function coin() {
       if (muted || !ac || ac.state !== "running") return;
       const t0 = ac.currentTime;
@@ -3291,6 +3351,11 @@
       // telling you what is happening.
       intro: { beat:0.78, pad:0.085, bass:0.060, lead:0,     wave:"sine",     lift:12, grow:2 },
       pause: { beat:0.62, pad:0.085, bass:0.075, lead:0.055, wave:"sine",     lift:12, grow:0 },
+      // The SHOP is the pause bed with the tune taken out — `lead:0`, exactly as the cinematic
+      // does it. The Tileverse next door plays the whole thing, and a shop is somewhere you go
+      // FROM there for a minute: the same chords underneath say it is the same place, and the
+      // melody stopping says you have stepped out of the room where it is playing.
+      shop:  { beat:0.62, pad:0.085, bass:0.075, lead:0,     wave:"sine",     lift:12, grow:0 },
     };
     let ambTimer = null, ambAt = 0, ambBar = 0, ambMode = null, ambSince = 0;
     // The title and cinematic tune leaves through here. Stopping the scheduler alone was never
@@ -3632,13 +3697,16 @@
         const g = ac.createGain(); g.gain.value = amp;
         sum.connect(bp); bp.connect(g); g.connect(out);
       }
-      const voices = [];
+      const voices = [], parts = [];
       for (const [semi, det] of [[0,-5],[0,6],[7,-4],[12,5],[16,-6],[19,4]]) {
         const o = ac.createOscillator();
         o.type = "sawtooth";
         o.frequency.setValueAtTime(BASE * Math.pow(2, semi/12), t);
         o.detune.setValueAtTime(det, t);
         o.connect(sum); o.start(t); voices.push(o);
+        // Its own detune, kept: the lift below is applied ON TOP of it, and a voice that forgot
+        // where it started would come back a few cents out and the chorus would lose its beat.
+        parts.push({ o, det });
       }
       // ...and two slow wobbles at rates that do not divide into each other, so the swell never
       // quite comes round to where it was. A pad that repeats is a pad you notice.
@@ -3651,7 +3719,92 @@
       swell.frequency.value = 0.31; swellG.gain.value = 0.045;
       swell.connect(swellG); swellG.connect(out.gain);
       swell.start(t);
-      choirNodes = { out, stop: voices.concat([vib, swell]) };
+      choirNodes = { out, parts, lift: 0, stop: voices.concat([vib, swell]) };
+    }
+    // THE SHELF'S OWN AIR. Not a tune — the charms are turning slowly in the dark and a melody
+    // would give them a tempo they do not have. A held chord that never quite arrives: two
+    // stacked fifths and a ninth, drifting, with the choir's "ah" formants over the top of it
+    // and a bell struck now and then somewhere far off.
+    //
+    // Built on choir() rather than beside it. That voice already solves the hard part — six
+    // detuned saws through three bandpass formants, two wobbles at rates that do not divide
+    // into each other — and a second copy of it would be a second thing to keep in tune with
+    // the first. This adds the air around it: a low pad under, a shimmer above, and the bell.
+    let etherNodes = null, etherTimer = 0;
+    function talismanTheme(on) {
+      if (!ac) return;
+      if (!on) {
+        choir(false);
+        if (etherTimer) { clearInterval(etherTimer); etherTimer = 0; }
+        const V = etherNodes; etherNodes = null;
+        if (!V) return;
+        const t = ac.currentTime;
+        V.out.gain.cancelScheduledValues(t);
+        V.out.gain.setTargetAtTime(0.0001, t, 0.5);      // ...a long way out, like a room emptying
+        for (const o of V.stop) { try { o.stop(t + 3.2); } catch(_) {} }
+        return;
+      }
+      if (etherNodes || muted || ac.state !== "running") return;
+      const t = ac.currentTime;
+      const out = ac.createGain();
+      out.gain.setValueAtTime(0.0001, t);
+      out.gain.exponentialRampToValueAtTime(0.085, t + 2.4);   // it fades UP over two seconds
+      out.connect(master); out.connect(sendBus);
+      const stop = [];
+      // The pad: sines, not saws — the choir is carrying the edge and anything else with teeth
+      // in it would be a second voice arguing. Two octaves below where the charms sit.
+      for (const [semi, amp, det] of [[-24, 1.00, 0], [-12, 0.62, -6], [-5, 0.44, 7],
+                                      [ -0, 0.30, -4], [  4, 0.18, 5]]) {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "sine";
+        o.frequency.setValueAtTime(BASE * Math.pow(2, semi/12), t);
+        o.detune.setValueAtTime(det, t);
+        g.gain.value = 0.16*amp;
+        o.connect(g); g.connect(out); o.start(t); stop.push(o);
+      }
+      // ...breathing on two clocks that do not line up, so the chord never sits still and never
+      // repeats. The same trick the choir uses, at a third of the rate: this is the air, and air
+      // moves more slowly than a voice does.
+      for (const [hz, depth] of [[0.071, 0.030], [0.113, 0.019]]) {
+        const lfo = ac.createOscillator(), lg = ac.createGain();
+        lfo.frequency.value = hz; lg.gain.value = depth;
+        lfo.connect(lg); lg.connect(out.gain); lfo.start(t); stop.push(lfo);
+      }
+      etherNodes = { out, stop };
+      choir(true);                                    // ...and the voices, over the lot
+      // A bell every so often, never on the beat, because there is no beat. Its pitch walks a
+      // little each time so it is plainly the same bell in the same room and never the same note
+      // twice running.
+      const ring = () => {
+        if (!etherNodes || muted || !ac || ac.state !== "running") return;
+        const t0 = ac.currentTime + Math.random()*1.4;
+        const up = [0, 7, 12, 16, 19][Math.floor(Math.random()*5)];
+        for (const [semi, amp, dec] of [[24, 1.00, 2.2], [31, 0.52, 2.8], [40, 0.24, 3.4]]) {
+          const o = ac.createOscillator(), g = ac.createGain();
+          o.type = "sine";
+          o.frequency.setValueAtTime(BASE * Math.pow(2, (semi + up)/12), t0);
+          g.gain.setValueAtTime(0.0001, t0);
+          g.gain.exponentialRampToValueAtTime(0.030*amp, t0 + 0.01);
+          g.gain.exponentialRampToValueAtTime(0.0003, t0 + dec);
+          o.connect(g); g.connect(master); g.connect(sendBus);
+          o.start(t0); o.stop(t0 + dec + 0.3);
+        }
+      };
+      etherTimer = setInterval(ring, 5200);
+      ring();
+    }
+    // THE VOICES RISE when you pick one up. Not a new sound — the same chorus, lifted, which is
+    // what a held voice does when the thing it is singing about arrives. Applied to `detune`
+    // rather than to the frequency: the vibrato LFO is already connected to that param and the
+    // two SUM, so the wobble carries on wobbling around the new pitch instead of being replaced.
+    // Eased over a second, because the charm takes about that long to come down.
+    function choirLift(cents) {
+      const V = choirNodes; if (!V || !ac || !V.parts) return;
+      const c = Math.max(-2400, Math.min(2400, cents || 0));
+      if (c === V.lift) return;
+      V.lift = c;
+      const t = ac.currentTime;
+      for (const { o, det } of V.parts) o.detune.setTargetAtTime(det + c, t, 0.32);
     }
     function duck(amount) {
       if (!ac || !musicBus) return;
@@ -3662,12 +3815,12 @@
       musicBus.gain.setTargetAtTime(target, ac.currentTime, 0.12);
     }
     function isMuted() { return muted; }
-    return { unlock, clearTile, smash, charmBreak, charmGrow, roar, win, lose, fall, death, boost, slow, coin, coinBank, coinSlam, key, doorOpen,
+    return { unlock, clearTile, smash, charmBreak, charmGrow, coinSpill, roar, win, lose, fall, death, boost, slow, coin, coinBank, coinSlam, key, doorOpen,
              slide, clack, tap, tapBig, power, warp, vortex, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck, choir,
              ambient,
              swish, introGather, introFlash, rumble, flap, life, claim, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
-             levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, setMusicGate,
+             levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, talismanTheme, choirLift, setMusicGate,
              musicNow: () => ({ ...MU }) };
   })();
 
@@ -3692,7 +3845,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.21";                    // shown on the title & pause screens
+  const VERSION = "v10.22";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -6718,6 +6871,10 @@
   };
   function spillPurse(x, y) {
     const n = Math.min(SPILL.max, Math.round((state && state.purse) || 0));
+    // ...and they make a noise on the way out. They were thrown, drawn, spun and left to fade in
+    // silence under the thud of him landing, which made the one moment the run's takings are
+    // visibly lost the one moment nothing said so.
+    Sound.coinSpill(n);
     for (let i = 0; i < n; i++) {
       // Fanned rather than random: a ring of directions walked in steps that do not divide into
       // it, so they come out evenly spread and never in a pattern you could count.
@@ -6881,7 +7038,18 @@
     if (!lead) return false;
     if (!junctionExits(lead.n, lead.prev).some(e => e.c === c && e.r === r)) return false;
     const tile = oldestFreeTile();
-    if (!tile) return false;
+    // NOTHING FREE YET, so the tap is taken as an ORDER rather than refused. The whole game is
+    // waiting for a tile to come back to you, and the decision about where it goes is one you
+    // have usually made well before it does — this lets you say so while you are still looking
+    // at the junction, instead of holding it in your head and racing the moment it arrives.
+    // Tapping the square you already chose takes the order back.
+    if (!tile) {
+      const q = state.queued;
+      state.queued = (q && q.c === c && q.r === r) ? null : { c, r };
+      Sound.tap(); haptic(state.queued ? 6 : 4);
+      return true;
+    }
+    state.queued = null;                    // ...a tap that lands now supersedes one that waited
     state.flyTile = { tile, c, r, t: 0,
                       x0: cx(tile.c), y0: cy(tile.r), x1: cx(c), y1: cy(r) };
     haptic(6);
@@ -6890,6 +7058,24 @@
   // Advance the flight, and land it. The tile is not placed until it ARRIVES: dropping it at
   // the moment of the tap and animating a ghost afterwards would link the track — and possibly
   // send the runner round a corner — before the thing that did it had got there.
+  // THE STANDING ORDER. Checked every frame rather than fired from wherever a tile happens to
+  // come free: tiles are freed in more than one place — cleared behind him, smashed off a
+  // block, handed back by a charm — and an order that only some of those honoured would be a
+  // rule with holes in it. Asking here costs one comparison a frame and cannot be missed.
+  function tickQueued() {
+    const s = state, q = s.queued; if (!q) return;
+    if (s.status !== "play") { s.queued = null; return; }
+    // The junction MOVES. He is running, and the front of the track is a different cell every
+    // few seconds — an order for a square that is no longer a way on is not a wait, it is a
+    // mistake, and it should go rather than sit there looking like it is about to happen.
+    const lead = leadNode();
+    if (!lead || !junctionExits(lead.n, lead.prev).some(e => e.c === q.c && e.r === q.r)) {
+      s.queued = null; return;
+    }
+    if (s.flyTile || !oldestFreeTile()) return;
+    s.queued = null;
+    sendTileTo(q.c, q.r);
+  }
   function tickFly(dt) {
     const f = state.flyTile;
     if (!f) return;
@@ -7175,6 +7361,7 @@
     // instead of drifting against the tiles the way a clock-driven stride does.
     s.runPhase = (s.runIdx + s.runT) * Math.PI*2 * STRIDES_PER_TILE;
     s.elapsed += dt;                        // level clock (for time bonus / stars)
+    tickQueued();                           // ...a hint square tapped before there was one
     tickFly(dt);                            // a tile on its way to a tapped hint square
     tickSlide(dt);                          // a platform or block on its way to a tapped rail cell
     // the flag snaps down and plants itself once a tile is laid on the exit cell
@@ -8352,9 +8539,13 @@
       const [c, r] = ck.split(",").map(Number);
       if (near(c, r)) { s.coinCells.delete(ck); grabCoin(c, r); }
     }
-    // talismans: passing over one unlocks it permanently, win or lose
+    // talismans: passing over one unlocks it permanently, win or lose — but you have to be ON
+    // it. At the coins' 0.7 of a cell he swept them up from the next tile along, which for the
+    // rarest thing in the game read as being given it for going past. A quarter of a cell means
+    // his own middle has to reach its middle.
+    const onIt = (c, r) => Math.hypot(rp.x-(c+0.5)*cell, rp.y-(r+0.5)*cell) < cell*0.25;
     for (const t of s.talismans) {
-      if (t.got || !near(t.c, t.r)) continue;
+      if (t.got || !onIt(t.c, t.r)) continue;
       t.got = true;
       const def = talById(t.id);
       const fresh = unlockTalisman(t.id);
@@ -8899,6 +9090,10 @@
     // is what keeps `f.t` from advancing, which is what stops the backstop firing mid-passage.
     if (f.ankh) { tickAnkh(dt); return; }
     if (f.land != null) {                      // down. Lie there a moment, then say so.
+      // AND THAT IS THAT. The Ankh answers a fall, and the fall is over — he is on the heap.
+      // Its window used to run on its own clock and could still be open while he lay there,
+      // which offered you a resurrection from a place he had already arrived at.
+      state.ankhGrace = 0;
       f.land += dt;
       // The zoom is still running under him, and the heap is measured in cells — so its summit
       // rises while he lies on it. Sit him back on top of it each frame rather than leaving him
@@ -9360,7 +9555,8 @@
     win.stepMs = route.length ? WIN.route / route.length : 40;
     hideWinUI();
   }
-  function winEnd() { win = null; hideWinUI(); }
+  function winEnd() { win = null; hideWinUI();
+                      Sound.ambient(null); }   // ...and the map's bed with it
   // Giving up on a chapter, played as a MOVE rather than as a cut. Skip used to load the next
   // level out from under you the instant you pressed it, which made the one you had just quit
   // vanish without ever being answered — you were somewhere else before you had finished being
@@ -9508,6 +9704,9 @@
     el.style.setProperty("--quilt", "url(" + c.toDataURL() + ")");
   }
   function showWinUI() {
+    // The map has music now. It is the thing the shop and the shelf are rooms off, and it was
+    // the only one of the three standing in silence.
+    Sound.ambient("pause");
     const el = document.getElementById("winui"); if (!el) return;
     const nx = document.getElementById("win-next");
     const idx = (win ? win.next : levelIdx);
@@ -9558,6 +9757,12 @@
       top.classList.add("show");
     }
   }
+  // NOTE that this does not touch the music. It runs on the way to a MENU as much as on the way
+  // out of the map — every door on the Tileverse takes the header down before opening one — and
+  // cutting the bed here meant walking through the cog into Settings stopped the map's music and
+  // started the identical bed again a frame later, which you hear as a dip in something that has
+  // not changed at all. The map's bed is dropped where the map actually ENDS: see winEnd and
+  // showLose. A menu says what it wants for itself, through menuBed.
   function hideWinUI() {
     const el = document.getElementById("winui"); if (el) el.classList.remove("show");
     const fd = document.getElementById("winfade"); if (fd) fd.classList.remove("show");
@@ -10094,7 +10299,20 @@
     // ground" rule lives — so the map went on being drawn under the shop: the squares, the ring
     // round the next chapter, the words. A shelf of hats over the top of that reads as a card
     // dropped onto the map rather than as somewhere you have gone.
-    if (menuEl && menuEl.classList.contains("show")) { drawVoid(ts); return; }
+    // ...and it is the SAME cosmos, standing exactly where it was. The map parallaxes the sky
+    // behind it — see voidPar — and this branch was drawing it without that offset, so stepping
+    // from the Tileverse into the shop slid the whole starfield sideways, and stepping back slid
+    // it back. The three screens are one place with different things standing on it: the cog
+    // takes you from the map to the shop to the charms without ever leaving, and the ground
+    // under all three has to agree or the moving is what you notice instead of the arriving.
+    if (menuEl && menuEl.classList.contains("show")) {
+      const S = winMapFit();
+      const px = (P.camC != null ? P.camC : 0) * S * VOID_PARALLAX;
+      const py = (P.camR != null ? P.camR : 0) * S * VOID_PARALLAX;
+      voidPar = { x: px, y: py };
+      try { drawVoid(ts); } finally { voidPar = null; }   // ...and only for this frame
+      return;
+    }
     // The last beat is the NEXT level playing normally with the black lifting off it.
     if (P.ph === "fade") {
       draw(ts);
@@ -10313,7 +10531,11 @@
         continue;
       }
       ctx.save();
-      ctx.globalAlpha = e;
+      // HALF THERE. Everything else the replay puts back is still ON the board — a key you
+      // carried, a lock you opened, the charm you found — but a coin you collected is gone: it
+      // is in the purse the next screen is about to count. Drawn solid it read as a coin still
+      // lying there waiting, which is the one thing it is not.
+      ctx.globalAlpha = e * (q.kind === "coin" ? 0.5 : 1);
       ctx.translate(x, y);
       const sc = 1 + (1 - e)*0.85;                     // it drops in rather than fading up
       ctx.scale(sc, sc);
@@ -10353,16 +10575,21 @@
     // it was saying it differently: a slash instead of the word, and one flat white instead of
     // the coin's gold with its denominator dim behind. The number that moves is gold and heavy;
     // what it is out of sits behind it, lighter and dimmer.
-    const h = UI_PX, gap = h*0.55;
+    // THE SIZE AND SPACING THE PURSE USES, one screen later — see PURSE_PX. This tally and the
+    // one on CHAPTER COMPLETE are the same figure a tap apart, and they were arriving at 15px
+    // beside a 13px coin here and 26 beside 20 there, which read as two different numbers about
+    // two different things. One set of measurements, and the coin a shade under the type on both
+    // because that is what the Tileverse chip does with it.
+    const h = PURSE_PX, gap = PURSE_GAP;
     const num = String(P.coins), rest = " of " + P.coinsTotal;
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.textAlign = "left"; ctx.textBaseline = "middle";
-    ctx.letterSpacing = UI_TRACK;
+    ctx.letterSpacing = "1px";                 // ...and the tracking the purse gives it
     const numF = "900 " + h + "px " + UI_FONT, restF = "700 " + h + "px " + UI_FONT;
     ctx.font = numF;  const nw = ctx.measureText(num).width;
     ctx.font = restF; const rw = ctx.measureText(rest).width;
-    const cw = h*0.86;
+    const cw = h*PURSE_COIN;
     const x0 = viewW/2 - (cw + gap + nw + rw)/2;
     hudCoin(x0, y, cw);
     ctx.font = numF;
@@ -10870,10 +11097,12 @@
     // own edges — see the beam above, which takes its half-width from this same radius.
     if (charmOn) {
       ctx.save();
-      const hal = ctx.createRadialGradient(fx, charmY, 0, fx, charmY, charmR*2.6);
-      hal.addColorStop(0, "rgba(255,248,214,0.46)"); hal.addColorStop(1, "rgba(255,248,214,0)");
-      ctx.fillStyle = hal;
-      ctx.beginPath(); ctx.arc(fx, charmY, charmR*2.6, 0, Math.PI*2); ctx.fill();
+      // ITS OWN COLOUR, and additively — the same light the shelf gives a charm you have picked
+      // out of the orbit, which is the other screen in the game that exists to look at one. It
+      // was a fixed warm white here: the colour of the beam it is coming down, not the colour of
+      // the thing coming down it, so the one moment the charm is the only object on the screen
+      // was the one moment it was not wearing its own colour.
+      charmGlow(fx, charmY, charmR*2.9, rgbOf(hexA(talFace(cere.def), 1)), 0.80);
       talHook(ctx, fx, charmY, charmR, cere.def);
       cere.def.draw(ctx, fx, charmY, charmR);
       ctx.restore();
@@ -10888,10 +11117,8 @@
       ctx.save();
       ctx.globalAlpha = e;
       ctx.rotate(0);
-      const hal = ctx.createRadialGradient(fx, cy0, 0, fx, cy0, R*2.2);
-      hal.addColorStop(0, "rgba(255,248,214,0.22)"); hal.addColorStop(1, "rgba(255,248,214,0)");
-      ctx.fillStyle = hal;
-      ctx.beginPath(); ctx.arc(fx, cy0, R*2.2, 0, Math.PI*2); ctx.fill();
+      // ...and the same again on the card, where it is the only thing left on the screen.
+      charmGlow(fx, cy0, R*2.9, rgbOf(hexA(talFace(cere.def), 1)), 0.95*e);
       ctx.save();
       ctx.translate(fx, cy0); ctx.rotate(Math.sin(ts/1100)*0.06); ctx.translate(-fx, -cy0);
       talHook(ctx, fx, cy0, R, cere.def);
@@ -11019,6 +11246,13 @@
   let _lastQuip = -1, _lastPause = -1;
   function showLose() {
     state.status = "lose";
+    // The Tileverse's own header — its title, its purse and the cog in the corner — is a fixed
+    // DOM layer, and it is taken down when the win sequence hands over to a level. A fall is
+    // the one way out of a level that the win sequence never sees, so anything it left standing
+    // stayed standing: the cog turned up in the corner of the death screen. Ask for it down
+    // here as well; hideWinUI is idempotent and this is the last word on the subject.
+    hideWinUI();
+    Sound.ambient(null);           // ...and no map music over a heap of bodies
     Sound.levelMusicStop();        // ...and with a fall, too
     // Nothing banked: a run you did not finish pays nothing, and the tiles it found go back on
     // the board with it. The purse is dropped rather than saved.
@@ -11296,6 +11530,10 @@
   function hudPlate() {
     const m  = Math.round(Math.min(viewW, viewH) * 0.028);
     const fs = Math.max(15, Math.round(Math.min(viewW, viewH) * 0.045));
+    // The second line of both plates — "TILES/S" under the speed, "OF 3" beside the count —
+    // was 52% of that, which on a phone is nine pixels: smaller than anything else the game
+    // ever asks you to read, on the two things it asks you to read most often. It is body
+    // type now, and only grows above that on a screen big enough to carry it.
     // Three grid spaces, the same three a menu button is tall, rather than one and a half times
     // whatever the type came out at. Both the pause button and the speedo take this — one
     // through a CSS variable and one directly — so pinning it to the grid pins the pair, and
@@ -11304,7 +11542,7 @@
     // and padding are worked out from — and was also being used directly as the speed number's
     // font size, which is why that one figure was set three times larger than every other word
     // in the HUD. Everything the HUD writes now takes fs2.
-    return { m, fs, fs2: Math.max(9, Math.round(fs*0.52)), h: uiGrid() * 3 };
+    return { m, fs, fs2: Math.max(UI_PX, Math.round(fs*0.72)), h: uiGrid() * 3 };
   }
   // Whether the glass has anything to say. Both plates ask this rather than each carrying its
   // own list of statuses, so they can never disagree about when the HUD is up.
@@ -13660,6 +13898,14 @@
     // small, when what it should look like is light gathering into the shape of one.
     ctx.restore();
   }
+  // WHICH SQUARE HAS BEEN CHOSEN, if any — a tile already flying to one, or an order standing
+  // against one. Asked in two places a few lines apart, and they have to be the same answer or
+  // the square eases open while the loop has stopped drawing it.
+  let markPick = 0;
+  const chosenPick = () => {
+    const f = state.flyTile;
+    return f ? { c: f.c, r: f.r } : state.queued;
+  };
   function drawJunctionMarks(ts) {
     // THE CHARM HAS TAKEN THE JUNCTION OVER, and keeps it for the whole of its turn — not just
     // for the asking. Tested on the charm rather than on its beat, because the moment you touch
@@ -13676,10 +13922,15 @@
     // level that opens with three squares already blinking has told you to hurry before it has
     // finished telling you where you are. They arrive with the first stride, and cold: markGrow
     // and markLive are left at rest until then, so the first thing you see is them opening.
-    if (state.status !== "play") { markGrow = 0; markLive = 0; return; }
+    if (state.status !== "play") { markGrow = 0; markLive = 0; markPick = 0; return; }
     const lead = leadNode();
     if (!lead) return;
     markGrow += ((state.drag ? 1 : 0) - markGrow) * 0.22;
+    // ...and the chosen square OPENS rather than appearing open. It is the same easing the two
+    // above use and for the same reason: a square that is suddenly a whole tile is a square that
+    // was replaced, and one that grows into a whole tile is the one you just pressed doing what
+    // you asked. Quicker than markGrow — this answers a tap, and a tap should be answered now.
+    markPick += ((chosenPick() ? 1 : 0) - markPick) * 0.30;
     // With nothing in hand the hints are still worth showing — they are where the track can go,
     // which is the thing you are working out while you wait for a tile to free up — but they are
     // no longer an invitation to tap, so they drop to a whisper.
@@ -13694,15 +13945,34 @@
     markLive += (live - markLive) * (live > markLive ? 0.42 : 0.14);
     const C = nodeCenter(lead.n);
     const a = MARK_EMPTY + (JUNCTION.mark - MARK_EMPTY)*markLive;
-    ctx.fillStyle = "rgba(255,255,255," + a.toFixed(3) + ")";
+    // ONE CHOSEN, AND IT IS THE ONLY ONE LEFT. A tile already flying to a square, or an order
+    // standing against one, is a decision you have made — and the other two stop being choices
+    // the moment you make it. Leaving them up is the board offering alternatives to a question
+    // that has been answered, and the chosen one opens out to the full tile because that is what
+    // is about to be sitting there.
+    const fly = state.flyTile;
+    const chosen = chosenPick();
     for (const e of junctionExits(lead.n, lead.prev)) {
+      const mine = !!chosen && chosen.c === e.c && chosen.r === e.r;
+      if (chosen && !mine) continue;                 // ...no longer a choice
       const mx = C.x + e.d.x*cell, my = C.y + e.d.y*cell;
+      // A PRESELECT breathes and a tile already on its way does not: one of them is waiting for
+      // something and the other has it. Both are brighter than a hint, because a hint is a note
+      // about where the track could go and these are about where it IS going.
+      const want = !mine ? a
+                 : fly ? Math.min(1, a*1.7)
+                       : Math.min(1, a*(1.5 + 0.5*Math.sin(ts/300)));
+      const lit = mine ? a + (want - a)*markPick : want;
+      ctx.fillStyle = "rgba(255,255,255," + lit.toFixed(3) + ")";
       // The SQUARE shrinks as the pool empties — half a tile with something to send, a quarter
       // with nothing — while the band stays an eighth of a tile throughout. At a quarter the two
       // outlines meet and there is no middle left, so the hint closes up into a small solid mark
       // rather than filling in at full size. A ring is a target; this is a note of where the
       // track can go, which is all it can honestly be while you have nothing to put there.
-      const os = cell*(0.125 + 0.125*markLive + 0.25*markGrow);
+      // ...and the chosen one is a whole tile, not a fraction of one. The rest of the scale is
+      // about how much you have to put there; this one is about the tile that is coming.
+      const base = cell*(0.125 + 0.125*markLive + 0.25*markGrow);
+      const os = mine ? base + (cell*0.5 - base)*markPick : base;
       const hs = Math.max(0, os - cell/8);
       if (os <= 0) continue;
       ctx.beginPath();
@@ -14093,6 +14363,20 @@
     ctx.translate(sx, sy); ctx.rotate(angle);
     if (hover) ctx.translate(0, -hover);
     if (sink)  ctx.translate(0, sink);
+    // MOONWALKING, he faces the way he came. In his local frame +x IS travel, so mirroring x
+    // turns him round without touching where he is or which way the track goes — and because it
+    // is done here, before anything of him is drawn, the drip, the hat, the kicks and the eyes
+    // all come along. The stride was already sweeping backward (a negative swing); this is what
+    // makes it a slide instead of a man walking backwards, because now the foot going back is
+    // the one behind him.
+    //
+    // BEFORE the lean, not after. Every swagger declares its tilt in HIS frame — "tilt about the
+    // feet", where the feet are his and the front of him is +x — so once he has been turned
+    // round the tilt has to turn with him. Applied the other way about, the mirror left the lean
+    // pointing the way it had always pointed in SCREEN terms, which on a man now facing the
+    // other way is the same number describing the opposite pose: he leant into the slide
+    // instead of away from it.
+    if (w.swing < 0) ctx.scale(-1, 1);
     if (w.lean) ctx.rotate(w.lean);                       // tilt about the feet
     // Wall squash: in the local frame +x is travel, so compressing x and bulging y is
     // exactly "flattened against the face". Scale about the feet (y=0) so he stays on
@@ -16124,7 +16408,11 @@
   }
   function updatePauseBtn() {
     const pf = document.getElementById("pauseFloat"); if (!pf) return;
-    const show = !titleActive && !paused && state &&
+    // ...and NOT while the win sequence owns the screen. The Tileverse is drawn over a level
+    // whose status is still "play" — it is the same board, pulled back to a square on the map —
+    // so the test passed and the pause button sat there over the cloud. There is nothing to
+    // pause: the thing you would be pausing has already finished.
+    const show = !titleActive && !paused && !win && state &&
                  (state.status === "play" || state.status === "vortex");
     // Against the ELEMENT, not against a remembered value. This used to cache what it last
     // wrote and skip the write when the new answer matched it — but half a dozen other places
@@ -16720,39 +17008,18 @@
   function cogChip(px, col){
     const c = document.createElement("canvas");
     c.className = "arrow"; c.width = c.height = Math.round(px*2*ICON_SCALE);
-    // A SQUARE cog, because everything in this game is a square and a circle in the corner of
-    // it was the one mark that had come from somewhere else. It is built the way the COIN is
-    // built — an outer plate, an inscribed panel a shade darker set in from its edge, and the
-    // shaft's eye punched clean through the middle of both — so the two objects that live at
-    // the top of the Tileverse are made of the same thing. Teeth stand off the middle of each
-    // flat. No rounded corners anywhere: this is the mark that was meant to lose them.
-    const g = c.getContext("2d"), S = c.width, m = S/2;
-    const OUT = S*0.375;      // the plate's half-width
-    const PANEL = S*0.300;    // ...the inscribed panel, set in from it
-    const HOLE = S*0.140;     // ...and the eye, punched through the lot
-    const TOOTH = S*0.105;    // half a tooth's width
-    const TIP = S*0.472;      // ...and how far it reaches, measured from the middle
-    // FOUR teeth, one per flat, rather than the six a round cog carries. Six about a square
-    // cannot be evenly placed — two of them land on corners and read as chips out of the
-    // metal — and four on the axes is what a square gear looks like anyway. Drawn first and
-    // in the plate's own colour, so they are part of the same piece of metal rather than four
-    // things stuck to it.
-    g.fillStyle = col;
-    g.fillRect(m - TOOTH, m - TIP, TOOTH*2, TIP*2);
-    g.fillRect(m - TIP, m - TOOTH, TIP*2, TOOTH*2);
-    g.fillRect(m - OUT, m - OUT, OUT*2, OUT*2);
-    // The panel, as a wash of black over the plate rather than a second colour: `col` arrives
-    // from getComputedStyle as an rgb() string and changes with the screen it is on, so a
-    // darker twin of it cannot be mixed here — but anything laid over it can be dimmed.
-    g.fillStyle = "rgba(0,0,0,0.26)";
-    g.fillRect(m - PANEL, m - PANEL, PANEL*2, PANEL*2);
-    // ...and the eye, taken out of both at once. OPAQUE black: under destination-out it is the
-    // source's ALPHA that says how much is erased, so leaving the panel's 26% fill in place
-    // took away a quarter of the metal and left a darker square where the hole should be.
-    g.globalCompositeOperation = "destination-out";
-    g.fillStyle = "#000";
-    g.fillRect(m - HOLE, m - HOLE, HOLE*2, HOLE*2);
-    g.globalCompositeOperation = "source-over";
+    // A HEAVIER ring: the eye of a cog is a hole for a shaft, not a doughnut, so the metal
+    // takes most of the radius and what is left in the middle is small.
+    const g = c.getContext("2d"), S = c.width, m = S/2, r = S*0.27;
+    g.strokeStyle = col; g.lineWidth = S*0.21; g.lineCap = "butt";
+    g.beginPath(); g.arc(m, m, r, 0, Math.PI*2); g.stroke();
+    for (let i = 0; i < 6; i++) {
+      const a = i*Math.PI/3;
+      g.beginPath();
+      g.moveTo(m + Math.cos(a)*r, m + Math.sin(a)*r);
+      g.lineTo(m + Math.cos(a)*r*1.62, m + Math.sin(a)*r*1.62);
+      g.stroke();
+    }
     return c;
   }
   // RESTART: a loop that goes round and comes back, with the same head the arrow chip wears.
@@ -16863,10 +17130,22 @@
   // up) and everything else goes. Opening the shop from the clear card used to leave LEVEL
   // CLEAR, its byline and its buttons showing through from underneath, and the talisman rack
   // and pause button sitting over the top of it.
+  // WHICH BED A SCREEN STANDS ON. The shelf brings its own held chord and wants silence under
+  // it; the shop drops the melody; everything else keeps the full one. In a function because it
+  // is asked from three places — opening a menu, walking between screens inside one, and
+  // closing — and three copies of it would drift the first time one of them changed.
+  const menuBed = (screen) => screen === "talismans" ? null
+                            : String(screen || "").startsWith("shop") ? "shop" : "pause";
+  // ...and what is playing when NO menu is up: the cinematic, the title, the Tileverse, or
+  // nothing at all because a level is running and has its own arrangement.
+  const ambBed = () => cineActive ? "intro" : titleActive ? "title"
+                     : (win && win.ph === "wait") ? "pause" : null;
   function openMenu(screen, ret) { paused = true; menuReturn = ret || null;
                                    buildMenu(screen || "main"); menuEl.classList.add("show");
                                    document.body.classList.add("menu-open");
-                                   Sound.ambient("pause"); }
+                                   // buildMenu has already run, so menuScreen is the one being
+                                   // opened and menuBed can be asked about it directly.
+                                   Sound.ambient(menuBed(menuScreen)); }
   // Any rack that scrolls stops exactly where the pinned button begins. Measured rather than
   // guessed: both the rack's top and the button's top depend on how much sits above them,
   // which differs per screen and changes with the notch.
@@ -16917,11 +17196,14 @@
     // half in and half out at the bottom is fine — it is a scroll view, and a sliced row is
     // the honest signal that there is more below.
   }
-  function closeMenu() { stopShopFig(); stopRelics(); shopPreview = null; endCeremony();
+  function closeMenu() {
+    // ...the shelf is the only screen with a voice of its own, and closing is not a rebuild.
+    Sound.talismanTheme(false);
+    stopShopFig(); stopRelics(); shopPreview = null; endCeremony();
                          if (state) state.pauseQuip = null;   // the next pause gets its own line
                          paused = false; menuReturn = null; menuEl.classList.remove("show");
                          document.body.classList.remove("menu-open");
-                         Sound.ambient(cineActive ? "intro" : titleActive ? "title" : null); }
+                         Sound.ambient(ambBed()); }
 
   // Every generated button clicks when pressed. Wired here rather than at each call site so
   // a new menu button can never be added silently.
@@ -17052,6 +17334,16 @@
   function buildMenu_(screen) {
     menuScreen = screen;
     stopShopFig(); stopRelics();          // whatever was animating is about to leave the DOM
+    // ...and off again on the way to anywhere else. Set where it is wanted and cleared HERE,
+    // because every screen comes through this line and only one of them wants it — a class that
+    // is only ever added would leave the shop unable to scroll the moment you had looked at the
+    // charms once. The shelf's music is twinned with it for exactly the same reason: it is the
+    // one screen that has any, and the way OUT of a screen is a hundred different taps.
+    if (menuEl) menuEl.classList.remove("orrery-page");
+    Sound.talismanTheme(false);
+    // ...and the bed follows you between screens with the menu still open. closeMenu handles
+    // the other way out.
+    if (menuEl && menuEl.classList.contains("show")) Sound.ambient(menuBed(screen));
     relicPainters = [];
     menuBody.innerHTML = "";
     // Anything that is a SHELF is pinned to the top: its content changes length as you unlock
@@ -17525,6 +17817,12 @@
       // a phone with its tilt carrying the last letters off the edge; stacked, it sits inside
       // the screen and matches TILE RUNNER's own two-line treatment on the pause menu.
       title.innerHTML = "Holy<br>Talismans"; title.className = "shop big amber rainbow";
+      menuEl.classList.add("orrery-page");
+      // The backing beat is gated off elsewhere, but the thing you can actually hear on this
+      // screen is the AMBIENT bed — a separate loop on a timer and a bus of its own, switched
+      // to "pause" by openMenu like every other menu. The shelf is the one menu that brings
+      // its own music, so it takes the bed down rather than playing over it.
+      Sound.unlock(); Sound.ambient(null); Sound.talismanTheme(true);
       const live = TALISMANS.filter(talLive);
       // The heading's own colours ARE the charms', read off the same faces the badges take —
       // laid down twice so the band can loop without a seam. See #menu-title.rainbow.
@@ -17781,6 +18079,10 @@
         // anywhere.
         if (want) { want = 0; }
         else if (hit) { cur = hit; want = 1; kk = Math.min(kk, 0.001); }
+        // ...and the choir goes up a fifth while one is out front, and back down when it is not.
+        // Asked on the tap rather than watched for every frame: it is a thing that happens when
+        // you do something, and choirLift ignores an order it is already carrying out.
+        Sound.choirLift(want ? 700 : 0);
         // The featured charm is the worn one too — a pendant on his cord, which is all this
         // page has ever set. Nothing out front, nothing worn.
         named = want ? cur : null;
@@ -18086,7 +18388,19 @@
   }
 
   // The level's backing and its count-in belong to the level. Anywhere else has its own tune.
-  Sound.setMusicGate(() => !paused && !cineActive && !titleActive);
+  // ...and shut on the HOLY TALISMANS shelf, which has a voice of its own. The backing is a
+  // pulse with a melody walking over it — the shelf is a held chord with a bell in it, and the
+  // two together are two pieces of music in one room. The gate is the right lever rather than
+  // stopping the backing outright: while it is shut the beat goes on ADVANCING and simply makes
+  // no sound, so stepping back out lands you where the tune had got to instead of restarting it.
+  const onShelf = () => menuScreen === "talismans" &&
+                        !!menuEl && menuEl.classList.contains("show");
+  // ...and shut for the whole WIN SEQUENCE, the Tileverse included. That backing belongs to a
+  // level: it is his tile clears keeping the beat, and once the board has been pulled back into
+  // a square on the map there is nothing keeping it. endWin does stop it — but the map is also
+  // reached straight from a pause, with a level still loaded and its drums still running, and
+  // that route never went past the stopping. `win` covers both, because `win` IS the sequence.
+  Sound.setMusicGate(() => !paused && !cineActive && !titleActive && !win && !onShelf());
 
   applyColorblind();   // apply saved colorblind setting on load
 
