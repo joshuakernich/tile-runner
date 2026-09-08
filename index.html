@@ -59,15 +59,22 @@
     -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent;
     touch-action:none; overscroll-behavior:none;
   }
-  /* No bottom inset. The board is the backdrop of the whole screen and should run to the
-     physical edge — padding it away from the home indicator left a band of dead page across
-     the foot of every iPhone and iPad, which read as the game being letterboxed.
-     Nothing is lost by it: every control that has to clear the indicator is position:fixed
-     and carries its own env() offset, so they sit exactly where they did. The top inset stays
-     — that one is a notch cut OUT of the screen, not a strip drawn over it. */
+  /* NO VERTICAL INSET AT EITHER END. The board is the backdrop of the whole screen and runs to
+     the physical edge — padding it away from the home indicator left a band of dead page across
+     the foot of every iPhone, which read as the game being letterboxed, and the notch at the
+     other end was doing exactly the same thing in --bg. Both are gone: the cosmos goes under the
+     status bar and under the home indicator, which is what a background is for.
+     Nothing is lost by it, because nothing was ever relying on this padding to be safe. Every
+     control that has to clear a notch is position:fixed and carries its own env() offset; every
+     heading and prompt PAINTED on the canvas reads --head-drop or --foot-lift, which carry the
+     insets too. The one exception was the HUD, whose margin was a bare number measured from the
+     top of the canvas — it takes safeArea() now, so the speedo and the pause button opposite it
+     still sit on one line.
+     The sides keep theirs. The manifest locks this to portrait, where they are zero anyway, and
+     in a landscape browser the notch is beside the board rather than over it. */
   #app {
     position:fixed; inset:0; display:flex; flex-direction:column; align-items:center;
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+    padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left);
   }
   header { text-align:center; padding:10px 0 6px; width:100%; }
   header h1 {
@@ -351,7 +358,7 @@
      see its --lift, which is the same subtraction — a little less of it here, because what
      stands on this line is a full-width slab rather than a row of small charms and wants to be
      off the swipe rather than merely off the bar. */
-  :root { --foot-lift: max(var(--chq), calc(env(safe-area-inset-bottom) + var(--edge-min) - 16px)); }
+  :root { --foot-lift: max(var(--chq), calc(var(--safe-b) + var(--edge-min))); }
   /* ...and THE HEAD, for the same reason. Every screen's name — the Tileverse's, the shop's,
      the shelf's, and the canvas-drawn CHAPTER N COMPLETE — starts its box this far down.
      Read from JS as well (headDrop), so the canvas heading cannot drift from the DOM ones. */
@@ -363,7 +370,13 @@
      at the top is not usable and 34px at the bottom mostly is. Measured from the ground each
      end actually has, the two gaps are now the same. */
   :root { --edge-min: 6px; }          /* how far past a reserved strip anything has to sit */
-  :root { --head-drop: max(calc(var(--chq) * 2.5), calc(env(safe-area-inset-top) + var(--edge-min))); }
+  /* WHAT EACH END HAS TO CLEAR, and everything that clears anything reads these two. The top is
+     the inset as given: a notch is cut OUT of the glass and there is no arguing with it. The
+     bottom is mostly handed back — the home indicator is a 5px bar about 8px up and the rest of
+     that 34px is margin around it — which is the same subtraction #power's --lift makes. */
+  :root { --safe-t: env(safe-area-inset-top);
+          --safe-b: max(0px, calc(env(safe-area-inset-bottom) - 16px)); }
+  :root { --head-drop: max(calc(var(--chq) * 2.5), calc(var(--safe-t) + var(--edge-min))); }
   #winfade {
     position:fixed; left:0; right:0; bottom:0; height:calc(var(--chq) * 13);
     z-index:33; pointer-events:none; display:none;
@@ -579,8 +592,10 @@
     position:fixed; inset:0; display:none; flex-direction:column;
     align-items:center; justify-content:center; gap:var(--chq2);
     background:rgba(5,4,13,0.94); z-index:36; cursor:pointer;
-    padding:calc(env(safe-area-inset-top) + var(--chq2)) calc(env(safe-area-inset-right) + var(--chq))
-            calc(env(safe-area-inset-bottom) + var(--chq2)) calc(env(safe-area-inset-left) + var(--chq));
+    padding:max(var(--chq2), calc(var(--safe-t) + var(--edge-min)))
+            calc(env(safe-area-inset-right) + var(--chq))
+            max(var(--chq2), calc(var(--safe-b) + var(--edge-min)))
+            calc(env(safe-area-inset-left) + var(--chq));
   }
   #poem.show { display:flex; }
   @keyframes poem-in { from { opacity:0; } to { opacity:1; } }
@@ -647,8 +662,8 @@
   #mechpop {
     position:fixed; inset:0; display:none; align-items:center; justify-content:center;
     background:rgba(5,4,13,0.32); z-index:35;
-    padding:calc(env(safe-area-inset-top) + 24px) calc(env(safe-area-inset-right) + 24px)
-            calc(env(safe-area-inset-bottom) + 24px) calc(env(safe-area-inset-left) + 24px);
+    padding:max(24px, calc(var(--safe-t) + var(--edge-min))) calc(env(safe-area-inset-right) + 24px)
+            max(24px, calc(var(--safe-b) + var(--edge-min))) calc(env(safe-area-inset-left) + 24px);
   }
   #mechpop.show { display:flex; }
   /* No outline, and the shadow straight below rather than down-and-right — the same rule the
@@ -788,10 +803,15 @@
        level dimmer without making anything on top of it easier to read — every button here has
        its own plate, and the plate is what separates it from the ground. */
     z-index:30; overflow:auto;
-    /* #app pads for the notch, but a fixed inset:0 layer sits OUTSIDE it and covers the whole
-       screen — so the shop's title landed under the notch. Add the insets here as well. */
-    padding:calc(env(safe-area-inset-top) + var(--menu-pad)) calc(env(safe-area-inset-right) + var(--menu-pad))
-            calc(env(safe-area-inset-bottom) + var(--menu-pad)) calc(env(safe-area-inset-left) + var(--menu-pad));
+    /* #app no longer pads for the notch — the board is the backdrop of the whole screen — so a
+       fixed inset:0 layer has to clear it itself. Same rule as every other edge in the game:
+       the pad, or the strip the device has reserved, whichever is MORE. Stacked, this put the
+       shop's heading 81px down where the Tileverse's sat at 65, and left DONE floating 56px off
+       the bottom of a screen with nothing under it. */
+    padding:max(var(--menu-pad), calc(var(--safe-t) + var(--edge-min)))
+            calc(env(safe-area-inset-right) + var(--menu-pad))
+            max(var(--menu-pad), calc(var(--safe-b) + var(--edge-min)))
+            calc(env(safe-area-inset-left) + var(--menu-pad));
   }
   #menu.show { display:flex; }
   /* Nothing else is on screen while a menu is. The backdrop behind it is the level's own,
@@ -817,7 +837,7 @@
      under the last button and so moved up and down with however many buttons a screen had,
      which also pulled the centred stack of them off centre by its own height. */
   .menu-ver { position:fixed; left:0; right:0; z-index:3; text-align:center;
-    bottom:calc(env(safe-area-inset-bottom) + var(--chq));
+    bottom:var(--foot-lift);
     font-size:var(--body); letter-spacing:var(--ls); color:var(--dim); margin:0; opacity:0.7; }
   /* The stepped extrusions below are the headings' own colour stacked behind them — the same
      idea as a button's plate, and they stay. What has gone is the soft dark blur that sat under
@@ -868,7 +888,7 @@
      the interlevel screen's, because it is the same door. */
   #menu-body .menu-cog {
     position:fixed; z-index:4; width:var(--btn-h); height:var(--btn-h); padding:0;
-    top:calc(env(safe-area-inset-top) + var(--chq));
+    top:max(var(--chq), calc(var(--safe-t) + var(--edge-min)));
     right:calc(env(safe-area-inset-right) + var(--chq));
     background:none; background-image:none; border:0; box-shadow:none;
     display:flex; align-items:center; justify-content:center; }
@@ -881,7 +901,7 @@
      under you between two screens you see back to back. */
   #menu-body .tv-back {
     position:fixed; z-index:4; width:auto;   /* not the 100% every button in the column takes */
-    top:calc(env(safe-area-inset-top) + var(--chq2));
+    top:max(var(--chq2), calc(var(--safe-t) + var(--edge-min)));
     left:calc(env(safe-area-inset-left) + var(--chq2)); }
   #menu-body .tv-back .tv-word { font-size:28px; }
   #menu-body .tv-back .l1 { font-size:12px; letter-spacing:2px; }
@@ -3914,7 +3934,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.24";                    // shown on the title & pause screens
+  const VERSION = "v10.25";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -6564,7 +6584,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     wallLayerDirty = true;                      // cell/world size changed — rebuild wall + grain caches
     _uiGrid = 0;                                // ...and re-read the grid, in case the CSS moved
-    _footLift = -1; _headDrop = -1;             // ...and both ends with it — the notch can change
+    _footLift = -1; _headDrop = -1; _safe = null;   // ...and the edges with it — a rotation moves all of them
     grainScreen = null;
     syncHudChrome();                            // the pause button follows the speedo's plate
   }
@@ -12617,6 +12637,24 @@
   // The speedo's plate size, and the margin it sits at. The pause button is DOM and the speedo
   // is canvas, so nothing makes them agree by themselves — this is the number both take, one
   // through CSS variables and one directly, so they cannot drift apart at any viewport.
+  // The four strips the device has reserved, in pixels. env() is a CSS value and JS has no
+  // other way to see one, so it is read back off a probe the same way --chq and --head-drop are.
+  // Cached, and computeLayout drops the cache — a rotation changes all four.
+  let _safe = null, _safeProbe = null;
+  function safeArea() {
+    if (_safe) return _safe;
+    if (!_safeProbe) {
+      _safeProbe = document.createElement("div");
+      _safeProbe.style.cssText = "position:fixed;left:-9999px;top:0;width:0;height:0;" +
+        "padding:env(safe-area-inset-top) env(safe-area-inset-right) " +
+        "env(safe-area-inset-bottom) env(safe-area-inset-left);pointer-events:none;";
+      document.body.appendChild(_safeProbe);
+    }
+    const c = getComputedStyle(_safeProbe);
+    _safe = { t: parseFloat(c.paddingTop) || 0,  r: parseFloat(c.paddingRight)  || 0,
+              b: parseFloat(c.paddingBottom) || 0, l: parseFloat(c.paddingLeft) || 0 };
+    return _safe;
+  }
   function hudPlate() {
     const m  = Math.round(Math.min(viewW, viewH) * 0.028);
     const fs = Math.max(15, Math.round(Math.min(viewW, viewH) * 0.045));
@@ -12632,7 +12670,14 @@
     // and padding are worked out from — and was also being used directly as the speed number's
     // font size, which is why that one figure was set three times larger than every other word
     // in the HUD. Everything the HUD writes now takes fs2.
-    return { m, fs, fs2: Math.max(UI_PX, Math.round(fs*0.72)), h: uiGrid() * 3 };
+    // `m` is the MARGIN and nothing else — the DOM pause button takes it through --hud-m and
+    // adds the insets in CSS. The canvas has no CSS to add them in, and since #app stopped
+    // padding for the notch the top of the canvas IS the top of the glass: a plate drawn at
+    // y = m would sit under the status bar. `top`/`left` are where the canvas actually
+    // draws, so the speedo and the button opposite it still land on one line.
+    const S = safeArea();
+    return { m, top: m + S.t, left: m + S.l,
+             fs, fs2: Math.max(UI_PX, Math.round(fs*0.72)), h: uiGrid() * 3 };
   }
   // Whether the glass has anything to say. Both plates ask this rather than each carrying its
   // own list of statuses, so they can never disagree about when the HUD is up.
@@ -12665,7 +12710,7 @@
     // ceiling, into the tens of millions by the time the chapter goes. The one instrument still
     // trying to describe what is happening, and failing.
     if (s.hole && s.hole.top > 0) cps *= Math.pow(10, HOLE.runaway*s.hole.top/1000);
-    const P = hudPlate(), m = P.m, fs = P.fs;
+    const P = hudPlate(), m = P.left, fs = P.fs;
     ctx.save();
     ctx.textBaseline = "middle";
     // No "SPEED" in front of it any more. The unit says what the number is — a figure reading
@@ -12701,9 +12746,9 @@
     // pause button's box exactly, since both take their height from hudPlate(). No outline:
     // the plate is dark enough against the board to be its own edge, and the hairline it used
     // to wear was the only thing on either of the two HUD boxes drawing a border.
-    rrect(m, m, boxW, boxH, 0);
+    rrect(m, P.top, boxW, boxH, 0);
     ctx.fillStyle = "rgba(10,8,22,0.62)"; ctx.fill();
-    const midY = m + boxH/2;
+    const midY = P.top + boxH/2;
     ctx.textAlign = "left";
     ctx.font = bigF;
     // The RAIL, not the earth. The number is the one bright thing on this plate and the rail is
@@ -12767,7 +12812,7 @@
     const w = padX*2 + cw + gap + nw + rw;
     const x = Math.round((viewW - w)/2);
     const textX = x + padX + cw + gap;
-    return { x, y: P.m, w, h: P.h, midY: P.m + P.h/2,
+    return { x, y: P.top, w, h: P.h, midY: P.top + P.h/2,
              iconX: x + padX, iconW: cw, textX, restX: textX + nw, num, rest, font, restFont };
   }
   function drawCoinHud() {
