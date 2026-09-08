@@ -25,8 +25,15 @@
   :root {
     --bg:        #0d0b1a;
     --shop-w:    520px;      /* the widest the shop's rack ever gets — portrait, whatever the screen */
-    --panel:     #17142b;
-    --panel-lo:  #0b0918;      /* its own colour darkened, for the plate it stands on */
+    /* THE STANDARD BLUE. Every button, every card, every shop cell. It was #17142b, which is
+       a shade off the background it stands on — at that distance a row of buttons read as a
+       darker patch of the same night rather than as objects sitting on it. Lifted about five
+       points of lightness, same hue, so a button is plainly a thing and the screen behind it is
+       plainly behind it. --panel-lo is lifted with it and keeps the gap it had: it is this
+       colour darkened, not a fixed near-black, and letting it stay put would have turned every
+       plate into a hole under a button that had walked away from it. */
+    --panel:     #242043;
+    --panel-lo:  #131029;      /* its own colour darkened, for the plate it stands on */
     --grid-line: #221d40;
     --ink:       #e8e6ff;
     --dim:       #6f68a8;
@@ -162,7 +169,7 @@
        down-and-right. The border stays, transparent, because the height is matched against the
        speedo by measurement and box-sizing counts it: dropping it would shorten the button by
        4px and the pair would stop lining up. */
-    background:rgba(23,20,43,0.72); border:2px solid transparent; box-shadow:0 4px 0 #0b0918;
+    background:rgba(36,32,67,0.72); border:2px solid transparent; box-shadow:0 4px 0 var(--panel-lo);
   }
   /* the two bars scale with the button rather than sitting at a fixed 16px inside a box that moves */
   #pauseFloat span { width:9%; height:36%; min-width:3px; background:var(--ink); border-radius:1px; }
@@ -251,8 +258,38 @@
      On `translate` rather than `transform`, and for a reason — the transform carries each
      charm's own hanging angle and the press nudge, and a dip written into it would throw the
      rotation away the moment the class landed. */
-  #power .pw.dim { translate:0 calc(50% + var(--lift) - var(--hang)); cursor:default; }
-  #power .pw.live { opacity:1; }
+  /* ONE `translate`, composed out of two variables — the DIP that says a charm is out of
+     reach, and the SLIDE the rack uses to close a gap after one of them has been smashed. They
+     are set from different places and neither may clobber the other, which two `translate`
+     rules on the same element would do. `transform` still carries the hanging angle and the
+     press nudge, and is left alone. */
+  #power .pw { translate:var(--slide, 0px) var(--dip, 0px);
+    transition:translate 240ms cubic-bezier(.2,.8,.25,1); }
+  #power .pw.dim { --dip:calc(50% + var(--lift) - var(--hang)); cursor:default; }
+  /* ...and a charm that is WORKING stands proud of the row. It rises as the effect starts and
+     settles back as it ends, on the same transition the dip uses, so the rack has one language
+     for "this one is in play" and "this one is not". After .dim on purpose: a charm can be
+     spent and still running — the Millstone, mid-sit — and what it is doing beats what it has
+     left. */
+  #power .pw.live { opacity:1; --dip:calc(var(--chq) * -0.6); }
+  /* Spent. It shudders where it hangs and then breaks up — the pieces are drawn on its own
+     canvas, see smashCharm; this is only the shake before them. `rotate` and `scale` are the
+     independent properties, which compose with the `transform` carrying its tilt instead of
+     replacing it. The duration is set inline from SMASH.shake so there is one number. */
+  @keyframes pw-shudder {
+    0%   { rotate:0deg;    scale:1; }
+    18%  { rotate:-5deg;   scale:1.05; }
+    34%  { rotate:6deg;    scale:1.04; }
+    50%  { rotate:-7deg;   scale:1.07; }
+    66%  { rotate:6deg;    scale:1.05; }
+    82%  { rotate:-5deg;   scale:1.09; }
+    100% { rotate:2deg;    scale:1.12; }
+  }
+  #power .pw.smash { animation:pw-shudder 260ms ease-in both; pointer-events:none; }
+  /* ...and once it has broken, the box stays where it is until the last piece is gone. Taking
+     it out of the row at the moment of the break would slide the others sideways THROUGH the
+     pieces still flying off it. */
+  #power .pw.gone { pointer-events:none; }
   /* armed and waiting to be aimed (the Hammer) */
   #power .pw.armed canvas { filter:drop-shadow(0 0 6px var(--goal)); }
   #pauseFloat:active { transform:translateY(4px); box-shadow:none; }
@@ -570,7 +607,7 @@
   .mech-card {
     max-width:min(calc(var(--pop) + 44px), 100%);
     text-align:center; background:var(--panel);
-    border:3px solid transparent; box-shadow:0 6px 0 #0b0918; padding:20px 22px 18px;
+    border:3px solid transparent; box-shadow:0 6px 0 var(--panel-lo); padding:20px 22px 18px;
   }
   #mech-icon { width:112px; height:112px; margin:0 auto 4px; display:block; }
   /* The name of the thing, at the SAME setting as the sentence under it. It is a label on a
@@ -930,7 +967,7 @@
      43 tall against its neighbours' 45 (padding, not a stated height) and it was the one plain
      slab in a column of chequered ones. Same height, same chequer; only the markup differs. */
   .toggle { display:flex; justify-content:space-between; align-items:center;
-    border:3px solid transparent; box-shadow:0 4px 0 #0b0918;
+    border:3px solid transparent; box-shadow:0 4px 0 var(--panel-lo);
     height:var(--btn-h); padding:0 14px; font-family:inherit; font-weight:900; text-transform:uppercase;
     letter-spacing:var(--ls); font-size:var(--btn); color:var(--ink); cursor:pointer;
     background-color:var(--panel);
@@ -982,8 +1019,12 @@
   /* Centred, with the price and the name given the SAME height and the same gap to the icon.
      Equal boxes above and below are what actually centres the icon — matching the gaps alone
      would still sit it off-centre by however much the two labels differed in height. */
+  /* overflow VISIBLE. It was hidden, which is what a plate with a chequer on it wants — but
+     the swatch canvases now stand taller and wider than the cell on purpose, and clipping them
+     is the one thing that would undo it. The background still clips to the box; only the art
+     leaves it. */
   .tal-grid .tal { display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:0; padding:3px 3px; overflow:hidden;
+    gap:0; padding:3px 3px; overflow:visible;
     border-color:transparent; color:#fff;
     background-color:var(--panel);
     background-image:
@@ -1001,18 +1042,41 @@
   /* Each part is given an explicit height rather than being left to its own line box. Chasing
      this with negative margins did not work: the leading above and below a 10px line is most of
      what you are fighting, and a margin pulls the BOX, which is the thing that is too tall. */
-  .tal-grid .tal canvas { display:block; width:46%; height:auto; aspect-ratio:1; }
-  .tal-grid .tal > span:last-child { height:11px; line-height:11px; margin-top:4px; }
-  /* the price is its own line under the name: the tile, then the number */
+  /* THE ICON TAKES THE TOP TWO THIRDS. It used to be 46% of the width — a thumbnail with a
+     third of the cell empty around it — on a shelf whose whole job is showing you what a thing
+     looks like. Height rather than width, because the cell's height is the measure that is
+     actually being divided; aspect-ratio squares it and max-width keeps a wide cell from
+     letting it out of the sides. */
+  /* THE 96-UNIT REGION SITS WHERE IT ALWAYS DID, and the padding a category asked for hangs
+     OUTSIDE the layout. --sw is the size that region is drawn at — two thirds of a seven-square
+     cell, the same place and the same scale the icon had before any of this — and the canvas is
+     grown from it by whatever pad the category set (--sx either side, --sy above, both unitless
+     numbers of the swatch's own 96). The negative top margin then takes the pad straight back
+     out of the flow, so the vertical room the canvas consumes is exactly --sw and the price
+     under it has not moved either. What is left over simply overflows the cell, which is what
+     the extra pixels are for: a wizard's hat is allowed to stand above its card. */
+  .tal-grid .tal canvas { display:block; flex:0 0 auto;
+    --sw:calc(var(--chq) * 7 * 0.62);
+    width:calc(var(--sw) * (96 + var(--sx, 0) * 2) / 96);
+    height:calc(var(--sw) * (96 + var(--sy, 0)) / 96);
+    margin-top:calc(var(--sw) * var(--sy, 0) / -96); }
+  /* ...and the price under it, which is the only word left in a cell: the name is gone, so
+     what is written here is what the picture cannot say. */
   .tal-grid .tal .price { display:flex; align-items:center; justify-content:center; gap:4px;
-    height:11px; margin-bottom:4px; font-size:10px; line-height:11px;
+    height:11px; margin-top:3px; font-size:10px; line-height:11px;
     letter-spacing:0.2px; color:#ffd24a; }
   .tal-grid .tal .price canvas { width:11px; height:11px; }
   .tal-grid .tal .price.equipped { color:#8dff78; letter-spacing:0.5px; font-weight:900; }
+  .tal-grid .tal .price.owned { color:#8b93b8; letter-spacing:0.5px; font-weight:900; }
   /* names are long ("Nightshard", "Green Sprig") and the cells are a third of a narrow
      menu — well below body size, tight leading, and allowed to wrap to two lines. */
   .tal-grid .tal span { font-size:10px; letter-spacing:0.2px; line-height:1.1;
                         text-align:center; hyphens:none; color:#fff; }
+  /* ...except the number in the price row, which is a span inside it and was being caught by
+     the blanket rule above — so the coin came out gold and the figure beside it white, one
+     label in two colours. It takes whatever colour the ROW is: the coin's own gold normally,
+     and black on the gold plate of the one you are trying on, which the rule below still wins. */
+  .tal-grid .tal .price span { color:inherit; }
   /* Something you can still buy is tinted with the currency that buys it — a faint gold wash,
      enough to sort the shelf into "yours" and "for sale" at a glance without shouting. Its own
      price is already gold, so the tile reads as one object rather than a label on a plate. */
@@ -1037,8 +1101,7 @@
      word and the number inside the price row are spans of their own — so colouring their parent
      black left the two bits of text that actually say the price still white on gold. */
   .tal-grid .tal.locked.preview .price,
-  .tal-grid .tal.locked.preview span,
-  .tal-grid .tal.locked.preview > span:last-child { color:#000; }
+  .tal-grid .tal.locked.preview span { color:#000; }
   .tal-grid .tal.locked.preview:active { background-color:#f0be3a; }
   /* Tried on but out of reach. Gold is the colour of the money, and wearing it on something
      you cannot buy is the offer made in a currency you do not have — grey says the same thing
@@ -1046,7 +1109,6 @@
   .tal-grid .tal.locked.preview.poor, #menu-body .shop-buy.poor {
     background-color:#9aa1b2; box-shadow:0 4px 0 #4c5163; }
   .tal-grid .tal.locked.preview.poor:active { background-color:#aab1c2; }
-  .tal-grid .tal.locked > span:last-child { color:#d8dceb; }   /* its name, cooled to match */
   /* what the talisman actually does — the reason to pick one over another */
   .tal-grid .tal .tal-blurb { font-size:9px; letter-spacing:0.2px; line-height:1.1; font-style:normal;
     text-transform:none; font-weight:700; color:var(--track); text-align:center; }
@@ -1070,6 +1132,42 @@
      label have to clear the pinned heading above and the pinned DONE below, and on a short
      phone a fixed 150 would push the bottom row under the button. */
   :root { --relic: min(150px, 16vh); }
+  /* THE ORRERY. The shelf used to be a two-by-three grid of charms with their names under
+     them, which is a rack — and the page had already given up its selection marking on the
+     grounds that it is a display and not a shop. This is the display it was trying to be: the
+     same six charms turning about each other that the DOOR to this page shows, at the size you
+     pick one up in a level and with room to go round in. One canvas, so the near ones can pass
+     in front of the far ones; the words live under it and change when you tap one. */
+  .orrery { display:flex; flex-direction:column; align-items:center;
+    gap:var(--chq); margin:2px 0 10px; }
+  .orrery canvas { display:block; cursor:pointer; touch-action:manipulation; }
+  /* The caption keeps its height whether or not anything is in it, so the page does not jump
+     when a charm comes to the front. Two lines of name and two of blurb is the worst case. */
+  /* FULL BLEED. The caption sits inside #menu-body, which is padded in from both edges, and a
+     sentence set to that column broke into four short lines with the screen empty either side
+     of them. It takes the width a VERSE takes instead — the whole screen, less the notch and
+     one grid square — by the standard trick: 100vw, pulled back to the middle of its own
+     column. See #poem, whose side padding this is copied from. */
+  .orrery-cap { display:flex; flex-direction:column; align-items:center; gap:var(--chq);
+    min-height:calc(var(--chq) * 7); text-align:center;
+    width:100vw; margin-inline:calc(50% - 50vw);
+    padding:0 calc(env(safe-area-inset-right) + var(--chq))
+            0 calc(env(safe-area-inset-left) + var(--chq)); }
+  /* THE NAME IS A HEADING. It takes the face every heading in the game wears — see the rule
+     above, which this selector has been added to rather than copied from, so the gold, the
+     tracking and the four-degree lean cannot drift from TILEVERSE and TILE SHOP. Only the size
+     is its own: 46px is the size of a screen's name and this is the name of a thing ON one,
+     and half the charms would wrap on a phone at that. */
+  .orrery-cap b { font-size:min(30px, 8.4vw); line-height:1.1; text-transform:uppercase; }
+  /* ...and the blurb is BODY COPY, set exactly as the mechanic cards set theirs — the game's
+     one voice for a sentence explaining something. It was 9px at 0.2 tracking, from before
+     there was a standard to be out of step with. */
+  .orrery-cap i { font-size:var(--body); letter-spacing:var(--ls); line-height:1.6;
+    font-style:normal; font-weight:700; color:var(--ink); max-width:100%; }
+  /* ...and what it says when nothing is out front. Dim, and in the same voice as every other
+     tap prompt in the game, because the turning is not obviously something you can touch. */
+  .orrery-cap .hint { font-size:var(--body); letter-spacing:var(--ls);
+    text-transform:uppercase; font-weight:700; color:var(--dim); }
   .relic-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:var(--chq); margin:2px 0 10px; }
   .relic { display:flex; flex-direction:column; align-items:center; gap:1px;
     background:none; border:0; padding:0; cursor:pointer; }
@@ -1116,7 +1214,7 @@
   #menu-title { position:fixed; left:0; right:0; z-index:3; top:var(--head-drop); }
   /* The face, shared: the interlevel screen's own header is the Tileverse's header, reached a
      different way, and it should be the same object. Only the positioning differs. */
-  #menu-title, .tv-word, .big-word {
+  #menu-title, .tv-word, .big-word, .orrery-cap b {
     font-size:46px; letter-spacing:2px; line-height:1.05;
     transform:rotate(-4deg); margin:0; color:#ffd24a;
     text-shadow:0.85px 1px 0 #c79418,
@@ -1173,6 +1271,42 @@
                 2.55px 3px 0 #a55814,
                 3.4px 4px 0 #944f12,
                 4.25px 5px 0 #834610; }
+  /* HOLY TALISMANS wears the charms. Its face is a band of all six of their colours — built in
+     JS from the same faces the badges are drawn with, so it cannot drift from them — clipped to
+     the letters, with a bar of light travelling across on a loop over the top of it.
+     The colour list is laid down TWICE end to end and the band sized at 200%, so sliding the
+     window by exactly one box width walks through one whole cycle and comes back to where it
+     started: the loop has no seam in it to see. The shimmer's own layer is sized 300% and its
+     bright band parked at the middle of that, which puts it off one end of the letters at each
+     end of the travel, so it sweeps rather than sits.
+     After .amber on purpose — same specificity, so the later rule is the one that wins — and
+     the amber EXTRUSION is left alone underneath: the shadows are painted from the glyph's
+     shape, not its fill, so they survive the face going transparent. */
+  #menu-title.rainbow {
+    background-image:
+      linear-gradient(100deg, rgba(255,255,255,0) 42%, rgba(255,255,255,0.92) 50%,
+                              rgba(255,255,255,0) 58%),
+      var(--tal-grad, linear-gradient(96deg, #ffa24a, #ffd24a));
+    background-size:300% 100%, 200% 100%;
+    background-repeat:no-repeat;
+    background-clip:text; -webkit-background-clip:text;
+    color:transparent; -webkit-text-fill-color:transparent;
+    /* THE EXTRUSION MOVES TO A FILTER, and it has to. A background — even one clipped to the
+       glyphs — is painted BEFORE the text and its shadows, so the five amber text-shadows were
+       landing on top of the band and the heading came out solid amber with the rainbow buried
+       under it. Chained drop-shadows are applied to the element as RENDERED, the clipped
+       background included, and each one shadows the result of the last — so five short steps
+       stack into the same solid wall the text-shadow built, behind the face instead of over it. */
+    text-shadow:none;
+    /* PINK, not amber. The face is a band of all six charms' colours and the wall behind it
+       was orange, which is one of those six — so the heading was a rainbow standing on a piece
+       of itself and the whole thing read warm. Pink is in none of them and sits under the lot. */
+    filter:drop-shadow(0.85px 1px 0 #d64a86) drop-shadow(0.85px 1px 0 #c34379)
+           drop-shadow(0.85px 1px 0 #b03c6d) drop-shadow(0.85px 1px 0 #9d3560)
+           drop-shadow(0.85px 1px 0 #8a2e54);
+    animation:tal-shimmer 7s linear infinite; }
+  @keyframes tal-shimmer { from { background-position:0% 0, 0% 0; }
+                           to   { background-position:100% 0, 100% 0; } }
   /* the shop: him at the top, tucked right under the title, then a tab per category */
   /* No scaling. The width is set INLINE, to whatever the canvas was drawn at, so one canvas
      pixel is one CSS pixel and the tile under him comes out exactly the size of the tile he
@@ -1312,11 +1446,12 @@
      still matters here: it happens to agree today, and would silently stop agreeing the moment
      --btn-h moved. Height loses to min-height, every time. */
   #menu-body .shop-tabs button { width:calc(var(--chq) * 3); min-height:0; height:calc(var(--chq) * 3);
-    padding:4px 0; font-size:8px;
-    letter-spacing:0.2px; border-width:2px; box-shadow:0 3px 0 #0b0918;
+    padding:0; font-size:8px;
+    letter-spacing:0.2px; border-width:2px; box-shadow:0 3px 0 var(--panel-lo);
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
     line-height:1; }
-  #menu-body .shop-tabs button canvas { width:60%; height:auto; aspect-ratio:1; display:block; }
+  /* The icon has the whole square now that the word under it has gone. */
+  #menu-body .shop-tabs button canvas { width:72%; height:auto; aspect-ratio:1; display:block; }
   /* The chosen tab is lit from within. A ring on a square that already has a border was two
      outlines arguing, and at this size the inner one ate the icon. */
   /* The chosen tab goes the SAME green as the equipped item, not a 20% wash of one — "this is
@@ -1461,7 +1596,7 @@
   #menu-body .lvl-map .stop.done { background-color:#2f7a26; color:#eaffe6; }
   #menu-body .lvl-map .stop.done .st { color:#dcffd4; }
   /* where you are standing */
-  #menu-body .lvl-map .stop.here { box-shadow:0 0 0 3px var(--track), 0 4px 0 #0b0918; }
+  #menu-body .lvl-map .stop.here { box-shadow:0 0 0 3px var(--track), 0 4px 0 var(--panel-lo); }
   /* the stepping stones between one level and the next — square, because everything in this
      game is, and small enough that the levels stay the thing you are looking at */
   .lvl-map .step { position:absolute; width:9px; height:9px; transform:translate(-50%,-50%);
@@ -3444,7 +3579,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.19";                    // shown on the title & pause screens
+  const VERSION = "v10.20";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -4545,13 +4680,25 @@
     { id:"cyan",    name:"Shadow",  cost:10, cols:["#000000"] },
     { id:"scarlet", name:"Scarlet", cost:10, cols:["#b3081a"] },
     { id:"rose",    name:"Rose",    cost:10, cols:["#ffd6e8","#ff9ec7","#e0559a"] },
-    // ---- the same ribbon, made to move ----
-    { id:"ripple",  name:"Ripple",  cost:15, cols:["#dffaff","#7fe4ff"],
-      wobble:0.55, freq:0.42, speed:170 },
-    { id:"serpent", name:"Serpent", cost:15, cols:["#173d1d","#5ad46b","#c8ffb0"],
-      wobble:0.85, freq:0.30, speed:260 },
+    // Ripple, Serpent and Morse are GONE. Two ribbons that wobbled down their own length and
+    // one cut into dashes: three variations on the band that were about the band rather than
+    // about him, and the only three whose shape you had to be standing still to read. What is
+    // left is a ribbon, a ribbon that tapers, and things he sheds.
+    //
+    // Nothing else has to change for them to go. lookItem already falls back to the first item
+    // in a category when the worn id is not in it, the rack is built from this list so a dead
+    // id simply does not appear, and wallet.owned keeping one costs nothing. The dash and
+    // wobble branches stay in paintTrail — wobble is still Bubbles' and Static's, and dash is
+    // two lines that a future ribbon can have back.
+    // HIS OWN COLOUR, run out behind him and drawn to a point. No palette of its own: `self`
+    // makes it read the drip you are actually wearing every frame, so it is the runner made
+    // longer rather than a ribbon that happens to match him — change your drip and it follows.
+    // `tip:0` takes the taper all the way to nothing (Comet stops at 0.18 of the band, which
+    // is a wedge, not a point), and `solid` turns off the fade down its length, because a tail
+    // is a thing with an end and not a thing that stops being there.
+    { id:"skin",    name:"Tail",    cost:15, self:true, cols:["#ffffff"],
+      taper:true, tip:0, solid:true },
     { id:"comet",   name:"Comet",   cost:20, cols:["#ffffff","#ffe9a8","#ff9e4d"], taper:true },
-    { id:"morse",   name:"Morse",   cost:20, cols:["#9ad9ff","#2f8fd6"], dash:true },
     // ---- no ribbon at all: what he sheds, left to thin out ----
     { id:"embers",  name:"Embers",  cost:25, style:"dots", cols:["#fff0b8","#ffb03a","#e5482a"],
       dot:0.20, fade:1.6 },
@@ -4643,6 +4790,16 @@
     // everybody who had bought it.
     { id:"flamingo",name:"Hop",       cost:35, leap:2, leapH:0.28, leapHold:0.38, pose:"onefoot",
       swing:0, lift:0, bob:0 },
+    // THE MOONWALK, and it is one number: a NEGATIVE swing. The stride reach is sin(phase) and
+    // the foot lift is cos(phase), a quarter turn apart — which is a walk. Flip the sign of the
+    // reach alone and the two come apart the other way round: the foot that is on the ground is
+    // now the one sweeping backward, and the one in the air is the one returning. He goes on
+    // travelling forward at the same rate, because that is the track's business and not his
+    // legs'. That gap between where he is going and what his feet are doing IS the illusion.
+    //
+    // Everything else is there to keep the feet on the floor, where a slide lives: a quarter of
+    // the usual lift so they skim rather than step, almost no bob, and a shade of lean back.
+    { id:"moon",    name:"Moonwalk",  cost:40, swing:-1.35, lift:0.25, bob:0.25, lean:-0.12 },
     // One whole turn per leap, timed to the flight rather than to the clock: he leaves the
     // ground upright and arrives upright, having gone all the way over in between. Higher and
     // with a longer flight than the others, because a turn needs room to finish.
@@ -4678,6 +4835,14 @@
       const rch = S*0.16;
       g.moveTo(bx - b.w*0.20, by); g.lineTo(bx - b.w*0.20 - rch, by + u*0.72);
       g.moveTo(bx + b.w*0.20, by); g.lineTo(bx + b.w*0.20 + rch, by + u*0.72);
+    } else if ((w.swing == null ? 1 : w.swing) < 0) {
+      // A backward stride drawn as a STILL crosses its own legs — the left foot ends up right
+      // of the right one — which reads as a stumble, not a slide. So the moonwalk's card gets
+      // the pose the still is actually of: both feet trailing behind him, one further back than
+      // the other, which is the shape everybody already has in their head.
+      const rch = S*0.09*Math.abs(w.swing);
+      g.moveTo(bx - b.w*0.20, by); g.lineTo(bx - b.w*0.20 - rch*1.25, by + u*0.94);
+      g.moveTo(bx + b.w*0.20, by); g.lineTo(bx + b.w*0.20 - rch*0.35, by + u);
     } else {
       const rch = S*0.09*(w.swing == null ? 1 : w.swing);
       g.moveTo(bx - b.w*0.20, by); g.lineTo(bx - b.w*0.20 - rch, by + u);
@@ -4981,31 +5146,118 @@
   // one table so the shop, the save format and the drawing all agree on what exists
   // A picture per category for the shop's tab strip. Six tabs across a phone leaves about
   // twenty pixels each, which is not enough for a word — so each draws the thing it sells.
+  // ONE INK. Six tabs, six pictures, and the only thing that should tell them apart is the
+  // shape — a pale blue face beside a near-white shoe beside a five-colour ribbon read as six
+  // different KINDS of thing rather than as one strip of controls. White on the blue plate, and
+  // white still reads on the green one the chosen tab wears.
+  const ICON_INK = "#ffffff";
   const LOOK_ICONS = {
-    drip: (g,S) => { rr2(g, S*0.20, S*0.24, S*0.60, S*0.52, S*0.10); g.fillStyle="#bfe6ff"; g.fill();
-      g.fillStyle="#17263f";
-      g.beginPath(); g.arc(S*0.40, S*0.46, S*0.055, 0, 7); g.arc(S*0.62, S*0.46, S*0.055, 0, 7); g.fill(); },
-    hat: (g,S) => { g.fillStyle="#2b2740";
-      g.fillRect(S*0.14, S*0.58, S*0.72, S*0.10);
-      rr2(g, S*0.30, S*0.24, S*0.40, S*0.36, S*0.04); g.fill(); },
-    trail: (g,S) => { const cols=["#ff595e","#ff924c","#ffca3a","#8ac926","#1982c4"];
-      cols.forEach((c,i)=>{ g.fillStyle=c; g.fillRect(S*0.10, S*0.30 + i*S*0.08, S*0.80, S*0.08); }); },
-    swagger: (g,S) => { g.strokeStyle="#bfe6ff"; g.lineWidth=S*0.10; g.lineCap="round";
-      g.beginPath(); g.moveTo(S*0.30,S*0.28); g.lineTo(S*0.52,S*0.52); g.lineTo(S*0.34,S*0.78); g.stroke();
-      g.beginPath(); g.moveTo(S*0.52,S*0.52); g.lineTo(S*0.74,S*0.72); g.stroke(); },
-    kicks: (g,S) => { g.fillStyle="#f2f4ff";
-      rr2(g, S*0.16, S*0.44, S*0.44, S*0.24, S*0.08); g.fill();
-      rr2(g, S*0.44, S*0.32, S*0.40, S*0.36, S*0.08); g.fill();
-      g.fillStyle="rgba(23,38,63,0.45)"; g.fillRect(S*0.14, S*0.66, S*0.72, S*0.10); },
-    track: (g,S) => { rr2(g, S*0.12, S*0.30, S*0.76, S*0.40, S*0.07); g.fillStyle="#8d86c9"; g.fill();
-      g.fillStyle="#ffcf4d"; g.fillRect(S*0.12, S*0.52, S*0.76, S*0.18);
-      g.fillStyle="#fff2c4"; g.fillRect(S*0.12, S*0.49, S*0.76, S*0.05); },
+    // HIM, square. The corners were rounded, which is the one thing his body is not — and the
+    // eyes are punched OUT rather than painted dark, so the mark stays a single colour.
+    drip: (g,S) => { g.fillStyle = ICON_INK; g.fillRect(S*0.20, S*0.20, S*0.60, S*0.60);
+      g.save(); g.globalCompositeOperation = "destination-out";
+      g.beginPath(); g.arc(S*0.41, S*0.45, S*0.058, 0, 7);
+      g.arc(S*0.62, S*0.45, S*0.058, 0, 7); g.fill();
+      g.restore(); },
+    // Top and bottom on the DRIP's lines — 0.20 to 0.80 — like everything else on the strip.
+    // It stood 0.24 to 0.68 and came out a third shorter than the square beside it, which read
+    // as a smaller icon rather than as a different one. Taller in the crown and thicker in the
+    // brim rather than scaled up whole: matching the height by scaling would have taken the
+    // brim to almost the full width of the tab.
+    hat: (g,S) => { g.fillStyle = ICON_INK;
+      g.fillRect(S*0.14, S*0.68, S*0.72, S*0.12);              // the brim, on the bottom line
+      rr2(g, S*0.30, S*0.20, S*0.40, S*0.48, S*0.04); g.fill(); },   // ...and the crown above it
+    // A ribbon thinning out behind him: solid at the head, gone at the tail. It used to be five
+    // stripes in five colours, which named the Rainbow rather than the category — and a trail's
+    // whole subject is that it FADES. Laid head-right, the way every trail swatch lays one.
+    //
+    // FOUR STRIPES, each at its own strength. Every ribbon in the shop is a band of parallel
+    // stripes and that is the shape the tab should be showing; one flat slab said "a fading
+    // rectangle" where the thing being sold is layered. Differing opacity does the work colour
+    // used to, in the one ink the strip is drawn in. Top and bottom on the drip's lines still,
+    // so four bands means thinner ones rather than a taller mark.
+    trail: (g,S) => {
+      const TOP = S*0.20, BAND = S*0.15, A = [1, 0.72, 0.48, 0.28];
+      for (let i = 0; i < 4; i++) {
+        const gd = g.createLinearGradient(S*0.08, 0, S*0.92, 0);
+        gd.addColorStop(0, "rgba(255,255,255,0)");
+        gd.addColorStop(1, "rgba(255,255,255," + A[i] + ")");
+        g.fillStyle = gd;
+        g.fillRect(S*0.08, TOP + i*BAND, S*0.84, BAND);
+      } },
+    // HIM AGAIN, MID-STRIDE, WALKING RIGHT — which is the way he runs on every board in the
+    // game, so the tab shows the thing it sells doing the thing it does. It was an abstract
+    // chevron, the one picture on the strip that was not something in the game; then it was a
+    // figure with its legs mirrored, which is a stance and not a stride. Nothing in a walk is
+    // symmetrical: one leg is planted ahead of him and the other is behind, still pushing off.
+    swagger: (g,S) => { const w = S*0.36, h = S*0.36, x = S/2 - w/2, y = S*0.16;
+      g.fillStyle = ICON_INK; g.fillRect(x, y, w, h);
+      // ...and he is LOOKING that way. Both eyes forward of the middle of his face, the way
+      // swatchBust already sets them, only further — a face facing you is a face standing still.
+      g.save(); g.globalCompositeOperation = "destination-out";
+      g.beginPath(); g.arc(S/2 + w*0.02, y + h*0.44, S*0.045, 0, 7);
+      g.arc(S/2 + w*0.30, y + h*0.44, S*0.045, 0, 7); g.fill();
+      g.restore();
+      g.strokeStyle = ICON_INK; g.lineWidth = S*0.075; g.lineCap = "round"; g.lineJoin = "round";
+      const by = y + h, u = S*0.20;
+      g.beginPath();
+      // The LEADING leg: knee thrown well forward, shin dropping BACK under it to a planted
+      // foot. The knee has to break the hip-to-foot line to be a knee at all — it used to sit
+      // very nearly on it, which is a leg with a kink rather than a leg with a joint.
+      const fh = S/2 + w*0.18;
+      g.moveTo(fh, by);
+      g.lineTo(fh + S*0.19, by + u*0.46);
+      g.lineTo(fh + S*0.17, by + u);
+      // ...and the TRAILING one, bent the OTHER way — which is the way a knee bends. Its thigh
+      // drops almost straight under the hip and the shin sweeps back from there to a foot still
+      // off the ground, so the joint breaks FORWARD of the hip-to-foot line. Bowing it backward
+      // instead put the knee on the wrong side of the leg: two legs bent the same way are two
+      // legs facing the same way, and only one of them is.
+      const bh = S/2 - w*0.18;
+      g.moveTo(bh, by);
+      g.lineTo(bh - S*0.02, by + u*0.48);
+      g.lineTo(bh - S*0.22, by + u*0.90);
+      g.stroke(); },
+    kicks: (g,S) => { g.fillStyle = ICON_INK;
+      const SW = S*0.15, FL = S*0.13;               // the shaft's width, and how far the foot goes
+      const TOP = S*0.22, ANK = S*0.54, BOT = S*0.72, GAP = S*0.06;
+      const boot = (sx, dir) => {
+        g.fillRect(sx, TOP, SW, ANK - TOP);                            // the shaft
+        g.fillRect(dir < 0 ? sx - FL : sx, ANK, SW + FL, BOT - ANK);   // ...and the foot, out
+      };
+      boot(S/2 - GAP/2 - SW, -1);
+      boot(S/2 + GAP/2,       1); },
+    // A piece of track, pieced the way a track is: four quarter-tiles across and two rows down,
+    // chequered — the same grid the shelf's own cards show — with the colour taken out of it.
+    // It used to be a lilac plaque with a yellow beam across it, which drew ONE track rather
+    // than the idea of one.
+    track: (g,S) => { const n = 4, m = 2, w = S*0.84, q = w/n;
+      const x = (S - w)/2, y = S/2 - (m*q)/2;
+      for (let j = 0; j < m; j++) for (let i = 0; i < n; i++) {
+        // The dark half of the chequer, at 0.60 rather than 0.40. It is a chequer, not a
+        // gap: the two squares should read as two shades of one material, and at 0.40 the
+        // off ones sank most of the way into the plate behind them and the mark came out as
+        // four white squares with holes between them.
+        g.fillStyle = ((i + j) & 1) ? "rgba(255,255,255,0.60)" : ICON_INK;
+        g.fillRect(Math.round(x + i*q), Math.round(y + j*q),
+                   Math.round(q) + 1, Math.round(q) + 1);
+      } },
   };
+  // `pad` is extra room on a shop swatch's canvas, in the 96 units every swatch is written
+  // against — `t` above the drawing, `x` either side of it. The card is not resized: the box
+  // grows around art that goes on being drawn at the size it always was, so the item keeps its
+  // scale and stops being cut off at the edge.
+  //
+  // Only two categories need any. A hat is drawn UP from a head sitting 30% down the card, and
+  // the tall ones go straight off the top of it — the Wizard's peak stands about a quarter of a
+  // card above the edge, and Head on Head and the Halo are not far behind. Swaggers throw a leg
+  // up and out, so they lose the top and one side. Trails and drips deliberately run edge to
+  // edge and must not be inset, which is why this is per category and not a constant.
   const LOOK = [
     { key:"drip",   label:"Drip",    items:SKIN_COLOURS },
-    { key:"hat",    label:"Hat",     items:HATS },
+    { key:"hat",    label:"Hat",     items:HATS,     pad:{ t:30 } },
     { key:"trail",   label:"Trail",   items:TRAILS },
-    { key:"swagger", label:"Swagger", items:SWAGGERS },
+    { key:"swagger", label:"Swagger", items:SWAGGERS, pad:{ t:22, x:18 } },
     { key:"kicks",   label:"Kicks",   items:KICKS },
     { key:"track",   label:"Track",   items:TRACKS },
   ];
@@ -5808,7 +6060,7 @@
     document.getElementById("mech-desc").textContent = si.desc || "";
     const cv = document.getElementById("mech-icon"), g = cv.getContext("2d");
     g.clearRect(0, 0, cv.width, cv.height);
-    withCanvas(g, cv.width, 0, 0, () => coinGlyph(cv.width/2, cv.width/2, cv.width*0.52));
+    withCanvas(g, cv.width, 0, 0, () => coinFlatGlyph(cv.width/2, cv.width/2, cv.width*0.52));
     document.getElementById("mech-tap").textContent = "Tap to continue";
     // ...and the one thing this card has that a mechanic card does not: a door. The tap that
     // presses it must NOT also count as the tap that dismisses the card behind it.
@@ -8941,35 +9193,97 @@
   // the near ones pass in FRONT of the far ones. That crossing is the whole illusion: without
   // it, two ellipses of badges read as a flat pattern rather than as something turning.
   const ATOM_PX = 46, ATOM_MS = 3400;
-  let _atomRaf = 0, _atomPad = null;
+  // ...and the same two rings again, at the size of a PAGE rather than a button — see the
+  // Holy Talismans screen. Everything here is a fraction of its box, so the numbers are a
+  // shape and not a resolution. Wider orbits and a much slower turn: the door has a second and
+  // a half of your attention and this has as long as you want to give it.
+  const ORRERY = {
+    ms:     11000,  // one turn, against the door's 3.4 seconds
+    ring:   0.27,   // both rings' radius, as a fraction of the box
+    home:   0.70,   // where the orbit's middle sits with nothing picked, down the box
+    // THE PLANES TURN TOO, on two clocks of their own and both far slower than the orbit —
+    // and they are held at RIGHT ANGLES to each other while they do it, by construction rather
+    // than by tuning. Three mutually perpendicular axes are turned as one rigid frame; one ring
+    // is drawn round the first and second of them, the other round the first and third. They
+    // therefore share an axis and their normals are perpendicular, at every instant and at
+    // every angle, which is what "two rings at right angles" actually means.
+    //
+    // This replaces a flat squash factor that both rings shared. That was a picture of the
+    // thing: as it opened out the two ellipses grew toward the same circle, so at the top of
+    // its breath the rings LAY ON each other rather than crossing. The tumble is real now, so
+    // one ring can be seen edge-on while the other is wide open, which is the whole reading.
+    planeMs:47000,  // one turn of the frame about its up axis
+    tipMs:  31000,  // ...and one turn about the other, so the tumble never repeats itself
+    charm:  0.105,  // a charm's radius at mid-depth — about the size it is on a tile
+    near:   0.30,   // how much bigger the near side of a ring is than the far
+    zoom:   380,    // ms for one to come to the front, and to go back
+    back:   0.62,   // how far the rest are knocked back while it is out front
+    // ...and what the orbit does to make room for it. The six of them going round is the whole
+    // page while nothing is picked; once something is, they are the CONTEXT for it and should
+    // behave like it — so they gather up and in and get out of the way, and the charm you asked
+    // for comes down into the space that leaves.
+    // Less than it was. The featured charm now sits far enough down the box that the orbit no
+    // longer has to climb out of its way, and at the old 0.28 it went up into the heading.
+    lift:   0.18,   // how far up the orbit's middle goes from home, in box heights
+    shrink: 0.55,   // the orbit's radius, as a fraction of what it was
+    small:  0.62,   // ...and the charms riding it, likewise
+    sit:    1.00,   // where the featured charm ends up, down the box
+    // ROOM FOR THE LIGHT. The glow reaches nearly three radii out from a charm that is already
+    // most of the way down the box, so on a canvas the size of the box it was cut off square at
+    // the bottom and both sides — a light with edges, which is the one thing a light has not
+    // got. The canvas is opened out by these fractions of the box and the drawing pushed across
+    // by the side one; the extra is pulled back out of the layout with a negative margin, so
+    // the column still reserves exactly the box and only the light spills.
+    padX:   0.34,   // extra canvas either side, in box widths
+    padY:   0.72,   // ...and below
+    // ...and how far the caption is pulled back UP into that room. The canvas has to be tall
+    // enough for the light, but the light is nearly all of it transparent — leaving the words
+    // below the whole of it put them a screen away from the charm they are naming. This is the
+    // one number that says how close they sit under it, and it is a fraction of the box like
+    // everything else here so it follows the box on any screen.
+    capUp:  0.44,
+    // ...and it is not a diagram of a charm, it is the charm. It leans a few degrees the way
+    // every heading in the game leans, and breathes on a long clock — the same float the
+    // ceremony holds him in, for the same reason: a thing held still is a picture of a thing.
+    // What each charm drags round behind it. Not a ribbon: a charm is a solid object turning
+    // in the dark, and what says so is a handful of bright grains strung along the path it has
+    // just come down, winking out as they fall behind. Squares, like every other particle in
+    // this game, laid additively in the charm's own colour.
+    // A grain lives well over three seconds now, and there are twice as many of them alive at
+    // once to keep the same spacing along the path — the two go together, because the emission
+    // RATE is tailN/tailMs and lengthening the life alone would have thinned the trail out at
+    // the same moment it was asked to last longer.
+    tailN:  46,     // grains alive behind each charm at once
+    tailMs: 3400,   // ...and how long one lives, from dropped to gone
+    tailSz: 0.30,   // a grain, as a fraction of the charm it came off
+    tailA:  1.00,   // ...and how bright the nearest one is
+    // How far off the path a grain may sit, as a fraction of the charm's own half-breadth. On
+    // the line exactly, they were a dotted rule drawn behind each badge — a charm sheds from
+    // the WHOLE of itself, so they come off anywhere across its face and the trail has width.
+    // Not much width, though: at nearly a full half-breadth, with the drift on top, the grains
+    // strayed far enough from the path to read as debris hanging in the space around the charm
+    // rather than as the wake of one. Under half keeps the trail a trail.
+    tailWide: 0.42,
+    tailDrift: 0.26, // how far a grain wanders over its life, in its charm's own radii
+    glow:   0.95,   // the light behind the one you have picked, in its own colour
+    // ...and each charm leans on a clock of its own while it goes round. They were drawn dead
+    // square, which is the one thing a thing tumbling in space is not: six badges all upright
+    // read as six stickers on two hoops. Out and back rather than round and round, and every
+    // charm out of step with every other, so the set never lines up into a pattern.
+    spinA:  0.22,   // radians it leans, at most — about thirteen degrees either way
+    spinMs: 13000,  // ...and one swing, out and back again
+    tilt:   0.09,   // radians it leans, to the right — about five degrees
+    bob:    0.030,  // how far it floats, in box heights
+    bobMs:  2600,   // ...and one breath, there and back
+  };
+  let _atomRaf = 0;
   function stopAtom() { if (_atomRaf) cancelAnimationFrame(_atomRaf); _atomRaf = 0; }
-  // A locked charm, drained — WITHOUT ctx.filter, which Safari did not have before 17.4 and
-  // silently ignores rather than throwing, so on an older iPhone every charm you had not found
-  // was orbiting in full colour alongside the ones you had.
-  //
-  // The rack already solves this with `source-atop` and a flat fill, but the rack gives each
-  // charm a canvas of its own; these six share one, and a source-atop fill would take every
-  // charm already drawn under it as well. So the locked one is drawn on a scratch canvas, greyed
-  // there where it is the only thing, and stamped back. One drawImage and one fill per locked
-  // charm — no getImageData, nothing read back off the GPU.
-  //
-  // Partial alpha rather than the rack's near-opaque silhouette: this is meant to read as the
-  // same charm with the colour drained out of it, so what is under the grey still shows.
-  function drawCharmDrained(g, S, draw) {
-    if (!_atomPad || _atomPad.width !== S) {
-      _atomPad = document.createElement("canvas");
-      _atomPad.width = _atomPad.height = S;
-    }
-    const pg = _atomPad.getContext("2d");
-    pg.setTransform(1, 0, 0, 1, 0, 0);
-    pg.clearRect(0, 0, S, S);
-    draw(pg);
-    pg.globalCompositeOperation = "source-atop";
-    pg.fillStyle = "rgba(104,108,132,0.80)";
-    pg.fillRect(0, 0, S, S);
-    pg.globalCompositeOperation = "source-over";
-    g.drawImage(_atomPad, 0, 0);
-  }
+  // Nothing draws a charm greyed out any more: an unfound one is TAL_UNKNOWN, a slate
+  // blank with a question mark, which needs no per-charm trick at all. What stood here was
+  // a scratch-canvas drain, written that way because ctx.filter did not exist on Safari
+  // before 17.4 and a source-atop fill on a shared canvas would have taken every charm
+  // already drawn under it. If a drained anything is ever wanted again, that is the shape
+  // of the answer.
   function startAtom(cv) {
     stopAtom();
     const S = cv.width, g = cv.getContext("2d");
@@ -8990,12 +9304,11 @@
       }).sort((a, b) => a.z - b.z);
       for (const p of pts) {
         g.save();
-        // Not yours yet: it still goes round, in grey, so what is missing is as plain as what
-        // is not. A charm left OUT of the orbit would just look like a smaller set.
+        // Not yours yet: it still goes round, as a blank, so what is missing is as plain as
+        // what is not. A charm left OUT of the orbit would just look like a smaller set.
         const size = rad*(0.70 + 0.30*(p.z*0.5 + 0.5));
-        const one = (into) => p.def.draw(into, p.x, p.y, size);
-        if (talUnlocked.has(p.def.id)) one(g);
-        else drawCharmDrained(g, S, one);
+        if (talUnlocked.has(p.def.id)) p.def.draw(g, p.x, p.y, size);
+        else talBadge(g, p.x, p.y, size, TAL_UNKNOWN);
         g.restore();
       }
       _atomRaf = requestAnimationFrame(paint);
@@ -9530,6 +9843,9 @@
     if (outK > 0) {
       const size = Math.min(46, viewW*0.11);
       const inK = (at) => P.ph === "name" ? Math.min(1, Math.max(0, (P.t - at)/260)) : 1;
+      // The ground they stand on, first — under the heading and under the tally, and carried
+      // in and out on the same k, so it is never a dark bar over a map with nothing on it.
+      drawHeadFade(outK);
       // Level with every other header in the game — the Tileverse's, the shop's, the shelf's —
       // rather than a sixth of the way down a screen of its own. See headTextY.
       const hy = headTextY(size);
@@ -9690,11 +10006,19 @@
   // Nothing here decides anything: the wallet was banked in endWin and is already correct. This
   // is the arithmetic being shown rather than announced, which is the whole reason the beat is
   // worth the second and a half it takes.
+  //
+  // THREE PAUSES, and every one of them is there to be read in. This beat is four separate
+  // statements — here is what the chapter got you, here is what you had, here is the first
+  // becoming an amount of money, and here is the sum — and running them together turns four
+  // things you could have read into one thing you watched. Each number below is the gap before
+  // the next statement, and each was roughly half this long: the tally arrived, the purse
+  // arrived under it, the denominator went and the number dropped, all inside a second and a
+  // half, which is not enough time to have understood any of it.
   const PAYOUT = {
     in:    560,    // ms into the beat before "+n" appears — ALONE, with nothing under it yet
-    purse: 300,    // ...and this long after that, the purse it is going into arrives below it
-    hang:  980,    // how long the takings hang there before they drop, measured from `in`
-    ofHold:460,    // ...of which this long is spent reading "n OF t" — the level's own tally
+    purse: 900,    // ...and this long after that, the purse it is going into arrives below it
+    hang:  1850,   // how long the takings hang there before they drop, measured from `in`
+    ofHold:1250,   // ...of which this long is spent reading "n OF t" — the level's own tally
     ofFade:280,    // ...and then the "OF t" goes, leaving the bare number to be paid in
     drop:  170,    // ...and how long it takes to come down, accelerating all the way
     dip:   420,    // the purse's squash after the hit, and its recovery
@@ -10562,6 +10886,26 @@
     ctx.fillStyle = g; ctx.fillRect(0, y0, viewW, h);
     ctx.restore();
   }
+  // ...and the same wash at the HEAD of the frame, for exactly the reason the foot needed one:
+  // #winfadetop is a DOM layer at z-index 33 and the chapter's heading and its purse are painted
+  // into the CANVAS underneath it, so the DOM one would sit on top of the words it is supposed
+  // to be a ground for. Same four stops, turned over.
+  //
+  // Taller than its DOM twin's eleven squares because it has more to cover. Every other header
+  // in the game is one line; this one is two, with the takings and the purse hanging under them,
+  // and a wash that stops before the number is a wash that has left the hardest thing to read
+  // sitting on the bare map.
+  function drawHeadFade(a) {
+    const h = uiGrid() * 15;
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0,    "rgba(5,4,13,0.72)");
+    g.addColorStop(0.30, "rgba(5,4,13,0.58)");
+    g.addColorStop(0.64, "rgba(5,4,13,0.28)");
+    g.addColorStop(1,    "rgba(5,4,13,0)");
+    ctx.save(); ctx.globalAlpha = a == null ? 1 : a;
+    ctx.fillStyle = g; ctx.fillRect(0, 0, viewW, h);
+    ctx.restore();
+  }
   let _uiGrid = 0;
   function uiGrid() {
     if (!_uiGrid) _uiGrid =
@@ -10881,6 +11225,19 @@
   }
 
   // the coin as a flat badge, for the HUD and the shop — no float, no shine, just the shape
+  // The FLAT coin — the one standing on the glass during a level; see hudCoin, which is this
+  // same square and this same pressed panel. coinGlyph lifts its coin off the page with an edge
+  // beneath it and a highlight along its top, which is right for a thing lying on a tile and
+  // wrong for a mark set in a line of type: at eleven pixels the edge is a smudge down one side
+  // and the highlight is a white pixel, and the two of them together just make it look soft.
+  // Every ICON in the game takes this one — the purse, the price on a cell, the price tag, the
+  // shop's own opening card — and the board keeps the other.
+  function coinFlatGlyph(cxp, cyp, s2) {
+    const h = s2/2, ip = s2*0.26;
+    rrect(cxp - h, cyp - h, s2, s2, tileR(s2)); ctx.fillStyle = COIN_FACE; ctx.fill();
+    rrect(cxp - h + ip, cyp - h + ip, s2 - ip*2, s2 - ip*2, tileR(s2 - ip*2));
+    ctx.fillStyle = "#c98d13"; ctx.fill();
+  }
   function coinGlyph(cxp, cyp, s2) {
     const h = s2/2, r = s2*TILE.radius;
     ctx.save();
@@ -11905,8 +12262,34 @@
   // `face`, a shade or two off the real thing, so the object never quite matched the colour
   // the rest of the game used for it. One source now: the metal, its wall and its raised icon
   // are all this, and only the wall is darkened.
+  // A CHARM YOU HAVE NOT FOUND. Not the charm greyed out — a charm greyed out is still the
+  // charm, and showing you the Bell in slate tells you what the Bell looks like before you have
+  // earned the right to know. This is a blank in the same family: the badge every talisman is
+  // built on, in dark slate, with a question mark where the sigil goes. What is withheld is the
+  // design; what is shown is that there IS one, and how many are missing.
+  //
+  // It is a def like any other, so it goes through talBadge and picks up the extrusion, the
+  // grain, the inscribed panel and the raised icon for free — an unfound charm is made of the
+  // same stuff as a found one, which is the whole point of it sitting in the same orbit.
+  const TAL_UNKNOWN = { col:"#4a4d5e",
+    etch:(g,x,y,r)=>{
+      g.lineCap = "butt"; g.lineJoin = "miter"; g.lineWidth = r*0.26;
+      g.beginPath();                                   // over the top and down to the middle
+      g.moveTo(x - r*0.42, y - r*0.34);
+      g.lineTo(x - r*0.42, y - r*0.62);
+      g.lineTo(x + r*0.42, y - r*0.62);
+      g.lineTo(x + r*0.42, y - r*0.08);
+      g.lineTo(x,          y - r*0.08);
+      g.lineTo(x,          y + r*0.22);
+      g.stroke();
+      g.fillRect(x - r*0.13, y + r*0.48, r*0.26, r*0.26); } };   // ...and the dot under it
   const talFace = def => def.col || def.face || "#e8dcc0";
   const talSide = def => tintHex(talFace(def), 0, 1, -TAL_SIDE_SHADE);
+  // How far a badge falls, against everything else the game extrudes. NOT in TAL: that block is
+  // pasted whole between here and talisman-lab.html, and the lab draws its badge with a fixed
+  // offset of its own rather than through extrude — a key it cannot move would be a slider that
+  // does nothing.
+  const TAL_DEEP = 0.62;
   function talBadge(g, x, y, r, def) {
     const s2 = r*1.9, h = s2/2, rad = s2*TILE.radius;
     const rr = (X, Y, W, H, R) => { g.beginPath(); g.moveTo(X+R,Y);
@@ -11916,7 +12299,8 @@
     // ...shaded away by extrude(), the same treatment the headings, the title and the coins
     // wear. It used to be a hand-picked near-black `edge` per charm: six rules where the rest
     // of the game has one.
-    extrude(g, s2, talSide(def), (dx, dy) => { rr(x-h+dx, y-h+dy, s2, s2, rad); g.fill(); });
+    extrude(g, s2, talSide(def), (dx, dy) => { rr(x-h+dx, y-h+dy, s2, s2, rad); g.fill(); },
+            TAL_DEEP);
     rr(x-h, y-h, s2, s2, rad); g.fillStyle = talFace(def); g.fill();
     g.save(); rr(x-h, y-h, s2, s2, rad); g.clip();
     // The same paper the board, the walls and the monsters are printed on. Under the panel,
@@ -15013,6 +15397,86 @@
   // The three fractions below are the old 112px drawing kept as ratios of the box, so the hook
   // goes on standing the same distance above the badge whatever size the charm becomes.
   const PW_PX = 75, PW_CV = PW_PX * 2, PW_CY = 62/112, PW_R = 34/112;
+  // SPENDING A CHARM. It shudders where it hangs, breaks into pieces off the game's own
+  // quarter-tile grid, and the pieces are thrown clear — and only when the last of them has
+  // gone does the button leave the row and the rest close up over the gap. A charm that simply
+  // greys out is still there, and the rack goes on telling you about something you cannot have
+  // for the rest of the level; a charm that breaks is spent, which is what it is.
+  const SMASH = {
+    shake: 260,   // ms of shudder before it goes — the CSS animation is set from this number
+    fly:   460,   // ...and how long the pieces take to leave
+    grid:  5,     // how many pieces across the badge is cut into
+    out:   0.95,  // how hard they are thrown, in canvas widths per second
+    drop:  2.60,  // ...and what gravity does to them, in canvas widths per second squared
+    spin:  0.55,  // ...and how far they turn on the way, in turns per second at most
+  };
+  // The rack closes its gap by FLIP: measure where everything is, do the thing that moves it,
+  // then put each survivor back where it was and let the transition carry it to its new place.
+  // Laying the row out by hand would mean owning the flexbox's arithmetic as well as its own.
+  function flipRack(fn) {
+    const kids = [...powerEl.children];
+    const was = kids.map(k => k.getBoundingClientRect().left);
+    fn();
+    for (const k of [...powerEl.children]) {
+      const i = kids.indexOf(k); if (i < 0) continue;
+      const dx = was[i] - k.getBoundingClientRect().left;
+      if (!dx) continue;
+      k.style.transition = "none";
+      k.style.setProperty("--slide", dx + "px");
+      void k.offsetWidth;                    // ...so the two writes land in two frames, not one
+      k.style.transition = "";
+      k.style.setProperty("--slide", "0px");
+    }
+  }
+  function smashCharm(b) {
+    if (b._smash) return;
+    b._smash = true;
+    const c = b.querySelector("canvas");
+    if (!c) { flipRack(() => b.remove()); return; }
+    const g = c.getContext("2d"), S = c.width;
+    // A copy of the charm exactly as it stands, to be cut up. Redrawing each piece from the
+    // charm's own routine would mean drawing it twenty-five times a frame.
+    const pad = document.createElement("canvas"); pad.width = pad.height = S;
+    pad.getContext("2d").drawImage(c, 0, 0);
+    const N = SMASH.grid, q = S/N, cx = S/2, cy = S*PW_CY;
+    const bits = [];
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      // Thrown away from the middle of the BADGE, not of the canvas — the hook stands above it,
+      // so the canvas's own centre is off the object and everything would leave to one side.
+      let dx = (i + 0.5)*q - cx, dy = (j + 0.5)*q - cy;
+      const d = Math.hypot(dx, dy) || 1;
+      bits.push({ i, j,
+                  vx: dx/d * (0.55 + Math.random()*0.85),
+                  vy: dy/d * (0.55 + Math.random()*0.85) - 0.85,   // ...and up, first
+                  sp: Math.random()*2 - 1 });
+    }
+    b.classList.add("smash");
+    b.style.animationDuration = SMASH.shake + "ms";
+    Sound.smash();
+    const t0 = performance.now();
+    const step = (ts) => {
+      if (!b.isConnected) return;
+      const t = ts - t0;
+      if (t < SMASH.shake) { requestAnimationFrame(step); return; }
+      if (!b.classList.contains("gone")) { b.classList.remove("smash"); b.classList.add("gone"); }
+      const u = (t - SMASH.shake)/1000, k = Math.min(1, (t - SMASH.shake)/SMASH.fly);
+      g.clearRect(0, 0, S, S);
+      for (const bt of bits) {
+        const sx = bt.i*q, sy = bt.j*q;
+        const X = bt.vx*SMASH.out*S*u;
+        const Y = (bt.vy*SMASH.out*u + 0.5*SMASH.drop*u*u)*S;
+        g.save();
+        g.globalAlpha = 1 - k*k;
+        g.translate(sx + q/2 + X, sy + q/2 + Y);
+        g.rotate(bt.sp*SMASH.spin*Math.PI*2*u);
+        g.drawImage(pad, sx, sy, q, q, -q/2, -q/2, q, q);
+        g.restore();
+      }
+      if (k < 1) { requestAnimationFrame(step); return; }
+      flipRack(() => b.remove());
+    };
+    requestAnimationFrame(step);
+  }
   let _rackIds = "";
   function buildPowerRack(ids) {
     powerEl.innerHTML = "";
@@ -15020,6 +15484,9 @@
       const def = talById(id); if (!def) return;
       const b = document.createElement("button");
       b.className = "pw"; b.setAttribute("aria-label", def.name);
+      // Named, not positional. A spent charm is taken OUT of the row — see smashCharm — so the
+      // nth button stopped being the nth id the first time one broke.
+      b.dataset.tal = id;
       // Taller than wide so the hook has somewhere to go: the badge sits low with the loop
       // standing above it, the same object you picked up off the board.
       const c = document.createElement("canvas"); c.width = c.height = PW_CV;
@@ -15055,6 +15522,9 @@
     if (ids.join(",") !== _rackIds) buildPowerRack(ids);
     if (_powerCls !== "on") { powerEl.className = "on"; _powerCls = "on"; }
     const p = state.power;
+    // A fresh level hands every charm back, and the set of ids has not changed — so the usual
+    // rebuild test cannot see it. If nothing has been spent, the row must be whole.
+    if (!p.used.size && powerEl.children.length !== ids.length) buildPowerRack(ids);
     // The fall belongs to the ANKH. He is in the air with the offer open, and that is the one
     // moment the Ankh is worth anything and the one moment nothing else is — so the rack says
     // so: everything else dips out of reach and the Ankh, which has been sitting half-sunk all
@@ -15062,9 +15532,16 @@
     const grace = state.status === "falling" && state.ankhGrace > 0;
     // One is spent per level, so once any has fired they ALL go dim — except the one that is
     // running, which keeps its drain bar, and the Hammer while it waits to be aimed.
-    [...powerEl.children].forEach((b, i) => {
-      const id = ids[i], mine = p.kind === id;
-      const bar = b.lastChild;
+    [...powerEl.children].forEach((b) => {
+      const id = b.dataset.tal, mine = p.kind === id;
+      const bar = b.querySelector(".pw-bar");
+      // Spent, and not yet broken: it goes now. A charm still RUNNING keeps its place until it
+      // has finished — you are watching the thing it does, and taking its own badge apart
+      // underneath you would say it had stopped.
+      const running = mine && p.t > 0;
+      const sitting = id === "brake" && state.rest;
+      if (p.used.has(id) && !running && !sitting) { smashCharm(b); return; }
+      if (b._smash) return;                  // ...and once it is going, nothing else touches it
       // Within reach exactly when it is this moment's charm: the Ankh in the air, everything
       // else on the ground. Written as one comparison so the two can never both be true or
       // both be false — the rule IS that they are opposites.
@@ -15074,10 +15551,9 @@
       // but it IS running, and while it is, its own button is the way out of it. So it gets the
       // live look and the draining bar every other running charm has; a second press that
       // stands him up would otherwise be a thing you had to be told about.
-      const sit = id === "brake" && state.rest;
-      if (sit) { cls = "pw live";
+      if (sitting) { cls = "pw live";
         bar.style.width = Math.max(0, 1 - state.rest.t/restTotal(state.rest))*100 + "%"; }
-      else if (mine && p.t > 0) { cls = "pw live";
+      else if (running) { cls = "pw live";
         bar.style.width = Math.max(0, Math.min(1, p.t / (p.ms || 1)))*100 + "%"; }
       else { bar.style.width = "0"; }
       // ...and out of reach either because it is not this moment's charm, or because it is
@@ -15530,6 +16006,14 @@
   // `band` is how deep the ribbon is (a body, on the board) and `T` the clock the wobble runs
   // on, both passed rather than read so a still card can ask for a still ribbon.
   const TRAIL_SMOOTH = 9;                  // half-window of the smoothing pass, in samples
+  // What a trail is painted in. Everything but one has a palette written down; `self` says
+  // "whatever he is wearing", which can only be answered at the moment of drawing — the shop
+  // lets you try a drip on, and a trail that had cached its colour would go on wearing the old
+  // one on the same card. Falls back to the stock body: a drip can be paint with no flat
+  // colour behind it (see Hollow, which has no body at all).
+  const trailCols = (tr) => tr.self
+    ? [(lookItem("drip") || {}).body || RUNNER.body]
+    : tr.cols;
   function paintTrail(tr, pts, band, T) {
     const N = pts.length;
     const nor = pts.map((p, k) => {
@@ -15537,7 +16021,7 @@
       let tx = b.x - a.x, ty = b.y - a.y; const m = Math.hypot(tx, ty) || 1;
       return { x: -ty/m, y: tx/m };
     });
-    const n = tr.cols.length, sw = band / n;
+    const cols = trailCols(tr), n = cols.length, sw = band / n;
 
     // ---- particles: no ribbon at all, just what he shed, thinning as it ages ----
     if (tr.style === "dots") {
@@ -15553,7 +16037,7 @@
         const r = band * (tr.dot || 0.16) * (tr.grow === false ? 1 : 0.30 + u*0.70);
         if (r < 0.4) continue;
         ctx.globalAlpha = Math.pow(u, tr.fade || 1.3) * 0.92;
-        ctx.fillStyle = tr.cols[k % n];
+        ctx.fillStyle = cols[k % n];
         ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
       }
       ctx.restore();
@@ -15599,7 +16083,10 @@
     // scales the offset toward the tail so the band narrows to nothing behind him.
     const at = (k, off) => {
       const wob = tr.wobble ? Math.sin(k*(tr.freq||0.5) + T/(tr.speed||200)) * band * tr.wobble : 0;
-      const tp  = tr.taper ? (0.18 + 0.82*(k/(N-1))) : 1;
+      // How wide the tail end is, as a fraction of the band. 0.18 by default — Comet's wedge —
+      // and a trail may ask for 0, which brings the two edges together into an actual point.
+      const t0 = tr.taper ? (tr.tip == null ? 0.18 : tr.tip) : 1;
+      const tp  = tr.taper ? (t0 + (1 - t0)*(k/(N-1))) : 1;
       return { x: pts[k].x + nor[k].x*(off*tp + wob), y: pts[k].y + nor[k].y*(off*tp + wob) };
     };
     for (let i = 0; i < n; i++) {
@@ -15607,12 +16094,14 @@
       // antialiased hairline of background between them. Colours differ, so the overlap
       // reads as a blend rather than the dark seam an alpha overlap would give.
       const lo = (i - n/2) * sw - 0.35, hi = (i - n/2 + 1) * sw + 0.35;
-      ctx.fillStyle = tr.cols[i];
+      ctx.fillStyle = cols[i];
       for (let c = 0; c < SEGS; c++) {
         if (tr.dash && (c % 2)) continue;            // every other chunk left out
         const a = Math.round((N-1) * c / SEGS), b = Math.round((N-1) * (c+1) / SEGS);
         if (b <= a) continue;
-        ctx.globalAlpha = Math.pow((c + 1) / SEGS, 1.4) * 0.92;   // oldest end nearly gone
+        // ...unless it is SOLID, which is a tail rather than a wake: it ends because it comes
+        // to a point, not because it has faded out from under itself.
+        ctx.globalAlpha = tr.solid ? 0.92 : Math.pow((c + 1) / SEGS, 1.4) * 0.92;
         ctx.beginPath();
         for (let k = a; k <= b; k++) { const q = at(k, lo);
           if (k === a) ctx.moveTo(q.x, q.y); else ctx.lineTo(q.x, q.y); }
@@ -15648,18 +16137,39 @@
   function cogChip(px, col){
     const c = document.createElement("canvas");
     c.className = "arrow"; c.width = c.height = Math.round(px*2*ICON_SCALE);
-    // A HEAVIER ring: the eye of a cog is a hole for a shaft, not a doughnut, so the metal
-    // takes most of the radius and what is left in the middle is small.
-    const g = c.getContext("2d"), S = c.width, m = S/2, r = S*0.27;
-    g.strokeStyle = col; g.lineWidth = S*0.21; g.lineCap = "butt";
-    g.beginPath(); g.arc(m, m, r, 0, Math.PI*2); g.stroke();
-    for (let i = 0; i < 6; i++) {
-      const a = i*Math.PI/3;
-      g.beginPath();
-      g.moveTo(m + Math.cos(a)*r, m + Math.sin(a)*r);
-      g.lineTo(m + Math.cos(a)*r*1.62, m + Math.sin(a)*r*1.62);
-      g.stroke();
-    }
+    // A SQUARE cog, because everything in this game is a square and a circle in the corner of
+    // it was the one mark that had come from somewhere else. It is built the way the COIN is
+    // built — an outer plate, an inscribed panel a shade darker set in from its edge, and the
+    // shaft's eye punched clean through the middle of both — so the two objects that live at
+    // the top of the Tileverse are made of the same thing. Teeth stand off the middle of each
+    // flat. No rounded corners anywhere: this is the mark that was meant to lose them.
+    const g = c.getContext("2d"), S = c.width, m = S/2;
+    const OUT = S*0.375;      // the plate's half-width
+    const PANEL = S*0.300;    // ...the inscribed panel, set in from it
+    const HOLE = S*0.140;     // ...and the eye, punched through the lot
+    const TOOTH = S*0.105;    // half a tooth's width
+    const TIP = S*0.472;      // ...and how far it reaches, measured from the middle
+    // FOUR teeth, one per flat, rather than the six a round cog carries. Six about a square
+    // cannot be evenly placed — two of them land on corners and read as chips out of the
+    // metal — and four on the axes is what a square gear looks like anyway. Drawn first and
+    // in the plate's own colour, so they are part of the same piece of metal rather than four
+    // things stuck to it.
+    g.fillStyle = col;
+    g.fillRect(m - TOOTH, m - TIP, TOOTH*2, TIP*2);
+    g.fillRect(m - TIP, m - TOOTH, TIP*2, TOOTH*2);
+    g.fillRect(m - OUT, m - OUT, OUT*2, OUT*2);
+    // The panel, as a wash of black over the plate rather than a second colour: `col` arrives
+    // from getComputedStyle as an rgb() string and changes with the screen it is on, so a
+    // darker twin of it cannot be mixed here — but anything laid over it can be dimmed.
+    g.fillStyle = "rgba(0,0,0,0.26)";
+    g.fillRect(m - PANEL, m - PANEL, PANEL*2, PANEL*2);
+    // ...and the eye, taken out of both at once. OPAQUE black: under destination-out it is the
+    // source's ALPHA that says how much is erased, so leaving the panel's 26% fill in place
+    // took away a quarter of the metal and left a darker square where the hole should be.
+    g.globalCompositeOperation = "destination-out";
+    g.fillStyle = "#000";
+    g.fillRect(m - HOLE, m - HOLE, HOLE*2, HOLE*2);
+    g.globalCompositeOperation = "source-over";
     return c;
   }
   // RESTART: a loop that goes round and comes back, with the same head the arrow chip wears.
@@ -15882,7 +16392,7 @@
     // 1.32 is the padding: the coin fills about three quarters of the box it is shown in.
     c.width = c.height = Math.round(px * 1.32 * ICON_SCALE);
     withCanvas(c.getContext("2d"), c.width, 0, 0,
-               () => coinGlyph(c.width/2, c.width/2, px * ICON_SCALE));
+               () => coinFlatGlyph(c.width/2, c.width/2, px * ICON_SCALE));
     return c;
   }
   function walletInto(el, label, px){
@@ -16302,7 +16812,7 @@
 
       const purse = document.createElement("div"); purse.className = "shop-purse";
       const pc = document.createElement("canvas"); pc.width = 34; pc.height = 34;
-      withCanvas(pc.getContext("2d"), 34, 0, 0, () => coinGlyph(17, 17, 26));
+      withCanvas(pc.getContext("2d"), 34, 0, 0, () => coinFlatGlyph(17, 17, 26));
       purse.appendChild(pc);
       const pv = document.createElement("span"); pv.textContent = wallet.tiles;
       purse.appendChild(pv);
@@ -16317,10 +16827,18 @@
       const tabs = document.createElement("div"); tabs.className = "shop-tabs";
       TABS.forEach(catg => {
         const t = document.createElement("button");
-        const ic = document.createElement("canvas"); ic.width = 44; ic.height = 44;
-        catg.icon(ic.getContext("2d"), 44);
-        const lb = document.createElement("span"); lb.textContent = catg.label;
-        t.appendChild(ic); t.appendChild(lb);
+        // 88, not 44. The CSS shows it at 60% of a three-square tab — about 27 points — which
+        // on any screen worth the name is 54 device pixels or more, and a 44-pixel bitmap
+        // stretched over that is soft. Every icon is written in fractions of S, so the number
+        // is a resolution and nothing else; the tab does not change size.
+        const ic = document.createElement("canvas"); ic.width = ic.height = 88;
+        catg.icon(ic.getContext("2d"), 88);
+        // NO WORD under it. Each tab draws the thing it sells — that is what the icons were
+        // made for, back when six words across a phone left twenty pixels each and none of
+        // them was legible anyway. The name stays as the button's label for anything reading
+        // the page aloud, and the icon can now have the whole square.
+        t.setAttribute("aria-label", catg.label);
+        t.appendChild(ic);
         if (catg.key === shopTab) t.className = "on";
         t.onclick = () => { Sound.unlock(); Sound.tap(); buildMenu("shop:" + catg.key); };
         tabs.appendChild(t);
@@ -16357,13 +16875,36 @@
         pr.appendChild(pn);
         // The worn item says so where its price used to be — same slot, so nothing moves.
         if (on) { pr.textContent = "EQUIPPED"; pr.classList.add("equipped"); }
-        else if (have) pr.style.visibility = "hidden";
-        el.appendChild(pr);
-        const sc = document.createElement("canvas"); sc.width = 96; sc.height = 96;
-        if (it.swatch) it.swatch(sc.getContext("2d"), 96);
-        const nm = document.createElement("span");
-        nm.textContent = it.name;
-        el.appendChild(sc); el.appendChild(nm);
+        // Yours, but not on. The slot used to go blank, which read the same as a cell with
+        // nothing to say — and on a shelf where the name has gone, "you already have this" is
+        // the one thing the picture cannot tell you. Cool grey-blue: it is a fact about the
+        // item, not an offer like the gold and not the green of the one you are wearing.
+        else if (have) { pr.textContent = "OWNED"; pr.classList.add("owned"); }
+        // At ICON_SCALE, because the swatch is shown at two thirds of a cell now rather than
+        // at 46% of one — 96 device pixels stretched over 135 was soft the moment it grew. The
+        // transform means every swatch goes on drawing in the 96 units it was written in, and
+        // the category's own `pad` opens the canvas out around it. Sized in CSS by WIDTH, so a
+        // taller box is taller on screen rather than the same height with the art shrunk into
+        // it — which would have been padding that costs exactly what it gives.
+        const SW = 96, pad = cat.pad || {}, px = pad.x || 0, pt = pad.t || 0;
+        const sc = document.createElement("canvas");
+        sc.width  = Math.round((SW + px*2) * ICON_SCALE);
+        sc.height = Math.round((SW + pt) * ICON_SCALE);
+        // ...and the same two numbers go to the CSS, which lays the 96-unit region out where
+        // the icon has always been and hangs the pad off the outside of it.
+        if (px) sc.style.setProperty("--sx", px);
+        if (pt) sc.style.setProperty("--sy", pt);
+        if (it.swatch) {
+          const sg = sc.getContext("2d");
+          sg.setTransform(ICON_SCALE, 0, 0, ICON_SCALE, 0, 0);
+          sg.translate(px, pt);
+          it.swatch(sg, SW);
+        }
+        // ...and no name under it either. A shelf of hats does not need every hat labelled:
+        // the picture IS the thing, at two thirds of a cell, and the name was a line of 10px
+        // type saying what you can already see. It stays on the button for a screen reader.
+        el.setAttribute("aria-label", it.name + (have ? "" : ", " + it.cost + " tiles"));
+        el.appendChild(sc); el.appendChild(pr);
         el.onclick = () => {
           Sound.unlock();
           if (have) { shopPreview = null; wearLook(cat.key, it.id); Sound.tap(); }
@@ -16400,64 +16941,284 @@
       // Two lines. It is the longest heading in the game and at 46px it ran the whole width of
       // a phone with its tilt carrying the last letters off the edge; stacked, it sits inside
       // the screen and matches TILE RUNNER's own two-line treatment on the pause menu.
-      title.innerHTML = "Holy<br>Talismans"; title.className = "shop big amber";
+      title.innerHTML = "Holy<br>Talismans"; title.className = "shop big amber rainbow";
+      const live = TALISMANS.filter(talLive);
+      // The heading's own colours ARE the charms', read off the same faces the badges take —
+      // laid down twice so the band can loop without a seam. See #menu-title.rainbow.
+      {
+        const cols = live.map(t => talFace(t));
+        const stops = cols.concat(cols, cols[0]);
+        title.style.setProperty("--tal-grad", "linear-gradient(96deg," + stops.map(
+          (c, i) => c + " " + (i*100/(stops.length - 1)).toFixed(2) + "%").join(",") + ")");
+      }
       const worn = settings.talisman;
-      const grid = document.createElement("div"); grid.className = "relic-grid";
-      TALISMANS.filter(talLive).forEach((t, i) => {
-        const got = talUnlocked.has(t.id), on = got && worn === t.id;
-        const el = document.createElement("div");
-        el.className = "relic" + (on ? " on" : "") + (got ? "" : " locked");
-        // THE SIZE IT IS ON THE BOARD. A charm lies on a tile at cell * 0.26 — see
-        // drawTalismanCell — and this shelf was drawing it at a flat 40 into a 150 box scaled by
-        // CSS to whatever --relic came out at, so the thing you are looking at on the shelf and
-        // the thing you pick up in a level were two different sizes on the same screen.
-        // playCell rather than `cell`, for the reason the shop's tile uses it: this page is
-        // reached from the Tileverse, where the win sequence's pull-back has left `cell` wound
-        // down to a fraction of what a level runs at.
+      const wrap = document.createElement("div"); wrap.className = "orrery";
+      // Square, and as wide as the page will let it be — the orbits are the point, so the box
+      // is sized to the room rather than the charms sized to a box. Capped against the VIEWPORT
+      // too, because the heading above and DONE below are both pinned and a tall orrery on a
+      // short phone would go under one of them.
+      const BOX = Math.round(Math.min(viewW * 0.86, viewH * 0.46));
+      const PX = Math.round(BOX * ORRERY.padX), PY = Math.round(BOX * ORRERY.padY);
+      const c = document.createElement("canvas");
+      c.width  = Math.round((BOX + PX*2) * ICON_SCALE);
+      c.height = Math.round((BOX + PY)   * ICON_SCALE);
+      c.style.width  = (BOX + PX*2) + "px";
+      c.style.height = (BOX + PY)   + "px";
+      // The side spill comes straight back out of the flow: the orrery column is BOX wide and
+      // stays BOX wide, and the light simply passes over whatever is beside it. The bottom
+      // spill is LEFT in, because that is the room the caption should be sitting below.
+      c.style.marginLeft = c.style.marginRight = -PX + "px";
+      const cap = document.createElement("div"); cap.className = "orrery-cap";
+      cap.style.marginTop = -Math.round(BOX * ORRERY.capUp) + "px";
+      const nm = document.createElement("b"), bl = document.createElement("i");
+      const hint = document.createElement("span"); hint.className = "hint";
+      hint.textContent = "Tap a talisman";
+      cap.appendChild(hint); cap.appendChild(nm); cap.appendChild(bl);
+      wrap.appendChild(c); wrap.appendChild(cap);
+      menuBody.appendChild(wrap);
+
+      // One out front, and everything else still going round behind it. `cur` is kept while it
+      // retreats as well, so letting go of a charm plays backwards instead of blinking it away.
+      // `named` is what the WORDS are about and `cur` is what is being DRAWN, and they are not
+      // the same thing for the third of a second a charm spends going back: the caption should
+      // leave with the tap that dismissed it, while the charm is still on its way home.
+      let cur = null, named = null, want = 0, kk = 0, last = 0, pts = [];
+      // The heading's extrusion, in whatever colour it is being asked to wear: the same five
+      // steps at the same offsets the gold one uses, walked down from the face rather than
+      // written out. Offsets and depths taken off #menu-title's own shadow so a charm's name
+      // is built like every other heading in the game and not merely coloured like one.
+      const headRamp = (face) => [56, 70, 84, 98, 112].map((d, i) =>
+        (0.85*(i+1)).toFixed(2) + "px " + (i+1) + "px 0 " + shadeHex(face, -d)).join(",");
+      const say = () => {
+        const got = named && talUnlocked.has(named.id);
+        hint.style.display = named ? "none" : "";
+        nm.textContent = named ? (got ? named.name : "???") : "";
+        bl.textContent = named && got ? (named.blurb || "") : "";
+        // ...and it is the CHARM'S colour, not the game's gold. Every other heading names a
+        // screen and gold is what a screen's name is; this one names an object that already
+        // has a colour, and the badge turning below it is wearing it.
         //
-        // The box keeps the proportions it always had — 3.75 radii across, the charm's centre
-        // 2.05 down — so the hook above it and the room to turn in are unchanged.
-        const R = playCell() * 0.26;
-        const BOX = Math.round(R * 3.75);
-        const c = document.createElement("canvas");
-        c.width = c.height = Math.round(BOX * ICON_SCALE);
-        c.style.width = c.style.height = BOX + "px";
-        c.style.setProperty("--tilt", TAL_TILT[i % TAL_TILT.length] + "deg");
-        const g = c.getContext("2d");
-        // Each hangs on its own bob, offset so the five drift out of step with one another —
-        // a row of them rising and falling together reads as one object, not five.
-        const paint = (ts) => {
-          g.setTransform(1, 0, 0, 1, 0, 0);
-          g.clearRect(0, 0, c.width, c.height);
-          g.setTransform(ICON_SCALE, 0, 0, ICON_SCALE, 0, 0);   // ...then draw in CSS pixels
-          const y = R*2.05 + Math.sin(ts/900 + i*1.3) * R*0.125;
-          g.save();
-          talHook(g, BOX/2, y, R, t);
-          t.draw(g, BOX/2, y, R);
-          if (!got) {                                  // not found yet: a flat silhouette
-            g.globalCompositeOperation = "source-atop";
-            g.fillStyle = "rgba(120,124,150,0.88)"; g.fillRect(0, 0, BOX, BOX);
-          }
-          g.restore();
+        // The colour is given whether you have found it or not: "???" over a slate blank says
+        // only that something is missing, and "???" in the Bell's violet says WHICH something.
+        // It is the one thing about an unfound charm worth telling you — the light behind it is
+        // already its own, so withholding it from the word was the odd one out.
+        const face = named ? talFace(named) : null;
+        nm.style.color = face || "";
+        nm.style.textShadow = face ? headRamp(face) : "";
+      };
+      say();
+      // S is still the geometry: every fraction in ORRERY is of the BOX, not of the canvas the
+      // box is now drawn in the middle-top of. `off` is how far across that box starts.
+      const g = c.getContext("2d"), S = Math.round(BOX * ICON_SCALE);
+      const off = Math.round(PX * ICON_SCALE);
+      // TWICE the size it lies on a tile at. On the board a charm is one thing among many and
+      // 0.26 of a cell is all the room it can have; this is the page you come to LOOK at them,
+      // where it is the only thing on screen and can be the size of the thing rather than the
+      // size of the slot. The number is still written against drawTalismanCell's, so the two
+      // cannot drift — it is that, doubled, and says so.
+      const orreryFrontR = () => playCell() * 0.26 * 2 * ICON_SCALE;
+      const paint = (ts) => {
+        const dt = last ? Math.min(120, ts - last) : 16; last = ts;
+        // Exponential, so it arrives without a snap at either end and does not care what the
+        // frame rate is. Everything else here is a function of kk.
+        kk += (want - kk) * (1 - Math.exp(-dt / (ORRERY.zoom / 3)));
+        if (want === 0 && kk < 0.004) { kk = 0; cur = null; }
+        g.clearRect(0, 0, c.width, c.height);
+        // Everything about the orbit is a function of kk: as a charm comes out, the ring rises,
+        // draws in and shrinks, all on the one clock that carries the charm down.
+        const mid = off + S/2;
+        const cy  = S*(ORRERY.home - ORRERY.lift*kk);
+        const R   = S*ORRERY.ring  * (1 - (1 - ORRERY.shrink)*kk);
+        const rad = S*ORRERY.charm * (1 - (1 - ORRERY.small)*kk);
+        const t = (ts % ORRERY.ms)/ORRERY.ms;
+        // The same two crossed rings the door draws — one lying flat, one standing up, three
+        // charms to each, the sine of the angle serving as depth for both so they share one
+        // near-and-far clock. Wider and slower than the door's: that is a button and this is
+        // the page it opens.
+        // WHERE A CHARM IS, at any moment you care to ask about. Written as a function of the
+        // time rather than of this frame, because the glitter behind it is the same question
+        // asked about a second and a half ago — one routine, so a grain can never fall off the
+        // path the charm actually took.
+        //
+        // THE FRAME. Three unit axes, mutually perpendicular, turned together — about the up
+        // axis on one clock and about the across axis on another. u is shared by both rings and
+        // the ring's own second axis is v or w, so the two planes meet along u and their normals
+        // are w and v, which are perpendicular. Nothing here can put them out of square.
+        const place = (tx, i) => {
+          const al = tx/ORRERY.planeMs*Math.PI*2, be = tx/ORRERY.tipMs*Math.PI*2;
+          const ca = Math.cos(al), sa = Math.sin(al), cb = Math.cos(be), sb = Math.sin(be);
+          const u = [ ca, sa*sb, -sa*cb ];
+          const ring = i % 2, k = (i - ring)/2;
+          const o = ring ? [ sa, -ca*sb, ca*cb ] : [ 0, cb, sb ];
+          const th = ((tx % ORRERY.ms)/ORRERY.ms)*Math.PI*2 + k*(Math.PI*2/3) + ring*(Math.PI/3);
+          const cs = Math.cos(th), sn = Math.sin(th);
+          // Round the circle in its own plane, in three dimensions, and then simply looked at:
+          // x and y are where it is on screen, z is how near it is and does the sorting and the
+          // sizing exactly as the old sine did.
+          const z = u[2]*cs + o[2]*sn;
+          return { x: mid + R*(u[0]*cs + o[0]*sn),
+                   y: cy  + R*(u[1]*cs + o[1]*sn), z,
+                   r: rad*((1 - ORRERY.near) + ORRERY.near*(z*0.5 + 0.5)) };
         };
-        el.appendChild(c);
-        const nm = document.createElement("span"); nm.textContent = got ? t.name : "???";
-        const bl = document.createElement("i"); bl.textContent = got ? t.blurb : "";
-        el.appendChild(nm); el.appendChild(bl);
-        if (got) el.onclick = () => { Sound.unlock(); Sound.tap();
-          settings.talisman = (worn === t.id) ? null : t.id; saveSettings(); buildMenu("talismans"); };
-        grid.appendChild(el);
-        relicPainters.push(paint);
+        void t;
+        pts = live.map((def, i) => Object.assign({ def, i }, place(ts, i)))
+                  .sort((a, b) => a.z - b.z);
+        // ---- the glitter, all of it under all of them -------------------------------------
+        // Additive and in each charm's own colour, so where two tails cross they brighten
+        // rather than one painting over the other — which is what a handful of sparks does.
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        for (const p of pts) {
+          const face = talFace(p.def);
+          // The one being featured is LEAVING its orbit, and its grains are still on it; they
+          // go out as it goes, rather than hanging behind as a tail attached to nothing.
+          // NOTHING sheds off a charm you have not found. It is a blank going round, not an
+          // object — and glitter coming off it would be the one thing on the page saying there
+          // is something there to see.
+          if (!talUnlocked.has(p.def.id)) continue;
+          const own = (cur && p.def.id === cur.id) ? (1 - kk) : 1;
+          // EACH GRAIN IS DROPPED AND LEFT. The trick is the birth time: it is quantised to a
+          // repeating schedule — one grain every `step`, each living `life` — so for the whole
+          // of a grain's life the time it asks `place` about does not move, and neither does
+          // the grain. Before, the age was fixed per slot and the birth slid forward with the
+          // clock, which meant every grain travelled along with the charm: a rigid tail bolted
+          // to its back rather than a wake it had left. When a grain's life runs out it is born
+          // again at wherever the charm has got to, which is what an emitter does.
+          const life = ORRERY.tailMs, step = life/ORRERY.tailN;
+          const hs = (n) => { const x = Math.sin(n*127.1 + 311.7)*43758.5453;
+                              return (x - Math.floor(x))*2 - 1; };
+          for (let j = 0; j < ORRERY.tailN; j++) {
+            const cyc = Math.floor((ts - j*step)/life);
+            const birth = cyc*life + j*step;
+            const u = (ts - birth)/life;              // 0 just dropped, 1 gone
+            const fade = 1 - u;
+            // Each grain winks on its own clock — a tail at one brightness is a smear. Squared
+            // rather than cubed, and off a floor rather than off nothing: they all stay lit and
+            // it is the RATE that varies, which glitters.
+            const tw = 0.55 + 0.45*Math.pow(Math.abs(Math.sin(ts/240 + p.i*2.1 + j*1.7)), 2);
+            // LINEAR, not squared. Squared spends most of a grain's life near black — it was
+            // gone long before it was over, so what you saw was a short trail behind a long
+            // one you could not see. Straight down means it is still there most of the way.
+            const a = ORRERY.tailA * fade * tw * own;
+            if (a < 0.012) continue;
+            const q = place(birth, p.i);              // where it was dropped, and stays
+            // Scattered across the charm's breadth rather than threaded along its centre — a
+            // charm sheds from the whole of itself — and then wandering a little as it ages.
+            // The hash keys on the CYCLE as well as the slot, so a grain reborn is a new grain
+            // in a new place rather than the same one blinking.
+            const seed = p.i*13 + j*7.3 + cyc*3.1;
+            const sp = q.r * ORRERY.tailWide;
+            const dr = q.r * ORRERY.tailDrift * u;
+            const gx = q.x + hs(seed)*sp     + hs(seed + 41)*dr;
+            const gy = q.y + hs(seed + 99)*sp + hs(seed + 63)*dr;
+            const sz = q.r * ORRERY.tailSz * (0.45 + 0.55*fade);
+            g.globalAlpha = a; g.fillStyle = face;
+            g.fillRect(gx - sz/2, gy - sz/2, sz, sz);
+          }
+        }
+        g.restore();
+        // A charm's own lean at this moment. Its index is the phase, so the six of them are
+        // never at the same angle at the same time.
+        const lean = (i) => Math.sin(ts/ORRERY.spinMs*Math.PI*2 + i*1.7) * ORRERY.spinA;
+        for (const p of pts) {
+          if (cur && p.def.id === cur.id) continue;     // it is drawn last, over everything
+          g.save();
+          // Knocked back while one is out front, so what you asked for is the only thing in
+          // focus — but still turning, because the set is what the page is.
+          g.globalAlpha = 1 - ORRERY.back*kk;
+          // Turned about its OWN centre, which is what lets the drained pass come along for
+          // the ride: the pad holds nothing but this charm, so rotating the pad about that
+          // point rotates the charm in place.
+          g.translate(p.x, p.y); g.rotate(lean(p.i)); g.translate(-p.x, -p.y);
+          if (talUnlocked.has(p.def.id)) p.def.draw(g, p.x, p.y, p.r);
+          else talBadge(g, p.x, p.y, p.r, TAL_UNKNOWN);
+          g.restore();
+        }
+        if (cur) {
+          const p = pts.find(q => q.def.id === cur.id) || { x:mid, y:cy, r:rad };
+          const e = kk*kk*(3 - 2*kk);
+          // THE SIZE IT IS ON A TILE. A charm lies on the board at cell * 0.26 — see
+          // drawTalismanCell — and this is the page you look at them on, so it should be the
+          // size you actually pick one up. playCell rather than `cell`, for the reason the
+          // shop's figure uses it: this page is reached from the Tileverse, where the win
+          // sequence's pull-back has left `cell` wound down to a fraction of a level's.
+          const x = p.x + (mid - p.x)*e, y = p.y + (S*ORRERY.sit - p.y)*e;
+          const r = p.r + (orreryFrontR() - p.r)*e;
+          // The lean and the float both scale with e, so they arrive as it does rather than
+          // switching on when it lands. Rotated about its OWN centre — which is why the drained
+          // pass still works: the pad holds nothing but this charm, so turning the whole pad
+          // about that point turns the charm in place.
+          const yy = y + Math.sin(ts/ORRERY.bobMs*Math.PI*2) * S*ORRERY.bob * e;
+          // ...and the light it is standing in, its own colour and nothing else's. Additive, so
+          // it lifts the cosmos behind it rather than laying a disc of paint over it, and keyed
+          // to e so it comes up with the charm instead of switching on beneath it.
+          {
+            const face = talFace(cur), RG = r*2.9;
+            const gd = g.createRadialGradient(x, yy, r*0.15, x, yy, RG);
+            gd.addColorStop(0,    hexA(face, 0.95));
+            gd.addColorStop(0.34, hexA(face, 0.40));
+            gd.addColorStop(1,    hexA(face, 0));
+            g.save();
+            g.globalCompositeOperation = "lighter";
+            g.globalAlpha = ORRERY.glow * e;
+            g.fillStyle = gd;
+            g.beginPath(); g.arc(x, yy, RG, 0, Math.PI*2); g.fill();
+            g.restore();
+          }
+          // ...and its lean EASES from the drift it had in the orbit to the one it holds out
+          // front, on the same e as everything else, so it does not snap upright on the way
+          // down and back into step on the way home.
+          const idx = pts.findIndex(q => q.def.id === cur.id);
+          const ang = lean(idx < 0 ? 0 : pts[idx].i)*(1 - e) + ORRERY.tilt*e;
+          g.save();
+          g.translate(x, yy); g.rotate(ang); g.translate(-x, -yy);
+          if (talUnlocked.has(cur.id)) cur.draw(g, x, yy, r);
+          else talBadge(g, x, yy, r, TAL_UNKNOWN);
+          g.restore();
+        }
+      };
+      // A tap lands on whatever charm is nearest it, and on nothing if it is nowhere near one.
+      // The test uses the LAST FRAME'S positions, which is what was under your thumb — the
+      // charm has moved a pixel by the time the event is handled, and testing against where it
+      // has got to would be testing against something you never saw.
+      c.addEventListener("pointerdown", (ev) => {
+        const b = c.getBoundingClientRect(), k = c.width / (b.width || 1);
+        const px = (ev.clientX - b.left)*k, py = (ev.clientY - b.top)*k;
+        let hit = null, best = Infinity;
+        for (const p of pts) {
+          const d = Math.hypot(px - p.x, py - p.y);
+          if (d < p.r*1.45 && d < best) { best = d; hit = p.def; }
+        }
+        Sound.tap();
+        // WHILE ONE IS OUT FRONT, a tap anywhere puts it back — on the charm itself, on one of
+        // the five still going round, on the empty dark between them. Swapping straight from
+        // one to another sounds tidier and is not: the five behind are the context for the one
+        // you are reading, they have gathered up and shrunk to say so, and letting them be
+        // pressed makes them controls again. One thing at a time, and the way out of it is
+        // anywhere.
+        if (want) { want = 0; }
+        else if (hit) { cur = hit; want = 1; kk = Math.min(kk, 0.001); }
+        // The featured charm is the worn one too — a pendant on his cord, which is all this
+        // page has ever set. Nothing out front, nothing worn.
+        named = want ? cur : null;
+        settings.talisman = (named && talUnlocked.has(named.id)) ? named.id : null;
+        saveSettings();
+        say();
       });
-      menuBody.appendChild(grid);
+      relicPainters.push(paint);
       // No tally. It counted against TALISMANS.length, which includes the ones held back, so it
-      // could never reach its own total — and a shelf of charms says how many you have by being
-      // a shelf with gaps in it.
+      // could never reach its own total — and a display of the six says how many you have by
+      // being a display with grey ones in it.
       const back = btn("Done", menuBack, true);
       back.className = "shop-go";
       labelWithArrow(back, "Done");     // the button was built as Done and then relabelled Back
       menuBody.appendChild(back);
       startRelics();
+      // It opens as an ORRERY every time, even if you were reading one of them last visit.
+      // What the page is FOR is the six of them going round each other; coming back to find
+      // one already parked over the middle of it would be answering a question nobody has
+      // asked yet. `worn` is still what a tap sets — see the handler.
+      void worn;
       return;
     }
     // ---- Debug: the levers you want while building the thing, kept off the main menu ----
@@ -18531,8 +19292,12 @@
     }
     return ramp;
   }
-  function extrude(g, size, col, paint) {
-    const d = Math.max(2, Math.round(size * EXTRUDE)), ramp = extrudeRamp(col, d);
+  // `deep` scales the fall for one caller without moving it for the rest. The talismans take
+  // it: they are the smallest extruded objects in the game and at the shared depth the wall
+  // under a badge was reading as most of the badge.
+  function extrude(g, size, col, paint, deep) {
+    const d = Math.max(2, Math.round(size * EXTRUDE * (deep == null ? 1 : deep)));
+    const ramp = extrudeRamp(col, d);
     for (let i = d; i >= 1; i--) { g.fillStyle = ramp[i]; paint(i * EXTRUDE_LEAN, i); }
   }
   // `face` and `side` are optional and default to the game's gold. The one caller that passes
