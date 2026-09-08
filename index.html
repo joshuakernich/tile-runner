@@ -391,7 +391,14 @@
      CENTRED on the screen rather than on the space left over — a heading that shifts left by
      half a cog is a heading nobody centred — so it is padded by the cog's own width on both
      sides, and sized to whatever room that leaves it. */
-  #wintop .wintop-head { position:relative; display:flex; align-items:flex-start;
+  /* ...and it sits ABOVE both doors' grounds. Each door pours a radial wash 150vw wide and
+     62vh tall out of a ::before, which is behind ITS OWN button (isolation:isolate) but in
+     front of everything painted earlier in the strip — and the heading is painted earlier,
+     being the first row. So the name of the place was being read through two overlapping
+     pools of the same dark that is there to make the doors legible. A z-index here lifts the
+     whole head row clear of both, and of the top fade under the strip: the heading is the one
+     thing on this screen that stands on nothing. */
+  #wintop .wintop-head { position:relative; z-index:2; display:flex; align-items:flex-start;
     justify-content:center; }
   /* Right into the corner, a grid square outside the strip's own padding: it is the one
      control here that is not about where you are going, and it should sit out of the way of
@@ -3545,6 +3552,41 @@
       og.gain.exponentialRampToValueAtTime(0.14, t + RUN*0.6);
       vxOsc.connect(og); og.connect(master); og.connect(sendBus); vxOsc.start(t);
     }
+    // WHAT IS LEFT WHEN THE NOISE STOPS. The vortex is a roar sweeping upward; this is the
+    // opposite of it and the thing that comes after it — three sawtooths a few cents apart at
+    // the very bottom of hearing, so slow against each other that what you hear is not a chord
+    // but a breathing, under a lowpass that opens by a hair and shuts again on a ten-second
+    // cycle. Nothing about it resolves and nothing about it arrives. It is the sound of being
+    // looked at.
+    let thrSrc = null, thrGain = null;
+    function thrum(on){
+      if (!ac || ac.state !== "running") return;
+      if (!on) {
+        if (thrGain) thrGain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.9);
+        const olds = thrSrc;
+        setTimeout(() => { try { (olds || []).forEach(o => o.stop()); } catch(_){} }, 3200);
+        thrSrc = null; return;
+      }
+      if (thrSrc || muted) return;
+      const t = ac.currentTime;
+      thrGain = ac.createGain();
+      thrGain.gain.setValueAtTime(0.0001, t);
+      thrGain.gain.exponentialRampToValueAtTime(0.34, t + 2.6);   // it arrives slowly, or it is a noise
+      thrGain.connect(master); thrGain.connect(sendBus);
+      const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.Q.value = 3.2;
+      lp.frequency.value = 190;
+      lp.connect(thrGain);
+      const sweep = ac.createOscillator(), sg = ac.createGain();  // the breath, ten seconds long
+      sweep.frequency.value = 0.1; sg.gain.value = 60;
+      sweep.connect(sg); sg.connect(lp.frequency); sweep.start(t);
+      thrSrc = [sweep];
+      // 36Hz is under the note and into the beat: it is felt on a phone rather than heard.
+      for (const det of [-7, 0, 6]) {
+        const o = ac.createOscillator(); o.type = "sawtooth";
+        o.frequency.value = 36; o.detune.value = det;
+        o.connect(lp); o.start(t); thrSrc.push(o);
+      }
+    }
     // One bite. A short band of noise for the splintering, under a fast falling thud for the
     // weight of the two halves meeting. Dry — no reverb send: it is happening on the board,
     // not in a hall.
@@ -3816,7 +3858,7 @@
     }
     function isMuted() { return muted; }
     return { unlock, clearTile, smash, charmBreak, charmGrow, coinSpill, roar, win, lose, fall, death, boost, slow, coin, coinBank, coinSlam, key, doorOpen,
-             slide, clack, tap, tapBig, power, warp, vortex, crunch, growl, trapWind,
+             slide, clack, tap, tapBig, power, warp, vortex, thrum, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck, choir,
              ambient,
              swish, introGather, introFlash, rumble, flap, life, claim, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
@@ -3845,7 +3887,17 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.22";                    // shown on the title & pause screens
+  // ...except inside a closed circuit, which is not a level being played any more. There the
+  // ramp COMPOUNDS — every clear adds another RAMP_PER_TILE to the step itself, so a loop
+  // that begins as a gentle quickening is a scream inside a minute — and it is allowed to run
+  // to a pace no level would ever ask for before the world lets go.
+  //
+  // TEN. It was four, which is fast but is still a runner running. Ten is a smear, and it has
+  // to be: the point of the circuit is that it has stopped being a game and become a thing
+  // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
+  // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
+  const LOOP_MAX_CPS  = 10.0;
+  const VERSION = "v10.23";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -5072,9 +5124,15 @@
     // travelling forward at the same rate, because that is the track's business and not his
     // legs'. That gap between where he is going and what his feet are doing IS the illusion.
     //
-    // Everything else is there to keep the feet on the floor, where a slide lives: a quarter of
-    // the usual lift so they skim rather than step, almost no bob, and a shade of lean back.
-    { id:"moon",    name:"Moonwalk",  cost:40, swing:-1.35, lift:0.25, bob:0.25, lean:-0.12 },
+    // ...and the RETURNING foot is a real step. The sliding foot stays down — that is the half
+    // of the walk that sells it — but the other one comes right up, rolls onto its toe as it
+    // leaves the floor, and swings through to land in front. It used to skim at a quarter of the
+    // usual lift, which made the two feet the same thing going opposite ways; a moonwalk is a
+    // slide and a step happening at once. `liftLead` is what puts the lift BEFORE the swing —
+    // the foot is already off the floor and pointed by the time it travels — and `toe` is the
+    // one thing on this runner that is a foot rather than the end of a leg.
+    { id:"moon",    name:"Moonwalk",  cost:40, swing:-1.35, lift:1.30, bob:0.25, lean:-0.12,
+      liftLead:0.62, toe:0.052, toeDrop:1.25 },
     // One whole turn per leap, timed to the flight rather than to the clock: he leaves the
     // ground upright and arrives upright, having gone all the way over in between. Higher and
     // with a longer flight than the others, because a turn needs room to finish.
@@ -6651,7 +6709,27 @@
     }
     return pts[pts.length-1];
   }
-  const surfaceAtTile = (i, u) => samplePolyline(tileSurface(state.path[i], state.path[i-1], state.path[i+1]), u);
+  // WHAT COMES AFTER A NODE, and on a closed circuit the answer is not "nothing". The front of
+  // the track has no next node — the path is only ever the live stretch — so tileSurface falls
+  // back to running the surface straight out the far side, which is the honest guess for a tile
+  // whose front is a junction. Once the track has joined up with itself it is not a guess and it
+  // is not a junction: the cell he goes to next is the one that closes the ring, which is L-1
+  // steps back down the path he came in on.
+  //
+  // Checked for adjacency before it is believed. The circuit is found by comparing two laps of
+  // history and is right, but this is geometry rather than bookkeeping, and a node that is not
+  // touching would put a quarter-circle across half the board.
+  function nextNode(i) {
+    const p = state.path;
+    if (p[i+1]) return p[i+1];
+    const L = (state.loop && state.loop.closed) ? state.loop.len : 0;
+    const q = (L > 1 && i - (L - 1) >= 0) ? p[i - (L - 1)] : null;
+    if (!q) return undefined;
+    return (Math.abs(q.c - p[i].c) + Math.abs(q.r - p[i].r)) === 1 ? q : undefined;
+  }
+  // ...and BOTH the drawing and his own movement read it, because they are the same polyline:
+  // the curve he is carried round is the curve you can see him standing on.
+  const surfaceAtTile = (i, u) => samplePolyline(tileSurface(state.path[i], state.path[i-1], nextNode(i)), u);
   // position along the whole route at fractional node index `param`
   function visualAt(param) {
     const len = state.path.length;
@@ -7298,7 +7376,10 @@
       // that swap happened silently between two frames. A short flash on the cell carries the
       // eye across it. Only mid-run: at level load a whole starting chain links at once, and
       // half a dozen flashes on the opening frame is a fault, not a flourish.
-      if (s.status === "play") spawnLaidFlash(t.c, t.r);
+      // ...but not once the track has closed on itself. Then it is the SAME three or four
+      // tiles going round again, several times a second by the end, and the flashes stacked
+      // into one solid white square sitting over the loop.
+      if (s.status === "play" && !(s.loop && s.loop.closed)) spawnLaidFlash(t.c, t.r);
       s.path.push({ c: t.c, r: t.r, kind: "tile", tileId: t.id });
       linked = true;
     }
@@ -7403,11 +7484,15 @@
       // whole route, so the whole route has to be remembered as it happens.
       s.walked.push({ c: now.c, r: now.r });
       if (s.goal && now.c === s.goal.c && now.r === s.goal.r) { s.runT = 0; endWin(); return; }
-      noticeLoop();
     }
     freeClearedTiles();
     collectKey();
     linkParkedTiles();      // connect any staged tile that now touches the front
+    // ...and AFTER that, because the front of the track is what closes a circuit and linking is
+    // what moves the front. Asked once a frame rather than once a step: the tile that shuts the
+    // ring is usually one the player just dropped, and waiting for his next step to notice it
+    // left the junction drawn over a track that had already joined up.
+    noticeLoop();
     // no tile ahead: the runner keeps going to the edge of the last tile, then falls off.
     // (visual position across the tile u = runT + 0.5, so the 80% mark is runT = 0.3)
     if (s.runIdx + 1 >= s.path.length) {
@@ -7443,7 +7528,6 @@
   // soft-lock, the game notices, winds him up to a flat sprint, and then folds the whole
   // picture — board, HUD and all — into the middle of the loop he built.
   const LOOP_MIN = 4, LOOP_MAX = 14;   // circuit lengths we look for, in cells
-  const LOOP_LAPS = 2;                 // clean laps before we are sure it is a circuit
   const VORTEX = {
     cps:   4.0,     // the sprint he is wound up to
     ramp:  2400,    // ms winding up to it
@@ -7453,19 +7537,52 @@
     rings: 42,      // annuli the frame is torn into — more is smoother and slower
     turns: 2.6,     // how many full twists the innermost ring takes
   };
-  // The cell he just entered is one he entered L steps ago, and so is every cell between.
-  // Checked over two laps so a path that merely crosses itself once does not count.
+  // A CIRCUIT, THE MOMENT IT IS ONE. Asked of the FRONT of the track rather than of where he
+  // is standing: the front joins back onto a cell the track already occupies, L-1 steps back
+  // down it, and the L cells between the two are all different. That is a ring, and there is
+  // nothing further to find out — the shape on the board is the whole of the evidence.
+  //
+  // It used to compare two clean LAPS of history against a third, which needed three times
+  // round before it would say so. A player who had visibly shut a square in front of them went
+  // on being offered a junction at the front, and went on running at the ordinary pace, for
+  // three laps of a track that was already closed. The lap count was there to tell a circuit
+  // from a path that merely crosses itself once; the distinctness test below rules that out
+  // outright, and does it on the first frame.
+  //
+  // Measured from the end of the path, which is where nextNode reads the ring from too — so the
+  // length that stops the junction being drawn and the length that curls the front tile into
+  // the back of the track are the same number arrived at the same way.
+  // A path node still standing. The path is a HISTORY — it keeps the nodes the runner has
+  // already left — and the tile named by one of those is very often somewhere else by now,
+  // carried round to the front and dropped again. A cell like that is not track any more, and a
+  // ring built through one is a ring that is not there. `exited` is no use for this: the node the
+  // circuit closes onto is exited by definition, and its tile is still sitting on it waiting to
+  // relink. What matters is whether the tile is still WHERE THE NODE SAYS.
+  const ringNodeLive = (n) => {
+    if (n.kind !== "tile") return true;                    // a fixed platform cannot be moved
+    const t = state.tiles[n.tileId];
+    return !!t && t.c === n.c && t.r === n.r;
+  };
   function circuitLength() {
-    const p = state.path, i = state.runIdx;
-    for (let L = LOOP_MIN; L <= LOOP_MAX; L++) {
-      // the furthest back we reach is i-(L-1)-LOOP_LAPS*L; anything shorter and there is
-      // simply not enough history yet to tell a circuit from a coincidence
-      if (i - (LOOP_LAPS + 1)*L + 1 < 0) break;
-      let same = true;
-      for (let lap = 1; lap <= LOOP_LAPS && same; lap++)
-        for (let k = 0; k < L && same; k++)
-          same = p[i-k].c === p[i-k-lap*L].c && p[i-k].r === p[i-k-lap*L].r;
-      if (same) return L;
+    const p = state.path, i = p.length - 1;
+    if (i < LOOP_MIN - 1) return 0;
+    const h = p[i];
+    // LONGEST first. A ring wider than one cell has chords across it — in a two-by-three, the
+    // front is touching the cell diagonally opposite as well as the one that closes the lap —
+    // and every chord is a shorter cycle that passes all three tests. The long way round is the
+    // track; the short way is a coincidence of the shape. Taking the largest also cannot be
+    // fooled by a lap and a bit: those repeat a cell, and the distinctness test throws them out.
+    for (let L = LOOP_MAX; L >= LOOP_MIN; L--) {
+      const j = i - (L - 1);
+      if (j < 0) continue;
+      const q = p[j];
+      if (Math.abs(q.c - h.c) + Math.abs(q.r - h.r) !== 1) continue;   // does the front join it...
+      let ok = true;
+      for (let a = j; a <= i && ok; a++) ok = ringNodeLive(p[a]);      // ...is all of it still there
+      for (let a = j; a < i && ok; a++)                                // ...and is the ring simple
+        for (let b = a + 1; b <= i && ok; b++)
+          ok = p[a].c !== p[b].c || p[a].r !== p[b].r;
+      if (ok) return L;
     }
     return 0;
   }
@@ -7473,13 +7590,22 @@
     const s = state;
     if (s.vortex) return;
     const L = circuitLength();
-    if (!L) { s.loop = null; return; }
-    if (!s.loop || s.loop.len !== L) { s.loop = { len: L, at: s.runIdx }; return; }
-    // The middle of the circuit, in world units — where everything is about to go — and
-    // which way round he is going. Walked FORWARD (the loop above collects backwards), so the
+    // ...and a circuit BROKEN puts the winding back too. Dropping a tile out of the ring is a
+    // decision to go somewhere, and the game should not go on punishing a loop that has been
+    // abandoned — nor keep a compounded step that would tear through the rest of the level.
+    // ...and the hole in the middle of it goes too. It is a thing the CIRCUIT is doing; drop a
+    // tile out of the ring and there is no circuit for it to be the middle of.
+    if (!L) { s.loop = null; s.rampStep = RAMP_PER_TILE; endHole(); return; }
+    // Already known, and the same ring: nothing to work out again.
+    if (s.loop && s.loop.closed && s.loop.len === L) return;
+    // ...and no second sighting needed before it counts. There used to be one — the first call
+    // recorded the length and returned, and only a second call agreeing with it closed the loop
+    // — which was hysteresis over a test that was already looking at three laps of history.
+    // The test is now the shape itself, and the shape is either a ring or it is not.
+    // The middle of the circuit, in world units — where everything is about to go — and which
+    // way round he is going. Taken off the FRONT of the path and walked forward, so the
     // shoelace comes out with the sign of his actual travel.
-    const ring = [];
-    for (let k = L - 1; k >= 0; k--) ring.push(s.path[s.runIdx - k]);
+    const ring = s.path.slice(s.path.length - L);
     let cx = 0, cy = 0, area = 0;
     for (let k = 0; k < L; k++) {
       const a = ring[k], b = ring[(k + 1) % L];
@@ -7489,7 +7615,878 @@
     // Canvas y runs downward, so a positive shoelace is a CLOCKWISE lap on screen — and a
     // positive rotate() is clockwise too. Taking the sign straight across means the
     // whirlpool turns the way he runs rather than against him.
-    s.vortex = { phase: "ramp", t: 0, wx: cx/L, wy: cy/L, len: L, spin: area >= 0 ? 1 : -1 };
+    // CLOSED, and that is all this says. It used to fold the world up on the spot; now the
+    // circuit is a state he is IN — the front of the track stops being a junction, the ramp
+    // starts compounding, and the ending waits for the pace to top out. Everything the vortex
+    // needs is worked out here all the same, because here is where the ring is under our hand.
+    s.loop = { len: L, at: s.runIdx, closed: true,
+               wx: cx/L, wy: cy/L, spin: area >= 0 ? 1 : -1 };
+  }
+  // ---------- The hole in the middle of it ------------------------------------------------
+  // What a topped-out circuit turns into. He is running a ring at ten tiles a second and there
+  // is nothing left for him to do with it, so something opens in the middle of the ring and
+  // starts eating the level: the ground goes one square at a time, torn off the quilt and
+  // pulled in, faster and faster, until half of the chapter is gone. THEN the world lets go.
+  //
+  // The pace is no longer what ends the run — it is what FEEDS this. The old ending fired the
+  // instant the ramp hit its ceiling, which meant the top speed was a tripwire rather than a
+  // place he arrived at; now he tops out and stays there, and the length of the hold is however
+  // long the hole takes.
+  const HOLE = {
+    from:   4.5,    // tiles/sec at which it starts to form — well before the ceiling, so the
+                    // thing arriving and the pace arriving are one movement rather than two.
+                    // Low, because the compounded ramp covers the last few tiles a second in
+                    // about as many, and a hole that opened at six had no run-up at all.
+    r:      0.62,   // its radius when the pace is at the top, in tiles
+    ring:   0.55,   // ...and how far past that the light it drags round reaches, again in tiles
+    rate0:  4,      // patches torn off a second as it opens...
+    rate1:  24,     // ...and once it is at full pelt. Squared between, so the tearing does not
+                    // merely get faster, it runs away. These two are what decide HOW LONG HE
+                    // HOLDS AT TEN, which is the thing being tuned: the pace tops out about a
+                    // third of the way through the meal, and the rest of it is the hold.
+    fly:    620,    // ms one patch takes to fall in at the start...
+    fly1:   200,    // ...and at the end
+    chip:   0.70,   // how big a torn patch is in the air, against the square it came out of.
+                    // A full-sized one read as a TILE sliding over the board rather than as
+                    // ground coming up: the square left behind is the patch, this is the bit
+                    // of it that is falling.
+    shrink: 0.88,   // ...and how much of that it loses on the way down, arriving as a speck
+    spin:   1.35,   // radians it is carried round on the way in — a fall, not a straight line
+    half:   0.50,   // the share of the board that has to be gone before it stops picking...
+    swallow:2000,   // ...and opens out to take the whole of the rest of the chapter at once
+    swallowR:0.50,  // ...how wide the DISC gets while it does, as a share of the screen's half
+                    // diagonal. NOT as wide as its reach: a board is usually bigger than the
+                    // view, so a disc grown to the far corner of the level is a disc grown well
+                    // past every edge of the screen — the picture goes to black, sits there,
+                    // and the rise that follows begins on nothing. It takes the whole chapter
+                    // and stays a circle you can see the edge of.
+                    //
+                    // Half the screen: big enough that the chapter is plainly gone into it, and
+                    // it is thrown back down to a speck by the whip that follows anyway.
+    // ---- the charms, which do not survive this either ----
+    talAt:  0.20,   // when they come up, as a share of the ground eaten
+    talN:      6,   // how many
+    talMs:  2800,   // how long one takes to rise, go round and go in
+    talGap:  300,   // ...and how far apart they set off
+    talR:   0.42,   // how big, in tiles
+    talOrb:  2.1,   // the orbit it settles onto, in hole radii
+    talTurns:1.25,  // ...and how many turns it makes on the way down it
+    // ---- and the readout, which stops meaning anything ----
+    runaway: 1.0,   // decades a second the SPEED PLATE gains once the pace has topped out. The
+                    // runner cannot go faster than ten — the animation stops reading long before
+                    // that — but the number can, and by the time the chapter goes it is in the
+                    // tens of millions. It is the one part of the game still trying to measure
+                    // what is happening.
+
+  };
+  // How far the pace has got from the hole opening to the ceiling, 0..1. Everything about the
+  // hole is a function of this rather than of its own clock, so the thing you can see and the
+  // number on the speed plate cannot disagree.
+  // Whether the track has closed on itself and he is simply going round. Everything that marks
+  // a SINGLE tile going by — the clear burst, the laid flash — asks this and stays quiet: at
+  // this pace those are not events any more, they are flicker.
+  const loopSpin = () => !!(state && state.loop && state.loop.closed);
+  const holeU = () => state && state.hole
+    ? clamp((state.cpsNow - HOLE.from)/Math.max(0.001, LOOP_MAX_CPS - HOLE.from), 0, 1) : 0;
+  function startHole() {
+    const s = state, L = s.loop;
+    if (!L || s.hole || s.restore || s.vortex) return;
+    // The quilt's own measure, taken from what the backdrop LAST PAINTED rather than from the
+    // formula — see buildPatchPattern, where the on-screen step comes out of a rounded raster
+    // and a pattern transform and is not exactly the half-cell it was asked for. Anything that
+    // has to line up with the quilt reads patchStepPx.
+    const w = patchStepPx || (cell*0.5); if (!(w > 0)) return;
+    const T = s.bgTheme || DEFAULT_THEME;
+    const hx = L.wx*cell, hy = L.wy*cell;
+    const ni = Math.ceil(COLS*cell / w), nj = Math.ceil(ROWS*cell / w);
+    // Every patch of the board, in the order it will go: nearest the middle of the loop first,
+    // with a hash of up to a tile added to each distance so what opens out is a ragged edge
+    // eating outward rather than a circle growing. Worked out once — it is a sort of a few
+    // hundred entries and the answer never changes — and the colour is taken here too, off the
+    // same function the quilt is pieced with, so a patch in the air is the patch that left.
+    const order = [];
+    for (let qj = 0; qj < nj; qj++) for (let qi = 0; qi < ni; qi++) {
+      const px = (qi + 0.5)*w, py = (qj + 0.5)*w;
+      const jit = ((bgHash(qi + 3, qj + 11) >>> 7) % 1000)/1000;
+      order.push({ qi, qj, col: patchColor(T, qi, qj),
+                   d: Math.hypot(px - hx, py - hy) + jit*cell*1.1 });
+    }
+    order.sort((a, b) => a.d - b.d);
+    // How far it would have to open to have the whole board inside it, measured from where it
+    // sits to the furthest corner. The swallow walks its radius out to this.
+    const cover = Math.max(Math.hypot(hx, hy), Math.hypot(COLS*cell - hx, hy),
+                           Math.hypot(hx, ROWS*cell - hy),
+                           Math.hypot(COLS*cell - hx, ROWS*cell - hy));
+    s.hole = { beat: "eat", t: 0, age: 0, top: 0, w, hx, hy, order, at: 0, done: 0, acc: 0,
+               fly: [], gone: new Set(), tal: null, eaten: new Set(),
+               cover, R: 0, total: order.length,
+               need: Math.max(1, Math.round(order.length*HOLE.half)) };
+    Sound.vortex(true);
+  }
+  function endHole() {
+    if (!state || !state.hole) return;
+    state.hole = null;
+    Sound.vortex(false);
+  }
+  function tickHole(dt) {
+    const s = state, H = s.hole; if (!H) return;
+    H.t += dt;
+    // Two clocks that never reset: how long the thing has been open, and how long the pace has
+    // been at the ceiling. The second is what the speed plate runs away on — see drawSpeedHud.
+    H.age += dt;
+    if (s.cpsNow >= LOOP_MAX_CPS - 1e-6) H.top += dt;
+    tickHoleTals(dt);
+    const u = holeU();
+    // THE SWALLOW. Once it has picked half the board off a square at a time it stops picking
+    // and simply OPENS, out past the corners, and everything still standing goes in as the edge
+    // reaches it. Tearing the second half one patch at a time would be the same minute again;
+    // this is the moment it stops being something happening to the level and becomes the level
+    // being over.
+    if (H.beat === "swallow") {
+      const k = Math.min(1, H.t/HOLE.swallow), kk = k*k;
+      // Two radii, and they are different things. REACH is how far out it has taken the ground,
+      // which has to arrive at the far corner of the board or half the level would still be
+      // lying there; the DISC is what you can see, and that is held to the screen.
+      const cap = Math.max(H.R0, Math.hypot(viewW, viewH)/2*HOLE.swallowR);
+      const reach = H.R0 + (H.cover - H.R0)*kk;
+      H.R = H.R0 + (cap - H.R0)*kk;
+      // ...and anything the reach has passed is simply gone. No flight: it is inside it.
+      while (H.at < H.order.length) {
+        const q = H.order[H.at];
+        if (q.d > reach) break;                     // the order IS by distance, so this stops early
+        H.gone.add(q.qi*8192 + q.qj); H.at++; H.done++;
+      }
+      for (const f of H.fly) f.t += dt;
+      H.fly = H.fly.filter(f => f.t < f.dur);
+      if (k >= 1) startRestore();
+      return;
+    }
+    // Torn off on an accumulator rather than one a frame, because by the end it is taking a
+    // hundred a second and a frame is not a small enough unit to spread that over.
+    H.acc += dt/1000 * (HOLE.rate0 + (HOLE.rate1 - HOLE.rate0)*u*u);
+    const dur = HOLE.fly + (HOLE.fly1 - HOLE.fly)*u;
+    while (H.acc >= 1 && H.at < H.order.length) {
+      H.acc -= 1;
+      const q = H.order[H.at++];
+      // Gone from the ground the MOMENT it leaves, not when it lands. The square it came from
+      // is a hole in the level from the first frame of the fall; what is in the air is the
+      // thing that used to be in it.
+      H.gone.add(q.qi*8192 + q.qj);
+      H.fly.push({ x: (q.qi + 0.5)*H.w, y: (q.qj + 0.5)*H.w, col: q.col, t: 0, dur,
+                   sp: ((bgHash(q.qi + 5, q.qj + 9) >>> 3) & 1) ? 1 : -1 });
+    }
+    if (H.fly.length) {
+      const keep = [];
+      for (const f of H.fly) { f.t += dt; if (f.t < f.dur) keep.push(f); else H.done++; }
+      H.fly = keep;
+    }
+    // ...and half the chapter eaten is what turns it. Counted on ARRIVALS: a patch still falling
+    // is a patch the hole has not had yet.
+    // ...and it opens out FROM WHERE IT IS. Read before the beat is flipped, because holeR
+    // answers a different question once the beat is "swallow" — it hands back H.R, which at
+    // this moment is still the zero it was built with. The swallow used to begin by snapping
+    // the hole shut and growing it again from nothing.
+    if (H.done >= H.need) { H.R0 = holeR(); H.beat = "swallow"; H.t = 0; }
+  }
+  // The squares that are no longer there. Not painted over: a patch that has gone leaves a
+  // HOLE in the level, and what you see through it is the thing the level was standing on all
+  // along. The cosmos is drawn under the quilt every frame (see drawBoardBackdrop), so putting
+  // it back inside the departed squares is the whole of it — the level is worn through rather
+  // than blacked out, and the sky the Tileverse hangs in is already on the other side.
+  //
+  // Painted BACK rather than clipped OUT of the quilt, which was the other way to do it: the
+  // squares are laid a pixel oversized so they abut with no hairline between them, and an
+  // oversized rect in an even-odd clip cancels itself in every overlap. As a paint they simply
+  // stack, which is what oversizing is for.
+  function drawHoleThrough(ts, shx, shy) {
+    const H = state.hole; if (!H || !H.gone.size) return;
+    const w = H.w;
+    const i0 = Math.floor(camX/w), j0 = Math.floor(camY/w);
+    const nx = Math.ceil(viewW/w) + 1, ny = Math.ceil(viewH/w) + 1;
+    ctx.save();
+    ctx.beginPath();
+    let any = false;
+    for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) {
+      const qi = i0 + i, qj = j0 + j;
+      if (qi < 0 || qj < 0 || !H.gone.has(qi*8192 + qj)) continue;
+      ctx.rect(qi*w - camX + shx, qj*w - camY + shy, w + 1, w + 1);
+      any = true;
+    }
+    if (any) { ctx.clip(); drawVoid(ts); }      // nonzero winding: overlaps are still inside
+    ctx.restore();
+  }
+  // ...and the thing itself, with whatever is falling into it. World space, inside the camera,
+  // over the board: a patch on its way in passes across the track and the runner because it is
+  // in the air, and the hole is between them and the sky.
+  // THE CHARMS GO IN TOO. Once a fifth of the chapter has gone the six of them come up out of
+  // the dark below the board, one after another, take a turn or two round the outside of the
+  // hole and fall into it — the same arc the ground's own squares are taking, at the size of a
+  // thing you would have worn. Nothing about the run needs them; the point is that the hole is
+  // not fussy, and that the objects the whole game has been about are objects.
+  function tickHoleTals(dt) {
+    const H = state.hole; if (!H) return;
+    if (!H.tal) {
+      if (H.done < H.need*HOLE.talAt) return;
+      const list = (typeof TALISMANS !== "undefined" ? TALISMANS : []).slice(0, HOLE.talN);
+      H.tal = list.map((def, i) => ({
+        def, t: -i*HOLE.talGap, dur: HOLE.talMs,
+        // spread across the foot of the screen, and each turning its own way round
+        sx: camX + viewW*(0.14 + 0.72*(list.length < 2 ? 0.5 : i/(list.length - 1))),
+        a0: (i/Math.max(1, list.length))*Math.PI*2,
+        dir: (i % 2) ? 1 : -1,
+      }));
+      return;
+    }
+    // ...and each one LEAVES THE RACK as it goes. The row at the foot of the screen is where
+    // they are kept, and they come up out of the bottom of the screen — so a charm still sitting
+    // in the rack while its own self is orbiting the hole is the same object in two places. It
+    // goes on the frame its flight starts, which is the frame it is visibly somewhere else.
+    // updatePowerBtn reads `eaten` when it works out what the rack holds.
+    for (const q of H.tal) { const was = q.t; q.t += dt; if (was <= 0 && q.t > 0) H.eaten.add(q.def.id); }
+    H.tal = H.tal.filter(q => q.t < q.dur);
+  }
+  function drawHoleTals(ts) {
+    const H = state.hole; if (!H || !H.tal || !H.tal.length) return;
+    const R = Math.max(1, holeR()), floor = camY + viewH + cell;
+    for (const q of H.tal) {
+      if (q.t <= 0) continue;
+      const u = q.t/q.dur;
+      // The turn it is making, and how far out it is making it: a full orbit at first, closing
+      // on the middle faster and faster. Both run on u, so the spiral is one movement.
+      const ang = q.a0 + q.dir*HOLE.talTurns*Math.PI*2*u;
+      const fall = Math.max(0, (u - 0.32)/0.68);
+      const rr = R*HOLE.talOrb*(1 - Math.pow(fall, 1.7));
+      const ox = H.hx + Math.cos(ang)*rr, oy = H.hy + Math.sin(ang)*rr;
+      // ...and the climb up into it, off the bottom of the screen. Eased out, so it arrives on
+      // the orbit rather than crossing it.
+      const climb = easeOut(Math.min(1, u/0.32));
+      const x = q.sx + (ox - q.sx)*climb, y = floor + (oy - floor)*climb;
+      const r = cell*HOLE.talR*(1 - 0.72*fall);
+      if (r < 0.5) continue;
+      // ...and it goes out as it arrives. Drawn in front of the disc it would otherwise be a
+      // charm sitting on the black at the end of its fall; fading over the last of the drop is
+      // what makes the middle a place things stop existing.
+      ctx.globalAlpha = 1 - Math.pow(Math.max(0, (u - 0.72)/0.28), 1.4);
+      talBadge(ctx, x, y, r, q.def);
+      ctx.globalAlpha = 1;
+    }
+  }
+  // How wide it is on the board. Grows with the PACE while it is picking the ground apart, and
+  // is driven by the swallow's own clock once that takes over.
+  function holeR() {
+    const H = state.hole; if (!H) return 0;
+    return H.beat === "swallow" ? H.R : cell*HOLE.r*(0.22 + 0.78*holeU());
+  }
+  function drawHole(ts) {
+    const H = state.hole; if (!H) return;
+    const u = holeU(), R = holeR();
+    ctx.save();
+    for (const f of H.fly) {
+      // It falls with the square of its own clock — barely moving as it comes off the ground
+      // and dropping the last half in a moment — and is carried round as it goes, so the field
+      // reads as something turning rather than as squares on strings.
+      // Position on k^1.6 and size on its square root: it starts moving at once and is half
+      // gone before it is a third of the way in, so what crosses the board is a chip rather
+      // than a block. On a plain square both curves start at zero together and the thing sat
+      // where it was, full size, for the first half of its fall.
+      const k = f.t/f.dur, e = Math.pow(k, 1.6);
+      const a = Math.atan2(f.y - H.hy, f.x - H.hx) + f.sp*HOLE.spin*e;
+      const d = Math.hypot(f.x - H.hx, f.y - H.hy)*(1 - e);
+      // Size falls on the RAW clock while the position falls on the square of it, so it is
+      // already small by the time it starts to move quickly — debris coming off the ground
+      // rather than a tile sliding across the board.
+      const sz = H.w*HOLE.chip*(1 - HOLE.shrink*Math.sqrt(k));
+      ctx.globalAlpha = 0.92 - 0.4*k;
+      ctx.fillStyle = f.col;
+      ctx.fillRect(H.hx + Math.cos(a)*d - sz/2, H.hy + Math.sin(a)*d - sz/2, sz, sz);
+    }
+    ctx.globalAlpha = 1;
+    paintHole(H.hx, H.hy, R, u, ts, (state.loop && state.loop.spin) || 1);
+    drawHoleTals(ts);          // ...OVER the disc: they are objects in front of a hole, and
+    ctx.restore();             // behind it they simply disappeared instead of falling in
+  }
+  // THE THING ITSELF, at any place and any size. The light dragged round the outside first,
+  // additively, and then the hole punched out of the middle of it in flat black — that order is
+  // the whole of what makes a disc read as a hole rather than as a dark spot in a glow.
+  // `calm` is how still it has become: at 0 the rim is three ragged arcs turning, at 1 it is one
+  // even ring and nothing moves. Split out of drawHole so the ending can go on drawing the same
+  // object over the map once the level it opened in has gone.
+  function paintHole(hx, hy, R, u, ts, spin, calm) {
+    if (!(R > 0)) return;
+    const q = calm || 0, ring = HOLE.ring*(1 + q*1.1);
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const g = ctx.createRadialGradient(hx, hy, R*(0.72 + q*0.22), hx, hy, R*(1 + ring));
+    g.addColorStop(0,    "rgba(255,238,208," + (0.90*u*(1 + q*0.5)).toFixed(3) + ")");
+    g.addColorStop(0.30, "rgba(255,150,86,"  + (0.42*u*(1 + q*0.7)).toFixed(3) + ")");
+    g.addColorStop(0.70, "rgba(150,110,255," + (0.16*u*(1 + q*1.6)).toFixed(3) + ")");
+    g.addColorStop(1,    "rgba(120,90,255,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(hx, hy, R*(1 + ring), 0, Math.PI*2); ctx.fill();
+    // The rim: three arcs turning while it is still eating, closing into one unbroken circle as
+    // it settles — the arcs lengthen to a full turn and stop, rather than fading out and a ring
+    // fading in over the top of them.
+    // ...and it THINS as it closes. A turning arc is a smear of light and wants weight; a
+    // finished circle is an edge, and an edge drawn a tenth of its own radius thick is a ring
+    // rather than a rim. The line all but vanishes into the glow it sits in.
+    const a0 = ts/820 * (spin || 1), len = 1.6 + q*(Math.PI*2 - 1.6);
+    ctx.lineWidth = Math.max(1, R*(0.11 - q*0.086));
+    for (let k = 0; k < 3; k++) {
+      const off = (1 - q)*k*1.1, fade = 1 - q*(k ? 1 : 0);      // the two trailing arcs go
+      if (fade <= 0.002) continue;
+      ctx.strokeStyle = "rgba(255,242,224," + (0.5*u/(k + 1)*fade*(1 + q*1.4)).toFixed(3) + ")";
+      ctx.beginPath(); ctx.arc(hx, hy, R*(1.03 + off*0.064), a0 + off, a0 + off + len);
+      ctx.stroke();
+    }
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = "#000000";
+    ctx.beginPath(); ctx.arc(hx, hy, R, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  // ---------- THE FINALE -----------------------------------------------------------------
+  // What a closed circuit ends in, and the end of the game. He is wound up to ten tiles a
+  // second, the hole in the middle of his loop has eaten the chapter he is standing on, and
+  // there is nothing left for him to do — so the thing he opened goes on eating. The chapter is
+  // thrown back into the Tileverse, the Tileverse goes into the hole a chapter at a time, and
+  // what is left when the last one has gone is a still circle with something awake in it.
+  //
+  // ONE OBJECT ALL THE WAY THROUGH. The hole is drawn by paintHole at every stage of this — on
+  // the board, on the map, and alone in the dark — so what you follow from the middle of his
+  // loop to the credits is demonstrably the same thing rather than three that resemble each
+  // other. All that changes is where it is, how wide, and how still.
+  //
+  // (This replaced the Tileverse folding back up into the Sacred Tiloid. That ending is gone,
+  // along with the clock that walked the opening cinematic backwards to draw it.)
+  const FIN = {
+    // A WHIP. The hole opens until it has the whole chapter, and at that moment the camera is
+    // THROWN back — fast, and settling rather than braking — and what you are suddenly looking
+    // at is the Tileverse, all of it, with a bright speck sitting on the square you were just
+    // inside. Then it holds there long enough for you to see what is about to happen, and only
+    // then does the eating start again.
+    //
+    // The hole is GLUED to the picture through the throw: its radius is multiplied by the same
+    // scale, so it is the same object seen from further away rather than a second one drawn at
+    // a size somebody chose. That is also why nothing doubles when the picture hands over —
+    // the hole behind it is exactly the hole in it.
+    whip:    420,   // ms of the throw
+    hand:   0.62,   // ...the chapter holding until this far through, then gone
+    mapIn:   1.5,   // ...and how late the map comes up behind it (higher = later)
+    look:    750,   // ms of holding on the whole Tileverse before it starts to go
+    rate0:   1.4,   // chapters a second going in when it starts...
+    rate1:    24,   // ...and by the end. Squared between, so it runs away.
+    ramp:   5200,   // ms over which that ramp happens
+    fly:     820,   // ms one chapter takes to fall in at the start...
+    fly1:    220,   // ...and at the end
+    spin:   1.25,   // radians it is carried round on the way in
+    // How big it is once the Tileverse has gone, against the SHORTER side of the screen. An
+    // absolute size and not a multiplier on where the throw left it: how small the throw leaves
+    // it depends on the ratio of a map square to the screen, which on a tall phone is twice what
+    // it is on a wide one — the same multiplier came out framed on one and off both edges on
+    // the other. This is the circle the eyes open in, so it is the one that has to be right.
+    // Reached on a square curve, so it swells the way the tearing accelerates.
+    calmR:   0.36,
+    settle:  600,   // ms of nothing, once the last chapter has gone
+    calm:   2600,   // ...it slowing to a stop and closing into one circle
+    eyes:   3000,   // ...and what opens in it
+    stare:  2200,   // ...looking at you
+    // ...and what it is, said while it is still looking. NO DURATION: the second line is a way
+    // out, and every way out in this game waits on you. It holds — eyes open, ring turning —
+    // until you answer it. See finTap.
+    wordGap:1500,   // ...how long before the second line
+    born:  "And thus the malevolent circle entity was born",
+    next:  "TO BE CONTINUED...",
+    dark:   1900,   // ...and everything going
+    eyeW:  0.230,   // an eye, as a fraction of the hole's own RADIUS
+    eyeH:  0.520,   // ...its height against its own width, once open. A SQUINT: at parity they
+                    // were two lit windows, and a thing that is looking at you narrows.
+    eyeGap:0.340,   // ...and how far each sits from the middle, again against the radius
+    eyeY:  -0.120,   // ...and how far up the face they sit, against the radius. Off centre,
+                    // because a pair of eyes in the exact middle of a disc is a smiley.
+    eyeBrow:0.400,  // ...how far the top-inner corner is dragged down. This is the whole of
+                    // what makes them evil rather than merely lit: an eye narrowed toward the
+                    // middle is a scowl, and it is one shape rather than a face drawn round it.
+    line:    820,   // ms between credit lines arriving
+    fade:    620,   // ...how long one takes to arrive
+    hold:   1400,   // ...and a beat at the end before TAP TO CONTINUE
+    // THE GAME'S OWN BODY COPY, and nothing else. One size, one tracking — the same UI_PX and
+    // UI_TRACK the chapter card sets its number, its verse, its byline and its way-out in. What
+    // separates these lines is COLOUR and the space around them, never a step down in scale; a
+    // credit roll in seven sizes would have been the one card in the game that did it
+    // differently.
+    //
+    // ...and the middle of it is a LETTER. Its three sentences are not three lines, they are one
+    // paragraph: set to a narrow column, justified to both edges the way a letter is, and
+    // arriving a sentence at a time into the shape the finished paragraph will have. Nothing
+    // reflows as they come — see drawFinCredits, which lays the whole letter out and reveals it
+    // — so the block never jumps under the words already on it.
+    //
+    // The strings are written in sentence case because that is easier to read here; the face
+    // has no lowercase, so what lands on the screen is capitals, exactly as every other line
+    // the game says does.
+                    // The letter's measure is --shop-w, read live rather than written down here:
+                    // it is the widest column of content the game has — the shop's rack — and a
+                    // letter set to the same measure is a letter that belongs to the same game.
+                    // Body copy elsewhere runs to 70vw, and 70vw of a desktop is a page.
+    head:  { t: "TILE RUNNER",                                  c: "#ffd24a",            gap: 0.4 },
+    sub:   { t: "And the quest for the holy talismans",          c: "#ffd24a", a: 0.75,  gap: 1.8 },
+    letter: [
+      "This project was conceived 15 years ago, in the early years of touch screen games.",
+      "And now, after so many years, it actually exists.",
+      "Thank you dearly to everyone who has held my hand as I run the great quest of life.",
+    ],
+    letterCol: "#e8e6ff",
+    letterGap: 1.8,
+    sign:  { t: "Sincerely,",                                    c: "#e8e6ff",           gap: 0.4 },
+    name:  { t: "BIG MAN LITTLE",                                c: "#ffd24a",            gap: 0 },
+  };
+  // WHERE THE THROW LANDS: a scale that puts the WHOLE cloud on screen, and the middle of the
+  // cloud to point it at. winMapFit is not that — it fits the map's ROWS to the height and lets
+  // the columns fall where they may, which is right for a map you can drag and wrong for the one
+  // moment the game shows you all of it at once. Fitted on both axes here, with half a square of
+  // margin each side, and centred on the cloud rather than on the chapter you were in: the
+  // chapter is one square of a thing you are being shown the whole of.
+  function finFit() {
+    const cells = mapCells();
+    if (!cells.length) return { S: winMapFit(), cx: 0, cy: 0 };
+    const cs = cells.map(p => p.c), rs = cells.map(p => p.r);
+    const c0 = Math.min(...cs), c1 = Math.max(...cs), r0 = Math.min(...rs), r1 = Math.max(...rs);
+    return { S: Math.max(4, Math.min(viewW/(c1 - c0 + 2), viewH/(r1 - r0 + 2))),
+             cx: (c0 + c1)/2, cy: (r0 + r1)/2 };
+  }
+  function startRestore() {
+    const s = state; if (s.restore || s.vortex) return;
+    const F = finFit(), S = F.S;
+    // Every OTHER chapter, in the order it will go: nearest this one first, with a hash of up
+    // to a square added to each distance so the map comes apart raggedly rather than in rings.
+    const here = mapCells()[levelIdx] || { c: 0, r: 0 };
+    const order = [];
+    // ...and the film's own square out at the end of the row, which is part of the Tileverse and
+    // goes the same way. It is not a chapter, so it has no entry in `cells`; INTRO_CELL is the index
+    // the rest of the map already knows it by.
+    const all = mapCells().map((p, i) => ({ i, p })).concat([{ i: INTRO_CELL, p: introMapCell() }]);
+    for (const { i, p } of all) {
+      if (i === levelIdx) continue;
+      const jit = ((bgHash(p.c + 17, p.r + 29) >>> 5) % 1000)/1000;
+      order.push({ i, c: p.c, r: p.r, d: Math.hypot(p.c - here.c, p.r - here.r) + jit*0.9 });
+    }
+    order.sort((a, b) => a.d - b.d);
+    // The camera does not move for the whole of this: the chapter he was playing sits in the
+    // middle of the screen and everything else falls into it.
+    // Where the hole is when the camera starts backing off: exactly where the LEVEL left it,
+    // which is what makes the rise a continuation rather than a cut. Falling back to the screen
+    // if there is no hole at all — the finale can be started by hand from the debug surface.
+    const R0 = (s.hole && holeR()) || Math.hypot(viewW, viewH)/2;
+    s.restore = { phase: "whip", t: 0, shot: null, S, cx0: F.cx, cy0: F.cy, R0,
+                  order, at: 0, acc: 0, fly: [], gone: new Set(),
+                  R: R0, Rin: R0, calm: 0, eye: 0 };
+    s.status = "vortex";                            // ...nothing else gets a turn from here
+    document.body.classList.add("vortex");          // the DOM buttons go down with it
+    // The music and the roar KEEP GOING. What is happening has not changed — the same hole is
+    // still eating, only what it is eating is bigger — and cutting the sound at the moment the
+    // camera pulls back would say the level ended and something else started. Both go later,
+    // on the calm, which is where the thing actually stops.
+    Sound.ambient(null); Sound.warp(false);
+  }
+  const RESTORE_ORDER = ["whip", "look", "eat", "settle", "calm", "eyes", "stare", "words", "dark", "credits"];
+  // Where the middle of everything is. The chapter he was on is centred by construction, so
+  // this is the screen's own middle — written as the square's centre rather than as viewW/2 so
+  // that a camera that ever does move takes the hole with it.
+  // How much of full screen the chapter is showing at, through the throw and after it. The
+  // hole is multiplied by this too, which is what glues the two together.
+  function finShot(R) {
+    if (R.phase !== "whip") return R.S/viewW;
+    return 1 + (R.S/viewW - 1)*easeOut(Math.min(1, R.t/FIN.whip));
+  }
+  function finCentre(R) {
+    const q = mapRect(levelIdx, R.S, R.cx0, R.cy0);
+    return { x: q.x + R.S/2, y: q.y + R.S/2 };
+  }
+  // WHERE THE HOLE IS THIS FRAME, and it moves twice. Through the throw it travels from the
+  // middle of the screen — which is where it was, filling the chapter — out to wherever that
+  // chapter's square lands once the whole cloud is in shot. Then, as the cloud goes into it, it
+  // comes back to the middle: by the time there is nothing left there is nothing to be beside,
+  // and the circle the eyes open in has to be the thing the screen is about. Chapter fifty sits
+  // in the bottom corner of the cloud, and a final circle half off the edge of the frame is a
+  // composition nobody chose.
+  function finHole(R) {
+    const C = finCentre(R), W = viewW, H = viewH;
+    if (R.phase === "whip") {
+      const k = easeOut(Math.min(1, R.t/FIN.whip));
+      return { x: W/2 + (C.x - W/2)*k, y: H/2 + (C.y - H/2)*k };
+    }
+    if (R.phase === "look") return C;
+    if (R.phase === "eat") {
+      const k = easeBoth(Math.min(1, R.t/FIN.ramp));
+      return { x: C.x + (W/2 - C.x)*k, y: C.y + (H/2 - C.y)*k };
+    }
+    return { x: W/2, y: H/2 };
+  }
+  function tickRestore(dt) {
+    const s = state, R = s.restore; if (!R) return;
+    R.t += dt;
+    // THE BEAT GOES ON. The music in this game is struck by the RUNNER — every tile he clears
+    // plays a bar of it, see Sound.clearTile — and he stopped the moment the camera began to
+    // pull back, which left the map being eaten in silence. It is struck here instead, at the
+    // pace he was last running: ten a second, which is what the level sounded like the moment
+    // before it went, and what the Tileverse going in should sound like too.
+    //
+    // It stops at the CALM, and nothing else stops it. That beat is the thing settling into a
+    // circle, and the melody ending is how the settling is heard.
+    if (R.phase === "whip" || R.phase === "look" || R.phase === "eat") {
+      const per = Math.max(40, s.msPerCell || 100);
+      R.beat = (R.beat || 0) + dt;
+      while (R.beat >= per) { R.beat -= per; Sound.clearTile(); }
+    }
+    // Thrown back with the picture: the same scale on the same clock, so what shrinks is the
+    // distance rather than the thing.
+    if (R.phase === "whip") R.R = R.R0 * finShot(R);
+    if (R.phase === "eat") {
+      // Chapters torn off on an accumulator, the same way the ground was: by the end it is
+      // taking twenty a second and a frame is not a small enough unit to spread that over.
+      const u = Math.min(1, R.t/FIN.ramp);
+      R.acc += dt/1000 * (FIN.rate0 + (FIN.rate1 - FIN.rate0)*u*u);
+      const dur = FIN.fly + (FIN.fly1 - FIN.fly)*u;
+      const C = finCentre(R);
+      while (R.acc >= 1 && R.at < R.order.length) {
+        R.acc -= 1;
+        const q = R.order[R.at++];
+        R.gone.add(q.i);
+        const rc = q.i === INTRO_CELL ? mapRectAt(introMapCell(), R.S, R.cx0, R.cy0)
+                                      : mapRect(q.i, R.S, R.cx0, R.cy0);
+        R.fly.push({ i: q.i, x: rc.x + R.S/2, y: rc.y + R.S/2, t: 0, dur,
+                     sp: ((bgHash(q.c + 3, q.r + 7) >>> 4) & 1) ? 1 : -1 });
+      }
+      R.fly = R.fly.filter(f => (f.t += dt) < f.dur);
+      // ...and it widens as it feeds, from one chapter across to three or four
+      // Carrying on from where the throw left it, mid-growth: the same growth continued rather
+      // than a second one begun. Never backwards, whatever the two ends work out to.
+      const want = Math.max(R.Rin, Math.min(viewW, viewH)*FIN.calmR);
+      R.R = R.Rin + (want - R.Rin)*u*u;
+      // A growl every so often under the roar, more often as it goes: one is an animal, six of
+      // them piling up is the floor going.
+      const every = 620 - 380*u;
+      if (R.t - (R.lastGrowl || -1e9) > every) { R.lastGrowl = R.t; Sound.growl(0.3 + 0.7*u); }
+      if (R.at >= R.order.length && !R.fly.length) { R.phase = "settle"; R.t = 0; }
+      void C;
+      return;
+    }
+    if (R.phase === "calm") {
+      // It stops. The rim's three turning arcs close into one circle (see paintHole's `calm`),
+      // the roar goes, and what comes up under it is the thrum — which is not a quieter version
+      // of the roar but its opposite: nothing sweeping, nothing arriving.
+      const k = Math.min(1, R.t/FIN.calm);
+      R.calm = k*k*(3 - 2*k);
+      if (!R.quiet) { R.quiet = 1; Sound.vortex(false); Sound.levelMusicStop(true); Sound.thrum(true); }
+    }
+    if (R.phase === "eyes") R.eye = Math.min(1, R.t/FIN.eyes);
+    // Both of these wait on you, and nothing else. The taps are answered in finTap.
+    if (R.phase === "words" || R.phase === "credits") return;
+    const span = FIN[R.phase] || 0;
+    if (R.t < span) return;
+    const i = RESTORE_ORDER.indexOf(R.phase);
+    if (i < 0 || i === RESTORE_ORDER.length - 1) { endRestore(); return; }
+    R.phase = RESTORE_ORDER[i + 1]; R.t = 0;
+    if (R.phase === "look") {
+      R.shot = null;                                  // the picture has gone...
+      R.Rin = R.R;                                    // ...and this is how wide it was when it did
+      R.gone.add(levelIdx);                           // ...and the square under it goes with it
+    }
+  }
+  // How long the credits take to say themselves, and therefore when the prompt may appear.
+  const finCreditsMs = () => FIN_BEATS*FIN.line + FIN.fade + FIN.hold;
+  function endRestore() {
+    if (!state || !state.restore) return;
+    state.restore = null;
+    state.hole = null;
+    Sound.thrum(false);
+    document.body.classList.remove("vortex");
+    startTitle();                                   // out the other side, back to the beginning
+  }
+  // The two places the ending waits on you: TO BE CONTINUED, and the way out of the credits.
+  // Neither will take a tap before its own last line has finished arriving — a prompt you can
+  // answer before you can read it is a prompt that eats the thing it is offering.
+  function finTap() {
+    const R = state && state.restore;
+    if (!R) return false;
+    if (R.phase === "words" && R.t >= FIN.wordGap + FIN.fade) {
+      Sound.tap(); R.phase = "dark"; R.t = 0; return true;
+    }
+    if (R.phase === "credits" && R.t >= finCreditsMs()) { Sound.tap(); endRestore(); return true; }
+    return false;
+  }
+  // The whole of it, drawn over everything. Returns true when it has taken the frame, which is
+  // every frame from the moment the chapter starts to go.
+  function drawRestore(ts) {
+    const R = state && state.restore; if (!R) return false;
+    const W = viewW, H = viewH;
+    // THE PICTURE THAT GETS THROWN BACK. Taken off the live canvas on the first frame of the
+    // whip, which is the last frame the level is on it: drawRestore runs at the END of draw, so
+    // by the time this reads the canvas the chapter — board, runner, hole and all — is sitting
+    // on it finished. Grabbed rather than re-rendered, because re-rendering would mean calling
+    // draw() from inside draw().
+    if (R.phase === "rise" && !R.shot && canvas.width && canvas.height) {
+      R.shot = document.createElement("canvas");
+      R.shot.width = canvas.width; R.shot.height = canvas.height;
+      R.shot.getContext("2d").drawImage(canvas, 0, 0);
+    }
+    const dark = R.phase === "dark" ? Math.min(1, R.t/FIN.dark) : R.phase === "credits" ? 1 : 0;
+    drawVoid(ts);
+    const C = finHole(R);            // ...which is what everything falls into, wherever it is
+    // THE MAP, less whatever has been eaten out of it. It goes on being the real Tileverse
+    // renderer — the same squares, the same colours, the same frontier — with a set of indices
+    // it is told to leave out, rather than a copy of it that could drift.
+    if (dark < 1) {
+      ctx.save();
+      // ...and it ARRIVES. At full strength from the first frame the Tileverse is a grid
+      // sitting behind a shrinking picture for the whole move; coming up late, it is the thing
+      // the move lands in. Same reasoning, and the same curve, as the victory dive's WIN.mapIn.
+      const mapA = R.phase === "whip" ? Math.pow(Math.min(1, R.t/FIN.whip), FIN.mapIn) : 1;
+      drawMap(ts, R.S, R.cx0, R.cy0, { hide: R.gone, alpha: mapA*(1 - dark) });
+      // ...and the chapters on their way in. Drawn as their own square of the map, shrinking and
+      // carried round, exactly as the ground'\''s patches were.
+      for (const f of R.fly) {
+        const k = f.t/f.dur, e = Math.pow(k, 1.6);
+        const a = Math.atan2(f.y - C.y, f.x - C.x) + f.sp*FIN.spin*e;
+        const d = Math.hypot(f.x - C.x, f.y - C.y)*(1 - e);
+        const sz = R.S*(1 - 0.86*Math.sqrt(k));
+        ctx.globalAlpha = (1 - dark)*(0.95 - 0.4*k);
+        drawMapSquare(f.i, C.x + Math.cos(a)*d - sz/2, C.y + Math.sin(a)*d - sz/2, sz);
+      }
+      ctx.restore();
+    }
+    // THE HOLE, at whatever it has grown to. Through the rise it is walked from the size the
+    // level left it at to a chapter and a fifth, UNDER the retreating picture — so when the
+    // picture hands over, the thing behind it is already exactly where the picture'\''s own hole
+    // was, and the join is not a join.
+    const hx = C.x, hy = C.y, hr = R.R;
+    ctx.save();
+    if (dark > 0) ctx.globalAlpha = 1 - dark;
+    paintHole(hx, hy, hr, 1, ts, 1, R.calm);
+    // ...and what opens in it. Two eyes, in the game'\''s own square idiom, unrolling from slits:
+    // there is nothing in the black until there is, which is the whole of the moment.
+    if (R.eye > 0) drawFinEyes(hx, hy, hr, R.eye, ts);
+    ctx.restore();
+    // ...and the chapter itself, thrown back into its square on the map. Walked from the whole
+    // screen down to one square on easeOut — away fast and settling rather than braking, which
+    // is what makes it a throw — and drawn to COVER its rect at every size so it never
+    // letterboxes on the way. It goes over the hole, and the hole in it sits on the live one
+    // behind because both are scaled by the same finShot.
+    if (R.phase === "whip" && R.shot) {
+      const u = Math.min(1, R.t/FIN.whip), sc = finShot(R), k = easeOut(u);
+      const q = mapRect(levelIdx, R.S, R.cx0, R.cy0);
+      const rw = W*sc, rh = H*sc, rx = q.x*k, ry = q.y*k;
+      ctx.save();
+      // Solid most of the way and then gone, on the RAW clock: an ease that is most of the way
+      // done a third of the way through would start the fade almost as soon as it had begun.
+      ctx.globalAlpha = 1 - Math.min(1, Math.max(0, (u - FIN.hand)/(1 - FIN.hand)));
+      rrect(rx, ry, rw, rh, tileR(Math.min(rw, rh))); ctx.clip();
+      ctx.drawImage(R.shot, rx, ry, rw, rh);
+      ctx.restore();
+    }
+    // WHAT IT IS, said while it is still there to be looked at. Drawn BEFORE the black so it
+    // goes out with everything else rather than surviving on top of it — the words are part of
+    // the picture, not a card over it.
+    if (R.phase === "words" || R.phase === "dark") drawFinWords(R.phase === "words" ? R.t : 1e6);
+    if (dark > 0) { ctx.fillStyle = "rgba(5,4,13," + dark.toFixed(3) + ")"; ctx.fillRect(0, 0, W, H); }
+    if (R.phase === "credits") drawFinCredits(R.t);
+    return true;
+  }
+  // EVIL. Two of them, and they are the runner'\''s own eyes turned inside out: the game draws
+  // every face it has with a pair of dark squares on something pale, so a pair of BURNING ones
+  // on something black is the same sentence said the other way round. They unroll from slits
+  // rather than fading up — a fade would be a picture appearing, and this is a thing opening.
+  function drawFinEyes(hx, hy, R, k, ts) {
+    const o = k*k*(3 - 2*k);
+    const w = R*FIN.eyeW, h = w*FIN.eyeH*o, gap = R*FIN.eyeGap;
+    if (!(h > 0.4)) return;
+    // A slow unease under the stare: they are not still, they are only nearly still.
+    const dy = Math.sin(ts/1900)*R*0.012, dx = Math.sin(ts/2700)*R*0.010;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (const sx of [-1, 1]) {
+      const x = hx + sx*gap + dx, y = hy + dy + R*FIN.eyeY;
+      // the burn around it first, so the eye sits in its own light rather than on top of it
+      const g = ctx.createRadialGradient(x, y, 0, x, y, w*3.2);
+      g.addColorStop(0,   "rgba(255,60,40," + (0.80*o).toFixed(3) + ")");
+      g.addColorStop(0.35,"rgba(224,18,14," + (0.34*o).toFixed(3) + ")");
+      g.addColorStop(1,   "rgba(180,0,0,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, w*3.2, 0, Math.PI*2); ctx.fill();
+      // ...and the eye. Four corners, not a rectangle: the top edge falls away toward the
+      // middle of the face, which is the scowl. It opens by unrolling from the BOTTOM, so the
+      // last thing to arrive is the brow.
+      const xo = x + sx*w/2, xi = x - sx*w/2, ty = y - h/2;
+      ctx.beginPath();
+      ctx.moveTo(xo, ty);
+      ctx.lineTo(xi, ty + h*FIN.eyeBrow);
+      ctx.lineTo(xi, y + h/2);
+      ctx.lineTo(xo, y + h/2);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(255,74,44," + (0.98*o).toFixed(3) + ")";
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,214,190," + (0.55*o*o).toFixed(3) + ")";   // the heat in it
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  // ...and the two lines before them, at the foot of the screen while the thing that has just
+  // opened its eyes is still filling it. Body size and body tracking, like everything else the
+  // game says; the second line in gold, because it is the one making a promise.
+  function drawFinWords(t) {
+    const W = viewW, lh = UI_PX*2;
+    const maxW = Math.min(W*0.86, finCol());
+    ctx.save();
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.font = "900 " + UI_PX + "px " + UI_FONT;
+    ctx.letterSpacing = UI_TRACK;
+    const rows = finWrap(FIN.born, maxW);
+    const y2 = footTextY(), y1 = y2 - lh*(rows.length + 1.3);
+    const a1 = Math.min(1, Math.max(0, t/FIN.fade));
+    const a2 = Math.min(1, Math.max(0, (t - FIN.wordGap)/FIN.fade));
+    if (a1 > 0.004) {
+      ctx.globalAlpha = a1; ctx.fillStyle = "#e8e6ff";
+      rows.forEach((r, i) => ctx.fillText(r, W/2, y1 + i*lh + (1 - a1)*lh*0.3));
+    }
+    // ...and the second line is the WAY OUT, so it is set as one: the foot of the screen, the
+    // #bfc6e0 every "tap to continue" in the game wears, the 0.6 they are all held at, and the
+    // same breath on top of it. It used to be gold and still — a caption promising something,
+    // rather than a thing asking you to go on — and it sat there for its four seconds whether
+    // you had read it or not.
+    if (a2 > 0.004) {
+      ctx.globalAlpha = a2*0.6*(0.72 + 0.28*Math.sin(t/620));
+      ctx.fillStyle = "#bfc6e0";
+      ctx.fillText(FIN.next, W/2, y2 + (1 - a2)*lh*0.3);
+    }
+    ctx.restore();
+  }
+  // Greedy word wrap against whatever font the caller has set. Always returns a row, so a
+  // string too long to break anywhere still draws rather than vanishing.
+  function finWrap(text, maxW) {
+    const words = String(text).split(/\s+/).filter(Boolean);
+    if (!words.length) return [""];
+    const rows = []; let line = words[0];
+    for (let i = 1; i < words.length; i++) {
+      const test = line + " " + words[i];
+      if (ctx.measureText(test).width <= maxW) line = test;
+      else { rows.push(line); line = words[i]; }
+    }
+    rows.push(line);
+    return rows;
+  }
+  // The words at the end, set the way the game sets every other run of copy: body size, body
+  // tracking, and — for the letter in the middle of it — a column of its own, justified.
+  //
+  // The whole card is laid out at FULL length whatever has arrived so far, and the arriving is
+  // done by not drawing the rest. A paragraph that grew as its sentences landed would reflow
+  // under itself and walk the lines already on screen up the page each time, which is the one
+  // thing a letter being written to you must not do.
+  const FIN_BEATS = 7;                                   // head, sub, three sentences, sign, name
+  // The widest a column of content in this game ever gets: --shop-w, which is what the rack of
+  // hats and trails is held to. Read from the sheet rather than copied into JS, so the letter
+  // and the shop cannot drift apart.
+  const finCol = () => parseFloat(getVar("--shop-w")) || 520;
+  function drawFinCredits(t) {
+    const W = viewW, H = viewH;
+    const col = Math.min(W*0.86, finCol());              // the letter's measure
+    const lh = UI_PX*2;                                  // ...at the verse's own line-height
+    ctx.save();
+    ctx.textBaseline = "top";
+    ctx.font = "900 " + UI_PX + "px " + UI_FONT;
+    ctx.letterSpacing = UI_TRACK;
+    // The letter, laid out once as ONE paragraph — the sentences joined, not stacked — and each
+    // word told which sentence it came in on, so the reveal can stop mid-line.
+    const P = finLetter(col);
+    // ...and the height of the finished card, so it can be centred before a word of it is drawn
+    const total = lh*(1 + FIN.head.gap) + lh*(1 + FIN.sub.gap)
+                + lh*(P.rows.length + FIN.letterGap)
+                + lh*(1 + FIN.sign.gap) + lh;
+    let y = H*0.46 - total/2;
+    // `at` is which beat has arrived; `a` how far in it is. One clock, read four times.
+    const beat = (i) => Math.min(1, Math.max(0, (t - i*FIN.line)/FIN.fade));
+    const centred = (L, i, yy) => {
+      const a = beat(i);
+      if (a > 0.004) {
+        ctx.globalAlpha = a * (L.a == null ? 1 : L.a);
+        ctx.fillStyle = L.c;
+        ctx.textAlign = "center";
+        ctx.fillText(L.t, W/2, yy + (1 - a)*lh*0.30);
+      }
+      return yy + lh*(1 + L.gap);
+    };
+    y = centred(FIN.head, 0, y);
+    y = centred(FIN.sub,  1, y);
+    // THE LETTER. Left edge of the column, and every row but the last of the paragraph pushed
+    // out to both margins — canvas cannot justify, so the words are placed one at a time and
+    // the slack is shared between the gaps. The last row of a justified paragraph is set at its
+    // natural spacing; a final short line stretched across the measure is the tell of a
+    // justification that does not know it has finished.
+    const x0 = (W - col)/2;
+    ctx.textAlign = "left";
+    ctx.fillStyle = FIN.letterCol;
+    P.rows.forEach((row, r) => {
+      const last = r === P.rows.length - 1;
+      const gaps = row.n.length - 1;
+      // THE WHOLE GAP, not an addition to the natural one. `ink` is the row with no spaces in it
+      // at all, so what is left over IS the space to share — adding a word-space on top of the
+      // share put an extra one in every gap and ran the paragraph a full space per word wider
+      // than its own column.
+      const gap = last || gaps < 1 ? P.sp : (col - row.ink)/gaps;
+      let x = x0;
+      for (const i of row.n) {
+        const a = beat(2 + P.sent[i]);
+        if (a > 0.004) {
+          ctx.globalAlpha = a;
+          ctx.fillText(P.word[i], x, y + r*lh + (1 - a)*lh*0.30);
+        }
+        x += P.w[i] + gap;
+      }
+    });
+    y += lh*(P.rows.length + FIN.letterGap);
+    y = centred(FIN.sign, 5, y);
+    y = centred(FIN.name, 6, y);
+    const pa = Math.min(1, Math.max(0, (t - finCreditsMs() + FIN.hold)/FIN.hold));
+    if (pa > 0.004) {
+      // The same way-out every screen in the game wears: body size, #bfc6e0, and the 0.6 the
+      // chapter card's own "tap to continue" is set at, breathing on top of it.
+      ctx.globalAlpha = pa*0.6*(0.72 + 0.28*Math.sin(t/620));
+      ctx.fillStyle = "#bfc6e0";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      tapPromptFont(ctx, "TAP TO CONTINUE", W*0.8);
+      ctx.fillText("TAP TO CONTINUE", W/2, footTextY());
+    }
+    ctx.restore();
+  }
+  // The letter as one wrapped paragraph, measured against whatever font the caller has set.
+  // Returns the words, their widths, which sentence each arrived in, and the rows they fell
+  // into — `ink` being the width of a row's words with no spaces at all, which is what the
+  // justifier shares the slack against.
+  //
+  // Cached on the measure and the face: this is a dozen measureText calls per word and it is
+  // asked for on every frame of the credits, and neither the text nor the column changes while
+  // they are up.
+  let _finLet = null;
+  function finLetter(col) {
+    const key = col.toFixed(2) + "|" + ctx.font + "|" + ctx.letterSpacing;
+    if (_finLet && _finLet.key === key) return _finLet;
+    const word = [], sent = [];
+    FIN.letter.forEach((s, si) => String(s).split(/\s+/).filter(Boolean)
+      .forEach(x => { word.push(x); sent.push(si); }));
+    const w = word.map(x => ctx.measureText(x).width);
+    const sp = ctx.measureText(" ").width;
+    const rows = []; let n = [], ink = 0;
+    for (let i = 0; i < word.length; i++) {
+      const add = (n.length ? sp : 0) + w[i];
+      if (n.length && ink + n.length*sp + w[i] > col) { rows.push({ n, ink }); n = []; ink = 0; }
+      ink += w[i]; n.push(i); void add;
+    }
+    if (n.length) rows.push({ n, ink });
+    _finLet = { key, word, sent, w, sp, rows };
+    return _finLet;
+  }
+  function startVortex() {
+    const s = state, L = s.loop; if (!L || s.vortex) return;
+    s.vortex = { phase: "ramp", t: 0, wx: L.wx, wy: L.wy, len: L.len, spin: L.spin };
     Sound.vortex(true);
     document.body.classList.add("vortex");        // the DOM buttons go down with the ship
   }
@@ -8208,6 +9205,7 @@
     grow:   1000,   // ...and how long the tile you chose takes to come up
     full:    500,   // ...and how long it stands there at full size before it clicks in
     from:   0.50,   // it starts at half a tile and swells to the whole one
+    etchTo: 0.80,   // ...and the mushroom cut out of it ends up spanning this much of a tile
     settle:  500,   // a beat after it lands, before the charm goes
     after:   500,   // ...and another after that, before he runs again
     glow:    1.15,  // how far the pink light reaches past the tile, in tiles
@@ -8604,7 +9602,7 @@
         if (!node.exited && param > i + 0.5) {
           node.exited = true;
           Sound.clearTile();
-          spawnLight(node.c, node.r);
+          if (!loopSpin()) spawnLight(node.c, node.r);
         }
         continue;
       }
@@ -8612,7 +9610,12 @@
       if (param > i + 0.5) {
         node.exited = true;                                 // this placement is done
         Sound.clearTile();                                  // play a tone as the tile clears
-        spawnLight(node.c, node.r);                         // burst of light from the cleared tile
+        // ...and a burst of light off it, EXCEPT on a closed circuit. It is a square pulse
+        // opening out over a tile and a half, and at ten clears a second there are eight of
+        // them on screen at once, overlapping, in front of the thing the circuit is building.
+        // Same call the laid flash makes and for the same reason: a mark that says "one tile
+        // went" is meaningless when the tiles are going faster than it can fade.
+        if (!loopSpin()) spawnLight(node.c, node.r);         // burst of light from the cleared tile
         scoreClear(i);                                      // score, combo, juice on the beat
         if (node.tileId != null) {
           const t = s.tiles[node.tileId];
@@ -8645,8 +9648,21 @@
     // wind the pace on. msPerCell is what actually drives movement, so derive it back
     // from the ramped cps, and hand the new beat length to the backing track — the
     // sub-beat notes between clears are scheduled off it.
-    s.cpsNow = Math.min(RAMP_MAX_CPS, s.cpsNow + RAMP_PER_TILE);
+    // THE STEP ITSELF GROWS, once the track has closed. Outside a circuit this is a flat
+    // RAMP_PER_TILE a clear and always has been; inside one there is no end to run out of, so
+    // the thing that has to end is him — and a constant ramp against an infinite loop only ever
+    // reaches the ceiling slowly and sits there. Adding to the STEP is what turns a loop from
+    // somewhere you can rest into somewhere you are being wound up.
+    if (s.loop && s.loop.closed) s.rampStep = (s.rampStep || RAMP_PER_TILE) + RAMP_PER_TILE;
+    const top = (s.loop && s.loop.closed) ? LOOP_MAX_CPS : RAMP_MAX_CPS;
+    s.cpsNow = Math.min(top, s.cpsNow + (s.rampStep || RAMP_PER_TILE));
     s.msPerCell = 1000 / s.cpsNow;
+    // ...and at the top of it the world lets go. Checked here rather than on a clock: it is the
+    // pace that ends the run, so the moment the pace arrives is the moment it should.
+    // The hole opens as he APPROACHES the top, not when he gets there — see HOLE.from. What
+    // used to be here was startRestore on the ceiling itself, which made the top speed a
+    // tripwire; the ending is now the hole finishing rather than the ramp finishing.
+    if (s.loop && s.loop.closed && s.cpsNow >= HOLE.from) startHole();
     Sound.setTempo(s.msPerCell);
     // track "flow" clears (a healthy buffer of track ahead) for the star rating
     let ahead = 0;
@@ -10005,6 +11021,33 @@
   // winOpen — hence an index of its own, which is what winCellAt hands back for it.
   const INTRO_CELL = -1;
   function introMapCell() { const p = mapCells()[0] || { c: 0, r: 0 }; return { c: p.c - 1, r: p.r }; }
+  // ONE chapter, at an arbitrary place and size — for the finale, which throws them about.
+  // The quilt and the paper only: no number, no cross, no ring. Those are things the MAP says
+  // about a chapter you might go to, and a square being dragged into a black hole is not one.
+  // At the size these reach a number would be two illegible pixels anyway.
+  function drawMapSquare(i, x, y, w) {
+    if (!(w > 0.5)) return;
+    // The film's square has no palette — it is a scatter of white on the map and nothing else —
+    // so falling into the hole it is a pale square rather than a chapter's quilt.
+    if (i === INTRO_CELL) {
+      ctx.save();
+      rrect(x, y, w, w, tileR(w)); ctx.clip();
+      ctx.fillStyle = "rgba(232,230,255,0.30)"; ctx.fillRect(x, y, w, w);
+      grainFill(x, y, w, w, TILE.bodyGrain * ctx.globalAlpha);
+      ctx.restore();
+      return;
+    }
+    const cols = genTheme(themeSeed(String(i + 1))).colors;
+    ctx.save();
+    rrect(x, y, w, w, tileR(w)); ctx.clip();
+    const q = LEVEL_SWATCH, qs = w/q;
+    for (let k = 0; k < q*q; k++) {
+      ctx.fillStyle = cols[k % cols.length];
+      ctx.fillRect(x + (k % q)*qs - 0.5, y + Math.floor(k/q)*qs - 0.5, qs + 1, qs + 1);
+    }
+    grainFill(x, y, w, w, TILE.bodyGrain * ctx.globalAlpha);
+    ctx.restore();
+  }
   // The whole map, drawn on the board's own canvas rather than in the menu's DOM: this has to
   // be something the camera can fly through, and a grid of buttons is not.
   function drawMap(ts, S, cx0, cy0, opts) {
@@ -10024,6 +11067,10 @@
     // of it, so they meet edge to edge with nothing showing between.
     const r = tileR(S);
     for (let i = 0; i < cells.length; i++) {
+      // ...except the ones that are no longer there. The finale eats the map a chapter at a
+      // time and this is how it says which are gone: the real renderer, told to leave some out,
+      // rather than a second copy of it that could drift from this one.
+      if (o.hide && o.hide.has(i)) continue;
       const R = mapRect(i, S, cx0, cy0);
       if (R.x > viewW + S || R.y > viewH + S || R.x + S < -S || R.y + S < -S) continue;   // off screen
       const x = R.x, y = R.y, w = S;
@@ -10130,7 +11177,10 @@
     // ...and the story of how all of it got here, beside the first chapter. Half-there: it is
     // not somewhere you go, it is what the places you go are made of — and a square at full
     // strength next to chapter one would read as a chapter you had somehow missed.
-    {
+    // ...and it goes into the hole with everything else. It is not in `cells`, so it is not in the
+    // order the finale eats the map in, and without this the story of how all of it got here was
+    // the one thing left floating beside the end of everything.
+    if (!(o.hide && o.hide.has(INTRO_CELL))) {
       const R = mapRectAt(introMapCell(), S, cx0, cy0);
       if (!(R.x > viewW + S || R.y > viewH + S || R.x + S < -S || R.y + S < -S)) {
         // Not a chapter's quilt and not the cosmos's either: a scatter of WHITE sub-tiles, most
@@ -11304,7 +12354,8 @@
       // field of squares behind a card reads as a screenshot rather than as a place. Scrolling
       // gently on, it stays the same kind of thing the cosmos and the title screen are.
       drawVoid(ts);
-    else drawBoardBackdrop(ts, shx, shy);     // sky, then the level's quilt over it
+    else { drawBoardBackdrop(ts, shx, shy);   // sky, then the level's quilt over it...
+           if (state.hole) drawHoleThrough(ts, shx, shy); }  // ...worn through where it has been eaten
     // pause / win / death: show ONLY the level background (a clean replica) behind the card
     if (endScreen || menuOpen) {
       // A FALL keeps its heap. The menu that comes up after one is standing over the place he
@@ -11420,6 +12471,7 @@
       drawFreeTile(d.sx + camX - d.grabDX, d.sy + camY - d.grabDY, ts, true);
     }
     drawCharmFx(ts);                              // ...and the shouting charms over the lot
+    if (state.hole) drawHole(ts);                 // ...and the end of the world over even those
     ctx.restore();
 
     // Off-screen indicators (screen space): the exit, and any key not yet taken. Shown only
@@ -11437,6 +12489,7 @@
     drawCeremony(ts);                   // over the board and under nothing: it IS the screen
     drawTalismanFlash(16, ts);
     drawVortex(ts);                     // ...and the whirlpool, over the top of everything
+    drawRestore(ts);                    // ...or the restoration, which is over even that
   }
 
   // The Mushroom's visuals. Rather than warping every drawing routine, the finished frame is
@@ -11568,7 +12621,13 @@
     const s = state;
     if (!hudLive()) return;
     const factor = s.liveFactor != null ? s.liveFactor : 1;
-    const cps = 1000 * factor / (s.msPerCell || 1000);      // cells per second
+    let cps = 1000 * factor / (s.msPerCell || 1000);        // cells per second
+    // ...until the hole opens, and then the plate stops being a measurement. He cannot run
+    // faster than ten — the animation gave up reading somewhere around three — so what climbs
+    // is the NUMBER, a decade and a half a second for as long as the pace has been at the
+    // ceiling, into the tens of millions by the time the chapter goes. The one instrument still
+    // trying to describe what is happening, and failing.
+    if (s.hole && s.hole.top > 0) cps *= Math.pow(10, HOLE.runaway*s.hole.top/1000);
     const P = hudPlate(), m = P.m, fs = P.fs;
     ctx.save();
     ctx.textBaseline = "middle";
@@ -11576,12 +12635,28 @@
     // "0.800 tiles/s" is not a figure anybody needs told is a speed — and the word was the
     // widest thing on the plate, spending a third of the box saying nothing the rest of it
     // did not already say.
-    const val = cps.toFixed(3), unit = " tiles/s";   // three decimals — the per-tile ramp is small
+    // Three decimals — the per-tile ramp is small — until it is thousands, at which point the
+    // decimals are noise on a number nobody is reading for its precision and the grouping is
+    // the only thing making it legible at all.
+    const val = cps < 1000 ? cps.toFixed(3) : Math.round(cps).toLocaleString("en-US");
+    const unit = " tiles/s";
     // Same size as the unit beside it. The number keeps its weight and its colour — it is
     // still the one bright thing on the plate — and gives up its height.
     const smallF = "700 " + P.fs2 + "px " + UI_FONT;
     const bigF   = "900 " + P.fs2 + "px " + UI_FONT;
-    ctx.font = bigF;   const vw = ctx.measureText(val).width;
+    // TABULAR, once it is running away. This face has no tabular figures — a "1" is half the
+    // width of an "8" — and above ten the number changes every frame, so measuring the string
+    // moved the unit, the edge of the plate, and every digit after the one that had changed, on
+    // every frame of it. The plate read as a thing shaking rather than a thing counting.
+    //
+    // Set in CELLS instead: one box per digit, a nought wide, separators at their own width,
+    // and half a digit of slack in front of the unit so it has somewhere to breathe. Nothing on
+    // the plate moves any more except the glyphs themselves, and the box only when the number
+    // gains a place.
+    const tab = cps > 10;
+    ctx.font = bigF;
+    const vw = tab ? speedTabW(ctx, val) + ctx.measureText("0").width*0.6
+                   : ctx.measureText(val).width;
     ctx.font = smallF; const uw = ctx.measureText(unit).width;
     const padX = Math.round(fs*0.55);
     const boxW = padX*2 + vw + uw, boxH = P.h;
@@ -11599,11 +12674,30 @@
     // sense. The earth colour is the dark ground under it: on Midnight or Blood that is nearly
     // black, which put a black number on a near-black plate.
     ctx.fillStyle = (typeof curRail === "function") ? curRail() : "#ffd24a";
-    ctx.fillText(val, m + padX, midY + 1);
+    if (tab) speedTab(ctx, val, m + padX, midY + 1); else ctx.fillText(val, m + padX, midY + 1);
     ctx.font = smallF;                                                // ...and the unit as a dim suffix
     ctx.fillStyle = "rgba(214,218,240,0.66)";
     ctx.fillText(unit, m + padX + vw, midY + 1);
     ctx.restore();
+  }
+  // The two halves of setting a number in fixed cells: how wide it comes out, and painting it.
+  // A digit gets a box the width of a nought and sits in the middle of it; anything else — the
+  // grouping commas, a decimal point — takes its own width, because those are punctuation and
+  // punctuation in a box looks like a gap.
+  function speedTabW(g, str) {
+    const d = g.measureText("0").width;
+    let w = 0;
+    for (const ch of str) w += (ch >= "0" && ch <= "9") ? d : g.measureText(ch).width;
+    return w;
+  }
+  function speedTab(g, str, x, y) {
+    const d = g.measureText("0").width, was = g.textAlign;
+    let cx0 = x;
+    for (const ch of str) {
+      if (ch >= "0" && ch <= "9") { g.textAlign = "center"; g.fillText(ch, cx0 + d/2, y); cx0 += d; }
+      else { g.textAlign = "left"; g.fillText(ch, cx0, y); cx0 += g.measureText(ch).width; }
+    }
+    g.textAlign = was;
   }
   // What this run has found, top centre, on the speedo's own plate. It answers a question the
   // board cannot: the coins you have already taken are gone from it, so without this the only
@@ -11892,8 +12986,13 @@
     for (let i = idx; i < p.length; i++)
       if (live(p[i])) {
         // leading tile = 3-way junction, unless it's the final tile on the goal cell
-        if (i === p.length - 1 && !onGoal(p[i])) drawJunction(p[i], p[i-1], ts);
-        else drawPlatformTile(p[i], p[i-1], p[i+1]);
+        // ASKED THROUGH leadNode, not tested here. This line used to repeat half of what that
+        // function knows — "the last node, and not the goal" — and the moment leadNode learned a
+        // third thing (a closed circuit has no front) the art went on being drawn by the copy
+        // that had not been told. The hints, the tap and the art now agree because they ask one
+        // question; the node is the same one either way.
+        if (i === p.length - 1 && leadNode()) drawJunction(p[i], p[i-1], ts);
+        else drawPlatformTile(p[i], p[i-1], nextNode(i));
       }
 
     // The victory replay's route goes down HERE — the last thing in the track layer, before the
@@ -13650,7 +14749,12 @@
   // proportional to (1 - x/depth): a straight ramp from the surface down, on a curve as
   // readily as on a straight, which is the thing a canvas gradient cannot do.
   const EDGE_STEPS = 7;
-  function surfaceEdge(X, Y, S, C) {
+  // `side` is which face of the surface the lip hangs off: +1 is the body side, the only
+  // one a laid tile has. A fixed rail has no body, so it hangs one off EACH face and comes out
+  // symmetrical — see drawPlatform. surfaceBand takes a signed depth already; everything else
+  // here only ever multiplies the depth, so one factor carries it the whole way down.
+  function surfaceEdge(X, Y, S, C, side) {
+    const sd = side === -1 ? -1 : 1;
     const d = cell * TILE.edgeDepth, a = TILE.edgeA;
     if (!(d > 0) || !(a > 0)) return;
     const v = Math.round(255 * Math.max(0, Math.min(1, TILE.edgeInk)));
@@ -13658,7 +14762,7 @@
     rrect(X, Y, cell, cell, tileR(cell)); ctx.clip();
     ctx.fillStyle = "rgba(" + v + "," + v + "," + v + "," + (a / EDGE_STEPS).toFixed(4) + ")";
     for (let k = 0; k < EDGE_STEPS; k++) {
-      ctx.beginPath(); surfaceBand(S, C, d * (1 - k/EDGE_STEPS)); ctx.fill();
+      ctx.beginPath(); surfaceBand(S, C, sd * d * (1 - k/EDGE_STEPS)); ctx.fill();
     }
     // ...and a second ramp inside the first, over a much shallower depth: the same falloff run
     // again in the top slice of the lip, so the very edge collects both and comes out far
@@ -13668,11 +14772,11 @@
     if (td > 0 && ta > 0) {
       ctx.fillStyle = "rgba(" + v + "," + v + "," + v + "," + (ta / EDGE_STEPS).toFixed(4) + ")";
       for (let k = 0; k < EDGE_STEPS; k++) {
-        ctx.beginPath(); surfaceBand(S, C, td * (1 - k/EDGE_STEPS)); ctx.fill();
+        ctx.beginPath(); surfaceBand(S, C, sd * td * (1 - k/EDGE_STEPS)); ctx.fill();
       }
     }
     if (TILE.edgeGrain > 0) {                    // ...and a tooth to it, cut to the same band
-      ctx.beginPath(); surfaceBand(S, C, d); ctx.clip();
+      ctx.beginPath(); surfaceBand(S, C, sd * d); ctx.clip();
       grainFill(X, Y, cell, cell, TILE.edgeGrain * a);
     }
     ctx.restore();
@@ -13736,9 +14840,16 @@
   const onGoal = (n) => !!state.goal && n.c === state.goal.c && n.r === state.goal.r;
   // The tile at the front of the track, if it is a live junction — the one thing both the
   // marker and the tap need to find, and neither should go looking for on its own.
+  // ...and a CLOSED CIRCUIT has no front either. The junction art, the three hint squares and
+  // the tap that sends a tile to one all ask this question, and all three of them are about a
+  // track that goes somewhere: once it has joined up with itself there is nowhere left to build,
+  // and offering the choice is the game pretending the loop is not what it plainly is. The
+  // surface follows on its own — with no junction to draw, the head is simply the next tile of a
+  // ring, and it meets the one behind it.
   function leadNode() {
     const p = state.path;
     if (!p || !p.length) return null;
+    if (state.loop && state.loop.closed) return null;
     const n = p[p.length - 1];
     return (n && !onGoal(n)) ? { n, prev: p[p.length - 2] } : null;
   }
@@ -13876,6 +14987,24 @@
       def.etch(ctx, mx, my, hs*0.86);
     }
   }
+  // A talisman's etch as a PATH rather than a mark. Every etch is written to paint itself —
+  // it opens a path, draws, and fills or strokes — which is right everywhere it is used except
+  // where the shape has to be a HOLE in something else. This hands it a stand-in that records
+  // the geometry and swallows the painting, so the same one outline that draws the charm on the
+  // rack can be subtracted from a tile without a second copy of it existing anywhere.
+  function etchPath(def, x, y, r) {
+    const p = new Path2D(), fwd = (m) => (...a) => p[m](...a);
+    const rec = { beginPath(){}, fill(){}, stroke(){}, closePath(){ p.closePath(); },
+                  moveTo: fwd("moveTo"), lineTo: fwd("lineTo"), rect: fwd("rect"),
+                  arc: fwd("arc"), arcTo: fwd("arcTo"), ellipse: fwd("ellipse"),
+                  quadraticCurveTo: fwd("quadraticCurveTo"), bezierCurveTo: fwd("bezierCurveTo"),
+                  // an etch that STROKES its shape has no area to subtract, so a stroked charm
+                  // would come back as an empty hole. Only the Mushroom is cut out today; this
+                  // is here so the next one fails visibly rather than silently.
+                  lineWidth: 0, lineCap: "butt", lineJoin: "miter" };
+    def.etch(rec, x, y, r);
+    return p;
+  }
   // THE TILE COMING UP. Half a tile to a whole one over a second, in the charm's pink and
   // standing in its own light — it is being made rather than moved, so it grows out of the cell
   // instead of flying to it the way a tile you already own does.
@@ -13888,7 +15017,28 @@
     // The light comes up with it and hardest at the end, so the moment it clicks in is the
     // brightest moment of the whole thing.
     charmGlow(mx, my, cell*MUSH.glow*k, [255, 143, 200], MUSH.glowA*(0.35 + 0.65*u*u));
+    // THE MUSHROOM IS A HOLE IN IT, not a mark on it. The square you tapped had the charm cut
+    // into a band of white; the tile that answers picks the shape up at exactly that size and
+    // opens it as it comes, so what grows is the hole as much as the tile — the charm is where
+    // the light is getting through rather than a badge riding on the front.
+    //
+    // Cut with an even-odd CLIP rather than a destination-out punch: this is the main canvas,
+    // and erasing here would take the ground and the glow out with it. A clip only decides
+    // where the two fills below land.
+    const def = talById("mush");
     ctx.save();
+    if (def && def.etch) {
+      const r0 = Math.max(0, cell*0.25 - cell/8) * 0.86;     // the hint mark's own mushroom...
+      // ...and the size it arrives at. The etch runs to ±0.76r across, so a shape spanning
+      // `etchTo` of a cell wants r = cell*etchTo/1.52. Written as the relationship rather than
+      // as the number it works out to, so a redrawn mushroom can be re-measured here.
+      const r1 = cell*MUSH.etchTo/(2*0.76);
+      const hole = etchPath(def, mx, my, r0 + (r1 - r0)*u);
+      const mask = new Path2D();
+      mask.rect(cx(M.c) - cell, cy(M.r) - cell, cell*3, cell*3);
+      mask.addPath(hole);
+      ctx.clip(mask, "evenodd");
+    }
     drawGlass(x, y, sz);
     ctx.globalAlpha = 0.30 + 0.42*u;
     ctx.fillStyle = "#ff8fc8";
@@ -14199,7 +15349,7 @@
         const n = p[i];
         if (n.kind === "platform") { ctx.rect(cx(n.c), cy(n.r), cell, cell); continue; }
         if (n.exited) continue;                       // its track is gone; its pane is caught below
-        bodyPath(tileSurface(n, p[i-1], p[i+1]), nodeCenter(n));
+        bodyPath(tileSurface(n, p[i-1], nextNode(i)), nodeCenter(n));
       }
       for (const t of state.tiles) {
         if (t.status !== "free" && t.status !== "parked") continue;
@@ -14499,7 +15649,19 @@
     // A foot lifts while it is travelling FORWARD and is planted while it is travelling back —
     // that is what separates a run from a skate. Foot x is sin(phase), so its direction of
     // travel is cos(phase): positive = swinging forward. footLift is the peak height.
-    const lift = (ph) => moving ? -s*RUNNER.footLift * mul(w.lift, 1) * Math.pow(Math.max(0, Math.cos(ph)), RUNNER.footLiftPow) : 0;
+    // A foot lifts on the half of the cycle it spends travelling FORWARD, and forward is
+    // whichever way the reach is going — reach is sin(phase) scaled by the swagger's own swing,
+    // so its direction of travel carries that swing's SIGN. Read off cos(phase) alone this was
+    // true for every stride but the Moonwalk, whose negative swing left the airborne foot
+    // sweeping backward and the planted one carrying him: feet that never took a step.
+    // Now the one that is up is the one going forward, whichever way round the stride runs.
+    const swingSgn = mul(w.swing, 1) < 0 ? -1 : 1;
+    // ...and `liftLead` turns the hump EARLIER in the cycle. Without it the peak lands with the
+    // foot at mid-swing, which is a run; a step picks the foot up first and then carries it.
+    // Zero everywhere but the Moonwalk, so every other stride is the one it always was.
+    const liftU = (ph) => moving
+      ? Math.pow(Math.max(0, swingSgn*Math.cos(ph + (w.liftLead || 0))), RUNNER.footLiftPow) : 0;
+    const lift = (ph) => -s*RUNNER.footLift * mul(w.lift, 1) * liftU(ph);
     // Every limb is hip → knee → foot. The stock stride works its knee out with IK from where
     // the foot landed; a folded pose places knee AND foot by hand, because a folded knee is
     // nowhere near the hip-to-foot line and there is no talking IK into putting it there.
@@ -14593,17 +15755,30 @@
       // the run and the straddle already use, so the knees and the kicks keep working.
       const reach = _floatPose ? sp*(1 - _floatPose)
                   : swing + sp + (_deadSplay ? s*PILE.splay : 0);
-      for (const [hx, fx, fy0] of [[backHip, reach, lift(phase)], [frontHip, -reach, lift(phase + Math.PI)]]) {
-        const fy = (fy0 - fx*sinL) / cosL;
+      // A TOE, for the one swagger that has one. A third bone off the end of the leg: lying
+      // flat along the real ground while the foot is planted — hence the -L, which undoes the
+      // lean the same way the boots do — and swinging down to point at the floor as the foot
+      // comes up. Driven off liftU, so the bend and the lift are the same movement rather than
+      // two that have to be kept in time.
+      const toeL = s*(w.toe || 0), toeD = w.toeDrop == null ? 1.25 : w.toeDrop;
+      for (const [hx, fx, ph] of [[backHip, reach, phase], [frontHip, -reach, phase + Math.PI]]) {
+        const fy = (lift(ph) - fx*sinL) / cosL;
         const k = RUNNER.knees ? solveKnee(hx, hipY, fx, fy, RUNNER.kneeBend, RUNNER.kneeSplit, kneeLead) : null;
-        limbs.push([hx, k && k.x, k && k.y, fx, fy]);
+        let tx = null, ty = null;
+        if (toeL > 0) {
+          const a = -L + toeD*liftU(ph);
+          tx = fx + Math.cos(a)*toeL; ty = fy + Math.sin(a)*toeL;
+        }
+        limbs.push([hx, k && k.x, k && k.y, fx, fy, tx, ty]);
       }
     }
     if (_bodyOnly) limbs.length = 0;   // ...and with it the kicks: both passes read limbs/feet
-    for (const [hx, kx, ky, fx, fy] of limbs) {
+    for (const [hx, kx, ky, fx, fy, tx, ty] of limbs) {
       ctx.beginPath(); ctx.moveTo(hx, hipY);
       if (kx != null) ctx.lineTo(kx, ky);
-      ctx.lineTo(fx, fy); ctx.stroke();
+      ctx.lineTo(fx, fy);
+      if (tx != null) ctx.lineTo(tx, ty);                 // ...and the toe, where there is one
+      ctx.stroke();
       if (kx != null && RUNNER.kneeR > 0) {
         ctx.beginPath(); ctx.arc(kx, ky, s*RUNNER.kneeR, 0, Math.PI*2); ctx.fillStyle = finish; ctx.fill();
       }
@@ -14625,9 +15800,11 @@
       // and a round cap put a dome on the end of every one of them. The foot end wants its
       // round back, so it is filled in afterwards rather than left squared off inside the shoe.
       ctx.lineCap = "butt";
-      for (const [hx, kx, ky, fx, fy] of limbs)
-        strokeLimbTail(kx != null ? [[hx, hipY], [kx, ky], [fx, fy]] : [[hx, hipY], [fx, fy]],
-                       shoe.cover);
+      for (const [hx, kx, ky, fx, fy, tx, ty] of limbs) {
+        const pts = kx != null ? [[hx, hipY], [kx, ky], [fx, fy]] : [[hx, hipY], [fx, fy]];
+        if (tx != null) pts.push([tx, ty]);               // the toe is the far end of the limb,
+        strokeLimbTail(pts, shoe.cover);                  // so an upper reaches it first
+      }
       ctx.fillStyle = shoe.legCol;
       for (const [fx, fy] of feet) { ctx.beginPath(); ctx.arc(fx, fy, lw/2, 0, Math.PI*2); ctx.fill(); }
       ctx.lineCap = "round";
@@ -14846,7 +16023,6 @@
   const PLATE_RIVET = { inset: 0.17, r: 0.05 };
   // How wide the bar behind a bolted rail is, fraction of a cell. Comfortably wider than
   // TILE.railW so the line reads as sitting ON it rather than beside it.
-  const PF_BAR = 0.20;
   const PLATE_PAD   = 0.055;        // inset, fraction of the tile
   const PLATE_SHADE = 0.22;         // how far it darkens the plate under it
   function platePanel(g, x, y, s, rad) {
@@ -15095,7 +16271,7 @@
 
     const lit = pf.lit || 0;
     // NO platform body and no colour wash — a fixed rail is JUST THE LINE, drawn exactly as the
-    // runner's own laid rail is: same colour, same TILE.railW, same round caps. It used to be a
+    // runner's own laid rail is: the same hairline under the same white lip. It used to be a
     // fatter line of its own over a dark recessed groove, which made a bolted rail a different
     // kind of thing from the rail he lays — and the two meet end to end, so the join showed.
     ctx.save();
@@ -15105,24 +16281,30 @@
     if (lit > 0.01) {
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
-      ctx.strokeStyle = hexA(curTrack(), 0.5*lit);
-      ctx.lineWidth = Math.max(6, s*0.16);
+      // Halved and narrowed when the rail became a hairline: at the old weight the bloom was
+      // wider than everything it was lighting and the live cell read as a glowing tube rather
+      // than a lit line. It is the warmth around the line now, not the line.
+      ctx.strokeStyle = hexA(curTrack(), 0.26*lit);
+      ctx.lineWidth = Math.max(4, s*0.10);
       ctx.filter = "blur(" + Math.max(1, s*0.05) + "px)";
       ctx.beginPath(); railPath(S); ctx.stroke();
       ctx.restore();
     }
-    // A thicker bar behind the line, in the PLATE'S OWN gradient — the colour of the plate's
-    // outer rim, which is the metal before platePanel darkens the recess inside it. So the rail
-    // reads as standing on a raised bar of the same steel the plinth is cut from, running the
-    // whole way across rather than being pinned down at its two ends. That is what the rivets
-    // were for, and this says it along the entire length instead of twice.
-    ctx.strokeStyle = g;
-    ctx.lineWidth = Math.max(5, s*PF_BAR);
-    ctx.beginPath(); railPath(S); ctx.stroke();
+    // The surface itself, built the way a LAID tile's is rather than as a rail of its own: the
+    // white lip stack (TILE.edge*) hanging off the line, then the hairline that says exactly
+    // where the line is. The one difference is that a laid tile has a body under it and so takes
+    // the lip on one side only; a fixed rail is a line in mid-air, so it takes the same lip on
+    // BOTH sides and comes out symmetrical — a bright cord rather than a lit edge.
+    //
+    // This replaced a fat coloured stroke over a bar of the plinth's own steel. That bar was
+    // doing the job of saying "cast in", but it made the fixed rail a visibly different WIDTH
+    // from the rail he lays, and the two meet end to end.
     ctx.globalAlpha = 0.6 + 0.4*lit;                 // dim while idle, full once live
-    ctx.strokeStyle = curRail();
-    ctx.lineWidth = Math.max(3, s*TILE.railW);       // the laid rail's own width, not one of its own
-    ctx.beginPath(); railPath(S); ctx.stroke();
+    const C = nodeCenter(n);
+    surfaceEdge(x, y, S,  C,  1);
+    surfaceEdge(x, y, S,  C, -1);
+    ctx.strokeStyle = RAIL_COL; ctx.lineWidth = RAIL_PX;
+    ctx.beginPath(); railPath(S); if (SHOW_RAIL) ctx.stroke();
     ctx.globalAlpha = 1;
     ctx.restore();
   }
@@ -15916,6 +17098,7 @@
   canvas.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     if (winPointerDown(e)) return;      // the victory sequence is waiting to be let on
+    if (finTap()) return;               // ...and so, at the very end, are the credits
     Sound.unlock();                     // first touch unlocks audio (iOS autoplay policy)
     if (cineActive)  { cineStep(); return; }    // tap anywhere to skip ahead one chapter
     if (titleActive) { leaveTitle(); return; }
@@ -16100,7 +17283,9 @@
       tickStarDust(dt);
       tickFx(dt);
       tickHeartbeat(dt);
+      if (state.hole && !state.restore) tickHole(dt);
       tickVortex(dt);
+      tickRestore(dt);
       tickPower(dt);
     }
     updateCamera(dt);
@@ -16331,7 +17516,11 @@
     // falling — so it gets a place of its own rather than whichever slot in the middle of the
     // row it happens to have been declared into. Stable sort, so the other five keep their
     // declaration order behind it.
-    const ids = live ? TALISMANS.filter(t => talLive(t) && talUnlocked.has(t.id)).map(t => t.id)
+    // ...less anything the hole has taken. See tickHoleTals: a charm that has left the rack to
+    // go round the hole is not in the rack any more, and the row closes up behind it.
+    const eaten = (state && state.hole && state.hole.eaten) || null;
+    const ids = live ? TALISMANS.filter(t => talLive(t) && talUnlocked.has(t.id) &&
+                                             !(eaten && eaten.has(t.id))).map(t => t.id)
                                 .sort((a, b) => (a === "ankh") - (b === "ankh")) : [];
     if (!ids.length) { if (_powerCls !== "off") { powerEl.className = ""; _powerCls = "off"; } return; }
     if (ids.join(",") !== _rackIds) buildPowerRack(ids);
@@ -18494,6 +19683,9 @@
     // hammer-lab.html drives these: the beam block, and a swing on demand. The lab fires on a
     // loop, so the swing clears the charm's spent flag and any shout already in progress —
     // neither of which the game itself would ever do.
+    // The ending a closed circuit earns, on demand — it is three phases and eight seconds long
+    // and the only way to reach it in play is to build a loop and then run it into the ground.
+    restore: () => { startRestore(); return !!(state && state.restore); },
     hammer: (patch) => { if (patch) Object.assign(HAMMER, patch); return { ...HAMMER }; },
     bell: (patch) => { if (patch) Object.assign(BELL, patch); return { ...BELL }; },
     // magnet-lab.html drives these: the field, and the pull switched on by hand. The lab loops
@@ -18548,6 +19740,11 @@
 
   // ---------- Title / attract screen -------------------------------------
   const TITLE_WORDS = ["TILE", "RUNNER"];
+  // ...and what it is a title OF, under it. Only once there is a Tileverse to quest in: on a
+  // first launch the front page is a name over an empty sky and a single instruction, because
+  // nothing has been made yet — no runner, no map, and nothing to be looking for. It arrives
+  // with the world, on the same tap that makes it.
+  const TITLE_BY = "QUEST FOR THE HOLY TALISMANS";
   const TITLE_TILE_DX = 0.13;            // how far left TILE sits, as a fraction of its size
   const TITLE = { t: 0, u: 0 };
   function easeOutBack(p){ const c1 = 1.70158, c3 = c1 + 1; return 1 + c3*Math.pow(p-1,3) + c1*Math.pow(p-1,2); }
@@ -20118,6 +21315,24 @@
     // left of dead centre for the stack to look balanced.
     drawTitleWord(TITLE_WORDS[0], viewW/2 - size*TITLE_TILE_DX, y1, size, TITLE.t - 120, ts);
     drawTitleWord(TITLE_WORDS[1], viewW/2, y2, size, TITLE.t - 400, ts);   // RUNNER
+
+    // --- the byline, once the world it names exists ---
+    // Body size and body tracking, in the byline's own gold at the 0.75 the chapter card sets
+    // its attribution at — one measure runs through everything the game says, and what separates
+    // a line from the thing above it is colour and space rather than a step down in scale. Sized
+    // through tapPromptFont, so on a narrow phone it shrinks with its tracking rather than
+    // running off both edges.
+    // It waits for RUNNER to land: a subtitle arriving under a word that is still bouncing
+    // reads as part of the bounce.
+    if (!first && TITLE.t > 920) {
+      ctx.save();
+      ctx.globalAlpha = 0.75 * clamp((TITLE.t - 920)/420, 0, 1);
+      ctx.fillStyle = "#ffd24a";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      tapPromptFont(ctx, TITLE_BY, viewW*0.82);
+      ctx.fillText(TITLE_BY, viewW/2, y2 + size*0.62 + UI_PX*1.7);
+      ctx.restore();
+    }
 
     // --- tap-to-play prompt (after the title has landed) ---
     if (TITLE.t > 400 + 520){
