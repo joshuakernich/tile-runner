@@ -789,6 +789,17 @@
   #a2hs .a2hs-x { background:transparent; border-color:transparent; box-shadow:none; color:var(--dim); padding:6px 8px; }
   #a2hs .a2hs-x:active { transform:none; }
 
+  /* TEMPORARY, with EDGE_PROBE. screen.height is 62 taller than innerHeight on the phone, and
+     the question this answers is whether that 62 is paintable: a green hairline is laid on the
+     bottom edge of the layout viewport and a red band is hung BELOW it. Red in the strip means
+     the surface goes on past the viewport and the board can be made to cover it; no red means
+     the strip is outside the web view and belongs to iOS. */
+  #edge-probe { position:fixed; left:0; right:0; bottom:0; height:0; z-index:9999;
+                pointer-events:none; display:none; }
+  body.edge-probe #edge-probe { display:block; }
+  #edge-probe i { position:absolute; left:0; right:0; bottom:0; height:4px; background:#00ff66; }
+  #edge-probe b { position:absolute; left:0; right:0; bottom:-140px; height:140px; background:#ff2d2d; }
+
   /* colorblind-friendly palette (Okabe–Ito) */
   .cb { --accent:#d55e00; --goal:#009e73; --runner:#56b4e9; }
 
@@ -1734,6 +1745,7 @@
 </style>
 </head>
 <body>
+<div id="edge-probe"><i></i><b></b></div>
 <div id="app">
   <div id="board-wrap"><canvas id="game"></canvas></div>
   <button id="pauseFloat" aria-label="Menu"><span></span><span></span></button>
@@ -3934,7 +3946,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.27";                    // shown on the title & pause screens
+  const VERSION = "v10.28";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -21470,11 +21482,12 @@
     const R = (n) => Math.round(n);
     const standalone = (window.matchMedia && matchMedia("(display-mode: standalone)").matches)
                        || window.navigator.standalone === true;
+    document.body.classList.add("edge-probe");
     const lines = [
-      "ih " + R(window.innerHeight) + "   vv " + R(vv ? vv.height : -1) + "   sh " + R(screen.height),
-      "st " + R(S.t) + "   sb " + R(S.b) + "   dpr " + (window.devicePixelRatio || 0).toFixed(2),
-      "appB " + R(ap.bottom) + "   wrapB " + R(wr.bottom) + "   canB " + R(cr.bottom),
-      "canH " + R(cr.height) + "   viewH " + viewH + "   sa " + (standalone ? 1 : 0),
+      "ih " + R(window.innerHeight) + "  sh " + R(screen.height) +
+        "  SHORT " + R(screen.height - window.innerHeight),
+      "st " + R(S.t) + "  sb " + R(S.b) + "  appB " + R(ap.bottom) + "  canB " + R(cr.bottom),
+      "green line = viewport foot / red = past it",
     ];
     const size = Math.max(9, Math.round(Math.min(viewW*0.030, 13)));
     ctx.save();
@@ -21484,7 +21497,7 @@
     ctx.font = "900 " + size + "px " + UI_FONT;
     // Bottom LEFT, and low: the strip in question is right under it, so one photograph carries
     // both the numbers and the thing they are supposed to explain.
-    let y = viewH - size*0.4;
+    let y = viewH - size*7.5;
     for (let i = lines.length - 1; i >= 0; i--) { ctx.fillText(lines[i], viewW*0.04, y); y -= size*1.35; }
     ctx.restore();
   }
