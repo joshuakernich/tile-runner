@@ -342,11 +342,28 @@
      it, so the LETTERS of every one of them end up the same distance up: --foot-lift plus half
      a button. Written once here and read from JS as well (footTextY), because half of them are
      drawn on the canvas and would otherwise be a second set of numbers agreeing by luck. */
-  :root { --foot-lift: calc(env(safe-area-inset-bottom) + var(--chq)); }
+  /* ...and the inset is ABSORBED, not stacked. A safe-area inset is a strip the device has
+     already set aside; adding a full design margin on top of one is how an iPhone ended up with
+     a foot standing 49px off the bottom against a desktop's 15 — the same button, half a
+     centimetre further up its own screen, for no reason the player can see. The home indicator
+     is a 5px bar about 8px off the glass and the other 20-odd pixels of that 34px inset are
+     margin round it, so most of it is given back. #power settled this argument once already:
+     see its --lift, which is the same subtraction — a little less of it here, because what
+     stands on this line is a full-width slab rather than a row of small charms and wants to be
+     off the swipe rather than merely off the bar. */
+  :root { --foot-lift: max(var(--chq), calc(env(safe-area-inset-bottom) + var(--edge-min) - 16px)); }
   /* ...and THE HEAD, for the same reason. Every screen's name — the Tileverse's, the shop's,
      the shelf's, and the canvas-drawn CHAPTER N COMPLETE — starts its box this far down.
      Read from JS as well (headDrop), so the canvas heading cannot drift from the DOM ones. */
-  :root { --head-drop: calc(env(safe-area-inset-top) + var(--chq) * 2.5); }
+  /* Same rule as the foot, and it has to be a MAX rather than a sum for the same reason: 2.5
+     squares on a screen with nothing cut out of it, and a notch plus a little where there is
+     one. Stacked, an iPhone header started 96px down against a desktop's 37 — and the notch
+     is not something to clear TWICE.
+     The remaining difference between the two ends on a phone is the notch itself: 59px of glass
+     at the top is not usable and 34px at the bottom mostly is. Measured from the ground each
+     end actually has, the two gaps are now the same. */
+  :root { --edge-min: 6px; }          /* how far past a reserved strip anything has to sit */
+  :root { --head-drop: max(calc(var(--chq) * 2.5), calc(env(safe-area-inset-top) + var(--edge-min))); }
   #winfade {
     position:fixed; left:0; right:0; bottom:0; height:calc(var(--chq) * 13);
     z-index:33; pointer-events:none; display:none;
@@ -3897,7 +3914,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.23";                    // shown on the title & pause screens
+  const VERSION = "v10.24";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -12515,8 +12532,20 @@
                                  "height:var(--foot-lift);pointer-events:none;";
       document.body.appendChild(_footProbe);
     }
-    _footLift = _footProbe.getBoundingClientRect().height || uiGrid();
+    // IN CANVAS SPACE, not viewport space. The probe is fixed to the viewport; the board is not
+    // — it lives inside #app, which pads itself by the safe-area insets — so a lift measured off
+    // the window and then applied to a canvas that starts somewhere else is the inset counted
+    // twice. Today #app has no bottom padding and this correction is zero; it is here because
+    // the head's version of it was not, and the two ends have to be the same routine.
+    const h = _footProbe.getBoundingClientRect().height;
+    _footLift = h ? Math.max(0, h - canvasGap().bottom) : uiGrid();
     return _footLift;
+  }
+  // How far the canvas sits inside the window at each end — #app's own padding, measured rather
+  // than restated, so this keeps working whatever that rule decides to do next.
+  function canvasGap() {
+    const r = canvas.getBoundingClientRect();
+    return { top: Math.max(0, r.top), bottom: Math.max(0, window.innerHeight - r.bottom) };
   }
   // ...and the middle of the line, in canvas pixels from the top: the lift, plus half a button.
   const footTextY = () => viewH - (footLift() + uiGrid()*1.5);
@@ -12533,7 +12562,15 @@
                                  "height:var(--head-drop);pointer-events:none;";
       document.body.appendChild(_headProbe);
     }
-    _headDrop = _headProbe.getBoundingClientRect().height || uiGrid()*2.5;
+    // ...and the same correction at this end, where it is NOT zero. #app carries
+    // padding-top: env(safe-area-inset-top) — the notch is cut out of the screen, so the board
+    // starts below it — and --head-drop carries that inset as well. A canvas heading was
+    // therefore drawn a whole notch lower than the DOM heading it is supposed to be level with:
+    // 96px down on an iPhone against #wintop-title's 96 from the top of the GLASS, which is 155.
+    // The one line this file has always claimed about these two — "so the canvas heading cannot
+    // drift from the DOM ones" — was false on every phone with a notch.
+    const h = _headProbe.getBoundingClientRect().height;
+    _headDrop = h ? Math.max(0, h - canvasGap().top) : uiGrid()*2.5;
     return _headDrop;
   }
   const headTextY = (size) => headDrop() + size*1.05*0.5;
