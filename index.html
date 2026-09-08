@@ -60,6 +60,15 @@
      --vh-fix is that height, MEASURED (see edgeShort) rather than assumed, because on anything
      whose viewport is already right — every desktop, every Android, and iOS Safari with its own
      chrome — adding to it would hang the foot of the app off the bottom of the screen. */
+  /* The height itself is CSS, and only the QUESTION is JavaScript. It used to be a number
+     measured once and written into --vh-fix, which meant a wrong answer on the first frame —
+     env() is not always settled while the launch screen is still up — was the answer for the
+     rest of the session. Relaunching landed on either side of that, which is what "sometimes
+     the gap comes back" was. Now the class says whether the bug applies and the inset says how
+     much, live, and the two cannot disagree.
+     It also makes the gate self-correcting off iOS: an Android home-screen app has a gap too —
+     its status bar — but no top inset, so this comes out zero and nothing moves. */
+  :root.vh-short { --vh-fix: env(safe-area-inset-top); }
   html, body {
     height:100%; width:100%; overflow:hidden;
     min-height:calc(100dvh + var(--vh-fix, 0px));
@@ -3949,7 +3958,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.29";                    // shown on the title & pause screens
+  const VERSION = "v10.30";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -6596,33 +6605,32 @@
   //     the browser chrome, which would be an enormous overshoot)
   //   - only when there IS a gap
   //   - and only when that gap is the top inset, which is the shape of this particular bug
-  function edgeShort() {
-    if (!window.screen || !window.innerHeight) return 0;
+  // IS THE DOCUMENT SHORT OF THE GLASS? Asked as a question of the moment, never answered once:
+  // a home-screen app's viewport is not settled on its first frame — it comes up with the launch
+  // screen still over it — and whatever this said then used to stand for the whole session.
+  //
+  // Two conditions and no arithmetic. Standalone, because in a browser the difference between
+  // the screen and the window is the browser's own chrome and has nothing to do with this. And a
+  // gap, at all — how BIG is not asked, because the class only turns --vh-fix into
+  // env(safe-area-inset-top), which is already zero everywhere this bug is not. If Apple ever
+  // fixes it the gap goes to zero, the class comes off, and so does the correction.
+  function syncEdgeFix() {
+    const root = document.documentElement;
     const standalone = (window.matchMedia && matchMedia("(display-mode: standalone)").matches)
                        || window.navigator.standalone === true;
-    if (!standalone) return 0;
-    const gap = Math.round(window.screen.height - window.innerHeight);
-    return (gap > 0 && gap <= Math.ceil(safeArea().t) + 1) ? gap : 0;
+    const short = !!(standalone && window.screen && window.innerHeight &&
+                     Math.round(window.screen.height - window.innerHeight) > 0);
+    if (root.classList.contains("vh-short") === short) return false;
+    root.classList.toggle("vh-short", short);
+    return true;
   }
   function computeLayout() {
     const wrap = document.getElementById("board-wrap");
-    document.documentElement.style.setProperty("--vh-fix", edgeShort() + "px");
-    // DOES THE BOX ACTUALLY REACH THE GLASS? #app is position:fixed; inset:0, which ought to
-    // mean the whole screen — and at the top it does, which is why the cosmos now goes under the
-    // notch. At the BOTTOM, an iOS home-screen web app resolves that same inset:0 against the
-    // SAFE viewport: the box stops an inset short of the glass and leaves a strip of page under
-    // the board that no amount of removing padding can reach, because there is no padding left
-    // to remove. The board is the backdrop of the whole screen or it is letterboxed; there is
-    // no third option.
-    //
-    // Measured, never assumed. The margin is cleared before the read so the box being measured
-    // is the honest one — leaving it on would find the shortfall already covered and take the
-    // cover away again, which is an oscillation once a frame. Zero everywhere the box is right,
-    // which is every desktop, every Android and the emulator, so nothing that can be tested
-    // here changes at all.
-    wrap.style.marginBottom = "";
-    const short = Math.max(0, Math.round(window.innerHeight - wrap.getBoundingClientRect().bottom));
-    if (short) wrap.style.marginBottom = -short + "px";
+    syncEdgeFix();          // ...before anything is measured, so what follows measures the answer
+    // (v10.26 hung the wrap past #app with a negative margin, on the theory that the fixed box
+    // was the short thing. It was not — the DOCUMENT was — and #app carries an explicit height
+    // now, so that cover could never fire again. It cost a forced reflow every layout to find
+    // a shortfall of zero, and it is gone.)
     viewW = Math.floor(wrap.clientWidth);
     viewH = Math.floor(wrap.clientHeight);
     cell = playCell();
@@ -19731,8 +19739,21 @@
 
   applyColorblind();   // apply saved colorblind setting on load
 
-  window.addEventListener("resize", () => { computeLayout(); snapCamera(); });
-  window.addEventListener("orientationchange", () => setTimeout(() => { computeLayout(); snapCamera(); }, 150));
+  const relayout = () => { computeLayout(); snapCamera(); };
+  window.addEventListener("resize", relayout);
+  window.addEventListener("orientationchange", () => setTimeout(relayout, 150));
+  // A HOME-SCREEN APP DOES NOT ARRIVE AT ITS FINAL SIZE. It opens with the launch screen still
+  // over it and settles a moment later, and iOS does not always fire a resize when it does — so
+  // the first layout is taken against numbers that are about to change, and everything decided
+  // from them (see syncEdgeFix) was decided wrongly for the rest of the session. That is what
+  // "relaunching brought the gap back" was: a race, landing on either side of the settle.
+  //
+  // Re-taken on the viewport's own events and on a short schedule after them. Each pass is a
+  // handful of measurements and a class that usually does not change, and they stop after a
+  // second and a half.
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", relayout);
+  window.addEventListener("pageshow", () => [0, 60, 200, 600, 1500].forEach(ms => setTimeout(relayout, ms)));
+  [0, 60, 200, 600, 1500].forEach(ms => setTimeout(relayout, ms));
   document.addEventListener("gesturestart", e => e.preventDefault());
   document.addEventListener("dblclick", e => e.preventDefault());
 
