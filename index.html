@@ -248,8 +248,10 @@
      soft, so both come from PW_PX in buildPowerRack and are set inline. */
   #power .pw canvas { display:block; }
   #power .pw:active { transform:rotate(var(--tilt, 0deg)) translateY(2px); }
-  /* running: a bar draining under the one that is up */
-  #power .pw-bar { position:absolute; left:12%; bottom:2px; height:3px; width:0; background:var(--goal); }
+  /* running: the charm's own frame going out, drawn on a canvas over the badge — see
+     drawPwRing. It replaces a three-pixel bar along the foot of the button, which is a loading
+     bar, and a loading bar is what a download has rather than what a talisman has. */
+  #power .pw-ring { position:absolute; left:0; top:0; pointer-events:none; }
   /* A charm you cannot use DIPS below the edge of the screen instead of going pale. Half of it
      is still there — so you can see what you are carrying, and that it is out of reach — and it
      rises when it becomes yours to press. Grey read as "broken"; sunk reads as "not now", which
@@ -292,6 +294,16 @@
   #power .pw.gone { pointer-events:none; }
   /* armed and waiting to be aimed (the Hammer) */
   #power .pw.armed canvas { filter:drop-shadow(0 0 6px var(--goal)); }
+  /* ...and a charm AT WORK burns, in its own colour. --tal-col is set on the button from the
+     same talFace the badge is painted with, so a charm cannot glow a colour it is not. After
+     .armed on purpose: a Hammer that has been thrown is working, not waiting.
+     The ring is excluded — it is white light on its own account and a coloured halo round it
+     would be the countdown wearing the charm's colour, which is the one thing it is not. */
+  #power .pw.live canvas:not(.pw-ring) {
+    animation:pw-burn 900ms ease-in-out infinite alternate; }
+  @keyframes pw-burn {
+    from { filter:drop-shadow(0 0 3px var(--tal-col)) drop-shadow(0 0  8px var(--tal-col)); }
+    to   { filter:drop-shadow(0 0 7px var(--tal-col)) drop-shadow(0 0 19px var(--tal-col)); } }
   #pauseFloat:active { transform:translateY(4px); box-shadow:none; }
   /* A talisman maze's win card. Bigger title, the charm itself where the stars normally go,
      and no score furniture — this screen is about the object, not the run. */
@@ -2510,6 +2522,107 @@
     // and left to ring at different lengths is what a struck metal thing actually does —
     // the top ones die first and the shimmer is what is left. A whisper of filtered noise
     // on the attack gives it the chime's "tick", and everything goes through the reverb send.
+    // A TALISMAN BREAKING. Chiming and unmistakably magic, and it RINGS OUT: a spread of
+    // inharmonic partials struck almost together, then struck again twice more, quieter and a
+    // little flatter each time, so what you hear is one bell in a big room rather than one
+    // sound with a decay on it. An echo is cheaper than a reverb and says the same thing.
+    //
+    // Pitched a fourth or so ABOVE the coin rather than two octaves, which is where it was: up
+    // there it was a glassy tick that vanished into the top of the mix, and what has just
+    // happened is a rare object being spent — that wants weight, not sparkle. Everything rings
+    // roughly twice as long as the coin's, because a coin is a thing you gained and this is a
+    // thing you have used up and will not get back.
+    // A TILE BEING MADE. It rises for as long as the thing on screen is rising and lands on the
+    // click that puts it in place, so what you hear is one gesture with an ending rather than a
+    // noise and then a separate noise. Two detuned voices sweeping up through a filter that
+    // opens with them — the swell is as much the filter as the pitch, which is what stops it
+    // sounding like a slide whistle.
+    function charmGrow(ms) {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime, T = Math.max(0.2, (ms || 1000)/1000);
+      // IT IS THERE FROM THE FIRST FRAME. Both of these used to start at nothing and arrive —
+      // the gain crept up from silence and the filter from 320Hz — so the first half of the
+      // second was a sound you could only just hear under a tile you could plainly see. It is
+      // struck now, at three-fifths of its final level in thirty-five milliseconds, and swells
+      // from there; the rise is the last two-fifths and the filter opening, not the whole of it.
+      const lp = ac.createBiquadFilter(); lp.type = "lowpass";
+      lp.frequency.setValueAtTime(900, t0);
+      lp.frequency.exponentialRampToValueAtTime(5200, t0 + T);
+      lp.Q.value = 6;
+      const bus = ac.createGain();
+      bus.gain.setValueAtTime(0.0001, t0);
+      bus.gain.exponentialRampToValueAtTime(0.055, t0 + 0.035);
+      bus.gain.exponentialRampToValueAtTime(0.090, t0 + T*0.92);
+      bus.gain.exponentialRampToValueAtTime(0.0003, t0 + T + 0.16);
+      lp.connect(bus); bus.connect(master); bus.connect(sendBus);
+      for (const det of [-5, 5]) {                       // a pair, a few cents apart, so it beats
+        const o = ac.createOscillator();
+        o.type = "triangle";
+        o.detune.setValueAtTime(det, t0);
+        o.frequency.setValueAtTime(BASE * Math.pow(2, 24/12), t0);
+        o.frequency.exponentialRampToValueAtTime(BASE * Math.pow(2, 43/12), t0 + T);
+        o.connect(lp); o.start(t0); o.stop(t0 + T + 0.2);
+      }
+      // ...and a shimmer arriving over the last third, so the top of the rise has somewhere to
+      // go once the filter is already open.
+      [36, 43, 48].forEach((semi, i) => {
+        const t = t0 + T*(0.62 + i*0.12);
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "sine"; o.frequency.setValueAtTime(BASE * Math.pow(2, semi/12), t);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.030, t + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.0003, t + 0.5);
+        o.connect(g); g.connect(master); g.connect(sendBus);
+        o.start(t); o.stop(t + 0.56);
+      });
+    }
+    function charmBreak() {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime;
+      // Deliberately not a chord: the ratios are the ones a struck bar gives, so it shimmers
+      // rather than resolves. Anything that resolved would sound like a reward.
+      const PART = [[29, 1.00, 2.6], [36.2, 0.72, 3.2], [41, 0.58, 2.9],
+                    [45.9, 0.42, 3.6], [48, 0.32, 3.3], [53.3, 0.24, 4.0]];
+      // ...and the room it is ringing in. Each repeat is quieter, later and detuned a shade
+      // down: a real reflection comes back off a wall having lost its top end, and a repeat at
+      // the same pitch and a lower volume is a machine doing it.
+      const ECHO = [[0.000, 1.00, 0], [0.185, 0.44, -0.10], [0.395, 0.19, -0.22]];
+      for (const [delay, level, drop] of ECHO) {
+        for (const [semi, amp, ring] of PART) {
+          const t = t0 + delay + Math.random()*0.008;
+          const o = ac.createOscillator(), g = ac.createGain();
+          o.type = "sine"; o.frequency.setValueAtTime(BASE * Math.pow(2, (semi + drop)/12), t);
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(0.10*amp*level, t + 0.006);
+          g.gain.exponentialRampToValueAtTime(0.0003, t + 0.18 + 0.9*ring);
+          o.connect(g); g.connect(master); g.connect(sendBus);
+          o.start(t); o.stop(t + 0.26 + 0.95*ring);
+        }
+      }
+      // ...and the sparkle climbing off it, four notes going up and away. Lower than it was and
+      // slower, so it is a phrase leaving rather than a chirp.
+      [36, 41, 48, 53].forEach((semi, i) => {
+        const t = t0 + 0.02 + i*0.062;
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "triangle"; o.frequency.setValueAtTime(BASE * Math.pow(2, semi/12), t);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.055 * (1 - i*0.14), t + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.0003, t + 0.52);
+        o.connect(g); g.connect(master); g.connect(sendBus);
+        o.start(t); o.stop(t + 0.58);
+      });
+      if (noiseBuf) {                                   // the glass of it going
+        const t = t0;
+        const src = ac.createBufferSource(); src.buffer = noiseBuf;
+        const hp = ac.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 3800;
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.05, t + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.0003, t + 0.40);
+        src.connect(hp); hp.connect(g); g.connect(master); g.connect(sendBus);
+        src.start(t); src.stop(t + 0.46);
+      }
+    }
     function coin() {
       if (muted || !ac || ac.state !== "running") return;
       const t0 = ac.currentTime;
@@ -3549,7 +3662,7 @@
       musicBus.gain.setTargetAtTime(target, ac.currentTime, 0.12);
     }
     function isMuted() { return muted; }
-    return { unlock, clearTile, smash, roar, win, lose, fall, death, boost, slow, coin, coinBank, coinSlam, key, doorOpen,
+    return { unlock, clearTile, smash, charmBreak, charmGrow, roar, win, lose, fall, death, boost, slow, coin, coinBank, coinSlam, key, doorOpen,
              slide, clack, tap, tapBig, power, warp, vortex, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck, choir,
              ambient,
@@ -3579,7 +3692,7 @@
   // tile to tile, large enough that a long level noticeably tightens by the end.
   const RAMP_PER_TILE = 0.005;   // tiles/sec added per clear
   const RAMP_MAX_CPS  = 3.0;     // hard ceiling — past this the animation stops reading
-  const VERSION = "v10.20";                    // shown on the title & pause screens
+  const VERSION = "v10.21";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -3787,14 +3900,23 @@
     { id:"mush", name:"Mushroom", col:"#ff8fc8", ms:0,
       face:"#ff7fb8", edge:"#9e2a60",
       blurb:"A gift from the Gods",
+      // ONE OUTLINE, filled ONCE. It was three shapes — a stem, a dome and a band — each with a
+      // fill of its own, which is invisible while the ink is opaque and falls apart the moment
+      // it is not: laid in at the junction hint's translucent white, every place two of them
+      // lapped came out twice as bright and the mushroom read as a stack of parts. A mushroom
+      // is one object, so it is one path — up the stem, out under the cap, over the dome and
+      // back down — and nothing in it can overlap anything else because there is nothing else.
       etch:(g,x,y,r)=>{
-        g.beginPath();                                           // stem
-        g.moveTo(x-r*0.22, y-r*0.04); g.lineTo(x+r*0.22, y-r*0.04);
-        g.lineTo(x+r*0.17, y+r*0.62); g.lineTo(x-r*0.17, y+r*0.62);
-        g.closePath(); g.fill();
-        g.beginPath();                                           // cap
-        g.ellipse(x, y-r*0.02, r*0.76, r*0.56, 0, Math.PI, 0); g.fill();
-        g.fillRect(x-r*0.76, y-r*0.04, r*1.52, r*0.08); } },
+        g.beginPath();
+        g.moveTo(x-r*0.17, y+r*0.62);                            // the foot of the stem...
+        g.lineTo(x-r*0.22, y+r*0.04);                            // ...up its left side
+        g.lineTo(x-r*0.76, y+r*0.04);                            // ...out along under the cap
+        g.lineTo(x-r*0.76, y-r*0.02);
+        g.ellipse(x, y-r*0.02, r*0.76, r*0.56, 0, Math.PI, 0);   // ...over the dome
+        g.lineTo(x+r*0.76, y+r*0.04);                            // ...down the far edge
+        g.lineTo(x+r*0.22, y+r*0.04);                            // ...back in to the stem
+        g.lineTo(x+r*0.17, y+r*0.62);                            // ...and down to its foot
+        g.closePath(); g.fill(); } },
     // Each is the golden tile in its own metal, with the motif cut into the face — see
     // talBadge. `etch` draws GEOMETRY ONLY: the badge painter sets the colour before each of
     // its two passes, so an etch that picks its own would come out flat.
@@ -5960,6 +6082,10 @@
     if (s.cueT > 0) return;
     Sound.levelMusicHandover();   // from here his tile clears ARE the beat
     s.status = "play";
+    // ...and from here the things that CHASE him are allowed to. Set once and never cleared:
+    // "he has begun" is not the same question as "is he running this instant", and a fall or a
+    // vortex must not put the hunters back to sleep in the middle of a level.
+    s.begun = true;
   }
   function drawIntro(ts) {
     const s = state, t = s.introT, w = patchW(), H = s.introHome;
@@ -6323,10 +6449,29 @@
   }
 
   // the top-surface points of one tile: straight (3 pts) or a quarter-circle arc
+  // A PLATFORM KNOWS WHICH WAY IT LEAVES even with nothing beyond it. Its shape is two fixed
+  // connectors — see parsePfDirs — so if the track came in through one of them the surface goes
+  // out through the other, and there is nothing to guess. Everything else on the board is a
+  // three-way junction at the front and genuinely has no answer until you give it one.
+  function platformExit(n, entry) {
+    if (!n || n.kind !== "platform") return null;
+    const pf = (state.platforms || []).find(q => q.id === n.pfId);
+    if (!pf || !pf.dirs || pf.dirs.length < 2) return null;
+    const v = [PF_VEC[pf.dirs[0]], PF_VEC[pf.dirs[1]]];
+    if (!v[0] || !v[1]) return null;
+    if (!entry) return v[1];                       // ...nothing behind it either: take an end
+    const same = (a, b) => a.x === b.x && a.y === b.y;
+    return same(v[0], entry) ? v[1] : same(v[1], entry) ? v[0] : null;
+  }
   function tileSurface(n, prev, next) {
     const C = nodeCenter(n), h = cell/2;
     let entry = prev ? axisDir(n, prev) : null;   // toward prev
     let exit  = next ? axisDir(n, next) : null;    // toward next
+    // THE ELBOW AT THE FRONT. With nothing laid past it the fallback below runs the surface
+    // straight out the far side — which is the honest guess for a tile, whose front is a
+    // junction, and plainly wrong for a bent platform, which has exactly one way out and is
+    // drawn with it. He walked off the end of a curve he was standing on.
+    if (!exit) exit = platformExit(n, entry);
     if (!entry && !exit) { entry = { x:-1, y:0 }; exit = { x:1, y:0 }; }
     else if (!entry)     { entry = { x:-exit.x, y:-exit.y }; }
     else if (!exit)      { exit  = { x:-entry.x, y:-entry.y }; }
@@ -7266,8 +7411,12 @@
     const s = state;
     const def = id ? (talLive(id) && talUnlocked.has(id) ? talById(id) : null) : wornTalisman();
     // Normally only while he is running. The exception is the Ankh's grace: he is already
-    // falling, and that is precisely when the offer is open.
-    const grace = s && s.status === "falling" && s.ankhGrace > 0;
+    // falling, and that is precisely when the offer is open — and it stays open, for the Ankh
+    // and shut for everything else, until the resurrection it started has finished. Half of a
+    // dipped charm is still on the screen and still takes a tap, so the rack going dim is not
+    // by itself enough to stop one being fired mid-passage; this is the test that is.
+    const grace = s && s.status === "falling" &&
+                  (s.ankhGrace > 0 || !!(s.fall && s.fall.ankh));
     // A second press on the Millstone is the way OUT of it. The sit runs long now — up to five
     // tiles' worth of running — and a rest you cannot stand up from is a punishment rather than
     // a power. The charm is spent either way, so letting go of it early costs nothing.
@@ -7293,7 +7442,7 @@
     // screen for six seconds, which was a joke at the player's expense rather than a power —
     // this is the only charm that changes what you have to work with instead of what is
     // happening to you, and three tiles is the whole shape of the game.
-    if (def.id === "mush")   { spawnSpareTile(def.col); return true; }
+    if (def.id === "mush")   { startMushroom(); return true; }
     // The Hammer stopped being a thing you aim and became a thing you set off: it used to wait,
     // armed, for you to tap a laid tile and lift it. A charm that does its work the moment you
     // press it is one fewer rule to hold, and breaking rock is what a sledge was always for.
@@ -7590,6 +7739,18 @@
                               r0 = Math.min(r0, b.r); r1 = Math.max(r1, b.r); }
     c0 = Math.max(0, c0 - 1); c1 = Math.min(COLS - 1, c1 + 1);
     r0 = Math.max(0, r0 - 1); r1 = Math.min(ROWS - 1, r1 + 1);
+    // The light, laid down the line the squares are about to be lit along, and under them. Its
+    // ends are the beam's own ends and its width the beam's own width, so it cannot describe a
+    // stream that is not there — and its leading end travels out with the beam rather than
+    // arriving whole, or the light would reach the far wall before the Hammer did.
+    {
+      const ax = (ox0 + alongMin*ux)*cell, ay = (oy0 + alongMin*uy)*cell;
+      const bx = (ox0 + alongMax*ux)*cell, by = (oy0 + alongMax*uy)*cell;
+      const grew = Math.min(1, u/Math.max(1, (L - 1)*R.step + HAMMER.inMs));
+      const left = Math.max(0, 1 - Math.max(0, u - goneAt)/Math.max(1, HAMMER.outMs*2));
+      charmGlowLine(ax, ay, ax + (bx - ax)*grew, ay + (by - ay)*grew,
+                    halfW*2*cell*CHARM_GLOW.beam, RIM, CHARM_GLOW.a*left);
+    }
     ctx.save();
     for (let cc = c0; cc <= c1; cc++) for (let rr = r0; rr <= r1; rr++) {
       if (state.walls.has(key(cc, rr))) continue;     // it does not light rock it cannot pass
@@ -7631,6 +7792,133 @@
     ctx.restore();
   }
 
+  // THE LIGHT A CHARM'S EFFECT GIVES OFF. Every one of them is built from little squares of
+  // the world's own grid, and a square does not glow: the shape reads as ground going out,
+  // which is right for the ground and wrong for the charm. So the light is a second thing —
+  // laid in the charm's own colour and ADDED to what is behind it, under the squares, so it is
+  // a lamp the effect is standing in front of rather than a wash over the top of one.
+  //
+  // Additive and nothing else: no blur filter, which Safari did not have before 17.4 and
+  // silently ignores rather than throwing, and no offscreen pass — a gradient is a gradient on
+  // every machine that has ever run this.
+  const CHARM_GLOW = {
+    a:     0.50,   // how hard it burns at the middle
+    reach: 1.30,   // ...and how far past the effect's own edge it carries
+    beam:  1.70,   // the Hammer's line is a line, so its light is a stroke this many times wide
+    // It burns harder and wider than the rest — everything the Bell touches stops existing,
+    // which is the largest thing any charm does — but not so hard that it puts out the sweep
+    // standing on it. At 0.90 the middle went flat white and the squares drawn OVER the light
+    // could not be seen against it, which reads as the light being on top of them.
+    bellA:     0.52,
+    bellReach: 1.55,
+  };
+  // ...and the BELL'S light is not one colour. Everything it touches stops existing, which is
+  // the largest thing any charm does, so it gets the largest light: white at the heart — hot
+  // enough to have no colour left — spreading out through the same hues its own sweep is drawn
+  // in, taken from BELL.hue0 and BELL.hueSpan so the halo and the squares can never disagree.
+  //
+  // A radial gradient with the hues laid along it, rather than a wheel of them: the sweep is a
+  // hand going round and the light is what it is giving off, and light gets fainter and cooler
+  // with distance rather than changing colour as you walk round it.
+  // BUILT ONCE AND STAMPED. A nine-stop radial gradient filled additively across several tiles
+  // of board, every frame, on top of a sweep that is already lighting a few thousand little
+  // squares, is the one thing in the whole effect that costs real time — and the picture barely
+  // changes from frame to frame. So it is drawn into a small offscreen and blitted at whatever
+  // size is wanted, and rebuilt only when the hue has walked far enough to see.
+  //
+  // The alpha is left at full in the sprite and applied at the stamp, so the same picture serves
+  // every strength the effect fades through and the cache is not thrown away as it goes out.
+  const BELL_GLOW_PX = 128;
+  let _bellGlow = null, _bellGlowKey = "";
+  function bellGlowSprite(h0, span, turn) {
+    const key = h0 + "|" + span + "|" + Math.round((turn || 0)*24);   // ~15° of hue to a bucket
+    if (_bellGlowKey === key && _bellGlow) return _bellGlow;
+    if (!_bellGlow) { _bellGlow = document.createElement("canvas");
+                      _bellGlow.width = _bellGlow.height = BELL_GLOW_PX; }
+    const g = _bellGlow.getContext("2d"), S = BELL_GLOW_PX, m = S/2;
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, S, S);
+    const gd = g.createRadialGradient(m, m, 0, m, m, m);
+    gd.addColorStop(0,    "rgba(255,255,255,1)");
+    gd.addColorStop(0.12, "rgba(255,255,255,0.78)");
+    const N = 6;
+    for (let i = 0; i < N; i++) {
+      const u = i/(N - 1);
+      const h = hueRGB(h0 + span*u + (turn || 0));
+      const k = 0.62 - 0.60*u;                          // ...falling away as it goes out
+      gd.addColorStop(0.22 + 0.76*u,
+        "rgba(" + Math.round(h[0]*255) + "," + Math.round(h[1]*255) + "," +
+                  Math.round(h[2]*255) + "," + Math.max(0, k).toFixed(3) + ")");
+    }
+    gd.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = gd; g.fillRect(0, 0, S, S);
+    _bellGlowKey = key;
+    return _bellGlow;
+  }
+  function charmGlowRainbow(x, y, r, a, h0, span, turn) {
+    if (!(a > 0.01) || !(r > 0)) return;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = a;
+    ctx.drawImage(bellGlowSprite(h0, span, turn), x - r, y - r, r*2, r*2);
+    ctx.restore();
+  }
+  function charmGlow(x, y, r, rgb, a) {
+    if (!(a > 0.01) || !(r > 0)) return;
+    const c = (v) => "rgba(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + "," + v.toFixed(3) + ")";
+    const gd = ctx.createRadialGradient(x, y, 0, x, y, r);
+    gd.addColorStop(0,    c(a));
+    gd.addColorStop(0.40, c(a*0.46));
+    gd.addColorStop(1,    c(0));
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = gd;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+  // ...and the same light for something long and thin. A circle over a beam is a circle.
+  //
+  // NOT STROKES. It was three nested round-capped lines, widest and faintest first, on the
+  // reasoning that a stack of them behaves like a falloff — and it does not: a stroke is a
+  // solid band with a hard edge, so three of them are three hard edges, and what you saw down
+  // the side of the Hammer was the outline of the widest one. Light does not have an outline.
+  //
+  // So the falloff is put where it belongs, in the FILL. The body is one rectangle laid along
+  // the beam whose gradient runs ACROSS it — full down the axis, nothing at the edge — which is
+  // what gives the sides no edge to see. The head is a radial at the tip, because the tip is
+  // where the thing actually is and a rectangle simply stopping there would be a wall of light.
+  // A smaller one at the root does the same for the end it comes out of.
+  function charmGlowLine(x0, y0, x1, y1, w, rgb, a) {
+    if (!(a > 0.01) || !(w > 0)) return;
+    const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy);
+    if (!(L > 0.5)) return;
+    const c = (v) => "rgba(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + "," +
+                     Math.max(0, v).toFixed(3) + ")";
+    const h = w/2;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    // Everything below is drawn in the BEAM'S own frame — along +x, across y — so the same few
+    // numbers serve it at any angle and none of the geometry has to know which way it went.
+    ctx.translate(x0, y0); ctx.rotate(Math.atan2(dy, dx));
+    const gb = ctx.createLinearGradient(0, -h, 0, h);
+    gb.addColorStop(0.00, c(0));
+    gb.addColorStop(0.28, c(a*0.30));
+    gb.addColorStop(0.50, c(a*0.62));
+    gb.addColorStop(0.72, c(a*0.30));
+    gb.addColorStop(1.00, c(0));
+    ctx.fillStyle = gb;
+    ctx.fillRect(0, -h, L, h*2);
+    const cap = (px, k, r) => {
+      const g = ctx.createRadialGradient(px, 0, 0, px, 0, r);
+      g.addColorStop(0.00, c(a*k));
+      g.addColorStop(0.38, c(a*k*0.44));
+      g.addColorStop(1.00, c(0));
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(px, 0, r, 0, Math.PI*2); ctx.fill();
+    };
+    cap(L, 1.00, h*1.75);                    // the head, which is where the Hammer has got to
+    cap(0, 0.55, h*1.20);                    // ...and the root it left from
+    ctx.restore();
+  }
   // A charm's own tone, pulled a little way toward a hue that runs across it — along the line
   // for the Hammer, round the circle for the Bell. `t` is how far through that run this square
   // sits. Subtle on purpose, and for both of them: the thing is still made of ground, and a
@@ -7679,6 +7967,10 @@
     const c0 = Math.max(0, Math.floor((p.x - rad)/cell)), c1 = Math.min(COLS-1, Math.floor((p.x + rad)/cell));
     const r0 = Math.max(0, Math.floor((p.y - rad)/cell)), r1 = Math.min(ROWS-1, Math.floor((p.y + rad)/cell));
     const spanR = Math.max(1e-3, rad - hole);
+    // The hue walks with the hand, so the halo turns with the sweep rather than sitting still
+    // under something that is plainly moving.
+    charmGlowRainbow(p.x, p.y, rad*CHARM_GLOW.bellReach, CHARM_GLOW.bellA*env,
+                     BELL.hue0, BELL.hueSpan, turn*0.35);
     ctx.save();
     for (let cc = c0; cc <= c1; cc++) for (let rr = r0; rr <= r1; rr++) {
       if (state.walls.has(key(cc, rr))) continue;        // it does not ring through rock
@@ -7716,6 +8008,86 @@
   // One more tile in the hand, dropped as close to the middle of the board as there is room
   // for. It goes down LOOSE, exactly as if you had dragged it there yourself: it is a fourth
   // tile to cycle, not a piece of track laid for you.
+  // THE MUSHROOM. It used to drop a fourth tile somewhere on the board and let go, which made
+  // it a thing you were given rather than a thing you did. Now it STOPS the world and hands you
+  // the decision: he holds still, the three squares the track could go to put on the charm's
+  // own mark, and the one you touch grows a tile out of nothing.
+  //
+  // Every beat of it is here rather than spread through the tick: it is a small state machine
+  // with one live instance, and the one thing that must never happen is the runner being let go
+  // while a tile is still coming up under him.
+  const MUSH = {
+    wait:   5000,   // how long he will stand there waiting for you to choose
+    grow:   1000,   // ...and how long the tile you chose takes to come up
+    full:    500,   // ...and how long it stands there at full size before it clicks in
+    from:   0.50,   // it starts at half a tile and swells to the whole one
+    settle:  500,   // a beat after it lands, before the charm goes
+    after:   500,   // ...and another after that, before he runs again
+    glow:    1.15,  // how far the pink light reaches past the tile, in tiles
+    glowA:   0.85,  // ...and how hard it burns
+  };
+  function startMushroom() {
+    const s = state;
+    // Nothing to build from — he is standing on the goal, or every way on is blocked — so the
+    // charm has nowhere to put a tile and there is no point holding him still to say so.
+    if (!leadNode()) { spawnSpareTile("#ff8fc8"); return; }
+    s.mush = { beat: "choose", t: 0, c: 0, r: 0 };
+  }
+  // The cells the charm is offering. The SAME list the junction hints are drawn from and the
+  // same list a tap is tested against, so the mark, the tap and the tile cannot disagree.
+  function mushExits() {
+    const lead = leadNode();
+    return lead ? junctionExits(lead.n, lead.prev) : [];
+  }
+  function tickMushroom(dt) {
+    const s = state, M = s.mush; if (!M) return;
+    // He is held for as long as this runs, and topped up every frame rather than set once: the
+    // choosing beat has no length of its own — it is however long you take.
+    s.hold = Math.max(s.hold, 60);
+    M.t += dt;
+    if (M.beat === "choose") {
+      // ...and if you never choose, the charm is spent anyway. It was pressed; the offer was
+      // made. Falling through to the same ending it would have had means there is one way out
+      // of this state rather than two.
+      if (M.t >= MUSH.wait) { M.beat = "settle"; M.t = 0; }
+      return;
+    }
+    if (M.beat === "grow") {
+      // Full size is not the same moment as IN PLACE. It comes up over `grow`, stands there
+      // whole for `full`, and only then does the board take it — so the click is its own
+      // event with a held breath in front of it rather than the last frame of the growth.
+      if (M.t < MUSH.grow + MUSH.full) return;
+      // IT CLICKS IN. A whole new tile, not one of your three — the charm is a fourth — laid
+      // straight onto the cell it grew on, which relinks the track and repaths him.
+      const t = { id: s.tiles.length, c: M.c, r: M.r, status: "free", freedAt: ++s.freeSeq };
+      s.tiles.push(t);
+      dropTileOn(t, M.c, M.r);
+      Sound.tileLaid(); haptic([8, 20, 10]);
+      M.beat = "settle"; M.t = 0;
+      return;
+    }
+    if (M.beat === "settle") {
+      if (M.t < MUSH.settle) return;
+      // ...and NOW the charm breaks. It is spent the moment it is pressed as far as the rules
+      // are concerned, but the rack holds it until here — see updatePowerBtn — so the break is
+      // the punctuation on the end of the thing rather than a noise over the top of it.
+      M.beat = "after"; M.t = 0;
+      return;
+    }
+    if (M.t >= MUSH.after) { s.mush = null; s.hold = 0; }
+  }
+  // A tap while the charm is waiting. Answered here and nowhere else: during the offer the
+  // board is frozen and the only thing a touch can mean is "that one".
+  function mushTap(c, r) {
+    const s = state, M = s.mush;
+    if (!M || M.beat !== "choose") return false;
+    if (!mushExits().some(e => e.c === c && e.r === r)) return false;
+    M.beat = "grow"; M.t = 0; M.c = c; M.r = r;
+    // The sound is given the GROWTH's length, not the whole beat: it should arrive at full
+    // size with the tile and leave the held half-second in silence before the click.
+    Sound.tap(); Sound.charmGrow(MUSH.grow); haptic(8);
+    return true;
+  }
   function spawnSpareTile(col) {
     const s = state;
     // SPARE, and it stays spare until the track reaches it. A fourth tile that arrived in your
@@ -8161,7 +8533,11 @@
     float:   1250,   // ...carried back to the board
     flash:    260,   // the light goes, all at once
     drop:     260,   // ...and the last of the way is a fall, because it should be
-    rebuild: 1000,   // a beat standing on the tile, to put the track back together
+    // TWO seconds, not one. He has just been taken out of a fall, carried back through the
+    // air and set down on a tile that was not there a moment ago — and at a second he was off
+    // and running again before you had finished watching it happen. This is the beat that says
+    // the thing is over, and it is the only still moment the passage has.
+    rebuild: 2000,   // a beat standing on the tile, to put the track back together
     rise:     1.15,  // how far above the tile he is brought before the drop, in tiles
     lift:     0.34,  // ...and how far he drifts up while he is held, in tiles
     radius:   1.45,  // how far the light reaches, in tiles
@@ -8292,6 +8668,7 @@
     const spanR = Math.max(1e-3, rad - hole);
     const i0 = Math.floor((f.x - rad)/q), i1 = Math.ceil((f.x + rad)/q);
     const j0 = Math.floor((f.y - rad)/q), j1 = Math.ceil((f.y + rad)/q);
+    charmGlow(f.x, f.y, rad*CHARM_GLOW.reach, ANKH_TONE, CHARM_GLOW.a*env);
     ctx.save();
     for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
       const sx = i*q + q/2 - f.x, sy = j*q + q/2 - f.y;
@@ -10772,6 +11149,7 @@
 
     drawPickups(ts);
     drawJunctionMarks(ts);                        // over the coins: it is the thing you aim at
+    drawMushGrow(ts);                             // ...and the tile the charm is making, over both
     drawShards();
     drawPops();
     drawLights();
@@ -11189,6 +11567,10 @@
     const R = MAGNET.radius*cell, hole = MAGNET.hole*cell;
     const n = Math.max(1, Math.round(MAGNET.grid)), q = cell/n;
     const MID = rgbOf(MAGNET_TONE.mid), RIM = rgbOf(MAGNET_TONE.rim);
+    // Half strength, and only this one. Every other charm effect is a bang — a second or two
+    // and gone — but the Lodestone burns for three whole seconds centred on the runner, and at
+    // full strength its light washed out the track he is running along while he needs to see it.
+    charmGlow(px, py, R*CHARM_GLOW.reach, RIM, CHARM_GLOW.a*0.5);
     const rings = Math.max(1, Math.round(MAGNET.rings)), band = Math.max(1e-3, MAGNET.band*R);
     // Where each ring has got to, worked out once rather than per square: they are the same
     // few radii for the whole field, and a square only has to ask how near it is to one.
@@ -13225,7 +13607,69 @@
   // It is a thing you AIM AT — a tap on it fetches a tile — and it was going down under the
   // coins, so the one square the game was asking you to hit could be the one square with a
   // great gold tile floating over it.
+  // ...and while the Mushroom is asking, the three hints wear its mark. THE SAME HINT: the same
+  // white band, the same half-tile square, the same eighth-of-a-tile thickness the junction
+  // draws when a tile is in your hand — because that is exactly what this is, and a second kind
+  // of target square would be a second thing to learn for a moment that is already unusual.
+  // The only difference is what is standing in the middle of it.
+  //
+  // At the MIDDLE of the three sizes the ordinary hint has — the one it wears with a tile free
+  // in the pool but nothing in your hand. The largest is the one it grows to under a tile being
+  // dragged over the board, and nothing is being dragged here; the smallest is the whisper it
+  // drops to with nothing to send. This is neither: there is something to place and no hand
+  // carrying it, which is exactly what the middle size has always meant.
+  function drawMushMarks(ts) {
+    const M = state.mush; if (!M || M.beat !== "choose") return;
+    const lead = leadNode(); if (!lead) return;
+    const def = talById("mush"); if (!def) return;
+    const C = nodeCenter(lead.n);
+    const os = cell*0.25, hs = Math.max(0, os - cell/8);
+    const ink = "rgba(255,255,255," + JUNCTION.mark.toFixed(3) + ")";
+    for (const e of junctionExits(lead.n, lead.prev)) {
+      const mx = C.x + e.d.x*cell, my = C.y + e.d.y*cell;
+      ctx.fillStyle = ink;
+      ctx.beginPath();
+      ctx.rect(mx - os, my - os, os*2, os*2);                      // the half-tile square...
+      if (hs > 0) ctx.rect(mx - hs, my - hs, hs*2, hs*2);          // ...less its middle
+      ctx.fill("evenodd");
+      // INSCRIBED in the hole the band leaves, in the band's own ink — the charm's pink would
+      // make it a badge sitting in a target rather than a target with a charm cut into it.
+      ctx.fillStyle = ctx.strokeStyle = ink;
+      def.etch(ctx, mx, my, hs*0.86);
+    }
+  }
+  // THE TILE COMING UP. Half a tile to a whole one over a second, in the charm's pink and
+  // standing in its own light — it is being made rather than moved, so it grows out of the cell
+  // instead of flying to it the way a tile you already own does.
+  function drawMushGrow(ts) {
+    const M = state.mush; if (!M || M.beat !== "grow") return;
+    const u = Math.min(1, M.t/MUSH.grow);
+    const k = MUSH.from + (1 - MUSH.from)*u;
+    const sz = cell*k, x = cx(M.c) + (cell - sz)/2, y = cy(M.r) + (cell - sz)/2;
+    const mx = cx(M.c) + cell/2, my = cy(M.r) + cell/2;
+    // The light comes up with it and hardest at the end, so the moment it clicks in is the
+    // brightest moment of the whole thing.
+    charmGlow(mx, my, cell*MUSH.glow*k, [255, 143, 200], MUSH.glowA*(0.35 + 0.65*u*u));
+    ctx.save();
+    drawGlass(x, y, sz);
+    ctx.globalAlpha = 0.30 + 0.42*u;
+    ctx.fillStyle = "#ff8fc8";
+    rrect(x, y, sz, sz, tileR(sz)); ctx.fill();
+    // No outline. A rim is what a tile HAS — the laid ones are drawn with one — and this is a
+    // tile being made: an edge on it says it is already a finished thing that happens to be
+    // small, when what it should look like is light gathering into the shape of one.
+    ctx.restore();
+  }
   function drawJunctionMarks(ts) {
+    // THE CHARM HAS TAKEN THE JUNCTION OVER, and keeps it for the whole of its turn — not just
+    // for the asking. Tested on the charm rather than on its beat, because the moment you touch
+    // one of the three the question has been answered: the other two are no longer choices, the
+    // one you picked is becoming a tile in front of you, and the ordinary white hints coming
+    // back up underneath it would be the board asking again over the top of the answer.
+    //
+    // drawMushMarks draws only while it is still asking, so this line hides everything from the
+    // tap onward — through the growth, the settle and the beat after it — until he runs again.
+    if (state.mush) { drawMushMarks(ts); return; }
     if (JUNCTION.mark <= 0) return;
     // Not until he is off. The hints are an invitation to act, and there is nothing to act on
     // while the camera is still panning the board or the character is still assembling — a
@@ -15198,6 +15642,9 @@
     const wx = x + camX, wy = y + camY;
     const { c, r } = cellAtWorld(wx, wy);
     if (!inBounds(c, r)) return;
+    // The Mushroom owns every tap while it is asking. Before the free-tile test, not after: a
+    // charm that has stopped the world to ask you a question should not be answered second.
+    if (state.mush && mushTap(c, r)) return;
     const tile = freeTileAt(c, r);
     if (!tile) {
       // A tap on one of the junction's hint squares sends a tile there rather than making you
@@ -15357,6 +15804,7 @@
       tickEaten(dt);
       tickCeremony(dt);
       if (state.roar) tickRoar(dt);
+      if (state.mush) tickMushroom(dt);
       if (state.rest) tickRest(dt);
       if (state.status === "falling") {
         if (state.ankhGrace > 0) state.ankhGrace -= dt;    // the window to reach for the Ankh
@@ -15431,6 +15879,14 @@
   function smashCharm(b) {
     if (b._smash) return;
     b._smash = true;
+    Sound.charmBreak(); haptic([10, 24, 8]);
+    // THE TIMER GOES FIRST. The countdown is drawn on a canvas of its own laid over the badge,
+    // and the break cuts up the BADGE — so a ring left standing would hang in the air over the
+    // pieces, a frame around a charm that is no longer inside it. It is removed rather than
+    // cleared: updatePowerBtn steps over anything mid-break, so nothing will ever paint it
+    // again and an empty canvas would only be a box left lying about.
+    const ring = b.querySelector(".pw-ring");
+    if (ring) ring.remove();
     const c = b.querySelector("canvas");
     if (!c) { flipRack(() => b.remove()); return; }
     const g = c.getContext("2d"), S = c.width;
@@ -15478,6 +15934,68 @@
     requestAnimationFrame(step);
   }
   let _rackIds = "";
+  // THE COUNTDOWN, drawn as the charm's own frame going out. One glowing white line just
+  // inside the badge's edge: whole at the moment the charm fires, and eaten away from the TOP
+  // MIDDLE in both directions at once, so the two ends run down either side and meet at the
+  // bottom. What is left is always the middle of the loop, which is what makes it symmetric.
+  //
+  // Walked as a polyline and stroked between two distances along it. Line dashes would do the
+  // same arithmetic with more of it hidden, and would need the path's length anyway — which
+  // canvas will not tell you.
+  const PW_RING = { inset: 0.5, w: 2.4, glow: 4.2, a: 0.95 };
+  let _pwLoop = null, _pwKey = "";
+  function pwRingLoop(cx0, cy0, s, rad) {
+    const k = cx0 + "|" + cy0 + "|" + s + "|" + rad;
+    if (_pwKey === k) return _pwLoop;
+    const h = s/2, pts = [];
+    const put = (x, y) => pts.push([x, y]);
+    const arc = (ax, ay, a0, a1) => { const N = 8;
+      for (let i = 0; i <= N; i++) { const a = a0 + (a1 - a0)*i/N;
+        put(ax + Math.cos(a)*rad, ay + Math.sin(a)*rad); } };
+    put(cx0, cy0 - h);                                    // the top middle, where it goes from
+    put(cx0 + h - rad, cy0 - h);
+    arc(cx0 + h - rad, cy0 - h + rad, -Math.PI/2, 0);
+    put(cx0 + h, cy0 + h - rad);
+    arc(cx0 + h - rad, cy0 + h - rad, 0, Math.PI/2);
+    put(cx0 - h + rad, cy0 + h);
+    arc(cx0 - h + rad, cy0 + h - rad, Math.PI/2, Math.PI);
+    put(cx0 - h, cy0 - h + rad);
+    arc(cx0 - h + rad, cy0 - h + rad, Math.PI, Math.PI*1.5);
+    put(cx0, cy0 - h);                                    // ...and all the way back to it
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++)
+      cum.push(cum[i-1] + Math.hypot(pts[i][0] - pts[i-1][0], pts[i][1] - pts[i-1][1]));
+    _pwKey = k; _pwLoop = { pts, cum, len: cum[cum.length - 1] };
+    return _pwLoop;
+  }
+  function drawPwRing(g, u) {
+    const W = g.canvas.width;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, W, g.canvas.height);
+    if (!(u > 0.004)) return;
+    // Inside the badge's edge by half the inscribed panel's own inset, so the line runs down
+    // the middle of the frame the charm already has rather than along the outside of it.
+    const R = W*PW_R, s2 = R*1.9, s = s2*(1 - TAL.panelPad*PW_RING.inset);
+    const L = pwRingLoop(W/2, W*PW_CY, s, s*TILE.radius);
+    const a = (1 - u)/2*L.len, b = L.len - a;
+    const at = (d) => { let i = 1;
+      while (i < L.cum.length - 1 && L.cum[i] < d) i++;
+      const t = (d - L.cum[i-1])/Math.max(1e-6, L.cum[i] - L.cum[i-1]);
+      return [L.pts[i-1][0] + (L.pts[i][0] - L.pts[i-1][0])*t,
+              L.pts[i-1][1] + (L.pts[i][1] - L.pts[i-1][1])*t]; };
+    g.beginPath();
+    const p0 = at(a); g.moveTo(p0[0], p0[1]);
+    for (let i = 0; i < L.pts.length; i++)
+      if (L.cum[i] > a && L.cum[i] < b) g.lineTo(L.pts[i][0], L.pts[i][1]);
+    const p1 = at(b); g.lineTo(p1[0], p1[1]);
+    g.lineCap = "round"; g.lineJoin = "round";
+    // A soft additive pass under a hard one: the line has to read as light on a badge that is
+    // already glowing its own colour, and white on white needs the halo to be seen at all.
+    g.globalCompositeOperation = "lighter";
+    g.strokeStyle = "rgba(255,255,255,0.34)"; g.lineWidth = PW_RING.glow; g.stroke();
+    g.globalCompositeOperation = "source-over";
+    g.strokeStyle = "rgba(255,255,255," + PW_RING.a + ")"; g.lineWidth = PW_RING.w; g.stroke();
+  }
   function buildPowerRack(ids) {
     powerEl.innerHTML = "";
     ids.forEach((id, i) => {
@@ -15495,9 +16013,13 @@
       const mx = PW_CV/2, my = PW_CV*PW_CY, R = PW_CV*PW_R;
       talHook(cg, mx, my, R, def);
       def.draw(cg, mx, my, R);
-      const bar = document.createElement("span"); bar.className = "pw-bar";
-      b.appendChild(c); b.appendChild(bar);
+      const ring = document.createElement("canvas"); ring.className = "pw-ring";
+      ring.width = ring.height = PW_CV;
+      ring.style.width = ring.style.height = PW_PX + "px";
+      b.appendChild(c); b.appendChild(ring);
       b.style.setProperty("--tilt", TAL_TILT[i % TAL_TILT.length] + "deg");
+      // ...and the colour it burns while it works, off the same face the badge is painted with.
+      b.style.setProperty("--tal-col", talFace(def));
       b.addEventListener("click", (e) => {
         e.preventDefault(); Sound.unlock();
         if (firePower(id)) return;
@@ -15508,9 +16030,18 @@
     _rackIds = ids.join(",");
   }
   function updatePowerBtn() {
+    // THE RACK IS ON WHILE THE ANKH IS WORKING, and this is where it was going wrong. Pressing
+    // the Ankh zeroes ankhGrace on its way into the passage — the fall takes the window away
+    // the moment it is spent — so the whole rack failed this test on the very next frame and
+    // was emptied out from under the charm you had just pressed. It vanished ON THE PRESS,
+    // rather than at the end of the thing the press started.
+    //
+    // fall.ankh IS that passage: it exists from the press until he is standing on the tile
+    // again, which is exactly as long as the rack should be there to show what is doing it.
+    const ankhRun = !!(state && state.fall && state.fall.ankh);
     const live = !titleActive && !paused && state &&
                  (state.status === "play" || state.status === "vortex" ||
-                  (state.status === "falling" && state.ankhGrace > 0));
+                  (state.status === "falling" && (state.ankhGrace > 0 || ankhRun)));
     // ...with the ANKH at the right-hand end, always. It is the odd one out on this rack — the
     // only charm that answers a fall, and the one the whole row inverts around when he starts
     // falling — so it gets a place of its own rather than whichever slot in the middle of the
@@ -15529,16 +16060,33 @@
     // moment the Ankh is worth anything and the one moment nothing else is — so the rack says
     // so: everything else dips out of reach and the Ankh, which has been sitting half-sunk all
     // level, comes up. One charm, one moment.
-    const grace = state.status === "falling" && state.ankhGrace > 0;
+    // ...and it stays the Ankh's moment for the whole of the RESURRECTION, not just for the
+    // window before it. ankhGrace is spent on the press, so without the second term the other
+    // five came back up the instant you reached for the Ankh — offering you a Hammer to throw
+    // while the light was still carrying him back to the tile. One charm, one moment, and the
+    // moment lasts until he is standing on it.
+    const grace = state.status === "falling" && (state.ankhGrace > 0 || ankhRun);
     // One is spent per level, so once any has fired they ALL go dim — except the one that is
-    // running, which keeps its drain bar, and the Hammer while it waits to be aimed.
+    // running, which keeps its countdown, and the Hammer while it waits to be aimed.
     [...powerEl.children].forEach((b) => {
       const id = b.dataset.tal, mine = p.kind === id;
-      const bar = b.querySelector(".pw-bar");
+      const ring = b.querySelector(".pw-ring");
+      const rg = ring && ring.getContext("2d");
       // Spent, and not yet broken: it goes now. A charm still RUNNING keeps its place until it
       // has finished — you are watching the thing it does, and taking its own badge apart
       // underneath you would say it had stopped.
-      const running = mine && p.t > 0;
+      // ...and the ANKH is working for as long as its passage runs, which outlives the power
+      // slot it was fired from: he is still in the air, being carried back to the tile he ran
+      // off. A charm whose light went out while you were watching the thing it does would say
+      // it had finished when it plainly has not — and this is also what keeps it out of the
+      // smash queue until he has landed.
+      const ankhWork = id === "ankh" && !!(state.fall && state.fall.ankh);
+      // ...and the Mushroom is working from the press until the tile it grew has settled. It
+      // breaks on the way out of "settle", which is the beat after the tile clicks in.
+      const mushWork = id === "mush" && !!state.mush &&
+                       (state.mush.beat === "choose" || state.mush.beat === "grow" ||
+                        state.mush.beat === "settle");
+      const running = (mine && p.t > 0) || ankhWork || mushWork;
       const sitting = id === "brake" && state.rest;
       if (p.used.has(id) && !running && !sitting) { smashCharm(b); return; }
       if (b._smash) return;                  // ...and once it is going, nothing else touches it
@@ -15551,15 +16099,26 @@
       // but it IS running, and while it is, its own button is the way out of it. So it gets the
       // live look and the draining bar every other running charm has; a second press that
       // stands him up would otherwise be a thing you had to be told about.
+      // ...and WHAT IS LEFT, not what has been spent. The bar filled up as the effect ran,
+      // which is a thing arriving; a charm running is a thing going.
       if (sitting) { cls = "pw live";
-        bar.style.width = Math.max(0, 1 - state.rest.t/restTotal(state.rest))*100 + "%"; }
+        if (rg) drawPwRing(rg, 1 - state.rest.t/restTotal(state.rest)); }
       else if (running) { cls = "pw live";
-        bar.style.width = Math.max(0, Math.min(1, p.t / (p.ms || 1)))*100 + "%"; }
-      else { bar.style.width = "0"; }
+        // A charm with no duration of its own — the Hammer, which is a throw and not a spell —
+        // has nothing to count down, and asks for no ring.
+        // ...and only from ITS OWN clock. The Ankh is lit off the fall rather than off the
+        // power slot, so there is nothing there to count down and it asks for no ring.
+        if (rg) drawPwRing(rg, (mine && p.ms > 0) ? 1 - clamp(p.t/p.ms, 0, 1) : 0); }
+      else if (rg) drawPwRing(rg, 0);
       // ...and out of reach either because it is not this moment's charm, or because it is
       // already spent. A charm still RUNNING keeps its live look under the dip — it is doing
       // its work whether or not you can press it again.
-      if (!reach || p.used.has(id)) cls += " dim";
+      // ...except the Ankh, for as long as its passage is running. Everything else that is
+      // working keeps its live look UNDER the dip on purpose — it is doing its job whether or
+      // not you can press it again — but the Ankh's job is the thing filling the screen, and a
+      // charm sunk half off the bottom edge while the light it is making is still going is the
+      // rack disowning it mid-sentence.
+      if ((!reach || p.used.has(id)) && !ankhWork && !mushWork) cls += " dim";
       if (b.className !== cls) b.className = cls;
     });
   }
@@ -15643,6 +16202,13 @@
           continue;
         }
         if (K.move === "hunt") {
+          // NOT UNTIL HE MOVES. A hunter has no path of its own — it walks at whoever it can
+          // see — so while he is still being assembled it spends the whole intro walking to
+          // where he is going to appear, and the level opens with something already standing on
+          // him. The patrols and the rails can carry on: they run a route they would have run
+          // anyway, and a board that is completely still until the downbeat is a board that
+          // looks broken. This is the one kind whose behaviour is ABOUT him.
+          if (!state.begun) { h.rowT = 0; continue; }
           // It hunts. At every cell it steps to whichever open neighbour is nearest the runner
           // by the board's own geometry, so a wall between them is walked around, not butted
           // into. With nobody to chase — before the run, or if he is sealed away behind stones
@@ -15675,6 +16241,8 @@
               for (const [dc, dr] of DIRS) {
                 const c = h.from[0] + dc, r = h.from[1] + dr;
                 if (!inBounds(c, r) || s.walls.has(key(c, r)) || s.stones.has(key(c, r))) continue;
+                if (platformCell(c, r)) continue;      // ...solid to it here too, or it swims
+                                                       // through one the moment it loses him
                 if (taken.has(key(c, r))) continue;
                 (h.came && c === h.came[0] && r === h.came[1] ? back : opts).push([c, r]);
               }
@@ -15811,11 +16379,26 @@
     }
     return taken;
   }
+  // A FIXED PLATFORM IS SOLID to anything that is not running on it. It is a plinth bolted into
+  // the board — you can never drop a tile on one — and the runner rides its rail because the
+  // rail is the only way across it. A hunter has no rail: it was crossing them as if they were
+  // bare floor, swimming up through the steel and out the other side.
+  //
+  // Laid track is deliberately NOT included. A hunter walking over the tiles you have put down
+  // is the whole threat: making the route itself a barricade would let you wall one out with a
+  // tile, which is a different game.
+  const platformCell = (c, r) =>
+    (state.platforms || []).some(p => p.c === c && p.r === r);
   function monsterHuntStep(from, taken) {
     const s = state;
     if (s.status !== "play" || !s.path || !s.path.length) return null;
     const g = runnerCell(), goal = key(g.c, g.r);
-    const open = (c, r) => inBounds(c, r) && !s.walls.has(key(c, r)) && !s.stones.has(key(c, r));
+    // Built once and asked thousands of times: the flood below visits every open cell on the
+    // board, and a linear scan of the platform list inside it would be the one expensive thing
+    // in an otherwise cheap search.
+    const pfs = new Set((s.platforms || []).map(p => key(p.c, p.r)));
+    const open = (c, r) => inBounds(c, r) && !s.walls.has(key(c, r)) &&
+                           !s.stones.has(key(c, r)) && !pfs.has(key(c, r));
     const dist = new Map([[goal, 0]]);
     const q = [[g.c, g.r]];
     for (let i = 0; i < q.length; i++) {
