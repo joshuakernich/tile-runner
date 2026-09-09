@@ -599,6 +599,13 @@
        #000        var(--f-lipfade, 26%),
        #000        calc(100% - var(--f-lipfade, 26%)),
        transparent 100%);
+    /* THE DARK AROUND IT, and it has to live up here on the strip rather than on the capsule.
+       An outer box-shadow on the capsule would be thrown away: the capsule is clipped, and
+       clipping is applied AFTER the shadow is drawn, so there would be nothing left outside the
+       shape to see. A filter on the parent is applied to the strip as RENDERED — the clipped
+       capsule and everything in it — so the shadow follows the real silhouette, chamfers and
+       all, and no second copy of the shape has to be kept in step with it. */
+    filter:drop-shadow(0 0 var(--f-outglow, 0px) var(--f-outglowcol, transparent));
     position:fixed; left:0; right:0; bottom:var(--foot-lift); z-index:35; display:none;
     height:calc(var(--chq) * var(--f-high, 5));
     /* THE ANSWER'S OWN BOX, to the character. Same 26rem cap, same margin, same padding as
@@ -619,7 +626,12 @@
      own background, the translucent panel is the ::before over it, and the items are content and
      sit above both. Without the isolation the ::before would escape and land UNDER the white. */
   #wintabs .wt-row { position:relative; isolation:isolate; display:flex; height:100%;
-    width:100%; margin:0 auto; gap:var(--f-space, 0px); justify-content:center;
+    /* A WHOLE NUMBER OF SQUARES ACROSS, the same way it is a whole number tall. It used to take
+       #winui's 26rem so that it and PLAY CHAPTER shared two edges — but the answer has moved out
+       from under the foot and hangs under the square it names now, so there is no longer another
+       object down here for the capsule to agree with. It answers to the grid instead. */
+    width:calc(var(--chq) * var(--f-wide, 15)); max-width:100%;
+    margin:0 auto; gap:var(--f-space, 0px); justify-content:center;
     /* The white-ish the panel is laid over. On its own it is nothing — a fifth of a white on a
        dark map — but it is what stops the translucent panel above reading as a smudge of the
        map gone dim, and gives the frost something to be. */
@@ -632,6 +644,19 @@
     clip-path:var(--bar-clip); }
   #wintabs .wt-row::before, #wintabs .wt-row::after {
     content:""; position:absolute; pointer-events:none; }
+  /* THE LIGHT INSIDE THE EDGE. An inset box-shadow, so it hugs all four sides at once and the
+     clip takes it round the two chamfers with everything else — a border would have to be told
+     about the cut corners and would come out as a line drawn round the shape rather than as the
+     shape catching light. Absolutely positioned, so it paints over the items as well as the
+     ground: an edge light that stops at the labels is a light behind glass, not in it. */
+  /* Two inset shadows on one layer: the RIM first, because an earlier shadow paints over a
+     later one and the hard edge has to sit on top of the soft light rather than under it. The
+     rim is spread with no blur — a hairline hard against the boundary; the glow is blur with no
+     spread — a haze falling inwards off it. The clip takes both round the chamfers. */
+  #wintabs .wt-glow { position:absolute; inset:0; pointer-events:none;
+    clip-path:var(--bar-clip);
+    box-shadow:inset 0 0 0 var(--f-rim, 0px) var(--f-rimcol, transparent),
+               inset 0 0 var(--f-inglow, 0px) var(--f-inglowcol, transparent); }
   /* THE CHAMFER. Eight points, one grid square off each corner, cut at 45° — the same angle the
      game leans everything else at and the same measure it builds everything else from. A radius
      would have been a softer object than anything else on this screen; a chamfer is a corner
@@ -674,7 +699,11 @@
      it everywhere else in this game: the green the shop marks an EQUIPPED item with. Full
      strength against the other two held back, so the bar reads at a glance without a second
      colour being invented for it. */
-  #wintabs button.on { opacity:1; color:var(--f-onink, #fff); }
+  /* ...and it stands on something. Everything else in the bar is held apart by colour alone;
+     this is the one shape, and it is what a tab strip does — background-COLOR, so nothing else
+     the button carries is reset by a shorthand. */
+  #wintabs button.on { opacity:1; color:var(--f-onink, #fff);
+    background-color:var(--f-onback, transparent); }
   #wintabs button.on .wt-lbl { color:var(--f-onlbl, #8dff78); }
   /* A light behind the mark of the one you are on. Off by default — the colour says it already —
      but it is the difference between a tab that is brighter and a tab that is LIT, and that is
@@ -1067,6 +1096,11 @@
      fitScrollRack measures the shop's rack down to DONE'S OWN TOP EDGE, so the floor of the
      rack follows the button up on its own and no second number has to be kept in step. */
   #menu.with-tabs { padding-bottom:calc(var(--bar-h) + var(--chq)); }
+  /* ...and in the SHOP that room is given back INSIDE the rack instead. The pane itself reaches
+     the bottom of the glass so the stock passes under the capsule; this padding is what lets the
+     last row be scrolled clear of it. Room taken out of the pane would have done the opposite —
+     it would have stopped the stock ever reaching the space under the bar at all. */
+  #menu.with-tabs #menu-body .shop-rack { padding-bottom:calc(var(--bar-h) + var(--chq)); }
   /* ...AND DONE GOES. The Tileverse tab is the way back now, and a DONE stacked over it was the
      same instruction given twice at the same end of the screen. Not deleted — display:none, and
      the screens reached from the pause menu (which get no panel, and so no `with-tabs`) still
@@ -2041,6 +2075,10 @@
      are, and the tab that names it is lit to say so. The cog is not here — it is not a room. -->
 <div id="wintabs">
   <div class="wt-row">
+    <!-- Nothing but a surface for the inner glow to be cast on. It is a real element and not a
+         third pseudo because .wt-row has already spent both: ::before is the panel and ::after
+         is the lip along the top. -->
+    <i class="wt-glow"></i>
     <button id="win-tal"><span class="wt-ico"></span><span class="wt-lbl">Talismans</span></button>
     <button id="win-tv" class="on" aria-current="page"><span class="wt-ico"><i class="tv-chip"></i></span><span class="wt-lbl">Tileverse</span></button>
     <button id="win-shop"><span class="wt-ico"></span><span class="wt-lbl">Tile Shop</span></button>
@@ -4214,7 +4252,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.33";                    // shown on the title & pause screens
+  const VERSION = "v10.34";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -11230,8 +11268,10 @@
   // is right on the first frame before this has run — and would still be right if the block
   // were deleted. That is the whole arrangement: this is a set of overrides, not a source.
   const FOOTER = {
-    high:    5.0,        // the capsule's height, in grid squares
-    cham:    15,         // the corner cut at its two bottom corners, px
+    wide:    15,         // the capsule's width, in grid squares
+    high:    5.0,        // ...and its height. Both in SQUARES, because the bar is furniture and
+                         // everything else in the menus is a whole number of them.
+    cham:    0,          // the corner cut at its two bottom corners, px — 0 is a plain rectangle
     ink:     "#000000",  // the panel it is made of
     inkA:    0.72,       // ...and how solid: under 1 the map goes on showing through
     back:    "#455bbf",  // the wash the panel is laid over, so it frosts rather than dims
@@ -11241,7 +11281,8 @@
                          // chapters behind the capsule go to grey with no blur at all, which is
                          // what this is here for — the bar's own blue is the only colour in it.
     lip:     "#ffffff",  // the light along the top edge
-    lipA:    1.00,
+    lipA:    0.00,       // ...off. The inner glow does this job now, all the way round, and the
+                         // two together were one hard rule under one soft one on the same edge.
     lipH:    2.0,        // its thickness, px
     lipFade: 0,          // where it reaches full strength, % in from each end — 0 is corner to corner
     mark:    25,         // the icon, px
@@ -11252,13 +11293,27 @@
     offInk:  "#697291",  // ...and this is the whole of what marks them out: a cool grey-blue
                          // against the lit tab's white. Held apart by COLOUR alone, which is why
                          // it has to be this far down from #ffffff to read at a glance.
-    item:    100,        // how wide ONE item is, px. 0 shares the bar equally, which pushes the
+    item:    75,         // how wide ONE item is, px. 0 shares the bar equally, which pushes the
                          // outer two names into its far corners; a width narrows them and the
                          // three cluster in the middle of the plate.
     space:   0,          // between one item and the next, px — the bar is one plate, so this is
                          // air inside it rather than a gap between objects
+    onBack:  "#ffffff",  // A PLATE BEHIND THE ONE YOU ARE ON, and the only thing on this bar
+    onBackA: 0.14,       // that is a shape rather than a colour. Semi-transparent, so it lifts
+                         // the item off the panel rather than covering it.
     onInk:   "#ffffff",  // the one you are
     onLbl:   "#ffffff",  // ...and its name
+    outGlow: 24,         // A DARK AROUND THE OUTSIDE, px. It is what stops a translucent bar
+    outGlowCol: "#000000",// dissolving into a bright chapter: the map goes down around it, so the
+    outGlowA: 0.55,      // capsule has an edge even where its own ground has almost none.
+    rim:     1.5,        // THE VERY EDGE, px. An inset shadow with a SPREAD and no blur, which
+    rimCol:  "#ffffff",  // is a hairline hard against the boundary rather than a haze off it —
+    rimA:    0.30,       // so the capsule has a lit edge AND a light inside it, and the two do
+                         // different jobs. Painted over the inner glow, being the sharper of the
+                         // two: the edge is where the eye is told the shape ends.
+    inGlow:  18,         // A LIGHT INSIDE THE CAPSULE'S OWN EDGE, px. An inset shadow rather
+    inGlowCol: "#ffffff",// than a border: it hugs all four sides and the two chamfers with it,
+    inGlowA: 0.22,       // and reads as glass catching light rather than as a line drawn round.
     glow:    0.0,        // a light behind the lit icon, px — 0 is off
     glowCol: "#ffffff",
     glowA:   0.00,
@@ -11272,7 +11327,14 @@
   }
   function applyFooter() {
     const S = document.documentElement.style, F = FOOTER;
+    S.setProperty("--f-wide",    F.wide);
     S.setProperty("--f-high",    F.high);
+    S.setProperty("--f-outglow", F.outGlow + "px");
+    S.setProperty("--f-outglowcol", fRGBA(F.outGlowCol, F.outGlowA));
+    S.setProperty("--f-rim",     F.rim + "px");
+    S.setProperty("--f-rimcol",  fRGBA(F.rimCol, F.rimA));
+    S.setProperty("--f-inglow",  F.inGlow + "px");
+    S.setProperty("--f-inglowcol", fRGBA(F.inGlowCol, F.inGlowA));
     S.setProperty("--f-cham",    F.cham + "px");
     S.setProperty("--f-ink",     F.ink);
     S.setProperty("--f-inka",    F.inkA);
@@ -11294,6 +11356,7 @@
     S.setProperty("--f-item",    (F.item > 0 ? F.item : 0) + "px");
     S.setProperty("--f-grow",    F.item > 0 ? 0 : 1);
     S.setProperty("--f-space",   F.space + "px");
+    S.setProperty("--f-onback",  fRGBA(F.onBack, F.onBackA));
     S.setProperty("--f-onink",   F.onInk);
     S.setProperty("--f-onlbl",   F.onLbl);
     S.setProperty("--f-glow",    F.glow + "px");
@@ -18991,19 +19054,23 @@
   function fitScrollRack() {
     const rack = menuBody.querySelector(".shop-rack"), go = menuBody.querySelector(".shop-go");
     if (!rack) return;
-    // WHATEVER IS PINNED UNDER THE RACK. It used to be DONE and only DONE; on the two screens
-    // the trilogy follows you onto, DONE is gone and the panel is the floor. Measured off the
-    // element rather than off a number, so neither one has to publish its height.
+    // THE RACK RUNS TO THE BOTTOM OF THE GLASS when the footer is up. It used to stop above the
+    // capsule, which left a dead band of cosmos between the last row of stock and a bar that is
+    // TRANSLUCENT and was built to be looked through — the stock should pass under it. What keeps
+    // the last row reachable is padding INSIDE the rack (see .shop-rack) rather than a shorter
+    // rack: a pane that ends early can never show you what is behind the thing it ends at.
+    // With no footer — the shop reached from the pause menu — DONE is the floor, as it always
+    // was, measured off the element rather than off a number so neither has to publish a height.
     const tabs = document.getElementById("wintabs");
-    const floor = (tabs && tabs.classList.contains("show")) ? tabs
-                : (go && go.offsetParent !== null) ? go : null;
-    if (!floor) return;
+    const barUp = !!(tabs && tabs.classList.contains("show"));
+    const floor = barUp ? null : (go && go.offsetParent !== null) ? go : null;
+    if (!barUp && !floor) return;
     // The Tileverse pane sizes itself: it is the whole screen, with the chrome floating over
     // it. Measuring a floor for it would put the bottom band back.
     if (rack.classList.contains("lvl-rack")) return;
     const gap = 12;
-    const floorTop = floor.getBoundingClientRect().top;
-    const h = floorTop - rack.getBoundingClientRect().top - gap;
+    const floorTop = barUp ? window.innerHeight : floor.getBoundingClientRect().top;
+    const h = floorTop - rack.getBoundingClientRect().top - (barUp ? 0 : gap);
     const maxH = Math.max(140, Math.round(h));
     rack.style.maxHeight = maxH + "px";
     // The stock fills the WIDTH: a cell is a third of it, and square, whatever that does to how
