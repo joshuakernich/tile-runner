@@ -359,6 +359,19 @@
     bottom:0; max-width:26rem; margin:0 auto;
   }
   #winui.show { display:flex; animation:poem-in 260ms ease-out both; }
+  /* THE STRIP TAKES NO TAPS, only the button in it does. It is a full-width fixed box and it
+     always was, but at the foot of the screen the map underneath had nothing to lose. Floating
+     in the MIDDLE of the map it would be an invisible bar across the whole width that swallowed
+     every drag that started on it. */
+  #winui { pointer-events:none; }
+  #winui > * { pointer-events:auto; }
+  /* PINNED UNDER THE SQUARE IT IS ABOUT. placeWinNext() writes the two numbers every frame; the
+     class is what switches the box off the foot. `bottom:auto` because a box cannot be pinned to
+     both ends, and no bottom padding because the room it was reserving for the footer belongs to
+     a box that ends at the button. */
+  #winui.at-cell {
+    top:var(--wn-y, 0px); bottom:auto; padding-bottom:0;
+    transform:translateX(var(--wn-x, 0px)); }
   /* A black ground under the one answer on this screen, fading up into the map. Every chapter
      brings its own palette to the bottom of the frame, and a button standing on whatever colour
      happens to be there is a button whose legibility is decided by the level behind it. Pinned
@@ -4201,7 +4214,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.32";                    // shown on the title & pause screens
+  const VERSION = "v10.33";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -6900,7 +6913,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     wallLayerDirty = true;                      // cell/world size changed — rebuild wall + grain caches
     _uiGrid = 0;                                // ...and re-read the grid, in case the CSS moved
-    _footLift = -1; _headDrop = -1; _safe = null;
+    _footLift = -1; _headDrop = -1; _safe = null; _canvasOrg = null;
     // ...and the edges with it — a rotation moves all of them
     grainScreen = null;
     syncHudChrome();                            // the pause button follows the speedo's plate
@@ -11032,6 +11045,10 @@
     win.camR = rubber(d.r0 - (y - d.sy)/S, B.r0, B.r1);
     win.camTo = null;
     d.moved = Math.max(d.moved, Math.hypot(x - d.sx, y - d.sy));
+    // MOVING THE MAP PUTS THE CHOICE DOWN. The answer is pinned under one square; the moment
+    // you start hauling the map about you are looking for a different one, and a button chasing
+    // a square across the screen while you drag is the map arguing with you.
+    if (d.moved > WIN_TAP_SLOP) dropWinPick();
     return true;
   }
   // Eight pixels of slop, so a tap made with a thumb is still a tap.
@@ -11047,16 +11064,63 @@
       win.camTo = { c: clamp(win.camC, B.c0, B.c1), r: clamp(win.camR, B.r0, B.r1) };
     if (d.moved <= WIN_TAP_SLOP) {
       const { x, y } = screenXY(e), i = winCellAt(x, y);
-      // `next` IS the choice: the button's label, the whip's target and the level that loads
-      // all read it, so choosing a chapter is one assignment and nothing downstream has to know
-      // this screen can now be steered.
-      if (i != null && i !== win.next && (i === INTRO_CELL || winOpen(i))) {
-        win.next = i; win.camTo = (i === INTRO_CELL ? introMapCell() : mapCells()[i]);
-        Sound.tapBig(); haptic(8);
-        showWinUI();
+      if (i != null && (i === INTRO_CELL || winOpen(i))) {
+        // The one already chosen is a TOGGLE: tap it again and it is put back down. Everywhere
+        // else in the game a second tap on the thing you just tapped undoes it, and a map where
+        // the only way to un-choose is to choose something else is a map with no way out of a
+        // decision.
+        if (winPicked() && i === win.next) { dropWinPick(); Sound.tap(); haptic(4); }
+        else {
+          // `next` IS the choice: the button's label, the whip's target and the level that loads
+          // all read it, so choosing a chapter is one assignment and nothing downstream has to
+          // know this screen can now be steered.
+          win.next = i; win.pick = true;
+          win.camTo = (i === INTRO_CELL ? introMapCell() : mapCells()[i]);
+          Sound.tapBig(); haptic(8);
+          showWinUI();
+        }
       }
     }
     return true;
+  }
+  // ---- THE ANSWER SITS UNDER THE SQUARE IT IS ABOUT -----------------------------------------
+  // It used to be pinned to the foot of the screen, which is where every other "carry on" in the
+  // game lives — but every other one of those is the only thing on its screen, and this one is
+  // ABOUT a particular square on a map you can drag. At the foot it was a caption a long way from
+  // its picture: you chose a chapter up here and the thing that agreed with you was down there.
+  //
+  // Written every frame while the map is up, because the map moves: a drag, a rubber-band, a pan
+  // to a chapter you just chose. Two custom properties rather than two style writes of `top` and
+  // `transform`, so the whole placement is one rule in the sheet and this only feeds it numbers.
+  const winPicked = () => !!win && win.pick !== false;
+  function placeWinNext(S, cx0, cy0) {
+    const el = document.getElementById("winui");
+    if (!el || !el.classList.contains("show") || !win) return;
+    const btn = document.getElementById("win-next"); if (!btn) return;
+    const p = win.next === INTRO_CELL ? introMapCell() : (mapCells()[win.next] || { c: 0, r: 0 });
+    const r = mapRectAt(p, S, cx0, cy0), o = canvasOrigin(), pad = uiGrid();
+    const bw = btn.offsetWidth, bh = btn.offsetHeight;
+    // CENTRED ON THE SQUARE, then pulled back inside the glass. The button is four times the
+    // width of a chapter, so a square near either edge would hang half of it off the screen —
+    // and an answer you cannot read all of is not one. What is left is still plainly under the
+    // square, because nothing else on the map is.
+    const half = bw/2 + pad;
+    const cx = clamp(o.x + r.x + r.w/2, half, window.innerWidth - half);
+    // ...and UNDER it, unless there is no room left before the footer, where it stops. Falling
+    // behind the capsule would be worse than sitting a little close to the square.
+    const floor = window.innerHeight - (FOOTER.high * pad + footLift()) - pad - bh;
+    const y = Math.min(o.y + r.y + r.h + pad, floor);
+    el.classList.add("at-cell");
+    el.style.setProperty("--wn-x", Math.round(cx - window.innerWidth/2) + "px");
+    el.style.setProperty("--wn-y", Math.round(y) + "px");
+  }
+  // Putting the chosen square back down. The button goes, the map keeps its camera, and
+  // `win.next` is left alone — it is still what would load, and the moment anything selects
+  // again it is what gets overwritten.
+  function dropWinPick() {
+    if (!win || win.pick === false) return;
+    win.pick = false;
+    const el = document.getElementById("winui"); if (el) el.classList.remove("show");
   }
   // Nine of the chapter's own colours, one pixel each, handed to the button as a background.
   // The same palette its square on the map is painted from — genTheme off the chapter number —
@@ -11137,7 +11201,7 @@
     labelWithArrow(nx, idx === INTRO_CELL ? "Replay Cinematic Intro"
                      : (b && (b.done || b.stars) ? "Replay Chapter " : "Play Chapter ") + (idx + 1));
     winNextQuilt(nx, idx);
-    el.classList.add("show");
+    el.classList.toggle("show", winPicked());
     // NO WASH AT EITHER END any more. Both existed for one reason: the heading and the two doors
     // stood bare on whatever chapter the map had scrolled under them, so the frame went dark to
     // give them a ground. Nothing up here needs one now — the heading is off, and the three doors
@@ -11166,7 +11230,7 @@
   // is right on the first frame before this has run — and would still be right if the block
   // were deleted. That is the whole arrangement: this is a set of overrides, not a source.
   const FOOTER = {
-    high:    4.0,        // the capsule's height, in grid squares
+    high:    5.0,        // the capsule's height, in grid squares
     cham:    15,         // the corner cut at its two bottom corners, px
     ink:     "#000000",  // the panel it is made of
     inkA:    0.72,       // ...and how solid: under 1 the map goes on showing through
@@ -11181,14 +11245,14 @@
     lipH:    2.0,        // its thickness, px
     lipFade: 0,          // where it reaches full strength, % in from each end — 0 is corner to corner
     mark:    25,         // the icon, px
-    tally:   21,         // the coin and its figure — one size for both, px
+    tally:   16,         // the coin and its figure — one size for both, px
     gap:     4,          // between an icon and its name, px
     label:   10.0,       // the name, px
     dim:     1.00,       // the two you are not on — at 1, nothing is held back...
     offInk:  "#697291",  // ...and this is the whole of what marks them out: a cool grey-blue
                          // against the lit tab's white. Held apart by COLOUR alone, which is why
                          // it has to be this far down from #ffffff to read at a glance.
-    item:    76,         // how wide ONE item is, px. 0 shares the bar equally, which pushes the
+    item:    100,        // how wide ONE item is, px. 0 shares the bar equally, which pushes the
                          // outer two names into its far corners; a width narrows them and the
                          // three cluster in the middle of the plate.
     space:   0,          // between one item and the next, px — the bar is one plate, so this is
@@ -11960,6 +12024,7 @@
     // voidCell, which pieces the sky to the map's own sub-tile on EVERY screen.
     voidPar = { x: cx0 * S * VOID_PARALLAX, y: cy0 * S * VOID_PARALLAX };
     try { drawVoid(ts); } finally { voidPar = null; }   // ...and only for this frame
+    placeWinNext(S, cx0, cy0);          // the answer follows the square it is about
     const opts = { glowIdx: P.idx, glow, glowA, ringIdx: P.next, ring, alpha: mapA };
     if (P.ph === "pan" || P.ph === "wait" || P.ph === "whip") { opts.litIdx = P.next; opts.lit = litK; }
     // ...and until then it is GREY. Finishing a chapter opens the next one, so the map's own
@@ -13048,6 +13113,16 @@
   // viewport to cover the strip, so this comes back negative down there — and it has to, or the
   // painted prompts would follow the board over the edge while every DOM button stayed behind at
   // the viewport foot, which is the exact drift --foot-lift exists to prevent.
+  // Where the board's top left corner is IN THE VIEWPORT. The map is drawn in canvas pixels and
+  // the answer is a fixed DOM box in viewport ones, so one of them has to be told about the
+  // other. Cached and cleared with every other measurement in computeLayout: this is read once
+  // a frame while the map is being dragged, and a getBoundingClientRect there is a forced
+  // reflow sixty times a second.
+  let _canvasOrg = null;
+  function canvasOrigin() {
+    if (!_canvasOrg) { const r = canvas.getBoundingClientRect(); _canvasOrg = { x: r.left, y: r.top }; }
+    return _canvasOrg;
+  }
   function canvasGap() {
     const r = canvas.getBoundingClientRect();
     return { top: r.top, bottom: window.innerHeight - r.bottom };
