@@ -352,8 +352,7 @@
        one. It was two, and the one answer on this screen stood a square higher than the answer
        on every other — near enough to read as a wobble rather than as a decision. */
     /* ...and now it has to clear the tab panel, which owns the foot. One grid square between
-       the answer and the panel, the gap every run of buttons in the game uses. --tv-cell is a
-       tab's height; the fallback matches the one #wintabs itself falls back to. */
+       the answer and the panel, the gap every run of buttons in the game uses. */
     padding:0 calc(env(safe-area-inset-left) + var(--chq2))
             calc(var(--bar-h) + var(--chq))
             calc(env(safe-area-inset-right) + var(--chq2));
@@ -387,11 +386,12 @@
      stands on this line is a full-width slab rather than a row of small charms and wants to be
      off the swipe rather than merely off the bar. */
   :root { --foot-lift: max(var(--chq), calc(var(--safe-b) + var(--edge-min))); }
-  /* HOW TALL THE FOOTER BAR IS — its own top pad, an item, and the lift off the glass. Written
-     once here because three things have to agree on it: the bar itself, the answer standing
-     above it on the Tileverse, and the two menus that give it the foot. It was worked out
-     separately in each of the three, and the answer landed exactly ON the bar's top edge. */
-  :root { --bar-h: calc(var(--chq) + var(--tv-cell, calc(var(--btn-h) * 1.8)) + var(--foot-lift)); }
+  /* HOW MUCH ROOM THE FOOTER TAKES — the capsule's five squares, and the lift that holds it off
+     the glass. Written once here because three things have to agree on it: the bar itself, the
+     answer standing above it on the Tileverse, and the two menus that give it the foot. It was
+     worked out separately in each of the three once, and the answer landed exactly ON the bar's
+     top edge. */
+  :root { --bar-h: calc(var(--chq) * var(--f-high, 5) + var(--foot-lift)); }
   /* ...and THE HEAD, for the same reason. Every screen's name — the Tileverse's, the shop's,
      the shelf's, and the canvas-drawn CHAPTER N COMPLETE — starts its box this far down.
      Read from JS as well (headDrop), so the canvas heading cannot drift from the DOM ones. */
@@ -558,61 +558,116 @@
      and the ROW inside it is capped at that, which is what lets the ground fade out past the
      items on a wide screen instead of running to both edges of a monitor. */
   #wintabs {
+    /* FIVE GRID SQUARES, and the number is written as five grid squares. Everything else in the
+       menus is a whole number of them — three to a button, one to a gap — and the footer was the
+       one thing measured against something else entirely (a chapter square on the map, which
+       moves with the screen height). It is furniture now, so it takes the furniture's measure. */
     --bar-w:26rem;
-    /* The ground fades over 130px OUTSIDE the row, so on a phone — where the row is nearly the
-       whole screen — those stops fall off both edges and the bar is simply solid, and on a wide
-       screen it dies away well before the corners. Same geometry for the white line, with a much
-       shorter run: it is a highlight along the lip of the bar, and a highlight that reaches the
-       ends of a wide screen is a rule, not a highlight. */
-    --bar-mask:linear-gradient(90deg,
-       transparent calc(50% - var(--bar-w)/2 - 130px),
-       #000        calc(50% - var(--bar-w)/2 + 8px),
-       #000        calc(50% + var(--bar-w)/2 - 8px),
-       transparent calc(50% + var(--bar-w)/2 + 130px));
+    /* EVERY NUMBER BELOW IS A --f-* PROPERTY WITH THE SHIPPED VALUE AS ITS FALLBACK. The block
+       is FOOTER in the script and applyFooter() writes it here; footer-lab.html drives that live.
+       Written as fallbacks and not as bare properties on purpose: the bar is correct on the very
+       first frame, before any script has run, and stays correct if the block is ever taken out. */
+    --bar-cham:var(--f-cham, var(--chq));   /* the corner cut: one grid square */
+    /* SQUARE AT THE TOP, CUT AT THE FOOT. Six points, not eight. The top edge is where the white
+       lip runs and where the answer above it lines up, and a chamfer there put two little
+       diagonals directly under a button whose corners are square — the capsule read as a
+       different family of object from the thing it sits beneath. The bottom two stay cut,
+       which is the end that is free. */
+    --bar-clip:polygon(
+       0 0, 100% 0,
+       100% calc(100% - var(--bar-cham)), calc(100% - var(--bar-cham)) 100%,
+       var(--bar-cham) 100%, 0 calc(100% - var(--bar-cham)));
+    /* A capsule, so it ENDS. The ground used to be full-bleed with a mask fading it out past the
+       row, which is a way of pretending an edge is not there; a thing that is 26rem wide and
+       stops has no need of the pretence, and on a wide screen it simply sits in the middle of
+       the foot. The white lip keeps its fade — that is a highlight, not an edge. */
     --line-mask:linear-gradient(90deg,
-       transparent calc(50% - var(--bar-w)/2 - 10px),
-       #000        calc(50% - var(--bar-w)/2 + 78px),
-       #000        calc(50% + var(--bar-w)/2 - 78px),
-       transparent calc(50% + var(--bar-w)/2 + 10px));
-    position:fixed; left:0; right:0; bottom:0; z-index:35; display:none; isolation:isolate;
-    padding:var(--chq) env(safe-area-inset-right) var(--foot-lift) env(safe-area-inset-left);
+       transparent 0,
+       #000        var(--f-lipfade, 26%),
+       #000        calc(100% - var(--f-lipfade, 26%)),
+       transparent 100%);
+    position:fixed; left:0; right:0; bottom:var(--foot-lift); z-index:35; display:none;
+    height:calc(var(--chq) * var(--f-high, 5));
+    /* THE ANSWER'S OWN BOX, to the character. Same 26rem cap, same margin, same padding as
+       #winui — so the capsule and PLAY CHAPTER are the same width and the same two edges, and
+       stay that way if either number ever moves. It used to hug its contents, which put a 270px
+       capsule under a 356px button: two objects at the foot of one screen, neither agreeing with
+       the other about where the screen's edges are. */
+    max-width:26rem; margin:0 auto;
+    padding:0 calc(env(safe-area-inset-right) + var(--chq2))
+            0 calc(env(safe-area-inset-left) + var(--chq2));
   }
   #wintabs.show { display:block; animation:poem-in 260ms ease-out both; }
-  #wintabs::before, #wintabs::after {
-    content:""; position:absolute; left:0; right:0; pointer-events:none; }
-  /* The bar's own ground: the game's panel and the game's chequer, the same material every
-     plate in it is made of — it is one big plate rather than a new kind of surface. */
-  #wintabs::before {
-    top:0; bottom:0; z-index:-1;
-    background-color:var(--panel);
+  /* The capsule is the ROW's own box, not the strip's: the strip runs the width of the screen so
+     the row can be centred in it, and what you see is the row. */
+  /* `isolation:isolate` ON PURPOSE, and it is the opposite call from the one on #win-next. Inside
+     a stacking context the element's OWN background paints first and negative-z children paint
+     on top of it — which is exactly the order wanted here: the white-ish backing is the row's
+     own background, the translucent panel is the ::before over it, and the items are content and
+     sit above both. Without the isolation the ::before would escape and land UNDER the white. */
+  #wintabs .wt-row { position:relative; isolation:isolate; display:flex; height:100%;
+    width:100%; margin:0 auto; gap:var(--f-space, 0px); justify-content:center;
+    /* The white-ish the panel is laid over. On its own it is nothing — a fifth of a white on a
+       dark map — but it is what stops the translucent panel above reading as a smudge of the
+       map gone dim, and gives the frost something to be. */
+    background:var(--f-back, rgba(255,255,255,0.20));
+    /* ...and, when it is asked for, the map behind it blurred. It is a backdrop-filter on the
+       ROW rather than on the panel above it, so what is blurred is the map — the row's own
+       backing and the panel are painted after, over the top of the blur. */
+    -webkit-backdrop-filter:blur(var(--f-blur, 0px)) saturate(var(--f-sat, 1));
+            backdrop-filter:blur(var(--f-blur, 0px)) saturate(var(--f-sat, 1));
+    clip-path:var(--bar-clip); }
+  #wintabs .wt-row::before, #wintabs .wt-row::after {
+    content:""; position:absolute; pointer-events:none; }
+  /* THE CHAMFER. Eight points, one grid square off each corner, cut at 45° — the same angle the
+     game leans everything else at and the same measure it builds everything else from. A radius
+     would have been a softer object than anything else on this screen; a chamfer is a corner
+     that has been CUT, which is what the tiles, the badges and the plates all read as.
+     Its ground is the game's panel and the game's chequer, the same material every plate is made
+     of — one big plate rather than a new kind of surface. */
+  #wintabs .wt-row::before {
+    inset:0; z-index:-1;
+    /* SEMI-TRANSPARENT, so the chapter under the foot of the map goes on being visible through
+       it. `opacity` on the whole pseudo-element rather than an alpha written into the colour:
+       it takes the chequer down with the panel, which is right — the chequer is part of the
+       panel's material, not a pattern lying on it — and it leaves --panel as the one place the
+       colour is stated, with no rgba copy of it here to fall out of step. */
+    opacity:var(--f-inka, 0.72);
+    background-color:var(--f-ink, var(--panel));
     background-image:conic-gradient(transparent 0 25%, var(--chq-ink) 0 50%,
                                     transparent 0 75%, var(--chq-ink) 0);
     background-size:var(--chq2) var(--chq2); background-origin:border-box;
-    -webkit-mask-image:var(--bar-mask); mask-image:var(--bar-mask); }
-  /* ...and the light catching its top edge. Two pixels, near-white, gone quickly at both ends.
-     It is the one hard line on this screen and it is what makes the bar read as an EDGE the map
-     runs behind rather than as a panel lying on top of it. */
-  #wintabs::after {
-    top:0; height:2px; background:rgba(255,255,255,0.92);
+    clip-path:var(--bar-clip); }
+  /* ...and the light catching its top edge, corner to corner now that the corner is a corner.
+     Two pixels, near-white, gone quickly at both ends. */
+  #wintabs .wt-row::after {
+    left:0; right:0; top:0; height:var(--f-liph, 2px);
+    background:var(--f-lip, rgba(255,255,255,0.92));
     -webkit-mask-image:var(--line-mask); mask-image:var(--line-mask); }
-  #wintabs .wt-row { display:flex; max-width:var(--bar-w); margin:0 auto; }
-  /* A column apiece: the mark, and its name under it. Height is the Tileverse's own square —
-     see --tv-cell, published from winMapFit() — so an item is the size of a chapter, and the
-     things you can go to are made of the same stuff as the places you can go to.
+  /* A column apiece: the mark, and its name under it, both sized to sit inside five squares
+     with air above and below rather than filling them to the edge.
      NO PLATE ON ANY OF THEM. The bar is the plate; a plate inside a plate is a button sitting
      on a shelf, which is the thing this stopped being. */
-  #wintabs button { flex:1 1 0; min-width:0; min-height:0;
-    height:var(--tv-cell, calc(var(--btn-h) * 1.8));
-    padding:0 4px; line-height:1.25; text-align:center;
+  /* Equal thirds again, now that the capsule is the answer's width rather than its own contents'.
+     A tab strip that spans a fixed box divides that box; one that hugs its labels measures them. */
+  #wintabs button { flex:var(--f-grow, 1) 1 var(--f-item, 0px);
+    min-width:0; min-height:0; height:100%;
+    padding:0 2px; line-height:1.15; text-align:center;
     background:none; background-image:none; border:0; box-shadow:none;
-    color:#bfc6e0; opacity:0.6;
-    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; }
+    color:var(--f-offink, #bfc6e0); opacity:var(--f-dim, 0.6);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:var(--f-gap, 3px); }
   /* THE ONE YOU ARE ON. With no plates left to light, what says it is the same thing that says
      it everywhere else in this game: the green the shop marks an EQUIPPED item with. Full
      strength against the other two held back, so the bar reads at a glance without a second
      colour being invented for it. */
-  #wintabs button.on { opacity:1; color:#fff; }
-  #wintabs button.on .wt-lbl { color:#8dff78; }
+  #wintabs button.on { opacity:1; color:var(--f-onink, #fff); }
+  #wintabs button.on .wt-lbl { color:var(--f-onlbl, #8dff78); }
+  /* A light behind the mark of the one you are on. Off by default — the colour says it already —
+     but it is the difference between a tab that is brighter and a tab that is LIT, and that is
+     worth a slider. drop-shadow and not box-shadow: the marks are canvases and a chip with a
+     transparent ground wants the glow to follow its ink, not its box. */
+  #wintabs button.on .wt-ico { filter:drop-shadow(0 0 var(--f-glow, 0px) var(--f-glowcol, transparent)); }
   /* No slab means no slab to press down: the press is the item dimming. */
   #wintabs button:active { transform:none; opacity:0.4; }
   /* The Tileverse's own mark is THE TILEVERSE — every chapter as one pixel, in the shape they
@@ -623,29 +678,46 @@
      Pixelated, like every other quilt in the game, which is the whole point here: one chapter
      has to land on one hard-edged pixel. */
   #wintabs .tv-chip { display:block; image-rendering:pixelated;
-    max-width:100%; max-height:46px; width:auto; height:46px;
+    max-width:100%; max-height:var(--wt-mark); width:auto; height:var(--wt-mark);
     aspect-ratio:var(--quilt-ar, 1);
     background-image:var(--quilt, none); background-size:100% 100%; }
-  #wintabs .wt-ico { display:flex; align-items:center; justify-content:center; gap:4px; }
-  #wintabs .wt-ico canvas { display:block; }
+  /* THE MARK'S SIZE, once, for all three. Two grid squares: with a two-line caption under it and
+     one square of air above and below, that is what fits inside five. It used to be 46 — the
+     orrery's own ATOM_PX, sized when a tab was as tall as a chapter square. The atom canvas is
+     still cut at that resolution and merely SHOWN at this, so it sharpened rather than softened.
+     The canvases carry no inline size any more, or they would beat this rule outright. */
+  #wintabs { --wt-mark:var(--f-mark, calc(var(--chq) * 2)); }
+  #wintabs .wt-ico { display:flex; align-items:center; justify-content:center; gap:4px;
+    height:var(--wt-mark); }
+  #wintabs .wt-ico canvas { display:block; width:var(--wt-mark); height:var(--wt-mark); }
   /* The same tally the shop itself shows, at the same size and spacing — it is the same number
      answering the same question, and it had been saying it in two different voices.
      CLOSED UP: at 9 the coin and the figure were two things standing near each other, and what
      they are is one reading — the mark and its number, the way a price is written. 4 is the gap
      the rest of the game puts inside a single label. Changed in .shop-purse to match, because
      the parity above is the whole point of this rule. */
-  #wintabs .wt-ico .n { font-size:26px; letter-spacing:1px; color:var(--track); font-weight:900; }
+  /* ONE SIZE FOR THE TALLY, and the coin takes it too — see the rule below. They are a mark and
+     its number read as a single thing, so a coin drawn at the mark's full 2 squares next to a
+     21px figure was the picture shouting over the value. Stated once so the two cannot drift. */
+  #wintabs { --wt-tally:var(--f-tally, 21px); }
+  #wintabs .wt-ico .n { font-size:var(--wt-tally); letter-spacing:1px; color:var(--track); font-weight:900; }
   /* `canvas.wallet` is pinned to 17px with an !important, because the wallet glyph has one size
      everywhere it appears in a LIST of prices. This is not that — it is the shop's own purse,
      said again on the way in — so it takes the purse's size, and needs the same weapon to do it. */
-  #wintabs .wt-ico canvas.wallet { width:26px !important; height:26px !important; }
+  #wintabs .wt-ico canvas.wallet { width:var(--wt-tally) !important; height:var(--wt-tally) !important; }
   /* ...and the name under it, in the SHOP'S OWN TINY TEXT — 10px on a 0.2 track, the size the
      stock cells caption their swatches at. Two doors that are the size of a chapter square have
      the room for a word again, and it is a caption under a picture rather than a label on a
      control, so it is set the way the game sets captions rather than the way it sets buttons.
      It keeps the button rule's uppercase and weight: it is still a thing you press. */
-  #wintabs .wt-lbl { display:block; font-size:10px; letter-spacing:0.2px; line-height:1.1;
-    text-align:center; }
+  /* ONE LINE, ALWAYS. `Holy Talismans` and `Tile Shop` used to be broken over two by a <br> in
+     the markup — which made TILEVERSE, the only single-word name of the three, sit at a
+     different height from its neighbours, and a row of tabs whose captions do not share a
+     baseline is a row that looks misaligned rather than one that looks varied.
+     `nowrap` as well as dropping the breaks: the names must not come back in two lines because
+     a narrow phone squeezed them. The item is sized to hold the longest of them outright. */
+  #wintabs .wt-lbl { display:block; font-size:var(--f-label, 10px); letter-spacing:0.2px;
+    line-height:1.1; text-align:center; white-space:nowrap; }
   /* A GROUND under each of the two doors along the top. They stand on whatever chapter the map
      has scrolled under them, and a white label whose legibility is decided by the level behind
      it is not a label. The same ink as the two fades at the head and the foot of the frame —
@@ -1956,9 +2028,9 @@
      are, and the tab that names it is lit to say so. The cog is not here — it is not a room. -->
 <div id="wintabs">
   <div class="wt-row">
-    <button id="win-tal"><span class="wt-ico"></span><span class="wt-lbl">Holy<br>Talismans</span></button>
+    <button id="win-tal"><span class="wt-ico"></span><span class="wt-lbl">Talismans</span></button>
     <button id="win-tv" class="on" aria-current="page"><span class="wt-ico"><i class="tv-chip"></i></span><span class="wt-lbl">Tileverse</span></button>
-    <button id="win-shop"><span class="wt-ico"></span><span class="wt-lbl">Tile<br>Shop</span></button>
+    <button id="win-shop"><span class="wt-ico"></span><span class="wt-lbl">Tile Shop</span></button>
   </div>
 </div>
 <div id="winfadetop"></div>
@@ -4129,7 +4201,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.31";                    // shown on the title & pause screens
+  const VERSION = "v10.32";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -6829,7 +6901,7 @@
     wallLayerDirty = true;                      // cell/world size changed — rebuild wall + grain caches
     _uiGrid = 0;                                // ...and re-read the grid, in case the CSS moved
     _footLift = -1; _headDrop = -1; _safe = null;
-    syncTvCell();                         // the Tileverse's pitch moved with the screen   // ...and the edges with it — a rotation moves all of them
+    // ...and the edges with it — a rotation moves all of them
     grainScreen = null;
     syncHudChrome();                            // the pause button follows the speedo's plate
   }
@@ -11066,9 +11138,13 @@
                      : (b && (b.done || b.stars) ? "Replay Chapter " : "Play Chapter ") + (idx + 1));
     winNextQuilt(nx, idx);
     el.classList.add("show");
-    const fd = document.getElementById("winfade");
-    if (fd) { fd.classList.add("show"); fd.classList.remove("under"); }   // over the board here
-    const ft = document.getElementById("winfadetop"); if (ft) ft.classList.add("show");
+    // NO WASH AT EITHER END any more. Both existed for one reason: the heading and the two doors
+    // stood bare on whatever chapter the map had scrolled under them, so the frame went dark to
+    // give them a ground. Nothing up here needs one now — the heading is off, and the three doors
+    // are a plated capsule at the foot that brings its own. What the darkness was costing was the
+    // top and bottom rows of the campaign, which are as much the picture as the middle is.
+    // The layers stay in the markup and in the sheet: a FALL still shows #winfade, under the menu
+    // rather than over the board, and that call site is untouched.
     const top = document.getElementById("wintop");
     if (top) {
       // Built on the way in rather than in the markup: the cog takes the button's own colour,
@@ -11079,11 +11155,88 @@
       // screen. Its drawing is all fractions of the canvas, so the number is a resolution and
       // nothing else.
       if (cog && !cog.firstChild) cog.appendChild(cogChip(20, getComputedStyle(cog).color || "#e8e6ff"));
-      syncTvCell();                       // a tab is a chapter square; this is how big one is
       top.classList.add("show");
     }
     syncWinTabs("tv");
   }
+  // ---- THE FOOTER'S OWN BLOCK --------------------------------------------------------------
+  // Every colour and measure the capsule at the foot is made of, in one place, pushed into the
+  // --f-* custom properties the stylesheet reads. footer-lab.html drives it live through
+  // __TR.footer(). The sheet carries each of these as the FALLBACK on its property, so the bar
+  // is right on the first frame before this has run — and would still be right if the block
+  // were deleted. That is the whole arrangement: this is a set of overrides, not a source.
+  const FOOTER = {
+    high:    4.0,        // the capsule's height, in grid squares
+    cham:    15,         // the corner cut at its two bottom corners, px
+    ink:     "#000000",  // the panel it is made of
+    inkA:    0.72,       // ...and how solid: under 1 the map goes on showing through
+    back:    "#455bbf",  // the wash the panel is laid over, so it frosts rather than dims
+    backA:   0.31,
+    blur:    0.0,        // the map behind it, blurred, px — 0 is off
+    sat:     0.00,       // ...and how much colour it keeps. NOT gated on the blur: at 0 the
+                         // chapters behind the capsule go to grey with no blur at all, which is
+                         // what this is here for — the bar's own blue is the only colour in it.
+    lip:     "#ffffff",  // the light along the top edge
+    lipA:    1.00,
+    lipH:    2.0,        // its thickness, px
+    lipFade: 0,          // where it reaches full strength, % in from each end — 0 is corner to corner
+    mark:    25,         // the icon, px
+    tally:   21,         // the coin and its figure — one size for both, px
+    gap:     4,          // between an icon and its name, px
+    label:   10.0,       // the name, px
+    dim:     1.00,       // the two you are not on — at 1, nothing is held back...
+    offInk:  "#697291",  // ...and this is the whole of what marks them out: a cool grey-blue
+                         // against the lit tab's white. Held apart by COLOUR alone, which is why
+                         // it has to be this far down from #ffffff to read at a glance.
+    item:    76,         // how wide ONE item is, px. 0 shares the bar equally, which pushes the
+                         // outer two names into its far corners; a width narrows them and the
+                         // three cluster in the middle of the plate.
+    space:   0,          // between one item and the next, px — the bar is one plate, so this is
+                         // air inside it rather than a gap between objects
+    onInk:   "#ffffff",  // the one you are
+    onLbl:   "#ffffff",  // ...and its name
+    glow:    0.0,        // a light behind the lit icon, px — 0 is off
+    glowCol: "#ffffff",
+    glowA:   0.00,
+  };
+  // "#rrggbb" + alpha -> "rgba(...)". The two colours that need an alpha are written as a hex
+  // and a number rather than as one rgba string, so a lab can offer a colour well for the one
+  // and a slider for the other without parsing anything.
+  function fRGBA(hex, a) {
+    const n = parseInt(String(hex).replace("#", ""), 16) || 0;
+    return "rgba(" + ((n>>16)&255) + "," + ((n>>8)&255) + "," + (n&255) + "," + a + ")";
+  }
+  function applyFooter() {
+    const S = document.documentElement.style, F = FOOTER;
+    S.setProperty("--f-high",    F.high);
+    S.setProperty("--f-cham",    F.cham + "px");
+    S.setProperty("--f-ink",     F.ink);
+    S.setProperty("--f-inka",    F.inkA);
+    S.setProperty("--f-back",    fRGBA(F.back, F.backA));
+    S.setProperty("--f-blur",    F.blur + "px");
+    S.setProperty("--f-sat",     F.sat);
+    S.setProperty("--f-lip",     fRGBA(F.lip, F.lipA));
+    S.setProperty("--f-liph",    F.lipH + "px");
+    S.setProperty("--f-lipfade", F.lipFade + "%");
+    S.setProperty("--f-mark",    F.mark + "px");
+    S.setProperty("--f-tally",   F.tally + "px");
+    S.setProperty("--f-gap",     F.gap + "px");
+    S.setProperty("--f-label",   F.label + "px");
+    S.setProperty("--f-dim",     F.dim);
+    S.setProperty("--f-offink",  F.offInk);
+    // One number, two properties: at 0 the items GROW into equal thirds and their basis is
+    // nothing; above 0 they stop growing and stand at exactly that width. CSS has no way to
+    // branch on a value, so the branch is made here and the sheet just reads both.
+    S.setProperty("--f-item",    (F.item > 0 ? F.item : 0) + "px");
+    S.setProperty("--f-grow",    F.item > 0 ? 0 : 1);
+    S.setProperty("--f-space",   F.space + "px");
+    S.setProperty("--f-onink",   F.onInk);
+    S.setProperty("--f-onlbl",   F.onLbl);
+    S.setProperty("--f-glow",    F.glow + "px");
+    S.setProperty("--f-glowcol", fRGBA(F.glowCol, F.glowA));
+  }
+  applyFooter();
+
   // ---- THE TRILOGY ------------------------------------------------------------------------
   // One owner for the panel: shown, lit and filled from here and nowhere else. It follows you
   // across all three of its own screens, so `active` says which of them you are standing on —
@@ -11111,8 +11264,9 @@
     if (ti) {
       ti.textContent = "";
       const c = document.createElement("canvas");
+      // Cut at the orrery's own resolution and SHOWN at whatever the sheet says a mark is —
+      // no inline size, which would beat the rule outright. See #wintabs --wt-mark.
       c.width = c.height = ATOM_PX*2*ICON_SCALE;
-      c.style.width = c.style.height = ATOM_PX + "px";
       ti.appendChild(c);
       startAtom(c);
     }
@@ -11328,16 +11482,6 @@
     const cells = mapCells();
     const mRows = Math.max(...cells.map(p => p.r)) + 1;
     return viewH/(mRows + 1);
-  }
-  // ...and the same figure handed to the stylesheet, because the two doors along the top are
-  // Tileverse squares and a square drawn on the canvas cannot be measured by CSS. Re-published
-  // on every layout, so a rotation resizes the doors with the map rather than leaving them at
-  // the old screen's pitch. Guarded: this can be reached before the campaign has loaded, and a
-  // door at its fallback size is a great deal better than a layout that throws.
-  function syncTvCell() {
-    try {
-      document.documentElement.style.setProperty("--tv-cell", Math.round(winMapFit()) + "px");
-    } catch (_) {}
   }
   // Which chapters you may go to: everything cleared, and the first one you have not. The same
   // rule drawMap colours by, so what is lit is exactly what is pressable.
@@ -20124,6 +20268,8 @@
     tiloid: (patch) => { if (patch) Object.assign(TILOID, patch); return { ...TILOID }; },
     // spare-lab.html drives this: the block, live, on the game's own tiles.
     spare: (patch) => { if (patch) Object.assign(SPARE, patch); return { ...SPARE }; },
+    // footer-lab.html drives this: the capsule at the foot of the Tileverse, live.
+    footer: (patch) => { if (patch) Object.assign(FOOTER, patch); applyFooter(); return { ...FOOTER }; },
     // hitbox-lab.html drives these: the block, and the two boxes as the game has them RIGHT
     // NOW, so the lab can report an overlap rather than guess at one from the picture.
     hitbox: (patch) => { if (patch) Object.assign(HITBOX, patch); return { ...HITBOX }; },

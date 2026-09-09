@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta http-equiv="Cache-Control" content="no-store"/>
+<title>Tile Runner — Footer Lab</title>
+<style>
+  :root{ --bg:#12102a; --panel:#1b1838; --line:#2b2850; --ink:#cfe9ff; --accent:#8dff78; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:10px 14px;border-bottom:1px solid var(--line);
+         display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;}
+  header h1{font-size:15px;margin:0 12px 0 0;font-weight:700;letter-spacing:.5px;}
+  #status{font-size:12px;opacity:.8;}
+  .app{display:grid;grid-template-columns:300px minmax(0,1fr);gap:14px;padding:14px;align-items:start;}
+  .rail{display:flex;flex-direction:column;gap:12px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;}
+  .card h2{font-size:11px;letter-spacing:1px;opacity:.55;margin:0 0 8px;
+           font-weight:700;text-transform:uppercase;}
+  .row{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:12px;}
+  .row label{flex:0 0 84px;opacity:.85;}
+  .row input[type=range]{flex:1;min-width:0;accent-color:var(--accent);}
+  .row input[type=color]{flex:1;min-width:0;height:24px;padding:0;border:1px solid var(--line);
+                         border-radius:5px;background:none;cursor:pointer;}
+  .row output{flex:0 0 50px;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent);}
+  button{background:#233;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+         padding:8px 12px;cursor:pointer;font:inherit;font-size:12px;width:100%;}
+  button:hover{border-color:var(--accent);}
+  button.prim{background:#1c6;color:#04120a;font-weight:700;border:none;}
+  .presets{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+  .presets button{padding:7px 0;font-size:11px;}
+  .opts{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+  .hint{font-size:11px;line-height:1.5;opacity:.65;margin:8px 0 0;}
+  .stage{display:flex;flex-direction:column;gap:8px;align-items:center;min-width:0;
+         position:sticky;top:14px;}
+  iframe{width:100%;max-width:460px;height:82vh;border:1px solid var(--line);
+         border-radius:12px;background:#000;display:block;}
+  .legend{font-size:11px;opacity:.7;line-height:1.6;max-width:460px;}
+  code{color:var(--accent);}
+  .warn{color:#ffd24a;}
+  /* A narrow window puts the rail above the stage rather than beside it — this page is often
+     opened in a side pane, and a 300px rail next to a 155px game is neither of them. */
+  @media (max-width:720px){
+    .app{grid-template-columns:minmax(0,1fr);}
+    .stage{position:static;}
+    iframe{max-width:none;height:70vh;}
+  }
+  textarea{width:100%;height:230px;background:#0d0b22;color:var(--ink);border:1px solid var(--line);
+           border-radius:8px;padding:8px;font:inherit;font-size:11px;line-height:1.5;resize:vertical;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Footer Lab</h1>
+  <span id="status">booting the game…</span>
+</header>
+
+<div class="app">
+  <aside class="rail">
+
+    <div class="card">
+      <h2>The ground</h2>
+      <div class="row"><label>panel</label><input id="ink" type="color" value="#000000"></div>
+      <div class="row"><label>solidity</label><input id="inkA" type="range" min="0" max="1" step="0.01" value="0.72"><output id="inkAOut">0.72</output></div>
+      <div class="row"><label>backing</label><input id="back" type="color" value="#455bbf"></div>
+      <div class="row"><label>…strength</label><input id="backA" type="range" min="0" max="1" step="0.01" value="0.31"><output id="backAOut">0.31</output></div>
+      <p class="hint">Two layers. The <b>backing</b> is painted first, straight onto the map; the
+        <b>panel</b> is laid over it at <b>solidity</b>. Drop solidity and the chapters show
+        through — the backing is what stops that reading as a smudge of map gone dim and makes it
+        read as frost. Set backing strength to 0 for a plain tinted glass.</p>
+    </div>
+
+    <div class="card">
+      <h2>The glass</h2>
+      <div class="row"><label>blur</label><input id="blur" type="range" min="0" max="30" step="0.5" value="0"><output id="blurOut">0</output></div>
+      <div class="row"><label>colour</label><input id="sat" type="range" min="0" max="3" step="0.05" value="0"><output id="satOut">0.00</output></div>
+      <p class="hint">A backdrop blur on the map behind the capsule. It only shows where the
+        panel lets it: at solidity 1 there is nothing to see through. <b>colour</b> saturates the
+        blurred map — over 1 the chapters bloom through, under 1 they go grey.
+        <span class="warn">Blur is expensive on a phone</span>, and it is the one control here
+        that can cost frames.</p>
+    </div>
+
+    <div class="card">
+      <h2>The lip</h2>
+      <div class="row"><label>colour</label><input id="lip" type="color" value="#ffffff"></div>
+      <div class="row"><label>strength</label><input id="lipA" type="range" min="0" max="1" step="0.01" value="1"><output id="lipAOut">1.00</output></div>
+      <div class="row"><label>thickness</label><input id="lipH" type="range" min="0" max="6" step="0.5" value="2"><output id="lipHOut">2</output></div>
+      <div class="row"><label>fade</label><input id="lipFade" type="range" min="0" max="49" step="1" value="0"><output id="lipFadeOut">0</output></div>
+      <p class="hint">The light along the top edge — the one hard line down here, and what makes
+        the bar read as an edge the map runs behind rather than a panel lying on it.
+        <b>fade</b> is how far in from each end it takes to reach full strength: 0 is a rule
+        corner to corner, 49 is a single bright point in the middle.</p>
+    </div>
+
+    <div class="card">
+      <h2>The shape</h2>
+      <div class="row"><label>height</label><input id="high" type="range" min="3" max="8" step="0.5" value="4"><output id="highOut">4.0</output></div>
+      <div class="row"><label>chamfer</label><input id="cham" type="range" min="0" max="40" step="1" value="15"><output id="chamOut">15</output></div>
+      <p class="hint"><b>height</b> is in GRID SQUARES, the measure everything in the menus is
+        built from — 5 is what ships. Whatever it is, the answer above and the two menus that
+        give the foot to this bar all follow it. <b>chamfer</b> is the cut on the two bottom
+        corners; the top two stay square, under the button.</p>
+    </div>
+
+    <div class="card">
+      <h2>The items</h2>
+      <div class="row"><label>icon</label><input id="mark" type="range" min="14" max="52" step="1" value="25"><output id="markOut">25</output></div>
+      <div class="row"><label>tally</label><input id="tally" type="range" min="10" max="34" step="1" value="21"><output id="tallyOut">21</output></div>
+      <div class="row"><label>gap</label><input id="gap" type="range" min="0" max="12" step="1" value="4"><output id="gapOut">4</output></div>
+      <div class="row"><label>name</label><input id="label" type="range" min="7" max="16" step="0.5" value="10"><output id="labelOut">10</output></div>
+      <div class="row"><label>item width</label><input id="item" type="range" min="0" max="170" step="1" value="76"><output id="itemOut">76</output></div>
+      <div class="row"><label>spacing</label><input id="space" type="range" min="0" max="40" step="1" value="0"><output id="spaceOut">0</output></div>
+      <div class="row"><label>the others</label><input id="dim" type="range" min="0.15" max="1" step="0.01" value="1"><output id="dimOut">1.00</output></div>
+      <div class="row"><label>…colour</label><input id="offInk" type="color" value="#697291"></div>
+      <p class="hint"><b>tally</b> sizes the coin AND its figure together — they are a mark and
+        its number and they read as one thing.
+        <b>item width</b> at <b>fill</b> gives the three an equal third of the bar each, which
+        pushes the two outer names into its far corners; give it a number and they narrow and
+        cluster in the middle. That is the only control that closes the space BETWEEN the names —
+        <b>spacing</b> can take a gap out, but it cannot take out the empty half of an item that
+        is a third of the bar wide. <b>spacing</b> is air between one item and the next; the bar
+        is a single plate, so it opens space INSIDE it rather than parting three objects.
+        <b>the others</b> is how far back the two tabs you are not on are held, and
+        <b>…colour</b> is what they are written in; at strength 1 that colour is the only thing
+        saying which tab you are on.</p>
+    </div>
+
+    <div class="card">
+      <h2>The one you are on</h2>
+      <div class="row"><label>ink</label><input id="onInk" type="color" value="#ffffff"></div>
+      <div class="row"><label>name</label><input id="onLbl" type="color" value="#ffffff"></div>
+      <div class="row"><label>glow</label><input id="glow" type="range" min="0" max="24" step="0.5" value="0"><output id="glowOut">0</output></div>
+      <div class="row"><label>…colour</label><input id="glowCol" type="color" value="#ffffff"></div>
+      <div class="row"><label>…strength</label><input id="glowA" type="range" min="0" max="1" step="0.01" value="0"><output id="glowAOut">0.00</output></div>
+      <p class="hint">The <b>glow</b> is a drop-shadow behind the lit tab's icon, so it follows
+        the ink of the mark rather than its box — the orrery glows as six charms, not as a
+        square. It ships at 0: the green name already says which tab you are on, and this is the
+        difference between a tab that is brighter and one that is LIT.</p>
+    </div>
+
+    <div class="card">
+      <h2>Somewhere to start</h2>
+      <div class="presets">
+        <button data-p="shipped">shipped</button>
+        <button data-p="frosted">frosted</button>
+        <button data-p="slab">slab</button>
+        <button data-p="ghost">ghost</button>
+        <button data-p="neon">neon</button>
+        <button data-p="ember">ember</button>
+      </div>
+      <p class="hint"><b>frosted</b> real glass — heavy blur, thin panel · <b>slab</b> opaque, no
+        map through it · <b>ghost</b> almost nothing but the lip and the marks · <b>neon</b> a lit
+        tab that glows · <b>ember</b> warm ground, gold lip.</p>
+    </div>
+
+    <div class="card">
+      <h2>The page</h2>
+      <div class="opts">
+        <button id="tab-tal">talismans</button>
+        <button id="tab-tv">tileverse</button>
+        <button id="tab-shop">shop</button>
+        <button id="reach">back to the map</button>
+      </div>
+      <p class="hint">The bar lives on three screens and looks different on each — the shop's
+        tally is the widest item, and the map behind it is the only thing the blur has to work
+        with. Check all three.</p>
+    </div>
+
+    <div class="card">
+      <h2>Out</h2>
+      <button id="restore">Restore my settings</button>
+      <div style="height:6px"></div>
+      <button id="reload">Reload the game</button>
+      <div style="height:6px"></div>
+      <button id="copy" class="prim">Copy FOOTER block</button>
+      <p class="hint">The rail writes itself down as you move it and puts itself back when you
+        come back. <b>Restore</b> is your last state, for after you have wandered off into the
+        presets.</p>
+    </div>
+  </aside>
+
+  <div class="stage">
+    <iframe id="frame" title="Tile Runner"></iframe>
+    <p class="legend">The <b>running game</b>, driven through <code>__TR.footer()</code> — not a
+      copy of the bar drawn here. What you see is the shipped renderer over the real Tileverse,
+      so it cannot drift from what ships.
+      <span class="warn">This page must be SERVED</span> — <code>file://</code> blocks it from
+      reading the frame.</p>
+    <textarea id="out" spellcheck="false"></textarea>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const frame = $("frame");
+let W = null;
+
+// The game, from wherever this page is being served, cache-busted so a tuning session is never
+// looking at yesterday's build through a service worker.
+const GAME_SRC = () => "index.html?lab=footer&t=" + Date.now();
+
+// Which control is which kind. Numbers go through +value; colours go through as strings.
+const NUMS = ["inkA","backA","blur","sat","lipA","lipH","lipFade","high","cham",
+              "mark","tally","gap","label","item","space","dim","glow","glowA"];
+const COLS = ["ink","back","lip","offInk","onInk","onLbl","glowCol"];
+const KEYS = NUMS.concat(COLS);
+// How many places each number is written back with, so the copied block reads like the one it
+// is replacing rather than like a float dump.
+const DP = { inkA:2, backA:2, blur:1, sat:2, lipA:2, lipH:1, lipFade:0, high:1, cham:0,
+             mark:0, tally:0, gap:0, label:1, item:0, space:0, dim:2, glow:1, glowA:2 };
+
+function values(){
+  const o = {};
+  for (const k of NUMS) o[k] = +$(k).value;
+  for (const k of COLS) o[k] = $(k).value;
+  return o;
+}
+
+const SAVE_KEY = "tilerunner:footer-lab";
+function save(){ try { localStorage.setItem(SAVE_KEY, JSON.stringify(values())); } catch (e) {} }
+function restore(){
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) {}
+  if (!v || typeof v !== "object") return false;
+  for (const k of NUMS) if (typeof v[k] === "number") $(k).value = v[k];
+  for (const k of COLS) if (typeof v[k] === "string") $(k).value = v[k];
+  return true;
+}
+
+function push(){
+  if (!W || !W.__TR || !W.__TR.footer) return;
+  try {
+    W.__TR.footer(values()); save(); refreshOut(); KEYS.forEach(sync);
+    if (!$("status").innerHTML.includes("warn")) $("status").textContent = "live";
+  } catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+}
+
+function sync(k){
+  const o = $(k + "Out");
+  if (!o) return;
+  // `item` is a width OR a mode: zero means "share the bar", which is not a width of nothing.
+  if (k === "item" && +$(k).value === 0) { o.textContent = "fill"; return; }
+  o.textContent = (+$(k).value).toFixed(DP[k] || 0);
+}
+
+// The bar only exists on the Tileverse and the two rooms off it, and the game boots into its
+// title screen. Rather than guess at a sequence, this taps whatever is in the way and stops the
+// moment the bar is actually up — which also covers a fresh save, where the first tap starts a
+// cinematic instead.
+function reach(done){
+  let tries = 0;
+  (function tick(){
+    if (!W || !W.__TR) return;
+    const D = W.document;
+    const tabs = D.getElementById("wintabs");
+    if (tabs && tabs.classList.contains("show")) { push(); if (done) done(); return; }
+    const poem = D.getElementById("poem");
+    if (poem && poem.classList.contains("show"))
+      poem.dispatchEvent(new W.PointerEvent("pointerdown", { bubbles:true, pointerId:1 }));
+    const mech = D.getElementById("mechpop");
+    if (mech && mech.classList.contains("show"))
+      mech.dispatchEvent(new W.MouseEvent("click", { bubbles:true }));
+    const cv = D.getElementById("game");
+    if (cv && !(D.getElementById("menu")||{classList:{contains:()=>false}}).classList.contains("show"))
+      cv.dispatchEvent(new W.PointerEvent("pointerdown", { bubbles:true, pointerId:1 }));
+    if (++tries > 500) {                    // ~30s, long enough for the opening cinematic
+      $("status").innerHTML = '<span class="warn">could not get to the Tileverse — ' +
+        'play a chapter once in the game, then reload this page</span>';
+      return;
+    }
+    setTimeout(tick, 60);
+  })();
+}
+function goTab(id){
+  if (!W || !W.document) return;
+  const b = W.document.getElementById(id);
+  if (b) b.click();
+  setTimeout(push, 400);
+}
+
+function refreshOut(){
+  const v = values(), f = (k) => (+v[k]).toFixed(DP[k]);
+  const q = (k) => '"' + v[k] + '"';
+  $("out").value =
+    "  const FOOTER = {\n" +
+    "    high:    " + f("high")    + ",          // the capsule's height, in grid squares\n" +
+    "    cham:    " + f("cham")    + ",         // the corner cut at its two bottom corners, px\n" +
+    "    ink:     " + q("ink")     + ",  // the panel it is made of — the game's own --panel\n" +
+    "    inkA:    " + f("inkA")    + ",       // ...and how solid: under 1 the map goes on showing through\n" +
+    "    back:    " + q("back")    + ",  // the wash the panel is laid over, so it frosts rather than dims\n" +
+    "    backA:   " + f("backA")   + ",\n" +
+    "    blur:    " + f("blur")    + ",          // the map behind it, blurred, px — 0 is off\n" +
+    "    sat:     " + f("sat")     + ",       // ...and how much colour that blur keeps\n" +
+    "    lip:     " + q("lip")     + ",  // the light along the top edge\n" +
+    "    lipA:    " + f("lipA")    + ",\n" +
+    "    lipH:    " + f("lipH")    + ",          // its thickness, px\n" +
+    "    lipFade: " + f("lipFade") + ",         // where it reaches full strength, % in from each end\n" +
+    "    mark:    " + f("mark")    + ",         // the icon, px\n" +
+    "    tally:   " + f("tally")   + ",         // the coin and its figure — one size for both, px\n" +
+    "    gap:     " + f("gap")     + ",          // between an icon and its name, px\n" +
+    "    label:   " + f("label")   + ",         // the name, px\n" +
+    "    dim:     " + f("dim")     + ",       // the two you are not on — at 1, nothing is held back\n" +
+    "    offInk:  " + q("offInk")  + ",  // ...and what colour they are written in\n" +
+    "    item:    " + f("item")    + ",          // how wide ONE item is, px — 0 shares the bar equally\n" +
+    "    space:   " + f("space")   + ",          // between one item and the next, px\n" +
+    "    onInk:   " + q("onInk")   + ",  // the one you are\n" +
+    "    onLbl:   " + q("onLbl")   + ",  // ...and its name, in the green the shop marks EQUIPPED with\n" +
+    "    glow:    " + f("glow")    + ",          // a light behind the lit icon, px — 0 is off\n" +
+    "    glowCol: " + q("glowCol") + ",\n" +
+    "    glowA:   " + f("glowA")   + ",\n" +
+    "  };";
+}
+
+const PRESETS = {
+  shipped: { ink:"#000000", inkA:0.72, back:"#455bbf", backA:0.31, blur:0,  sat:0.00,
+             lip:"#ffffff", lipA:1.00, lipH:2, lipFade:0, high:4, cham:15,
+             mark:25, tally:21, gap:4, label:10, item:76, space:0, dim:1.00, offInk:"#697291",
+             onInk:"#ffffff", onLbl:"#ffffff", glow:0, glowCol:"#ffffff", glowA:0.00 },
+  frosted: { ink:"#242043", inkA:0.34, back:"#ffffff", backA:0.10, blur:14, sat:1.35,
+             lip:"#ffffff", lipA:0.85, lipH:1.5, lipFade:20, high:5, cham:15,
+             mark:30, tally:21, gap:3, label:10, item:0, space:0, dim:0.62, offInk:"#bfc6e0",
+             onInk:"#ffffff", onLbl:"#8dff78", glow:0, glowCol:"#8dff78", glowA:0.55 },
+  slab:    { ink:"#242043", inkA:1.00, back:"#ffffff", backA:0.00, blur:0,  sat:1.00,
+             lip:"#ffffff", lipA:0.55, lipH:2, lipFade:32, high:5, cham:15,
+             mark:30, tally:21, gap:3, label:10, item:0, space:0, dim:0.55, offInk:"#bfc6e0",
+             onInk:"#ffffff", onLbl:"#8dff78", glow:0, glowCol:"#8dff78", glowA:0.55 },
+  ghost:   { ink:"#242043", inkA:0.16, back:"#ffffff", backA:0.06, blur:6,  sat:1.00,
+             lip:"#ffffff", lipA:0.70, lipH:1, lipFade:34, high:5, cham:15,
+             mark:30, tally:21, gap:3, label:10, item:0, space:8, dim:0.70, offInk:"#bfc6e0",
+             onInk:"#ffffff", onLbl:"#8dff78", glow:0, glowCol:"#8dff78", glowA:0.55 },
+  neon:    { ink:"#141230", inkA:0.86, back:"#8dff78", backA:0.08, blur:4,  sat:1.10,
+             lip:"#8dff78", lipA:0.95, lipH:2, lipFade:22, high:5, cham:15,
+             mark:30, tally:21, gap:3, label:10, item:0, space:0, dim:0.45, offInk:"#7f8bb0",
+             onInk:"#ffffff", onLbl:"#8dff78", glow:10, glowCol:"#8dff78", glowA:0.75 },
+  ember:   { ink:"#2a1a2e", inkA:0.78, back:"#ffd24a", backA:0.14, blur:3,  sat:1.15,
+             lip:"#ffd24a", lipA:0.90, lipH:2, lipFade:24, high:5, cham:15,
+             mark:30, tally:21, gap:3, label:10, item:0, space:6, dim:0.58, offInk:"#c9b79a",
+             onInk:"#fff4d6", onLbl:"#ffd24a", glow:8, glowCol:"#ffd24a", glowA:0.60 },
+};function apply(p){
+  for (const k of KEYS) if (p[k] != null) $(k).value = p[k];
+  KEYS.forEach(sync); push();
+}
+
+function attach(){
+  W = frame.contentWindow;
+  let tries = 0;
+  (function wait(){
+    if (W.__TR && W.__TR.footer) { push(); reach(); return; }
+    if (++tries > 200) {
+      $("status").innerHTML = '<span class="warn">the game never came up — is this being SERVED? ' +
+        'file:// blocks the frame from being read.</span>';
+      return;
+    }
+    setTimeout(wait, 50);
+  })();
+}
+frame.addEventListener("load", attach);
+frame.src = GAME_SRC();
+
+KEYS.forEach(k => $(k).addEventListener("input", () => { sync(k); push(); }));
+document.querySelectorAll(".presets button").forEach(b =>
+  b.onclick = () => { apply(PRESETS[b.dataset.p]); $("status").textContent = "preset: " + b.dataset.p; });
+
+$("tab-tal").onclick  = () => goTab("win-tal");
+$("tab-tv").onclick   = () => goTab("win-tv");
+$("tab-shop").onclick = () => goTab("win-shop");
+$("reach").onclick    = () => reach();
+$("restore").onclick = () => {
+  if (!restore()) { $("status").innerHTML = '<span class="warn">nothing saved yet</span>'; return; }
+  KEYS.forEach(sync); push();
+  $("status").textContent = "your saved settings, put back";
+};
+$("reload").onclick = () => { frame.src = GAME_SRC(); };
+$("copy").onclick = () => {
+  navigator.clipboard.writeText($("out").value).then(
+    () => $("status").textContent = "FOOTER block copied — paste it over the one in index.html",
+    () => $("status").innerHTML = '<span class="warn">clipboard refused — copy it out of the box below</span>');
+};
+
+const restored = restore();
+KEYS.forEach(sync);
+refreshOut();
+if (restored) $("status").textContent = "your last settings, put back";
+</script>
+</body>
+</html>
