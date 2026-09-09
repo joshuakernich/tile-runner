@@ -372,6 +372,12 @@
   #winui.at-cell {
     top:var(--wn-y, 0px); bottom:auto; padding-bottom:0;
     transform:translateX(var(--wn-x, 0px)); }
+  /* HALF THE WIDTH IT WAS. A full-width bar was the right shape for a thing pinned across the
+     foot of the screen; under a square it is a banner four times the width of what it points at.
+     The word is one word now, so the box can be the size of the word.
+     On #winui's max-width rather than on the button, because the button is `width:100%` of it —
+     which is what keeps the two agreeing without either being told a number. */
+  #winui.at-cell { max-width:15rem; }
   /* A black ground under the one answer on this screen, fading up into the map. Every chapter
      brings its own palette to the bottom of the frame, and a button standing on whatever colour
      happens to be there is a button whose legibility is decided by the level behind it. Pinned
@@ -476,8 +482,8 @@
      thing on this screen that stands on nothing. */
   #wintop .wintop-head { position:relative; z-index:2; display:flex; align-items:flex-start;
     justify-content:center; }
-  /* ...and with the name turned off, the row it stood in is 62px of nothing between the top of
-     the screen and the two doors. Collapsed, so the doors ARE the top of the screen.
+  /* ...and with the name turned off, the row it stands in is 62px of nothing at the top of the
+     screen. Collapsed, so nothing is held down by a heading that is not there.
      Tied to the heading with :has rather than set by hand, so un-hiding the word brings its row
      back with it and the two can never disagree. A browser without :has simply keeps the row,
      which is the layout as it was — the failure is the old screen, not a broken one.
@@ -488,12 +494,6 @@
      is positioned OUTSIDE this box, in the corner, and clipping the row would take it with the
      word. The heading overflows instead, which costs nothing — it is invisible. */
   #wintop .wintop-head:has(> .head-off) { height:0; min-height:0; }
-  /* Right into the corner, a grid square outside the strip's own padding: it is the one control
-     on this screen that is not about where you are going, and it sits out of the way of the
-     three that are. With the heading off, the row it hangs from is a zero-height line at the top
-     of the strip — so this IS the top right corner of the pane. */
-  #wintop .wintop-head #win-cog {
-    position:absolute; right:calc(0px - var(--chq)); top:calc(0px - var(--chq)); }
   /* #wintop #wintop-title, not #wintop-title: the shared face rule further down the sheet is
      also an ID and comes later, so a bare id here would lose the size to it and the heading
      would stay at 46 however little room it had. */
@@ -699,11 +699,21 @@
      it everywhere else in this game: the green the shop marks an EQUIPPED item with. Full
      strength against the other two held back, so the bar reads at a glance without a second
      colour being invented for it. */
-  /* ...and it stands on something. Everything else in the bar is held apart by colour alone;
-     this is the one shape, and it is what a tab strip does — background-COLOR, so nothing else
-     the button carries is reset by a shorthand. */
-  #wintabs button.on { opacity:1; color:var(--f-onink, #fff);
-    background-color:var(--f-onback, transparent); }
+  /* ...and it stands on something: see .wt-plate, which is that something and which slides.
+     The button itself carries no ground at all — a background belongs to the box it is on, and
+     this one has to be able to leave. */
+  #wintabs button.on { opacity:1; color:var(--f-onink, #fff); }
+  /* THE PLATE. `z-index:-1` puts it above .wt-row's own backing and above ::before (both are at
+     -1, and a later sibling wins a tie) but below the items, which are in-flow content — so it
+     is a ground and not a veil. It is placed by placeWinPlate() off the lit tab's own box, so
+     the geometry is never restated here: whatever the items are doing, the plate is doing.
+     `.jump` is for the frames where it must not slide — arriving on a screen, and a resize. */
+  #wintabs .wt-plate { position:absolute; z-index:-1; top:0; bottom:0; left:0;
+    width:var(--wp-w, 0px); transform:translateX(var(--wp-x, 0px));
+    background-color:var(--f-onback, transparent); pointer-events:none;
+    transition:transform 260ms cubic-bezier(.22,1,.36,1),
+               width     260ms cubic-bezier(.22,1,.36,1); }
+  #wintabs .wt-plate.jump { transition:none; }
   #wintabs button.on .wt-lbl { color:var(--f-onlbl, #8dff78); }
   /* A light behind the mark of the one you are on. Off by default — the colour says it already —
      but it is the difference between a tab that is brighter and a tab that is LIT, and that is
@@ -817,19 +827,9 @@
     background-size:140px 140px, 100% 100%;
     -webkit-mask-image:radial-gradient(closest-side, #000 0%, rgba(0,0,0,0.62) 55%, transparent 100%);
             mask-image:radial-gradient(closest-side, #000 0%, rgba(0,0,0,0.62) 55%, transparent 100%); }
-  /* THE COG IS BACK IN ITS CORNER, and back to being a bare mark. It is the one control on this
-     screen that is not a room off the map — it is the machinery of the game itself — so it does
-     not belong in a run of three tabs that name places. No plate: a plate is what the game puts
-     under a decision, and a slab in the corner of the map would be a fourth thing asking to be
-     pressed above a panel of three. No slab means no slab to press DOWN, so its press is the
-     mark dimming instead. */
-  #wintop button { width:var(--btn-h); min-height:var(--btn-h); height:auto; padding:0;
-    background:none; background-image:none; border:0; box-shadow:none;
-    color:#bfc6e0; line-height:1.25; text-align:center;
-    display:flex; align-items:center; justify-content:center; gap:8px; }
-  #wintop button:active { transform:none; opacity:0.55; }
-  #wintop #win-cog { flex:0 0 auto; }
-  #wintop #win-cog canvas { width:27px; height:27px; display:block; }
+  /* #wintop is now the hidden heading and nothing else — the cog has gone down to the footer
+     with the other three. Kept, because the heading is hidden and not deleted, and because the
+     row it stands in is what the answer above the map used to clear. */
   #winui button { width:100%; display:flex; align-items:center; justify-content:center; gap:10px;
     height:var(--btn-h); padding-top:0; padding-bottom:0; }
   /* The button wears the GROUND of the chapter it opens — the same nine colours that chapter's
@@ -1651,7 +1651,9 @@
      After .amber on purpose — same specificity, so the later rule is the one that wins — and
      the amber EXTRUSION is left alone underneath: the shadows are painted from the glyph's
      shape, not its fill, so they survive the face going transparent. */
-  /* HIDDEN, NOT GONE — the one switch, worn by every heading that is currently off.
+  /* HIDDEN, NOT GONE — the one switch for turning a heading off. NOTHING WEARS IT AT PRESENT:
+     all three are back on. Kept because these headings have gone off and on more than once, and
+     because the reasoning below is the part that is easy to lose.
      `visibility` rather than `display` on purpose, and this is the whole reason it is one rule
      and not three: the heading stays LAID OUT and still measures, so --title-h comes out
      unchanged and nothing under it moves. `display:none` would collapse that measurement to
@@ -2063,25 +2065,34 @@
 
 <div id="wintop">
   <div class="wintop-head">
-    <!-- `head-off` turns it off and nothing else: the word, its data-t twin and the clipped
-         rainbow sheen over the gold are all still here. Delete the class to bring it back. -->
-    <h2 id="wintop-title" class="tv-word head-off" data-t="Tileverse">Tileverse</h2>
-    <button id="win-cog" aria-label="Settings"></button>
+    <!-- Add `head-off` to turn it off again — see the rule of that name, which hides a heading
+         without letting anything below it move. -->
+    <h2 id="wintop-title" class="tv-word" data-t="Tileverse">Tileverse</h2>
   </div>
 </div>
 
-<!-- The three rooms this screen leads to, as a panel of equals across the foot. The Tileverse
-     is one of them and not the frame around the other two: standing on the map is a place you
-     are, and the tab that names it is lit to say so. The cog is not here — it is not a room. -->
+<!-- The four rooms this screen leads to, as a panel of equals across the foot. The Tileverse is
+     one of them and not the frame around the other three: standing on the map is a place you are,
+     and the tab that names it is lit to say so.
+     Settings is the fourth. It used to hang in the top right corner as a bare mark, on the
+     grounds that it is machinery rather than a place — but a mark alone in a corner is not a
+     smaller thing than a tab, it is an ODDER one, and the corner it sat in was the only chrome
+     left on a screen whose whole subject is the map. Everything you can walk into from here is
+     now in one row, said the same way. -->
 <div id="wintabs">
   <div class="wt-row">
     <!-- Nothing but a surface for the inner glow to be cast on. It is a real element and not a
          third pseudo because .wt-row has already spent both: ::before is the panel and ::after
          is the lip along the top. -->
     <i class="wt-glow"></i>
+    <!-- The plate under whichever tab is lit. One element that MOVES rather than a background
+         switched from tab to tab: a background cannot slide, and what the eye should see is the
+         same plate going to the thing you just pressed. -->
+    <i class="wt-plate"></i>
     <button id="win-tal"><span class="wt-ico"></span><span class="wt-lbl">Talismans</span></button>
     <button id="win-tv" class="on" aria-current="page"><span class="wt-ico"><i class="tv-chip"></i></span><span class="wt-lbl">Tileverse</span></button>
     <button id="win-shop"><span class="wt-ico"></span><span class="wt-lbl">Tile Shop</span></button>
+    <button id="win-cog" aria-label="Settings"><span class="wt-ico"></span><span class="wt-lbl">Settings</span></button>
   </div>
 </div>
 <div id="winfadetop"></div>
@@ -3685,6 +3696,36 @@
         o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.18);
       });
     }
+    // MOVING BETWEEN TABS IS NOT A BUTTON PRESS. tapBig is a struck thing — a hard attack and
+    // two triangle notes — which is the right sound for choosing a chapter and the wrong one for
+    // sliding a plate three inches sideways. This is air instead of impact: a band of noise
+    // whose window sweeps UP and away over the length of the slide, with a soft low body under
+    // it so it has somewhere to land. No transient at the front — the attack is 18ms rather
+    // than 2, which is the whole difference between a click and a breath.
+    function swish(){
+      if (muted || !ac || ac.state !== "running" || !noiseBuf) return;
+      const t0 = ac.currentTime, dur = 0.26;
+      const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+      const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 1.1;
+      bp.frequency.setValueAtTime(560, t0);
+      bp.frequency.exponentialRampToValueAtTime(2300, t0 + dur);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.075, t0 + 0.018);   // no crack at the front
+      g.gain.exponentialRampToValueAtTime(0.0006, t0 + dur);
+      src.connect(bp); bp.connect(g); g.connect(master);
+      src.start(t0); src.stop(t0 + dur + 0.03);
+      // ...and the body. Sine, not triangle: a triangle has enough edge to read as a note being
+      // played, and nothing here should sound played.
+      const o = ac.createOscillator(), og = ac.createGain();
+      o.type = "sine";
+      o.frequency.setValueAtTime(BASE * Math.pow(2, 7/12), t0);
+      o.frequency.exponentialRampToValueAtTime(BASE * Math.pow(2, 12/12), t0 + dur*0.8);
+      og.gain.setValueAtTime(0.0001, t0);
+      og.gain.exponentialRampToValueAtTime(0.055, t0 + 0.03);
+      og.gain.exponentialRampToValueAtTime(0.0006, t0 + dur*0.9);
+      o.connect(og); og.connect(master); o.start(t0); o.stop(t0 + dur);
+    }
     // The saw whir is gone. It only ever rose for a hazard of kind "saw", and the campaign has
     // none left — every one of the seventeen is a monster now — so it was a second continuous
     // drone sitting under the coin choir that could never actually sound. Placing a saw in the
@@ -4213,7 +4254,7 @@
     }
     function isMuted() { return muted; }
     return { unlock, clearTile, smash, charmBreak, charmGrow, coinSpill, roar, win, lose, fall, death, boost, slow, coin, coinBank, coinSlam, key, doorOpen,
-             slide, clack, tap, tapBig, power, warp, vortex, thrum, crunch, growl, trapWind,
+             slide, clack, tap, tapBig, swish, power, warp, vortex, thrum, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck, choir,
              ambient,
              swish, introGather, introFlash, rumble, flap, life, claim, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
@@ -4252,7 +4293,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.34";                    // shown on the title & pause screens
+  const VERSION = "v10.35";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -6952,6 +6993,7 @@
     wallLayerDirty = true;                      // cell/world size changed — rebuild wall + grain caches
     _uiGrid = 0;                                // ...and re-read the grid, in case the CSS moved
     _footLift = -1; _headDrop = -1; _safe = null; _canvasOrg = null;
+    placeWinPlate(true);                  // the lit tab moved with the screen; do not slide to it
     // ...and the edges with it — a rotation moves all of them
     grainScreen = null;
     syncHudChrome();                            // the pause button follows the speedo's plate
@@ -11236,8 +11278,13 @@
     // one along. "Replay" is not decoration — on a map where everything is playable it is the
     // one word that tells you which squares you have already been to.
     const best = loadBest(), b = best["L" + idx];
-    labelWithArrow(nx, idx === INTRO_CELL ? "Replay Cinematic Intro"
-                     : (b && (b.done || b.stars) ? "Replay Chapter " : "Play Chapter ") + (idx + 1));
+    // ONE WORD. It used to name the chapter — "Replay Chapter 16" — which was worth saying while
+    // the button sat at the foot of the screen with nothing near it to say what it meant. It now
+    // hangs directly under the square, and that square has the number written across it: a button
+    // an inch below a big 16 does not need to say sixteen. What is left is the one thing the
+    // square cannot tell you, which is whether you have been there.
+    labelWithArrow(nx, idx === INTRO_CELL ? "Replay"
+                     : (b && (b.done || b.stars) ? "Replay" : "Play"));
     winNextQuilt(nx, idx);
     el.classList.toggle("show", winPicked());
     // NO WASH AT EITHER END any more. Both existed for one reason: the heading and the two doors
@@ -11248,17 +11295,7 @@
     // The layers stay in the markup and in the sheet: a FALL still shows #winfade, under the menu
     // rather than over the board, and that call site is untouched.
     const top = document.getElementById("wintop");
-    if (top) {
-      // Built on the way in rather than in the markup: the cog takes the button's own colour,
-      // which is not known until it is in the document.
-      const cog = document.getElementById("win-cog");
-      // 20, not 10: the cog is SHOWN at 27 CSS pixels and was being cut at 20 device pixels —
-      // less than one per pixel of its own box, which is why it was the softest thing on the
-      // screen. Its drawing is all fractions of the canvas, so the number is a resolution and
-      // nothing else.
-      if (cog && !cog.firstChild) cog.appendChild(cogChip(20, getComputedStyle(cog).color || "#e8e6ff"));
-      top.classList.add("show");
-    }
+    if (top) top.classList.add("show");
     syncWinTabs("tv");
   }
   // ---- THE FOOTER'S OWN BLOCK --------------------------------------------------------------
@@ -11268,7 +11305,8 @@
   // is right on the first frame before this has run — and would still be right if the block
   // were deleted. That is the whole arrangement: this is a set of overrides, not a source.
   const FOOTER = {
-    wide:    15,         // the capsule's width, in grid squares
+    wide:    20,         // the capsule's width, in grid squares — FOUR items of five squares
+                         // each, since Settings came down off the corner and joined the row
     high:    5.0,        // ...and its height. Both in SQUARES, because the bar is furniture and
                          // everything else in the menus is a whole number of them.
     cham:    0,          // the corner cut at its two bottom corners, px — 0 is a plain rectangle
@@ -11364,6 +11402,23 @@
   }
   applyFooter();
 
+  // Where the lit tab is, handed to the plate. Read off the button's own box rather than worked
+  // out from the item width and the count, so it stays right whatever the row is doing — four
+  // tabs or three, equal shares or fixed widths, a gap between them or none.
+  function placeWinPlate(jump) {
+    const row = document.querySelector("#wintabs .wt-row"); if (!row) return;
+    const plate = row.querySelector(".wt-plate"); if (!plate) return;
+    const on = row.querySelector("button.on");
+    if (!on) { plate.style.opacity = "0"; return; }
+    plate.style.opacity = "";
+    if (jump) plate.classList.add("jump");
+    row.style.setProperty("--wp-x", on.offsetLeft + "px");
+    row.style.setProperty("--wp-w", on.offsetWidth + "px");
+    // Two frames: one for the browser to take the new position with the transition off, and one
+    // before it goes back on. Removing it in the same frame reinstates the animation in time to
+    // animate the very move it was suppressed for.
+    if (jump) requestAnimationFrame(() => requestAnimationFrame(() => plate.classList.remove("jump")));
+  }
   // ---- THE TRILOGY ------------------------------------------------------------------------
   // One owner for the panel: shown, lit and filled from here and nowhere else. It follows you
   // across all three of its own screens, so `active` says which of them you are standing on —
@@ -11371,18 +11426,40 @@
   // Rebuilt every time it goes up, because all three marks are live: the charms are whichever
   // ones you have found, and the purse is whatever the last chapter left in it — and a panel
   // that persists across screens is exactly the thing that would go stale if it did not.
+  // WHICH TAB WE ARE COMING FROM, which is not the same question as "was the panel on screen".
+  // Walking from the shop to the shelf HIDES the panel and shows it again in one task — winDoor
+  // takes the map's chrome down before it opens a menu — so a plate that decided whether to
+  // slide by looking at the `show` class jumped on every move, which is exactly the move it
+  // exists to animate. The clear is deferred by a tick so that pair never reads as an absence;
+  // a real departure (into a level) still lands on null a moment later.
+  let _tabWas = null, _tabClear = 0;
   function syncWinTabs(active) {
     const tabs = document.getElementById("wintabs"); if (!tabs) return;
-    tabs.classList.toggle("show", !!active);
-    for (const pair of [["win-tal","talismans"], ["win-tv","tv"], ["win-shop","shop"]]) {
+    const wasOn = _tabWas != null;
+    if (active) { clearTimeout(_tabClear); _tabWas = active; }
+    else _tabClear = setTimeout(() => { _tabWas = null; }, 0);
+    for (const pair of [["win-tal","talismans"], ["win-tv","tv"], ["win-shop","shop"],
+                        ["win-cog","settings"]]) {
       const b = document.getElementById(pair[0]); if (!b) continue;
       b.classList.toggle("on", pair[1] === active);
       if (pair[1] === active) b.setAttribute("aria-current", "page");
       else b.removeAttribute("aria-current");
     }
+    tabs.classList.toggle("show", !!active);
+    // The plate slides to whichever tab is now lit — but it JUMPS when the panel was not on
+    // screen a moment ago, because a plate sliding in from wherever it was last is a memory
+    // of a screen you have not been looking at.
+    requestAnimationFrame(() => placeWinPlate(!wasOn));
     // Nothing on screen means nothing to animate. The orrery is a rAF loop and it has no
     // business running behind a level.
     if (!active) { stopAtom(); return; }
+    // The cog is drawn rather than typed, and it takes the button's own colour — which is not
+    // known until the button is in the document, hence here and not in the markup. 20, not 10:
+    // it is shown at two grid squares and was being cut at 20 device pixels. Its drawing is all
+    // fractions of the canvas, so the number is a resolution and nothing else.
+    const ci = document.querySelector("#win-cog .wt-ico");
+    if (ci && !ci.firstChild)
+      ci.appendChild(cogChip(20, getComputedStyle(document.getElementById("win-cog")).color || "#e8e6ff"));
     // ALL of them, going round: two rings crossed at right angles with three charms on
     // each, near ones passing in front of far ones. A door to the shelf should show the
     // shelf, not one thing off it — and the ones you have not found yet go round grey, so
@@ -18976,7 +19053,9 @@
   function winDoor(screen) {
     return () => {
       if (!win) return;
-      Sound.unlock(); Sound.tapBig();
+      // swish, not tapBig: this is the footer's plate sliding across, not a decision being
+      // struck. tapBig still belongs to choosing a chapter, which IS one.
+      Sound.unlock(); Sound.swish();
       hideWinUI();
       openMenu(screen, () => { closeMenu(); showWinUI(); });
     };
@@ -18989,7 +19068,7 @@
   // puts the map back. Standing on the map it is the tab you are already on, and does nothing.
   document.getElementById("win-tv").addEventListener("click", () => {
     if (!menuEl.classList.contains("show")) return;
-    Sound.unlock(); Sound.tapBig();
+    Sound.unlock(); Sound.swish();
     if (menuReturn) menuReturn(); else { closeMenu(); showWinUI(); }
   });
   // The whole card is the button now. A pop-up that explains one thing and then asks you to
@@ -19325,7 +19404,9 @@
     // on them with its own tab lit — that is what makes it navigation rather than a launcher.
     // Gated on `win`: it is the MAP'S panel, and the shelf reached from the pause menu mid-level
     // has no map behind it. There, DONE is the only way out, exactly as it was before this.
+    // Settings joined them when the cog came down off the corner: it is one of the four now.
     syncWinTabs(win ? (screen === "talismans" ? "talismans"
+                     : screen === "settings" ? "settings"
                      : (screen === "shop" || screen.indexOf("shop:") === 0) ? "shop" : null)
                     : null);
     menuEl.classList.toggle("with-tabs",
@@ -19334,10 +19415,7 @@
     if (screen === "shop" || screen.indexOf("shop:") === 0) {
       if (screen.indexOf("shop:") === 0) shopTab = screen.slice(5);
       if (!LOOK.some(l => l.key === shopTab)) shopTab = LOOK[0].key;
-      // Turned off, not taken out — the same `head-off` the Holy Talismans shelf wears, which keeps
-      // the heading laid out and measured so --title-h is unchanged and the rack below it does
-      // not move. Drop the word and the gilt heading is back.
-      title.textContent = "Tile Shop"; title.className = "shop big gilt head-off";
+      title.textContent = "Tile Shop"; title.className = "shop big gilt";
       saveWallet();                                   // banks whatever the last run earned
 
       // A picture of him wearing everything currently on, standing on a real tile. It sits
@@ -19744,10 +19822,7 @@
       // Two lines. It is the longest heading in the game and at 46px it ran the whole width of
       // a phone with its tilt carrying the last letters off the edge; stacked, it sits inside
       // the screen and matches TILE RUNNER's own two-line treatment on the pause menu.
-      // ...and then hidden. Everything below is left standing — the two-line break, the band
-      // mixed from the charms' own faces, the travelling shimmer — because this is a heading
-      // turned OFF, not one taken out. Drop `head-off` and it all comes straight back.
-      title.innerHTML = "Holy<br>Talismans"; title.className = "shop big amber rainbow head-off";
+      title.innerHTML = "Holy<br>Talismans"; title.className = "shop big amber rainbow";
       menuEl.classList.add("orrery-page");
       // The backing beat is gated off elsewhere, but the thing you can actually hear on this
       // screen is the AMBIENT bed — a separate loop on a timer and a bus of its own, switched
