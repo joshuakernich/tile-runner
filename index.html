@@ -351,8 +351,12 @@
     /* One grid square off the foot, which is exactly where DONE sits on every screen that has
        one. It was two, and the one answer on this screen stood a square higher than the answer
        on every other — near enough to read as a wobble rather than as a decision. */
+    /* ...and now it has to clear the tab panel, which owns the foot. One grid square between
+       the answer and the panel, the gap every run of buttons in the game uses. --tv-cell is a
+       tab's height; the fallback matches the one #wintabs itself falls back to. */
     padding:0 calc(env(safe-area-inset-left) + var(--chq2))
-            var(--foot-lift) calc(env(safe-area-inset-right) + var(--chq2));
+            calc(var(--bar-h) + var(--chq))
+            calc(env(safe-area-inset-right) + var(--chq2));
     bottom:0; max-width:26rem; margin:0 auto;
   }
   #winui.show { display:flex; animation:poem-in 260ms ease-out both; }
@@ -383,6 +387,11 @@
      stands on this line is a full-width slab rather than a row of small charms and wants to be
      off the swipe rather than merely off the bar. */
   :root { --foot-lift: max(var(--chq), calc(var(--safe-b) + var(--edge-min))); }
+  /* HOW TALL THE FOOTER BAR IS — its own top pad, an item, and the lift off the glass. Written
+     once here because three things have to agree on it: the bar itself, the answer standing
+     above it on the Tileverse, and the two menus that give it the foot. It was worked out
+     separately in each of the three, and the answer landed exactly ON the bar's top edge. */
+  :root { --bar-h: calc(var(--chq) + var(--tv-cell, calc(var(--btn-h) * 1.8)) + var(--foot-lift)); }
   /* ...and THE HEAD, for the same reason. Every screen's name — the Tileverse's, the shop's,
      the shelf's, and the canvas-drawn CHAPTER N COMPLETE — starts its box this far down.
      Read from JS as well (headDrop), so the canvas heading cannot drift from the DOM ones. */
@@ -454,9 +463,22 @@
      thing on this screen that stands on nothing. */
   #wintop .wintop-head { position:relative; z-index:2; display:flex; align-items:flex-start;
     justify-content:center; }
-  /* Right into the corner, a grid square outside the strip's own padding: it is the one
-     control here that is not about where you are going, and it should sit out of the way of
-     the two that are. */
+  /* ...and with the name turned off, the row it stood in is 62px of nothing between the top of
+     the screen and the two doors. Collapsed, so the doors ARE the top of the screen.
+     Tied to the heading with :has rather than set by hand, so un-hiding the word brings its row
+     back with it and the two can never disagree. A browser without :has simply keeps the row,
+     which is the layout as it was — the failure is the old screen, not a broken one.
+     The cog is positioned against THIS row, so it keeps its corner either way.
+     `min-height:0` and not just `height:0`: a flex item's min-height is `auto`, which is its
+     content's height, and a definite height under it is clamped straight back up — the row
+     collapsed to 41px of its 62 and stopped there. No `overflow:hidden` to go with it: the cog
+     is positioned OUTSIDE this box, in the corner, and clipping the row would take it with the
+     word. The heading overflows instead, which costs nothing — it is invisible. */
+  #wintop .wintop-head:has(> .head-off) { height:0; min-height:0; }
+  /* Right into the corner, a grid square outside the strip's own padding: it is the one control
+     on this screen that is not about where you are going, and it sits out of the way of the
+     three that are. With the heading off, the row it hangs from is a zero-height line at the top
+     of the strip — so this IS the top right corner of the pane. */
   #wintop .wintop-head #win-cog {
     position:absolute; right:calc(0px - var(--chq)); top:calc(0px - var(--chq)); }
   /* #wintop #wintop-title, not #wintop-title: the shared face rule further down the sheet is
@@ -515,21 +537,115 @@
      name under it rather than a label in a box: the charm you are wearing, and what you have to
      spend. Both are things you would want to see on this screen anyway, so the button is the
      readout and the readout is the button. */
-  #wintop .wintop-row { display:flex; justify-content:space-between; align-items:flex-start;
-    gap:var(--chq); }
-  #wintop .wintop-row button { flex-direction:column; gap:6px; min-height:0; }
-  #wintop .wt-ico { display:flex; align-items:center; justify-content:center; gap:6px;
-    height:46px; }
-  #wintop .wt-ico canvas { display:block; }
+  /* ---- THE STRIP AT THE FOOT ------------------------------------------------------------
+     The three rooms this screen leads to, as a tab panel across the bottom: the shelf, the map
+     you are standing on, and the shop. Three equal shares of the width — `flex:1 1 0` with
+     `min-width:0`, so what is written in one cannot make it wider than the other two — rather
+     than three squares sized to their contents, because a tab panel's items are equals and a
+     row that measures itself is a row of buttons.
+     At the FOOT, where a thumb is, and where every other screen in the game puts the thing you
+     press. The top of this screen is the map's own head; what it wants up there is the map. */
+  /* 35, one above #winui. The answer at the foot clears the panel with PADDING, and padding is
+     part of a box: #winui's own rectangle still lies right across the three tabs, and being a
+     later sibling at the same z-index it was swallowing every tap meant for them. Lifting the
+     panel is the fix rather than making #winui transparent to pointers, because the panel is
+     genuinely in front — it is the thing at the very edge of the screen.
+     ONE BAR, not three buttons. Three plates side by side were three objects that happened to
+     be adjacent; a footer is a single piece of furniture with three places in it. So the plate
+     moves to the bar — one ground, one chequer, one white line along its lip — and the items
+     inside it give theirs up entirely.
+     --bar-w is how wide the three of them want to be. The BAR is the whole width of the screen
+     and the ROW inside it is capped at that, which is what lets the ground fade out past the
+     items on a wide screen instead of running to both edges of a monitor. */
+  #wintabs {
+    --bar-w:26rem;
+    /* The ground fades over 130px OUTSIDE the row, so on a phone — where the row is nearly the
+       whole screen — those stops fall off both edges and the bar is simply solid, and on a wide
+       screen it dies away well before the corners. Same geometry for the white line, with a much
+       shorter run: it is a highlight along the lip of the bar, and a highlight that reaches the
+       ends of a wide screen is a rule, not a highlight. */
+    --bar-mask:linear-gradient(90deg,
+       transparent calc(50% - var(--bar-w)/2 - 130px),
+       #000        calc(50% - var(--bar-w)/2 + 8px),
+       #000        calc(50% + var(--bar-w)/2 - 8px),
+       transparent calc(50% + var(--bar-w)/2 + 130px));
+    --line-mask:linear-gradient(90deg,
+       transparent calc(50% - var(--bar-w)/2 - 10px),
+       #000        calc(50% - var(--bar-w)/2 + 78px),
+       #000        calc(50% + var(--bar-w)/2 - 78px),
+       transparent calc(50% + var(--bar-w)/2 + 10px));
+    position:fixed; left:0; right:0; bottom:0; z-index:35; display:none; isolation:isolate;
+    padding:var(--chq) env(safe-area-inset-right) var(--foot-lift) env(safe-area-inset-left);
+  }
+  #wintabs.show { display:block; animation:poem-in 260ms ease-out both; }
+  #wintabs::before, #wintabs::after {
+    content:""; position:absolute; left:0; right:0; pointer-events:none; }
+  /* The bar's own ground: the game's panel and the game's chequer, the same material every
+     plate in it is made of — it is one big plate rather than a new kind of surface. */
+  #wintabs::before {
+    top:0; bottom:0; z-index:-1;
+    background-color:var(--panel);
+    background-image:conic-gradient(transparent 0 25%, var(--chq-ink) 0 50%,
+                                    transparent 0 75%, var(--chq-ink) 0);
+    background-size:var(--chq2) var(--chq2); background-origin:border-box;
+    -webkit-mask-image:var(--bar-mask); mask-image:var(--bar-mask); }
+  /* ...and the light catching its top edge. Two pixels, near-white, gone quickly at both ends.
+     It is the one hard line on this screen and it is what makes the bar read as an EDGE the map
+     runs behind rather than as a panel lying on top of it. */
+  #wintabs::after {
+    top:0; height:2px; background:rgba(255,255,255,0.92);
+    -webkit-mask-image:var(--line-mask); mask-image:var(--line-mask); }
+  #wintabs .wt-row { display:flex; max-width:var(--bar-w); margin:0 auto; }
+  /* A column apiece: the mark, and its name under it. Height is the Tileverse's own square —
+     see --tv-cell, published from winMapFit() — so an item is the size of a chapter, and the
+     things you can go to are made of the same stuff as the places you can go to.
+     NO PLATE ON ANY OF THEM. The bar is the plate; a plate inside a plate is a button sitting
+     on a shelf, which is the thing this stopped being. */
+  #wintabs button { flex:1 1 0; min-width:0; min-height:0;
+    height:var(--tv-cell, calc(var(--btn-h) * 1.8));
+    padding:0 4px; line-height:1.25; text-align:center;
+    background:none; background-image:none; border:0; box-shadow:none;
+    color:#bfc6e0; opacity:0.6;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; }
+  /* THE ONE YOU ARE ON. With no plates left to light, what says it is the same thing that says
+     it everywhere else in this game: the green the shop marks an EQUIPPED item with. Full
+     strength against the other two held back, so the bar reads at a glance without a second
+     colour being invented for it. */
+  #wintabs button.on { opacity:1; color:#fff; }
+  #wintabs button.on .wt-lbl { color:#8dff78; }
+  /* No slab means no slab to press down: the press is the item dimming. */
+  #wintabs button:active { transform:none; opacity:0.4; }
+  /* The Tileverse's own mark is THE TILEVERSE — every chapter as one pixel, in the shape they
+     actually make. It takes the map's own proportions from --quilt-ar rather than being forced
+     square: the campaign is wider than it is tall, and a square crop of it would be a different
+     map. Bounded on BOTH axes — the tab's width less its padding, and a mark's height — so a
+     campaign that grows in either direction still fits the tab rather than bursting it.
+     Pixelated, like every other quilt in the game, which is the whole point here: one chapter
+     has to land on one hard-edged pixel. */
+  #wintabs .tv-chip { display:block; image-rendering:pixelated;
+    max-width:100%; max-height:46px; width:auto; height:46px;
+    aspect-ratio:var(--quilt-ar, 1);
+    background-image:var(--quilt, none); background-size:100% 100%; }
+  #wintabs .wt-ico { display:flex; align-items:center; justify-content:center; gap:4px; }
+  #wintabs .wt-ico canvas { display:block; }
   /* The same tally the shop itself shows, at the same size and spacing — it is the same number
-     answering the same question, and it had been saying it in two different voices. */
-  #wintop .wt-ico { gap:9px; }
-  #wintop .wt-ico .n { font-size:26px; letter-spacing:1px; color:var(--track); font-weight:900; }
+     answering the same question, and it had been saying it in two different voices.
+     CLOSED UP: at 9 the coin and the figure were two things standing near each other, and what
+     they are is one reading — the mark and its number, the way a price is written. 4 is the gap
+     the rest of the game puts inside a single label. Changed in .shop-purse to match, because
+     the parity above is the whole point of this rule. */
+  #wintabs .wt-ico .n { font-size:26px; letter-spacing:1px; color:var(--track); font-weight:900; }
   /* `canvas.wallet` is pinned to 17px with an !important, because the wallet glyph has one size
      everywhere it appears in a LIST of prices. This is not that — it is the shop's own purse,
      said again on the way in — so it takes the purse's size, and needs the same weapon to do it. */
-  #wintop .wt-ico canvas.wallet { width:26px !important; height:26px !important; }
-  #wintop .wt-lbl { display:block; }
+  #wintabs .wt-ico canvas.wallet { width:26px !important; height:26px !important; }
+  /* ...and the name under it, in the SHOP'S OWN TINY TEXT — 10px on a 0.2 track, the size the
+     stock cells caption their swatches at. Two doors that are the size of a chapter square have
+     the room for a word again, and it is a caption under a picture rather than a label on a
+     control, so it is set the way the game sets captions rather than the way it sets buttons.
+     It keeps the button rule's uppercase and weight: it is still a thing you press. */
+  #wintabs .wt-lbl { display:block; font-size:10px; letter-spacing:0.2px; line-height:1.1;
+    text-align:center; }
   /* A GROUND under each of the two doors along the top. They stand on whatever chapter the map
      has scrolled under them, and a white label whose legibility is decided by the level behind
      it is not a label. The same ink as the two fades at the head and the foot of the frame —
@@ -545,10 +661,22 @@
      of a map that carries a different palette under every chapter, and the words on it were
      being read against whatever colour happened to be behind them. This is a pool of dark
      around the button itself, which is a different job from the frame going dark.
-     Listed with the doors rather than written out again: it is the same recipe, and the only
-     thing it needs of its own is a size. */
-  #wintop #win-tal, #wintop #win-shop, #winui #win-next { position:relative; isolation:isolate; }
-  #wintop #win-tal::before, #wintop #win-shop::before, #winui #win-next::before {
+     It used to be listed with the two doors, being the same recipe with a size of its own.
+     ...AND THE TWO DOORS NO LONGER TAKE IT. This whole pool existed because they had no plate:
+     a mark and a white word standing straight on whatever chapter the map had scrolled under
+     them. They are plated buttons now, so their legibility is the plate's job, and two pools
+     150vw wide overlapping in one corner were darkening a third of the map to solve a problem
+     that had gone. The ANSWER at the foot still has no plate of its own to stand on and still
+     takes it. */
+  /* `position:relative` ONLY. `isolation:isolate` used to sit here too, and it was the bug: it
+     makes the button its own stacking context, and inside one the element's OWN background is
+     painted first — before any negative-z child. So the pool was landing on top of the button's
+     quilt and under its label, which a dark wash at low alpha hid and a white one at 0.72 did
+     not. Without the isolation the pseudo-element is painted in #winui's context instead, which
+     puts it properly behind the whole button. Nothing above it has a background of its own for
+     it to disappear behind, which is the one thing isolation was buying. */
+  #winui #win-next { position:relative; }
+  #winui #win-next::before {
     content:""; position:absolute; z-index:-1; pointer-events:none;
     /* MUCH bigger, and sized against the SCREEN rather than the button. At 230% of a small
        button it was a neat oval sitting behind each door with a visible end to it, which reads
@@ -558,29 +686,35 @@
        boundary anywhere near the screen is the one where it has already faded to nothing.
        #wintop does not clip (no overflow rule), so the overflow is real rather than cut. */
     left:50%; top:50%; width:150vw; height:62vh; transform:translate(-50%,-50%);
+    /* WHITE, not the ink. It used to be the same rgba(5,4,13) as the fades at the head and foot
+       of the frame — the map going dark around the one answer on it. Turned over, it is the map
+       being LIT around it instead, which is the better fit for what this button is: the way in.
+       ...and the grain turns over with it. It is a black rect at 0.14 in the SVG, and left black
+       under a white wash it greys the very thing the wash is brightening — the same reason the
+       chequer has a light ink for bright plates and a dark one for the panel. */
     background-image:
       url("data:image/svg+xml;utf8,\
 <svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'>\
 <filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/>\
-</filter><rect width='140' height='140' filter='url(%23n)' opacity='0.14'/></svg>"),
+</filter><rect width='140' height='140' fill='%23fff' filter='url(%23n)' opacity='0.14'/></svg>"),
       radial-gradient(closest-side,
-        rgba(5,4,13,0.72) 0%, rgba(5,4,13,0.58) 30%, rgba(5,4,13,0.28) 64%, rgba(5,4,13,0) 100%);
+        rgba(255,255,255,0.40) 0%, rgba(255,255,255,0.30) 30%,
+        rgba(255,255,255,0.13) 64%, rgba(255,255,255,0) 100%);
     background-size:140px 140px, 100% 100%;
     -webkit-mask-image:radial-gradient(closest-side, #000 0%, rgba(0,0,0,0.62) 55%, transparent 100%);
             mask-image:radial-gradient(closest-side, #000 0%, rgba(0,0,0,0.62) 55%, transparent 100%); }
-  /* NO PLATE on any of them. A plate is what the game puts under a decision, and the decision
-     on this screen is the one at the foot — three chequered slabs across the top were three
-     more things asking to be pressed, and the loudest thing on a screen whose subject is the
-     map behind them. Words and a mark, standing on the cosmos.
-     The box is still three squares tall so there is a thumb-sized target behind the label. */
-  #wintop button { width:auto; min-height:var(--btn-h); height:auto; padding:0;
+  /* THE COG IS BACK IN ITS CORNER, and back to being a bare mark. It is the one control on this
+     screen that is not a room off the map — it is the machinery of the game itself — so it does
+     not belong in a run of three tabs that name places. No plate: a plate is what the game puts
+     under a decision, and a slab in the corner of the map would be a fourth thing asking to be
+     pressed above a panel of three. No slab means no slab to press DOWN, so its press is the
+     mark dimming instead. */
+  #wintop button { width:var(--btn-h); min-height:var(--btn-h); height:auto; padding:0;
     background:none; background-image:none; border:0; box-shadow:none;
     color:#bfc6e0; line-height:1.25; text-align:center;
     display:flex; align-items:center; justify-content:center; gap:8px; }
-  /* No slab means no slab to press DOWN, so the press is the label dimming instead. */
   #wintop button:active { transform:none; opacity:0.55; }
-  /* ...and the cog is a mark in the corner, at the same square target and nothing else. */
-  #wintop #win-cog { width:var(--btn-h); flex:0 0 auto; }
+  #wintop #win-cog { flex:0 0 auto; }
   #wintop #win-cog canvas { width:27px; height:27px; display:block; }
   #winui button { width:100%; display:flex; align-items:center; justify-content:center; gap:10px;
     height:var(--btn-h); padding-top:0; padding-bottom:0; }
@@ -606,11 +740,13 @@
   }
   /* ...but not the arrow on it. image-rendering inherits, and the chip is drawn at twice its
      size and scaled down — pixelated turned the one round-capped thing in the row to gravel. */
-  /* Wider than the viewport, so it has no ends anywhere you can see them, and deep enough that
-     the button sits in the MIDDLE of it rather than on top of it — a pool with the thing in
-     the middle reads as somewhere it is standing, and one that stops just past the plate
-     reads as a shadow the plate is casting. */
-  #winui #win-next::before { width:170vw; height:46vh; }
+  /* SIZED TO THE BUTTON, not to the screen. It used to be 170vw by 46vh — written when this was
+     a pool of the frame's own dark, where having no ends anywhere you could see them was the
+     whole point. Turned white, that same shape stopped being a ground and became a floodlight:
+     half the map went pale and the answer was the darkest thing in the middle of it.
+     A little wider than the plate and a couple of times its height, so what you see is a glow
+     coming off the button rather than a lit region the button happens to be in. */
+  #winui #win-next::before { width:146%; height:390%; }
   #winui #win-next canvas { image-rendering:auto; }
   #poem {
     position:fixed; inset:0; display:none; flex-direction:column;
@@ -838,6 +974,20 @@
             calc(env(safe-area-inset-left) + var(--menu-pad));
   }
   #menu.show { display:flex; }
+  /* ...and when the trilogy is up, the menu it is standing over has to give it the foot. The
+     panel is fixed to the bottom of the SCREEN, so nothing in the flow knows about it: this is
+     the room it takes, added to whatever bottom pad the screen already had.
+     The pinned DONE steps up by the same amount rather than being taken away. It is still the
+     way out for anyone who reached this screen from the pause menu, and — less obviously —
+     fitScrollRack measures the shop's rack down to DONE'S OWN TOP EDGE, so the floor of the
+     rack follows the button up on its own and no second number has to be kept in step. */
+  #menu.with-tabs { padding-bottom:calc(var(--bar-h) + var(--chq)); }
+  /* ...AND DONE GOES. The Tileverse tab is the way back now, and a DONE stacked over it was the
+     same instruction given twice at the same end of the screen. Not deleted — display:none, and
+     the screens reached from the pause menu (which get no panel, and so no `with-tabs`) still
+     have it as their only way out. See fitScrollRack, which had to be told to measure the rack
+     down to the panel instead of down to a button that is no longer there. */
+  #menu.with-tabs #menu-body .shop-go { display:none; }
   /* Nothing else is on screen while a menu is. The backdrop behind it is the level's own,
      painted by draw(), which is exactly the "current background" a menu should sit on. */
   body.menu-open #power,
@@ -1382,6 +1532,16 @@
      After .amber on purpose — same specificity, so the later rule is the one that wins — and
      the amber EXTRUSION is left alone underneath: the shadows are painted from the glyph's
      shape, not its fill, so they survive the face going transparent. */
+  /* HIDDEN, NOT GONE — the one switch, worn by every heading that is currently off.
+     `visibility` rather than `display` on purpose, and this is the whole reason it is one rule
+     and not three: the heading stays LAID OUT and still measures, so --title-h comes out
+     unchanged and nothing under it moves. `display:none` would collapse that measurement to
+     zero and drag every rack, orrery and prompt up under the notch — a hide that quietly
+     relayouts the screen is not a hide.
+     Nothing else is touched: the text, the gilt, the rainbow band, the extrusion and the
+     shimmer are all still wired up behind it. Take `head-off` off the element and the heading
+     is back exactly as it was. Written against the ids so no later id rule can outrank it. */
+  #menu-title.head-off, #wintop-title.head-off { visibility:hidden; }
   #menu-title.rainbow {
     background-image:
       linear-gradient(100deg, rgba(255,255,255,0) 42%, rgba(255,255,255,0.92) 50%,
@@ -1528,7 +1688,9 @@
   /* the wallet, sitting on the picture rather than costing a line of its own */
   /* The count IS the wallet — the word "TILES" said nothing the coin beside it didn't, and
      it was the only reason the number had to stay small enough to leave room for it. */
-  .shop-purse { display:flex; align-items:center; justify-content:center; gap:9px;
+  /* gap 4, not 9: the coin and its figure are one reading. See #wintop .wt-ico, which says the
+     same number on the way in and has to keep saying it the same way. */
+  .shop-purse { display:flex; align-items:center; justify-content:center; gap:4px;
     margin:-4px auto 10px; font-size:26px; letter-spacing:1px; color:var(--track); font-weight:900; }
   .shop-purse canvas { width:26px; height:26px; }
   /* #menu-body button sets width:100%, and an id beats a class — so these have to match it */
@@ -1782,11 +1944,20 @@
 
 <div id="wintop">
   <div class="wintop-head">
-    <h2 id="wintop-title" class="tv-word" data-t="Tileverse">Tileverse</h2>
+    <!-- `head-off` turns it off and nothing else: the word, its data-t twin and the clipped
+         rainbow sheen over the gold are all still here. Delete the class to bring it back. -->
+    <h2 id="wintop-title" class="tv-word head-off" data-t="Tileverse">Tileverse</h2>
     <button id="win-cog" aria-label="Settings"></button>
   </div>
-  <div class="wintop-row">
+</div>
+
+<!-- The three rooms this screen leads to, as a panel of equals across the foot. The Tileverse
+     is one of them and not the frame around the other two: standing on the map is a place you
+     are, and the tab that names it is lit to say so. The cog is not here — it is not a room. -->
+<div id="wintabs">
+  <div class="wt-row">
     <button id="win-tal"><span class="wt-ico"></span><span class="wt-lbl">Holy<br>Talismans</span></button>
+    <button id="win-tv" class="on" aria-current="page"><span class="wt-ico"><i class="tv-chip"></i></span><span class="wt-lbl">Tileverse</span></button>
     <button id="win-shop"><span class="wt-ico"></span><span class="wt-lbl">Tile<br>Shop</span></button>
   </div>
 </div>
@@ -3958,7 +4129,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.30";                    // shown on the title & pause screens
+  const VERSION = "v10.31";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -4029,11 +4200,27 @@
   //
   //   ms    how long the effect runs; 0 means it stays armed until it is spent on something
   //   blurb one line, shown on the button and in the talisman screen
+  // ---- THE SPECTRUM ---------------------------------------------------------------------
+  // The six that ship are the six colours of the rainbow, in the order they sit on the shelf:
+  // red, orange, yellow, green, blue, violet. They used to be six colours picked one at a time
+  // for the charm each belonged to — a red lodestone, a cream sledge, a slate millstone — which
+  // is a fine way to colour one object and a poor way to colour a SET. Nothing told you how
+  // many there were or that you had them all; the rack at the foot of a level was a handful of
+  // unrelated things rather than one run with gaps in it.
+  //
+  // Now the shelf is a spectrum, so a hole in it is visible as a missing colour rather than as
+  // a missing object, and the HOLY TALISMANS heading — whose face is a band mixed from these
+  // very values — becomes an actual rainbow rather than a smear. Even chroma across all six, at
+  // lightnesses tuned by eye: a yellow at the blue's lightness burns out, and a violet at the
+  // yellow's goes muddy, so the numbers are not a straight sweep.
+  //
+  // ORDER IS THE POINT. Move a charm in this list and you move its colour; the run has to read
+  // left to right on the shelf.
   const TALISMANS = [
 
     // A lodestone is magnetite that has been struck by lightning and come out magnetic — which
     // is what this is. The name was on the charm below until this one earned it.
-    { id:"magnet", name:"Lodestone", col:"#ff6d6d", ms:3000,
+    { id:"magnet", name:"Lodestone", col:"#f1645f", ms:3000,
       face:"#f2685f", edge:"#8f2820",
       blurb:"Pulls coins in",
       etch:(g,x,y,r)=>{
@@ -4047,7 +4234,7 @@
     // The id stays "finger": it is written into level 16's data, into the editor's picker and
     // into every save that has unlocked it, and none of that is worth churning for a name only
     // the player ever sees.
-    { id:"finger", name:"Hammer of God", col:"#ffe9a8", ms:0,
+    { id:"finger", name:"Hammer of God", col:"#f7933b", ms:0,
       face:"#e8dcc0", edge:"#8d7c58",
       blurb:"A fell voice that shatters stone",
       etch:(g,x,y,r)=>{
@@ -4072,7 +4259,7 @@
         // what you would see looking at one head-on.
         rr(x-r*0.13, y-r*0.80, r*0.26, r*1.50, r*0.10); } },
 
-    { id:"brake", name:"Millstone", col:"#9aa3b8", ms:REST_MS,
+    { id:"brake", name:"Millstone", col:"#f6cd28", ms:REST_MS,
       face:"#8b95ab", edge:"#3a4152",
       blurb:"Slows the heart and body",
       etch:(g,x,y,r)=>{
@@ -4106,7 +4293,7 @@
     // which also waits for something to happen rather than running on a clock — and it is
     // spent the instant the run would have ended, putting him back on the last tile he stood
     // on and holding him there while you work out what went wrong.
-    { id:"ankh", name:"Ankh", col:"#7ee0c8", ms:0,
+    { id:"ankh", name:"Ankh", col:"#49d47c", ms:0,
       face:"#63cbb1", edge:"#1f5f50",
       blurb:"A second chance to die",
       etch:(g,x,y,r)=>{
@@ -4129,7 +4316,7 @@
         g.arc(x, CY, RI, 0, Math.PI*2, true);
         g.fill(); } },
 
-    { id:"pulse", name:"Bell of Unmaking", col:"#c9b6ff", ms:0,
+    { id:"pulse", name:"Bell of Unmaking", col:"#4baff1", ms:0,
       face:"#b49df5", edge:"#4a3080",
       blurb:"A mighty scream to unmake monsters",
       etch:(g,x,y,r)=>{
@@ -4163,7 +4350,7 @@
         g.beginPath(); g.rect(x - r*0.72, lipY, r*1.44, r*0.17); g.fill();
         g.beginPath(); g.arc(x, lipY + r*0.34, r*0.15, 0, 7); g.fill(); } },  // the clapper
 
-    { id:"mush", name:"Mushroom", col:"#ff8fc8", ms:0,
+    { id:"mush", name:"Mushroom", col:"#c37ef1", ms:0,
       face:"#ff7fb8", edge:"#9e2a60",
       blurb:"A gift from the Gods",
       // ONE OUTLINE, filled ONCE. It was three shapes — a stem, a dome and a band — each with a
@@ -6641,7 +6828,8 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     wallLayerDirty = true;                      // cell/world size changed — rebuild wall + grain caches
     _uiGrid = 0;                                // ...and re-read the grid, in case the CSS moved
-    _footLift = -1; _headDrop = -1; _safe = null;   // ...and the edges with it — a rotation moves all of them
+    _footLift = -1; _headDrop = -1; _safe = null;
+    syncTvCell();                         // the Tileverse's pitch moved with the screen   // ...and the edges with it — a rotation moves all of them
     grainScreen = null;
     syncHudChrome();                            // the pause button follows the speedo's plate
   }
@@ -10813,6 +11001,56 @@
     }
     el.style.setProperty("--quilt", "url(" + c.toDataURL() + ")");
   }
+  // THE WHOLE TILEVERSE, ONE PIXEL TO A CHAPTER. Not a picture of the map — the map itself, at
+  // the smallest scale it can still be itself: every chapter in its own cell, in its own colour,
+  // and the shape they make together is the shape you are looking at behind the panel. A chapter
+  // is a quilt of four to seven colours, so its pixel is the MEAN of them — the honest downsample
+  // of that square rather than one swatch off it standing in for the rest.
+  // The film's square goes in too, pale and colourless, because it is part of the map: it is the
+  // one cell that has no palette, and leaving it out would change the shape.
+  // Built once and kept: the campaign does not change shape while the game is running, and this
+  // walks every level and mixes every theme.
+  let _tvChip = null;
+  function tileverseChip() {
+    if (_tvChip) return _tvChip;
+    const cells = mapCells();
+    const all = cells.map((p, i) => ({ p, i })).concat([{ p: introMapCell(), i: INTRO_CELL }]);
+    let minC = Infinity, minR = Infinity, maxC = -Infinity, maxR = -Infinity;
+    for (const a of all) {
+      minC = Math.min(minC, a.p.c); maxC = Math.max(maxC, a.p.c);
+      minR = Math.min(minR, a.p.r); maxR = Math.max(maxR, a.p.r);
+    }
+    const w = maxC - minC + 1, h = maxR - minR + 1;
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    const g = c.getContext("2d");
+    // genTheme hands back "hsl(h,s%,l%)" strings, not hex — so each one goes through hslHex
+    // before it can be averaged. (It was being fed to parseInt as though it were hex, which is
+    // NaN, which canvas ignores: every chapter came out the default black and the whole map read
+    // as one silhouette.)
+    // ...and then LIFTED. A chapter's palette lives at 24-42% lightness, which is right for a
+    // square you look INTO and far too dark for a pixel you look AT — on a lit tab they all went
+    // to the same near-black. The hue and the relationship between the chapters are untouched;
+    // this only takes each one to a lightness at which its colour is still a colour at 1px.
+    const mean = list => {
+      let r = 0, gr = 0, b = 0;
+      for (const col of list) {
+        const m = /hsl\((-?[\d.]+),\s*([\d.]+)%,\s*([\d.]+)%\)/.exec(col);
+        const hex = m ? hslHex(+m[1], +m[2], +m[3]) : col;
+        const n = parseInt(hex.replace("#",""), 16) || 0;
+        r += (n>>16)&255; gr += (n>>8)&255; b += n&255;
+      }
+      const k = Math.max(1, list.length);
+      const hex = "#" + [r/k, gr/k, b/k].map(v =>
+        Math.round(v).toString(16).padStart(2, "0")).join("");
+      return tintHex(hex, 0, 1.25, 22);
+    };
+    for (const a of all) {
+      g.fillStyle = a.i === INTRO_CELL ? "rgba(232,230,255,0.55)"
+                                       : mean(genTheme(themeSeed(String(a.i + 1))).colors);
+      g.fillRect(a.p.c - minC, a.p.r - minR, 1, 1);
+    }
+    return (_tvChip = { url: c.toDataURL(), w, h });
+  }
   function showWinUI() {
     // The map has music now. It is the thing the shop and the shelf are rooms off, and it was
     // the only one of the three standing in silence.
@@ -10833,38 +11071,65 @@
     const ft = document.getElementById("winfadetop"); if (ft) ft.classList.add("show");
     const top = document.getElementById("wintop");
     if (top) {
-      // Built on the way in rather than in the markup, and rebuilt EVERY time: the cog takes
-      // the button's own colour (not known until it is in the document), the charm is whichever
-      // one is worn right now, and the purse is whatever the last chapter left in it — all
-      // three can have changed while the shop was open.
+      // Built on the way in rather than in the markup: the cog takes the button's own colour,
+      // which is not known until it is in the document.
       const cog = document.getElementById("win-cog");
       // 20, not 10: the cog is SHOWN at 27 CSS pixels and was being cut at 20 device pixels —
       // less than one per pixel of its own box, which is why it was the softest thing on the
       // screen. Its drawing is all fractions of the canvas, so the number is a resolution and
       // nothing else.
       if (cog && !cog.firstChild) cog.appendChild(cogChip(20, getComputedStyle(cog).color || "#e8e6ff"));
-      // ALL of them, going round: two rings crossed at right angles with three charms on
-      // each, near ones passing in front of far ones. A door to the shelf should show the
-      // shelf, not one thing off it — and the ones you have not found yet go round grey, so
-      // the button is also the count.
-      const ti = document.querySelector("#win-tal .wt-ico");
-      if (ti) {
-        ti.textContent = "";
-        const c = document.createElement("canvas");
-        c.width = c.height = ATOM_PX*2*ICON_SCALE;
-        c.style.width = c.style.height = ATOM_PX + "px";
-        ti.appendChild(c);
-        startAtom(c);
-      }
-      // ...and what you have to spend, which is the whole question the shop asks.
-      const si = document.querySelector("#win-shop .wt-ico");
-      if (si) {
-        si.textContent = "";
-        si.appendChild(coinChip(26));       // ...and the same coin, at the shop's own size
-        const n = document.createElement("span"); n.className = "n"; n.textContent = wallet.tiles;
-        si.appendChild(n);
-      }
+      syncTvCell();                       // a tab is a chapter square; this is how big one is
       top.classList.add("show");
+    }
+    syncWinTabs("tv");
+  }
+  // ---- THE TRILOGY ------------------------------------------------------------------------
+  // One owner for the panel: shown, lit and filled from here and nowhere else. It follows you
+  // across all three of its own screens, so `active` says which of them you are standing on —
+  // "tv", "talismans", "shop", or null to take it away entirely.
+  // Rebuilt every time it goes up, because all three marks are live: the charms are whichever
+  // ones you have found, and the purse is whatever the last chapter left in it — and a panel
+  // that persists across screens is exactly the thing that would go stale if it did not.
+  function syncWinTabs(active) {
+    const tabs = document.getElementById("wintabs"); if (!tabs) return;
+    tabs.classList.toggle("show", !!active);
+    for (const pair of [["win-tal","talismans"], ["win-tv","tv"], ["win-shop","shop"]]) {
+      const b = document.getElementById(pair[0]); if (!b) continue;
+      b.classList.toggle("on", pair[1] === active);
+      if (pair[1] === active) b.setAttribute("aria-current", "page");
+      else b.removeAttribute("aria-current");
+    }
+    // Nothing on screen means nothing to animate. The orrery is a rAF loop and it has no
+    // business running behind a level.
+    if (!active) { stopAtom(); return; }
+    // ALL of them, going round: two rings crossed at right angles with three charms on
+    // each, near ones passing in front of far ones. A door to the shelf should show the
+    // shelf, not one thing off it — and the ones you have not found yet go round grey, so
+    // the tab is also the count.
+    const ti = document.querySelector("#win-tal .wt-ico");
+    if (ti) {
+      ti.textContent = "";
+      const c = document.createElement("canvas");
+      c.width = c.height = ATOM_PX*2*ICON_SCALE;
+      c.style.width = c.style.height = ATOM_PX + "px";
+      ti.appendChild(c);
+      startAtom(c);
+    }
+    // ...and what you have to spend, which is the whole question the shop asks.
+    const si = document.querySelector("#win-shop .wt-ico");
+    if (si) {
+      si.textContent = "";
+      si.appendChild(coinChip(26));         // ...and the same coin, at the shop's own size
+      const n = document.createElement("span"); n.className = "n"; n.textContent = wallet.tiles;
+      si.appendChild(n);
+    }
+    // ...and the Tileverse's own tab wears the Tileverse: the whole map at one pixel a chapter.
+    const chip = document.querySelector("#win-tv .tv-chip");
+    if (chip) {
+      const tvc = tileverseChip();
+      chip.style.setProperty("--quilt", "url(" + tvc.url + ")");
+      chip.style.setProperty("--quilt-ar", tvc.w + " / " + tvc.h);
     }
   }
   // NOTE that this does not touch the music. It runs on the way to a MENU as much as on the way
@@ -10878,7 +11143,9 @@
     const fd = document.getElementById("winfade"); if (fd) fd.classList.remove("show");
     const ft = document.getElementById("winfadetop"); if (ft) ft.classList.remove("show");
     const top = document.getElementById("wintop"); if (top) top.classList.remove("show");
-    stopAtom();
+    // The panel goes with it. A menu that wants it back says so a frame later, in buildMenu —
+    // both happen in the same task, so there is nothing to see between the two.
+    syncWinTabs(null);
   }
   // The charms in orbit. Two rings at right angles — one lying flat, one standing up — with
   // three charms spaced evenly round each, and everything sorted back to front every frame so
@@ -11061,6 +11328,16 @@
     const cells = mapCells();
     const mRows = Math.max(...cells.map(p => p.r)) + 1;
     return viewH/(mRows + 1);
+  }
+  // ...and the same figure handed to the stylesheet, because the two doors along the top are
+  // Tileverse squares and a square drawn on the canvas cannot be measured by CSS. Re-published
+  // on every layout, so a rotation resizes the doors with the map rather than leaving them at
+  // the old screen's pitch. Guarded: this can be reached before the campaign has loaded, and a
+  // door at its fallback size is a great deal better than a layout that throws.
+  function syncTvCell() {
+    try {
+      document.documentElement.style.setProperty("--tv-cell", Math.round(winMapFit()) + "px");
+    } catch (_) {}
   }
   // Which chapters you may go to: everything cleared, and the first one you have not. The same
   // rule drawMap colours by, so what is lit is exactly what is pressable.
@@ -18425,6 +18702,14 @@
   document.getElementById("win-tal").addEventListener("click", winDoor("talismans"));
   document.getElementById("win-shop").addEventListener("click", winDoor("shop"));
   document.getElementById("win-cog").addEventListener("click", winDoor("settings"));
+  // The way back to the map, from either of the other two. It is the panel's own tab, so it does
+  // exactly what DONE does — runs the return the door was opened with, which closes the menu and
+  // puts the map back. Standing on the map it is the tab you are already on, and does nothing.
+  document.getElementById("win-tv").addEventListener("click", () => {
+    if (!menuEl.classList.contains("show")) return;
+    Sound.unlock(); Sound.tapBig();
+    if (menuReturn) menuReturn(); else { closeMenu(); showWinUI(); }
+  });
   // The whole card is the button now. A pop-up that explains one thing and then asks you to
   // find a control to agree with it is two actions where the game only needed one — every other
   // card in this game is dismissed by tapping it, and this is the last one that was not.
@@ -18486,14 +18771,19 @@
   // which differs per screen and changes with the notch.
   function fitScrollRack() {
     const rack = menuBody.querySelector(".shop-rack"), go = menuBody.querySelector(".shop-go");
-    if (!rack || !go) return;
+    if (!rack) return;
+    // WHATEVER IS PINNED UNDER THE RACK. It used to be DONE and only DONE; on the two screens
+    // the trilogy follows you onto, DONE is gone and the panel is the floor. Measured off the
+    // element rather than off a number, so neither one has to publish its height.
+    const tabs = document.getElementById("wintabs");
+    const floor = (tabs && tabs.classList.contains("show")) ? tabs
+                : (go && go.offsetParent !== null) ? go : null;
+    if (!floor) return;
     // The Tileverse pane sizes itself: it is the whole screen, with the chrome floating over
     // it. Measuring a floor for it would put the bottom band back.
     if (rack.classList.contains("lvl-rack")) return;
     const gap = 12;
-    // DONE is the only pinned button under the rack now — the buy bar that used to appear
-    // above it when something was being tried on has gone to the price tag.
-    const floorTop = go.getBoundingClientRect().top;
+    const floorTop = floor.getBoundingClientRect().top;
     const h = floorTop - rack.getBoundingClientRect().top - gap;
     const maxH = Math.max(140, Math.round(h));
     rack.style.maxHeight = maxH + "px";
@@ -18735,16 +19025,33 @@
       // figure taken from the viewport over-padded by exactly that offset, and every pinned
       // screen sat a good 20px lower under its heading than the one grid square it asks for.
       // padding-top does not move the element's top edge, so there is no loop in measuring it.
+      // ...and a heading that is OFF clears nothing, so nothing is reserved for it. This is the
+      // one place `head-off` has to be read rather than merely obeyed: `visibility:hidden` keeps
+      // the box, which is what stops the pinned chrome moving, but the box is invisible and the
+      // whole point of this figure is how far down the first thing you can SEE has to start.
       document.documentElement.style.setProperty("--title-h",
-        Math.round(title.getBoundingClientRect().bottom
-                   - menuBody.getBoundingClientRect().top + chq) + "px");
+        title.classList.contains("head-off") ? "0px"
+          : Math.round(title.getBoundingClientRect().bottom
+                       - menuBody.getBoundingClientRect().top + chq) + "px");
     });
     title.className = "";                      // only the main screen wears the logo treatment
+    // THE PANEL FOLLOWS YOU. The shelf and the shop are two of its three screens, so it stays up
+    // on them with its own tab lit — that is what makes it navigation rather than a launcher.
+    // Gated on `win`: it is the MAP'S panel, and the shelf reached from the pause menu mid-level
+    // has no map behind it. There, DONE is the only way out, exactly as it was before this.
+    syncWinTabs(win ? (screen === "talismans" ? "talismans"
+                     : (screen === "shop" || screen.indexOf("shop:") === 0) ? "shop" : null)
+                    : null);
+    menuEl.classList.toggle("with-tabs",
+      document.getElementById("wintabs").classList.contains("show"));
     // ---- the shop: him at the top, a tab per category, then that tab's rack ----
     if (screen === "shop" || screen.indexOf("shop:") === 0) {
       if (screen.indexOf("shop:") === 0) shopTab = screen.slice(5);
       if (!LOOK.some(l => l.key === shopTab)) shopTab = LOOK[0].key;
-      title.textContent = "Tile Shop"; title.className = "shop big gilt";
+      // Turned off, not taken out — the same `head-off` the Holy Talismans shelf wears, which keeps
+      // the heading laid out and measured so --title-h is unchanged and the rack below it does
+      // not move. Drop the word and the gilt heading is back.
+      title.textContent = "Tile Shop"; title.className = "shop big gilt head-off";
       saveWallet();                                   // banks whatever the last run earned
 
       // A picture of him wearing everything currently on, standing on a real tile. It sits
@@ -19151,7 +19458,10 @@
       // Two lines. It is the longest heading in the game and at 46px it ran the whole width of
       // a phone with its tilt carrying the last letters off the edge; stacked, it sits inside
       // the screen and matches TILE RUNNER's own two-line treatment on the pause menu.
-      title.innerHTML = "Holy<br>Talismans"; title.className = "shop big amber rainbow";
+      // ...and then hidden. Everything below is left standing — the two-line break, the band
+      // mixed from the charms' own faces, the travelling shimmer — because this is a heading
+      // turned OFF, not one taken out. Drop `head-off` and it all comes straight back.
+      title.innerHTML = "Holy<br>Talismans"; title.className = "shop big amber rainbow head-off";
       menuEl.classList.add("orrery-page");
       // The backing beat is gated off elsewhere, but the thing you can actually hear on this
       // screen is the AMBIENT bed — a separate loop on a timer and a bus of its own, switched
@@ -19904,6 +20214,31 @@
   // nothing has been made yet — no runner, no map, and nothing to be looking for. It arrives
   // with the world, on the same tap that makes it.
   const TITLE_BY = "QUEST FOR THE HOLY TALISMANS";
+  // THE LEAN, and every part of the lockup takes it from here. -0.07 radians is the four degrees
+  // .tv-word carries in CSS, which is what the Tileverse's heading and the interlevel screen's
+  // are set at — the title is the same sign as those, drawn rather than laid out.
+  const TITLE_TILT = -0.07;
+  // The byline leans, but not all the way. At the words' full tilt its right end climbed so far
+  // up RUNNER's descender that the gap between the two lines closed at one end and opened at
+  // the other; pulled back to two thirds, it still belongs to the lean without racing it.
+  const TITLE_BY_TILT = TITLE_TILT * 0.68;
+  // ---- the drift ------------------------------------------------------------------------
+  // Nothing in this lockup is nailed to the page. It hangs in the same void the Tileverse
+  // hangs in, so it moves like something WEIGHTLESS: a slow rise and fall, a slower sway
+  // across it, and a lazy roll about its own middle. Three periods that don't divide into each
+  // other, so the loop never lands on itself and the eye can't find the repeat.
+  // Each piece takes its own seed, so TILE, RUNNER and the byline drift apart and back together
+  // rather than sliding about as one rigid block — which is the difference between three things
+  // floating and one picture being waved around.
+  const TITLE_FLOAT = { y: 0.055, x: 0.030, rot: 0.016, ty: 3900, tx: 6100, tr: 5300 };
+  function titleFloat(seed, ts, size){
+    const F = TITLE_FLOAT;
+    return {
+      dx:  Math.sin(ts/F.tx + seed*1.7) * size * F.x,
+      dy:  Math.sin(ts/F.ty + seed)     * size * F.y,
+      rot: Math.sin(ts/F.tr + seed*2.3) * F.rot,
+    };
+  }
   const TITLE_TILE_DX = 0.13;            // how far left TILE sits, as a fraction of its size
   const TITLE = { t: 0, u: 0 };
   function easeOutBack(p){ const c1 = 1.70158, c3 = c1 + 1; return 1 + c3*Math.pow(p-1,3) + c1*Math.pow(p-1,2); }
@@ -21483,13 +21818,32 @@
     // running off both edges.
     // It waits for RUNNER to land: a subtitle arriving under a word that is still bouncing
     // reads as part of the bounce.
+    // ...and it leans with them. Set flat under two words on a four-degree tilt it read as a
+    // caption someone had put beneath the sign rather than as the bottom line OF it. Turned
+    // about its own centre, the same way each word is turned about its own, so the three of them
+    // are parallel rather than sharing one long axis — which is what the two words already do.
     if (!first && TITLE.t > 920) {
       ctx.save();
       ctx.globalAlpha = 0.75 * clamp((TITLE.t - 920)/420, 0, 1);
       ctx.fillStyle = "#ffd24a";
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       tapPromptFont(ctx, TITLE_BY, viewW*0.82);
-      ctx.fillText(TITLE_BY, viewW/2, y2 + size*0.62 + UI_PX*1.7);
+      // 0.40 of the size is where RUNNER actually ENDS: the face is drawn on a middle baseline,
+      // so its ink falls 0.294 of the size below the anchor, and the extrusion carries it a
+      // further EXTRUDE (0.11). The old 0.62 was a guess at that and overshot it by a fifth of
+      // the word, which is why this sat 38px clear of a title it is supposed to belong to. What
+      // is left is the byline's own ascent and one grid square of air.
+      // Its own seed, and a fraction of the words' amplitude — it is a tenth their height, and
+      // at their swing it would read as a loose caption rather than the bottom line of a
+      // lockup that is drifting together.
+      const flb = titleFloat(11, ts, size*0.55);
+      ctx.translate(viewW/2 + flb.dx, y2 + size*0.40 + UI_PX*1.85 + flb.dy);
+      ctx.rotate(TITLE_BY_TILT + flb.rot);
+      ctx.fillText(TITLE_BY, 0, 0);
+      // ...and the same light crosses it. Its own width is the span here rather than the title's
+      // — it is a tenth the height, and one band sized for RUNNER would sit on it as a single
+      // flat colour instead of a sweep.
+      shimmerText(TITLE_BY, 0, 0, ctx.measureText(TITLE_BY).width, ts);
       ctx.restore();
     }
 
@@ -21519,11 +21873,14 @@
     const p = clamp(appearLocal/520, 0, 1), e = easeOutBack(p);
     const k = 0.55 + 0.45*e;                                   // scale up with an overshoot
     const a = clamp(appearLocal/170, 0, 1);
-    const idle = p >= 1 ? Math.sin(ts/560 + word.length)*size*0.02 : 0;
+    // The pop-in lands the word on its mark; the drift only takes over once it is there, so
+    // the overshoot isn't fighting a sway.
+    const fl = titleFloat(word.length, ts, size), w = p >= 1 ? 1 : 0;
     ctx.save();
     ctx.globalAlpha = a;
-    ctx.translate(X, y + idle); ctx.rotate(-0.07); ctx.scale(k, k);   // gentle ~-4° tilt, matching the headers
-    draw3DText(word, 0, 0, size);
+    ctx.translate(X + fl.dx*w, y + fl.dy*w);
+    ctx.rotate(TITLE_TILT + fl.rot*w); ctx.scale(k, k);   // ~-4°, matching the headers
+    draw3DText(word, 0, 0, size, null, null, ts);   // ...and the rainbow runs over it
     ctx.restore();
     ctx.globalAlpha = 1;
   }
@@ -21573,7 +21930,7 @@
   // `face` and `side` are optional and default to the game's gold. The one caller that passes
   // them is the talisman ceremony, where the heading names the charm standing above it and has
   // no business being a different colour from the thing it names.
-  function draw3DText(text, X, Y, size, face, side){
+  function draw3DText(text, X, Y, size, face, side, shimTs){
     ctx.font = "900 " + Math.round(size) + "px " + UI_FONT;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     // styled like the other headers (e.g. the gold "SPEED UP" name): flat face over a flat
@@ -21581,6 +21938,68 @@
     // size read as a smudge under the letters rather than as a solid wall.
     extrude(ctx, size, side || TITLE_SIDE, (dx, dy) => ctx.fillText(text, X + dx, Y + dy));
     ctx.fillStyle = face || "#ffd24a"; ctx.fillText(text, X, Y);
+    // `shimTs` is the title lockup and nothing else: light travelling over the gold face.
+    if (shimTs != null) shimmerText(text, X, Y, size * 5.2, shimTs);
+  }
+
+  // ---- the rainbow that runs through the lockup ------------------------------------------
+  // The title is GOLD, and stays gold. This is light ON it rather than a repaint: the face is
+  // laid down in its own colour first and every pass here sits over the top of it, so what you
+  // see is a struck gold sign catching a spectrum, not a rainbow-coloured word.
+  //
+  // Three passes, all in the word's own rotated space so the band leans with the letters:
+  // a bloom that spills a little colour past the edges, the spectrum itself at less than full
+  // strength so the gold underneath still warms it, and a narrow white glint travelling faster
+  // than the colour — which is the pass the eye actually reads as SHINE. A hue ramp on its own,
+  // however saturated, just looks painted on; it is the moving highlight that makes it shimmer.
+  const SHIMMER_MS = 5200;                        // one full turn of the spectrum
+  const GLINT_MS   = 2600;                        // ...and one pass of the white band across it
+  // A whole turn of hue laid along a shallow diagonal. Seamless because the hue at the two ends
+  // of the span is the same angle, so nothing pops as the band wraps around.
+  function shimmerGrad(w, phase){
+    const g = ctx.createLinearGradient(-w/2, -w*0.20, w/2, w*0.20);
+    for (let i = 0; i <= 12; i++){
+      const p = i/12, h = ((((p - phase) % 1) + 1) % 1) * 360;
+      g.addColorStop(p, "hsl(" + h.toFixed(1) + ",100%,62%)");
+    }
+    return g;
+  }
+  // The glint. Its span is wider than the word so the band enters and leaves off the ends of
+  // the ink rather than fading up in the middle of a letter.
+  function glintGrad(w, pos){
+    const g = ctx.createLinearGradient(-w*0.8, -w*0.20, w*0.8, w*0.20);
+    const s = 0.11;                               // half-width of the band, as a share of the span
+    g.addColorStop(0, "rgba(255,255,255,0)");
+    for (const st of [[pos-s,0],[pos-s*0.4,0.45],[pos,1],[pos+s*0.4,0.45],[pos+s,0]])
+      if (st[0] > 0 && st[0] < 1) g.addColorStop(st[0], "rgba(255,255,255," + st[1] + ")");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    return g;
+  }
+  // `span` is how wide one turn of the spectrum is drawn — passed in rather than measured so
+  // TILE and RUNNER, which are nothing like the same width, get the same physical band moving
+  // at the same physical speed, and read as one sheet of light crossing the whole lockup.
+  // Every alpha is a FRACTION of whatever alpha the caller was already at, so the title still
+  // fades in and pops in exactly as it did.
+  function shimmerText(text, X, Y, span, ts){
+    const A = ctx.globalAlpha;
+    const phase = (ts % SHIMMER_MS) / SHIMMER_MS;
+    const gpos  = (ts % GLINT_MS)   / GLINT_MS;
+    const spectrum = shimmerGrad(span, phase);
+    ctx.save();
+    ctx.translate(X, Y);
+    // the bloom: the same word a hair larger, added, so colour spills past the edge
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = A * 0.20;
+    ctx.save(); ctx.scale(1.035, 1.045); ctx.fillStyle = spectrum; ctx.fillText(text, 0, 0); ctx.restore();
+    // the spectrum, over the gold rather than instead of it
+    ctx.globalCompositeOperation = "source-over";
+    ctx.globalAlpha = A * 0.72;
+    ctx.fillStyle = spectrum; ctx.fillText(text, 0, 0);
+    // the glint
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = A * 0.85;
+    ctx.fillStyle = glintGrad(span, gpos); ctx.fillText(text, 0, 0);
+    ctx.restore();
   }
 
   // one path tile carrying the game's own beam+rail, oriented to how the path enters/exits it
