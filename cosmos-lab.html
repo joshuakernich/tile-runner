@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta http-equiv="Cache-Control" content="no-store"/>
+<title>Tile Runner — Cosmos Lab</title>
+<style>
+  :root{ --bg:#0b0a1c; --panel:#171533; --line:#2b2850; --ink:#cfe9ff; --accent:#8fd8ff; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:10px 14px;border-bottom:1px solid var(--line);
+         display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;}
+  header h1{font-size:15px;margin:0 12px 0 0;font-weight:700;letter-spacing:.5px;}
+  #status{font-size:12px;opacity:.8;}
+  .app{display:grid;grid-template-columns:310px minmax(0,1fr);gap:14px;padding:14px;align-items:start;}
+  .rail{display:flex;flex-direction:column;gap:12px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;}
+  .card h2{font-size:11px;letter-spacing:1px;opacity:.55;margin:0 0 8px;
+           font-weight:700;text-transform:uppercase;}
+  .row{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:12px;}
+  .row label{flex:0 0 92px;opacity:.85;}
+  .row input[type=range]{flex:1;min-width:0;accent-color:var(--accent);}
+  .row output{flex:0 0 52px;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent);}
+  button{background:#233;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+         padding:8px 12px;cursor:pointer;font:inherit;font-size:12px;width:100%;}
+  button:hover{border-color:var(--accent);}
+  button.prim{background:#1c6;color:#04120a;font-weight:700;border:none;}
+  .presets,.opts{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+  .presets button{padding:7px 0;font-size:11px;}
+  .hint{font-size:11px;line-height:1.5;opacity:.65;margin:8px 0 0;}
+  .stage{display:flex;flex-direction:column;gap:8px;align-items:center;min-width:0;
+         position:sticky;top:14px;}
+  iframe{width:100%;max-width:460px;height:82vh;border:1px solid var(--line);
+         border-radius:12px;background:#000;display:block;}
+  .legend{font-size:11px;opacity:.7;line-height:1.6;max-width:460px;}
+  code{color:var(--accent);}
+  .warn{color:#ffd24a;}
+  textarea{width:100%;height:260px;background:#07061a;color:var(--ink);border:1px solid var(--line);
+           border-radius:8px;padding:8px;font:inherit;font-size:11px;line-height:1.5;resize:vertical;}
+  @media (max-width:760px){
+    .app{grid-template-columns:minmax(0,1fr);}
+    .stage{position:static;}
+    iframe{max-width:none;height:70vh;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Cosmos Lab</h1>
+  <span id="status">booting the game…</span>
+</header>
+
+<div class="app">
+  <aside class="rail">
+
+    <div class="card">
+      <h2>The quilt</h2>
+      <div class="row"><label>hues</label><input id="hues" type="range" min="2" max="24" step="1" value="12"><output id="huesOut">12</output></div>
+      <div class="row"><label>span</label><input id="span" type="range" min="30" max="360" step="5" value="360"><output id="spanOut">360</output></div>
+      <div class="row"><label>start</label><input id="hue0" type="range" min="0" max="359" step="1" value="0"><output id="hue0Out">0</output></div>
+      <div class="row"><label>saturation</label><input id="sat" type="range" min="0" max="100" step="1" value="65"><output id="satOut">65</output></div>
+      <div class="row"><label>lightness</label><input id="lig" type="range" min="0" max="40" step="0.5" value="6"><output id="ligOut">6.0</output></div>
+      <div class="row"><label>stripe</label><input id="stripeW" type="range" min="1" max="8" step="1" value="4"><output id="stripeWOut">4</output></div>
+      <p class="hint"><b>span</b> 360 walks the hue right round the wheel — every level's family
+        of colour represented and none of them owning it. Below about 180 the sky starts picking
+        a side. <b>lightness</b> is the one number that decides whether this reads as black with
+        a hint of colour or as colour that happens to be dark; the shipped 7 is very nearly
+        black. <b>stripe</b> is how many patches share a colour along the 45° staircase.</p>
+    </div>
+
+    <div class="card">
+      <h2>Nebulae</h2>
+      <div class="row"><label>how many</label><input id="nebN" type="range" min="0" max="14" step="1" value="6"><output id="nebNOut">6</output></div>
+      <div class="row"><label>gap</label><input id="nebGap" type="range" min="6" max="80" step="1" value="30"><output id="nebGapOut">30</output></div>
+      <div class="row"><label>size</label><input id="nebR" type="range" min="2" max="22" step="1" value="8"><output id="nebROut">8</output></div>
+      <div class="row"><label>strength</label><input id="nebA" type="range" min="0" max="1" step="0.01" value="0.35"><output id="nebAOut">0.35</output></div>
+      <div class="row"><label>saturation</label><input id="nebSat" type="range" min="0" max="100" step="1" value="100"><output id="nebSatOut">100</output></div>
+      <div class="row"><label>lightness</label><input id="nebLig" type="range" min="5" max="80" step="1" value="54"><output id="nebLigOut">54</output></div>
+      <div class="row"><label>hue spread</label><input id="nebSpan" type="range" min="0" max="360" step="5" value="180"><output id="nebSpanOut">180</output></div>
+      <div class="row"><label>parallax</label><input id="nebPar" type="range" min="0" max="1.5" step="0.05" value="0.6"><output id="nebParOut">0.60</output></div>
+      <p class="hint">Clouds pieced out of the QUILT'S OWN SQUARES, lit additively and eaten into
+        patch by patch, with the hue walking across the width so a cloud is a piece of the
+        rainbow rather than a wash of one colour. <b>gap</b> is how far apart they are, IN PATCHES — every distance in this lab is,
+        which is what makes a sky tuned here look the same on a phone as on a desktop.
+        <b>parallax</b> under 1 lets them lag behind the stars in front — which is the whole
+        reason they are on a layer of their own.</p>
+    </div>
+
+    <div class="card">
+      <h2>The stars</h2>
+      <div class="row"><label>how many</label><input id="starN" type="range" min="0" max="600" step="10" value="260"><output id="starNOut">260</output></div>
+      <div class="row"><label>field</label><input id="starGap" type="range" min="10" max="120" step="1" value="46"><output id="starGapOut">46</output></div>
+      <div class="row"><label>floor</label><input id="starA" type="range" min="0.1" max="1" step="0.01" value="0.68"><output id="starAOut">0.68</output></div>
+      <div class="row"><label>clustering</label><input id="clump" type="range" min="0" max="1" step="0.01" value="1"><output id="clumpOut">1.00</output></div>
+      <div class="row"><label>…per drift</label><input id="clumpN" type="range" min="1" max="24" step="1" value="5"><output id="clumpNOut">5</output></div>
+      <div class="row"><label>…spread</label><input id="clumpSpread" type="range" min="0.5" max="20" step="0.5" value="4"><output id="clumpSpreadOut">4.0</output></div>
+      <p class="hint"><b>clustering</b> is the one to play with. At 0 the field is placed by one
+        hash per star — evenly scattered, which is the one thing a real sky never is. At 1 every
+        star is pulled into a drift, leaving voids between them. In between the two positions are
+        blended, so no star is ever in two places. <b>…per drift</b> is how many share a middle
+        and <b>…spread</b> how far from it they may fall, in patches.</p>
+    </div>
+
+    <div class="card">
+      <h2>…and the field behind them</h2>
+      <div class="row"><label>how many</label><input id="farN" type="range" min="0" max="600" step="10" value="0"><output id="farNOut">0</output></div>
+      <div class="row"><label>parallax</label><input id="farPar" type="range" min="0" max="1" step="0.01" value="0.5"><output id="farParOut">0.50</output></div>
+      <div class="row"><label>floor</label><input id="farA" type="range" min="0" max="1" step="0.01" value="0.61"><output id="farAOut">0.61</output></div>
+      <p class="hint">A second field at single-pixel size, taking only a share of the near one's
+        movement. That share IS the depth — it is the only thing separating the two fields, and
+        the only thing depth ever is. It shows on the Tileverse, where the sky moves because you
+        are dragging it; on the title it shows in the slow drift.</p>
+    </div>
+
+    <div class="card">
+      <h2>Shooting stars</h2>
+      <div class="row"><label>one every</label><input id="shootMs" type="range" min="800" max="20000" step="100" value="4000"><output id="shootMsOut">4000</output></div>
+      <div class="row"><label>fall lasts</label><input id="shootDur" type="range" min="150" max="2500" step="10" value="520"><output id="shootDurOut">520</output></div>
+      <div class="row"><label>trail</label><input id="shootTail" type="range" min="1" max="40" step="0.5" value="15"><output id="shootTailOut">15.0</output></div>
+      <div class="row"><label>strength</label><input id="shootA" type="range" min="0" max="1" step="0.01" value="1"><output id="shootAOut">1.00</output></div>
+      <button id="shoot">One now</button>
+      <p class="hint">On a clock rather than a random roll — which one it is and where it comes
+        from is hashed off the number of periods elapsed, so it needs no state and can never fire
+        twice at once. <b>One now</b> moves the clock's origin to this instant rather than faking
+        anything, so what you see is exactly what the game will draw.</p>
+    </div>
+
+    <div class="card">
+      <h2>Somewhere to start</h2>
+      <div class="presets">
+        <button data-p="shipped">shipped</button>
+        <button data-p="deep">deep</button>
+        <button data-p="vivid">vivid</button>
+        <button data-p="dusty">dusty</button>
+        <button data-p="empty">empty</button>
+        <button data-p="carnival">carnival</button>
+      </div>
+      <p class="hint"><b>deep</b> darker and emptier, more space between things ·
+        <b>vivid</b> the rainbow turned up, big lit clouds · <b>dusty</b> many small faint
+        drifts · <b>empty</b> nearly bare sky, the old look · <b>carnival</b> too much of
+        everything, for finding where the limits are.</p>
+    </div>
+
+    <div class="card">
+      <h2>Where to look</h2>
+      <div class="opts">
+        <button id="go-title">title</button>
+        <button id="go-map">tileverse</button>
+      </div>
+      <p class="hint">The title is mostly sky and it DRIFTS on its own clock. The Tileverse is
+        where the parallax actually reads — drag the map about and watch the layers separate.</p>
+    </div>
+
+    <div class="card">
+      <h2>Out</h2>
+      <button id="restore">Restore my settings</button>
+      <div style="height:6px"></div>
+      <button id="reload">Reload the game</button>
+      <div style="height:6px"></div>
+      <button id="copy" class="prim">Copy COSMOS block</button>
+      <p class="hint">The rail writes itself down as you move it and puts itself back when you
+        come back. <b>Restore</b> is your last state, for after the presets.</p>
+    </div>
+  </aside>
+
+  <div class="stage">
+    <iframe id="frame" title="Tile Runner"></iframe>
+    <p class="legend">The <b>running game</b>, driven through <code>__TR.cosmos()</code> — the
+      shipped sky, not a copy drawn here, so it cannot drift from what ships.
+      <span class="warn">This page must be SERVED</span> — <code>file://</code> blocks it from
+      reading the frame.</p>
+    <textarea id="out" spellcheck="false"></textarea>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const frame = $("frame");
+let W = null;
+
+const GAME_SRC = () => "index.html?lab=cosmos&t=" + Date.now();
+
+const KEYS = ["hues","span","hue0","sat","lig","stripeW",
+              "nebN","nebGap","nebR","nebA","nebSat","nebLig","nebSpan","nebPar",
+              "starN","starGap","starA","clump","clumpN","clumpSpread",
+              "farN","farPar","farA",
+              "shootMs","shootDur","shootTail","shootA"];
+// How many places each is written back with, so the copied block reads like the one it replaces.
+const DP = { hues:0, span:0, hue0:0, sat:0, lig:1, stripeW:0,
+             nebN:0, nebGap:0, nebR:0, nebA:2, nebSat:0, nebLig:0, nebSpan:0, nebPar:2,
+             starN:0, starGap:0, starA:2, clump:2, clumpN:0, clumpSpread:1,
+             farN:0, farPar:2, farA:2,
+             shootMs:0, shootDur:0, shootTail:1, shootA:2 };
+
+const values = () => { const o = {}; for (const k of KEYS) o[k] = +$(k).value; return o; };
+
+const SAVE_KEY = "tilerunner:cosmos-lab";
+function save(){ try { localStorage.setItem(SAVE_KEY, JSON.stringify(values())); } catch (e) {} }
+function restore(){
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) {}
+  if (!v || typeof v !== "object") return false;
+  for (const k of KEYS) if (typeof v[k] === "number") $(k).value = v[k];
+  return true;
+}
+function sync(k){ const o = $(k + "Out"); if (o) o.textContent = (+$(k).value).toFixed(DP[k] || 0); }
+
+function push(){
+  if (!W || !W.__TR || !W.__TR.cosmos) return;
+  try {
+    W.__TR.cosmos(values()); save(); refreshOut(); KEYS.forEach(sync);
+    if (!$("status").innerHTML.includes("warn")) $("status").textContent = "live";
+  } catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+}
+
+function refreshOut(){
+  const v = values(), f = (k) => (+v[k]).toFixed(DP[k]);
+  $("out").value =
+    "  const COSMOS = {\n" +
+    "    // ---- the quilt it is all pieced from ----\n" +
+    "    hues:  " + f("hues") + ", span: " + f("span") + ", hue0: " + f("hue0") +
+    ", sat: " + f("sat") + ", lig: " + f("lig") + ", stripeW: " + f("stripeW") + ",\n" +
+    "    // ---- nebulae: clouds pieced out of the quilt's own squares ----\n" +
+    "    nebN: " + f("nebN") + ", nebGap: " + f("nebGap") + ", nebR: " + f("nebR") +
+    ", nebA: " + f("nebA") + ",\n" +
+    "    nebSat: " + f("nebSat") + ", nebLig: " + f("nebLig") + ", nebSpan: " + f("nebSpan") +
+    ", nebPar: " + f("nebPar") + ",\n" +
+    "    // ---- the stars ----\n" +
+    "    starN: " + f("starN") + ", starGap: " + f("starGap") + ", starA: " + f("starA") + ",\n" +
+    "    clump: " + f("clump") + ", clumpN: " + f("clumpN") + ", clumpSpread: " + f("clumpSpread") + ",\n" +
+    "    // ---- ...and a second, slower field behind them ----\n" +
+    "    farN: " + f("farN") + ", farPar: " + f("farPar") + ", farA: " + f("farA") + ",\n" +
+    "    // ---- shooting stars ----\n" +
+    "    shootMs: " + f("shootMs") + ", shootDur: " + f("shootDur") +
+    ", shootTail: " + f("shootTail") + ", shootA: " + f("shootA") + ", shootT0: 0,\n" +
+    "  };";
+}
+
+const PRESETS = {
+  shipped:  { hues:12, span:360, hue0:0, sat:65, lig:6, stripeW:4,
+              nebN:6, nebGap:30, nebR:8, nebA:0.35, nebSat:100, nebLig:54, nebSpan:180, nebPar:0.60,
+              starN:260, starGap:46, starA:0.68, clump:1.00, clumpN:5, clumpSpread:4,
+              farN:0, farPar:0.50, farA:0.61,
+              shootMs:4000, shootDur:520, shootTail:15, shootA:1.00 },
+  deep:     { hues:6, span:300, hue0:220, sat:38, lig:5, stripeW:4,
+              nebN:2, nebGap:120, nebR:11, nebA:0.26, nebSat:60, nebLig:38, nebSpan:25, nebPar:0.35,
+              starN:150, starGap:56, starA:0.55, clump:0.85, clumpN:7, clumpSpread:5.5,
+              farN:180, farPar:0.30, farA:0.26,
+              shootMs:9000, shootDur:800, shootTail:6, shootA:0.8 },
+  vivid:    { hues:12, span:360, hue0:0, sat:70, lig:12, stripeW:2,
+              nebN:6, nebGap:50, nebR:10, nebA:0.55, nebSat:86, nebLig:54, nebSpan:80, nebPar:0.6,
+              starN:240, starGap:40, starA:0.68, clump:0.6, clumpN:4, clumpSpread:3,
+              farN:160, farPar:0.5, farA:0.4,
+              shootMs:4000, shootDur:520, shootTail:5.5, shootA:1 },
+  dusty:    { hues:9, span:360, hue0:30, sat:40, lig:8, stripeW:3,
+              nebN:10, nebGap:46, nebR:4, nebA:0.22, nebSat:55, nebLig:42, nebSpan:30, nebPar:0.7,
+              starN:420, starGap:40, starA:0.45, clump:0.9, clumpN:10, clumpSpread:3,
+              farN:320, farPar:0.55, farA:0.22,
+              shootMs:6500, shootDur:700, shootTail:3.5, shootA:0.7 },
+  empty:    { hues:8, span:360, hue0:0, sat:46, lig:7, stripeW:3,
+              nebN:0, nebGap:70, nebR:8, nebA:0, nebSat:72, nebLig:46, nebSpan:40, nebPar:0.55,
+              starN:190, starGap:46, starA:0.62, clump:0, clumpN:5, clumpSpread:3.5,
+              farN:0, farPar:0.45, farA:0.34,
+              shootMs:20000, shootDur:620, shootTail:4.5, shootA:0 },
+  carnival: { hues:18, span:360, hue0:0, sat:90, lig:18, stripeW:1,
+              nebN:12, nebGap:40, nebR:12, nebA:0.7, nebSat:100, nebLig:60, nebSpan:160, nebPar:0.8,
+              starN:500, starGap:36, starA:0.7, clump:0.5, clumpN:3, clumpSpread:2,
+              farN:400, farPar:0.6, farA:0.5,
+              shootMs:1500, shootDur:500, shootTail:8, shootA:1 },
+};
+function apply(p){ for (const k of KEYS) if (p[k] != null) $(k).value = p[k]; KEYS.forEach(sync); push(); }
+
+// The title screen draws the sky and almost nothing else, so that is where this opens. Driven by
+// ELEMENT rather than by coordinate on purpose — a blind tap at a fixed point is how a lab ends
+// up pressing something it cannot see.
+function goTitle(){ frame.src = GAME_SRC(); }
+function goMap(){
+  if (!W || !W.document) return;
+  const cv = W.document.getElementById("game");
+  if (cv) cv.dispatchEvent(new W.PointerEvent("pointerdown", { bubbles:true, pointerId:1 }));
+  setTimeout(push, 600);
+}
+
+function attach(){
+  W = frame.contentWindow;
+  let tries = 0;
+  (function wait(){
+    if (W.__TR && W.__TR.cosmos) { push(); return; }
+    if (++tries > 200) {
+      $("status").innerHTML = '<span class="warn">the game never came up — is this being SERVED? ' +
+        'file:// blocks the frame from being read.</span>';
+      return;
+    }
+    setTimeout(wait, 50);
+  })();
+}
+frame.addEventListener("load", attach);
+frame.src = GAME_SRC();
+
+KEYS.forEach(k => $(k).addEventListener("input", () => { sync(k); push(); }));
+document.querySelectorAll(".presets button").forEach(b =>
+  b.onclick = () => { apply(PRESETS[b.dataset.p]); $("status").textContent = "preset: " + b.dataset.p; });
+
+$("shoot").onclick   = () => { if (W && W.__TR && W.__TR.shootNow) W.__TR.shootNow(); };
+$("go-title").onclick = goTitle;
+$("go-map").onclick   = goMap;
+$("restore").onclick = () => {
+  if (!restore()) { $("status").innerHTML = '<span class="warn">nothing saved yet</span>'; return; }
+  KEYS.forEach(sync); push();
+  $("status").textContent = "your saved settings, put back";
+};
+$("reload").onclick = () => { frame.src = GAME_SRC(); };
+$("copy").onclick = () => {
+  navigator.clipboard.writeText($("out").value).then(
+    () => $("status").textContent = "COSMOS block copied — paste it over the one in index.html",
+    () => $("status").innerHTML = '<span class="warn">clipboard refused — copy it out of the box below</span>');
+};
+
+const restored = restore();
+KEYS.forEach(sync);
+refreshOut();
+if (restored) $("status").textContent = "your last settings, put back";
+</script>
+</body>
+</html>

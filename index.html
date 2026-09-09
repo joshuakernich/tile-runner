@@ -377,7 +377,9 @@
      The word is one word now, so the box can be the size of the word.
      On #winui's max-width rather than on the button, because the button is `width:100%` of it —
      which is what keeps the two agreeing without either being told a number. */
-  #winui.at-cell { max-width:15rem; }
+  /* ...less two grid squares. `calc` off the same 15rem rather than a new figure, so what the
+     width IS stays legible: half the old full-width bar, and then two squares off. */
+  #winui.at-cell { max-width:calc(15rem - var(--chq) * 2); }
   /* A black ground under the one answer on this screen, fading up into the map. Every chapter
      brings its own palette to the bottom of the frame, and a button standing on whatever colour
      happens to be there is a button whose legibility is decided by the level behind it. Pinned
@@ -494,11 +496,16 @@
      is positioned OUTSIDE this box, in the corner, and clipping the row would take it with the
      word. The heading overflows instead, which costs nothing — it is invisible. */
   #wintop .wintop-head:has(> .head-off) { height:0; min-height:0; }
-  /* #wintop #wintop-title, not #wintop-title: the shared face rule further down the sheet is
-     also an ID and comes later, so a bare id here would lose the size to it and the heading
-     would stay at 46 however little room it had. */
-  #wintop #wintop-title { text-align:center; padding:0 var(--btn-h); white-space:nowrap;
-    font-size:min(46px, 8.6vw); }
+  /* THE SAME HEADING AS EVERY OTHER SCREEN'S, and pinned the same way. It was carrying two
+     differences it no longer has any reason to: a size of min(46px, 8.6vw) rather than the
+     shared 46, and a grid of side padding — both of which existed to keep it clear of the cog
+     that used to sit in the corner beside it. The cog is in the footer now, so the heading gets
+     the whole width and the family's own size.
+     Positioned like #menu-title rather than laid out inside #wintop's padded head row: pinning
+     both to the SAME top means neither can drift from the other when --head-drop moves, which
+     is the number that follows the notch. */
+  #wintop #wintop-title {
+    position:fixed; left:0; right:0; top:var(--head-drop); text-align:center; }
   /* GOLD, with an oil-on-water sheen across it: a flat sheet of the game's own gold with a
      rainbow at a third strength over the top, both clipped to the glyphs — so what you read is
      yellow and what you notice is that the yellow is not quite one colour. At full strength it
@@ -842,15 +849,22 @@
      them as two different places. The label stands on the palette unaided, the way the map's
      numbers do over those very same colours. */
   #winui #win-next {
-    image-rendering:pixelated;
+    background-color:#fff;
+    color:var(--quilt-ink, #242043);
+    /* The chequer every button in the game wears, in the CHAPTER'S OWN colour at a tenth. The
+       shared --chq-ink and --chq-lift are both whites, for dark plates and bright ones, and on
+       a white plate neither is there at all. This is the third case: a light ground that wants a
+       dark weave — and taking it from the chapter means the tie to the square is said twice, once
+       loudly in the type and once under it. */
     background-image:
-      conic-gradient(transparent 0 25%, var(--chq-void) 0 50%,
-                     transparent 0 75%, var(--chq-void) 0),
-      var(--quilt, none);
-    background-size:var(--chq2) var(--chq2), calc(var(--chq) * 3) calc(var(--chq) * 3);
-    background-repeat:repeat, repeat;
+      conic-gradient(transparent 0 25%, var(--quilt-wash, transparent) 0 50%,
+                     transparent 0 75%, var(--quilt-wash, transparent) 0);
+    background-size:var(--chq2) var(--chq2);
     background-position:0 0;
     background-origin:border-box;
+    /* ...and the shadow is the button's own colour darkened, which is the rule the gold and the
+       amber ones follow. The button's own colour is white now, so it is a grey. */
+    box-shadow:0 4px 0 #b9bdd2;
   }
   /* ...but not the arrow on it. image-rendering inherits, and the chip is drawn at twice its
      size and scaled down — pixelated turned the one round-capped thing in the row to gravel. */
@@ -1088,6 +1102,31 @@
             calc(env(safe-area-inset-left) + var(--menu-pad));
   }
   #menu.show { display:flex; }
+  /* THE PAN. Moving to a tab on the right pans right: the screen you are going to comes in from
+     the right and travels left into place, which is what a camera moving right over a row of
+     rooms looks like. --tab-dir carries the sign, so one number decides it and the whole thing
+     reverses by negating it.
+     Applied to the HEADING and the BODY, not to the card that holds both. #menu-title is
+     `position:fixed`, and a fixed element inside a TRANSFORMED ancestor stops answering to the
+     viewport and starts answering to that ancestor's box — the heading would have snapped to the
+     card's 330px column for the length of the animation and back out again at the end. */
+  /* `translate`, NOT `transform`. The headings carry the family's four-degree lean as a
+     `transform: rotate(-4deg)`, and an animation on `transform` replaces that outright — with
+     `both` fill it then holds the final keyframe forever, so every menu heading in the game came
+     out straight and stayed straight after the first pan. The independent `translate` property
+     composes with the rotation instead of overwriting it. */
+  @keyframes tab-whip {
+    from { translate:calc(var(--tab-dir, 1) * 26%) 0; opacity:0; }
+    to   { translate:0 0; opacity:1; }
+  }
+  @keyframes tab-whip-out {
+    from { translate:0 0; opacity:1; }
+    to   { translate:calc(var(--tab-dir, 1) * -26%) 0; opacity:0; }
+  }
+  #menu.whip     #menu-title, #menu.whip     #menu-body {
+    animation:tab-whip     var(--tab-ms, 240ms) cubic-bezier(.22,1,.36,1) both; }
+  #menu.whip-out #menu-title, #menu.whip-out #menu-body {
+    animation:tab-whip-out var(--tab-ms, 240ms) cubic-bezier(.4,0,.9,.4) both; }
   /* ...and when the trilogy is up, the menu it is standing over has to give it the foot. The
      panel is fixed to the bottom of the SCREEN, so nothing in the flow knows about it: this is
      the room it takes, added to whatever bottom pad the screen already had.
@@ -4293,7 +4332,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.35";                    // shown on the title & pause screens
+  const VERSION = "v10.36";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -9994,6 +10033,11 @@
       t.got = true;
       const def = talById(t.id);
       const fresh = unlockTalisman(t.id);
+      // ...and remembered, because the CHAPTER COMPLETE screen names it once more. Only the
+      // FRESH ones: a charm you already owned pays out in coins instead of being claimed, and a
+      // summary announcing something you have had for ten chapters is not news.
+      // Recorded before the charm-maze exit below, which returns without coming back here.
+      if (fresh) (s.freshTal || (s.freshTal = [])).push(t.id);
       spawnPop(t.c, t.r, def ? def.col : "#ffd24a"); spawnLight(t.c, t.r);
       notePick("tal", t.c, t.r, { id: t.id });
       Sound.coin(); haptic([8, 30, 8]);
@@ -11012,7 +11056,10 @@
             picks: (state.picked || []).map(q => Object.assign({}, q, { t: -1 })),
             coins: 0, coinsTotal: ((state.L && state.L.coins) || []).length, clock: 0, pickSnd: -1e9,
             // The purse as it stood before this chapter, and what the chapter put in it.
-            was: purseWas || 0, gain: purseGain || 0, nextWasOpen: _nextWasOpen };
+            was: purseWas || 0, gain: purseGain || 0, nextWasOpen: _nextWasOpen,
+            // What this chapter yielded that was not money. Copied, like `picks`: the run's own
+            // record must not be chewed up by the thing replaying it.
+            charm: (state.freshTal || []).slice() };
     // Whatever cell size shows the whole board with a tile of air around it.
     win.cellFit = Math.max(4, Math.min(viewW/(COLS + 2), viewH/(ROWS + 2)));
     win.stepMs = route.length ? WIN.route / route.length : 40;
@@ -11188,8 +11235,12 @@
     const cx = clamp(o.x + r.x + r.w/2, half, window.innerWidth - half);
     // ...and UNDER it, unless there is no room left before the footer, where it stops. Falling
     // behind the capsule would be worse than sitting a little close to the square.
+    // A square and a half below the square's own edge, not one: at a single square the button was
+    // touching the ring drawn round the chosen chapter rather than hanging under it, and a gap
+    // that reads as contact is not a gap.
+    const drop = pad * 1.5;
     const floor = window.innerHeight - (FOOTER.high * pad + footLift()) - pad - bh;
-    const y = Math.min(o.y + r.y + r.h + pad, floor);
+    const y = Math.min(o.y + r.y + r.h + drop, floor);
     el.classList.add("at-cell");
     el.style.setProperty("--wn-x", Math.round(cx - window.innerWidth/2) + "px");
     el.style.setProperty("--wn-y", Math.round(y) + "px");
@@ -11202,20 +11253,36 @@
     win.pick = false;
     const el = document.getElementById("winui"); if (el) el.classList.remove("show");
   }
-  // Nine of the chapter's own colours, one pixel each, handed to the button as a background.
-  // The same palette its square on the map is painted from — genTheme off the chapter number —
-  // so the button and the tile it points at are plainly the same place.
-  function winNextQuilt(el, idx) {
-    // The intro's ground is the cosmos — it is not a chapter and has no palette of its own.
-    const cols = (idx === INTRO_CELL ? VOID_THEME : genTheme(themeSeed(String(idx + 1)))).colors;
-    const q = LEVEL_SWATCH;
-    const c = document.createElement("canvas"); c.width = c.height = q;
-    const g = c.getContext("2d");
-    for (let k = 0; k < q*q; k++) {
-      g.fillStyle = cols[k % cols.length];
-      g.fillRect(k % q, Math.floor(k/q), 1, 1);
+  // A CHAPTER, MIXED DOWN TO ONE COLOUR — its four-to-seven patches averaged, which is the
+  // honest downsample of its square rather than one swatch off it standing in for the rest.
+  // genTheme hands back "hsl(...)" strings, not hex, so each goes through hslHex before it can
+  // be averaged; feeding those to parseInt as though they were hex is NaN, and canvas answers a
+  // NaN fill by drawing black. Two callers, wanting opposite things of the same number — the
+  // Tileverse chip lifts it to read on a dark map, the answer darkens it to read on white — so
+  // the mixing lives here and the tinting lives with them.
+  function themeMean(i) {
+    const cols = (i === INTRO_CELL ? VOID_THEME : genTheme(themeSeed(String(i + 1)))).colors;
+    let r = 0, g = 0, b = 0;
+    for (const col of cols) {
+      const m = /hsl\((-?[\d.]+),\s*([\d.]+)%,\s*([\d.]+)%\)/.exec(col);
+      const hex = m ? hslHex(+m[1], +m[2], +m[3]) : col;
+      const n = parseInt(String(hex).replace("#",""), 16) || 0;
+      r += (n>>16)&255; g += (n>>8)&255; b += n&255;
     }
-    el.style.setProperty("--quilt", "url(" + c.toDataURL() + ")");
+    const k = Math.max(1, cols.length);
+    return "#" + [r/k, g/k, b/k].map(v => Math.round(v).toString(16).padStart(2, "0")).join("");
+  }
+  // THE ANSWER WEARS THE CHAPTER IN ITS INK, not on its ground. It used to be the chapter's own
+  // quilt blown up — nine of its colours as the button's background — which said "the same
+  // place" plainly but made the one thing you press on this screen the same value as the map it
+  // is standing on. White reads at any size against any chapter, and the writing carries the
+  // colour instead: same information, said by the type rather than by the plate.
+  // Darkened and saturated a step, because a chapter's palette lives at 24-42% lightness — right
+  // for a square you look INTO and too pale for six letters on white.
+  function winNextInk(el, idx) {
+    const ink = tintHex(themeMean(idx), 0, 1.35, -14);
+    el.style.setProperty("--quilt-ink", ink);
+    el.style.setProperty("--quilt-wash", fRGBA(ink, 0.10));
   }
   // THE WHOLE TILEVERSE, ONE PIXEL TO A CHAPTER. Not a picture of the map — the map itself, at
   // the smallest scale it can still be itself: every chapter in its own cell, in its own colour,
@@ -11247,22 +11314,12 @@
     // square you look INTO and far too dark for a pixel you look AT — on a lit tab they all went
     // to the same near-black. The hue and the relationship between the chapters are untouched;
     // this only takes each one to a lightness at which its colour is still a colour at 1px.
-    const mean = list => {
-      let r = 0, gr = 0, b = 0;
-      for (const col of list) {
-        const m = /hsl\((-?[\d.]+),\s*([\d.]+)%,\s*([\d.]+)%\)/.exec(col);
-        const hex = m ? hslHex(+m[1], +m[2], +m[3]) : col;
-        const n = parseInt(hex.replace("#",""), 16) || 0;
-        r += (n>>16)&255; gr += (n>>8)&255; b += n&255;
-      }
-      const k = Math.max(1, list.length);
-      const hex = "#" + [r/k, gr/k, b/k].map(v =>
-        Math.round(v).toString(16).padStart(2, "0")).join("");
-      return tintHex(hex, 0, 1.25, 22);
-    };
+    // LIFTED. A chapter's palette lives at 24-42% lightness, which is right for a square you look
+    // INTO and far too dark for a pixel you look AT — on a lit tab they all went to the same
+    // near-black. The hue and the relationship between the chapters are untouched.
     for (const a of all) {
       g.fillStyle = a.i === INTRO_CELL ? "rgba(232,230,255,0.55)"
-                                       : mean(genTheme(themeSeed(String(a.i + 1))).colors);
+                                       : tintHex(themeMean(a.i), 0, 1.25, 22);
       g.fillRect(a.p.c - minC, a.p.r - minR, 1, 1);
     }
     return (_tvChip = { url: c.toDataURL(), w, h });
@@ -11283,9 +11340,12 @@
     // hangs directly under the square, and that square has the number written across it: a button
     // an inch below a big 16 does not need to say sixteen. What is left is the one thing the
     // square cannot tell you, which is whether you have been there.
+    // The ink first: labelWithArrow draws the arrow in the button's COMPUTED colour, so the
+    // chapter's colour has to be on the element before the label is built or the chip comes out
+    // in whatever the last chapter left behind.
+    winNextInk(nx, idx);
     labelWithArrow(nx, idx === INTRO_CELL ? "Replay"
                      : (b && (b.done || b.stars) ? "Replay" : "Play"));
-    winNextQuilt(nx, idx);
     el.classList.toggle("show", winPicked());
     // NO WASH AT EITHER END any more. Both existed for one reason: the heading and the two doors
     // stood bare on whatever chapter the map had scrolled under them, so the frame went dark to
@@ -11433,9 +11493,31 @@
   // exists to animate. The clear is deferred by a tick so that pair never reads as an absence;
   // a real departure (into a level) still lands on null a moment later.
   let _tabWas = null, _tabClear = 0;
+  // The row's order IS this array; a move is the sign of the distance between two entries in it.
+  const TAB_ORDER = ["talismans", "tv", "shop", "settings"];
+  const TAB_MS = 240;
+  function tabDir(from, to) {
+    const a = TAB_ORDER.indexOf(from), b = TAB_ORDER.indexOf(to);
+    return (a < 0 || b < 0 || a === b) ? 0 : Math.sign(b - a);
+  }
+  // Restarting a CSS animation on an element that already has the class needs the class off, a
+  // reflow, and the class on again — the browser coalesces a remove and an add in one frame into
+  // no change at all, and walking from the shop to the shelf does exactly that: #menu never
+  // stops being shown, it is only refilled.
+  function whipMenu(cls, dir) {
+    if (!dir) return;
+    document.documentElement.style.setProperty("--tab-dir", dir);
+    menuEl.classList.remove("whip", "whip-out");
+    void menuEl.offsetWidth;
+    menuEl.classList.add(cls);
+  }
   function syncWinTabs(active) {
     const tabs = document.getElementById("wintabs"); if (!tabs) return;
     const wasOn = _tabWas != null;
+    // ...and the screen behind the tabs pans with them. Only between two MENU screens: arriving
+    // from the map is the map being covered rather than a pan across a row, and going back to it
+    // is animated on the way OUT instead — see the Tileverse tab's own handler.
+    if (active && active !== "tv") whipMenu("whip", tabDir(_tabWas, active));
     if (active) { clearTimeout(_tabClear); _tabWas = active; }
     else _tabClear = setTimeout(() => { _tabWas = null; }, 0);
     for (const pair of [["win-tal","talismans"], ["win-tv","tv"], ["win-shop","shop"],
@@ -12223,10 +12305,20 @@
       // the purse — and at the Tileverse's own size it is half as tall again as the single line
       // it replaced, which put the "+n" straight through the word COMPLETE.
       if (!P.skip) drawPurseTally(ts, hy + size*2.9, outK);
+      // ...and if a charm came out of this chapter, it is named ONCE MORE, directly under the
+      // money. It was announced when you picked it up — mid-run, with a maze still to finish and
+      // a runner who does not stop — which is the worst moment in the game to be told something.
+      // This is the quiet second telling, after the counting, when nothing else is moving.
+      // Under the tally rather than up off the foot: the three of them are one statement about
+      // the chapter you just finished — what it was called, what it paid, and what it held —
+      // and a line hanging on its own at the bottom of the screen is a separate remark.
+      if (!P.skip) drawWinCharm(P, payoutEnd(P) + PAYOUT.tail, hy + size*4.35, outK);
     }
     // ...and last of all, the way out — offered once the purse has taken its takings and
     // settled, never over the top of the number still changing.
-    const outAt = payoutEnd(P) + PAYOUT.tail;
+    // The way out waits for the charm to have had its moment. Offered under it, the eye takes
+    // the prompt and the announcement is something you read on the way past.
+    const outAt = payoutEnd(P) + PAYOUT.tail + (charmShown(P) ? CHARM_HOLD : 0);
     if (P.ph === "name" && !P.skip && P.t > outAt) {
       ctx.save();
       drawFootFade();                       // ...on the same ground the Tileverse's button has
@@ -12368,6 +12460,53 @@
     ctx.font = restF;
     ctx.fillStyle = "rgba(214,218,240,0.66)";
     ctx.fillText(rest, x0 + cw + gap + nw, y);
+    ctx.restore();
+  }
+  // A CHARM, NAMED A SECOND TIME. The badge itself, its name in its own colour, and the one
+  // line the shelf uses to say what it does — so the announcement carries the same three things
+  // the shelf does, rather than being a word about an object you have to remember.
+  // More than one is drawn as a row of badges: it is possible for a chapter to hold two, and a
+  // routine that quietly showed the first would be a bug nobody found for a year.
+  const CHARM_IN = 560, CHARM_HOLD = 900;
+  const charmShown = (P) => !!(P && P.charm && P.charm.length);
+  function drawWinCharm(P, at, y, outK) {
+    if (!charmShown(P) || P.ph !== "name") return;
+    const k = clamp((P.t - at) / CHARM_IN, 0, 1) * (outK == null ? 1 : outK);
+    if (k <= 0) return;
+    const g = uiGrid(), ids = P.charm;
+    // ONE LINE: the mark, then the name. The charm's badge is a square object and the name is a
+    // line of type, so the badge is sized to the TYPE — a little taller than its caps, the way
+    // an icon sits beside a word — rather than to itself. talBadge draws a square of 1.9r, so
+    // this is that side length worked backwards from the size of the writing.
+    const px = Math.round(g*1.25), r = px*1.15/1.9, bw = r*1.9, gap = g*0.55;
+    ctx.font = "900 " + px + "px " + UI_FONT;
+    ctx.letterSpacing = Math.round(g*0.16) + "px";
+    ctx.textBaseline = "middle";
+    const name = ids.map(id => (talById(id) || {}).name || "").filter(Boolean)
+                    .join("   ·   ").toUpperCase();
+    // Measured and laid out from the left, not centred as two separate things: a badge centred
+    // on one point and a word centred on another are two objects that happen to be near each
+    // other, and what this is meant to be is one line.
+    const tw = ctx.measureText(name).width;
+    const x0 = viewW/2 - (bw*ids.length + gap*ids.length + tw)/2;
+    ctx.save();
+    ctx.globalAlpha = k;
+    // A small overshoot on the way in, the same one the title's words arrive with: it is a
+    // thing being presented, and a thing that fades up is a thing that was always there.
+    const pop = 0.80 + 0.20*easeOutBack(clamp((P.t - at)/CHARM_IN, 0, 1));
+    for (let i = 0; i < ids.length; i++) {
+      const def = talById(ids[i]); if (!def) continue;
+      ctx.save();
+      ctx.translate(x0 + bw/2 + i*(bw + gap), y);
+      ctx.scale(pop, pop);
+      talBadge(ctx, 0, 0, r, def);
+      ctx.restore();
+    }
+    // The name, in the charm's own colour — the colour the badge beside it is struck in, so the
+    // two are plainly one announcement rather than a picture and a caption.
+    ctx.textAlign = "left";
+    ctx.fillStyle = ids.length === 1 ? talFace(talById(ids[0])) : "#ffd24a";
+    ctx.fillText(name, x0 + ids.length*(bw + gap), y);
     ctx.restore();
   }
   // THE PAYOUT, on the CHAPTER COMPLETE screen. What stands there is the whole game's purse,
@@ -12554,9 +12693,76 @@
   // the hue walked right round the wheel — every level's family of colour represented, none of
   // them owning it — with hard white stars over the top. Anywhere that is OUTSIDE a level asks
   // for this by name: the Tileverse, the opening, and whatever comes next.
-  const VOID_THEME = { colors: Array.from({ length: 8 }, (_, i) =>
-                         "hsl(" + Math.round(i * 360 / 8) + ",46%,7%)"),
-                       patchW: 0.55, drift: 0.5, dir: 1, stripeW: 3 };
+  // ---- THE COSMOS, TUNABLE ----------------------------------------------------------------
+  // EVERY DISTANCE HERE IS IN PATCHES, NOT PIXELS, and that is the whole reason the sky looks the
+  // same on every screen. The quilt's patch is viewH/30 — it grows with the viewport — so a field
+  // spacing written in pixels means a phone, a desktop and a lab's iframe each get a different
+  // sky from the same numbers: the clouds keep their size in patches while the gaps between them
+  // do not, and the composition falls apart. The four that were pixels (nebGap, starGap,
+  // clumpSpread, shootTail) were RENAMED when their units changed rather than quietly
+  // reinterpreted, so a block pasted from before cannot be read as though it meant patches.
+  // Every number the sky is made of, in one block. cosmos-lab.html drives it live through
+  // __TR.cosmos(). Six things live here and they are drawn in this order, back to front: the
+  // quilt (the near-black patchwork), the nebulae pieced out of that same quilt's squares, the
+  // far stars, the near stars, and whatever is falling through it at the time.
+  const COSMOS = {
+    // ---- the quilt it is all pieced from ----
+    hues:    12,      // how many hues the wheel is walked in
+    span:   360,      // ...and how far round it goes. 360 is the whole rainbow and every level's
+                      // family of colour represented; less and the sky picks a side.
+    hue0:     0,      // where the walk starts, degrees
+    sat:     65,      // the quilt's saturation
+    lig:      6.0,    // ...and its lightness. This is the one number that decides whether the
+                      // sky reads as black with a hint of colour or as colour that happens to
+                      // be dark — and it goes DOWN as the saturation goes up, or the two
+                      // together stop the stars being the brightest thing out here.
+    stripeW:  4,      // patches to a diagonal stripe
+    // ---- nebulae: clouds pieced out of the quilt's own squares ----
+    nebN:     6,      // how many are scattered over a field
+    nebGap:  30,      // ...and how far apart, IN PATCHES. Everything out here that is a distance
+                      // is measured in patches, never in pixels — see the note above the block.
+    nebR:     8,      // radius, in patches
+    nebA:     0.35,   // strength at the middle
+    nebSat: 100,      // their colour: as saturated as it goes, and much lighter than the quilt —
+    nebLig:  54,      // a nebula is the one thing out here that is actually LIT
+    nebSpan: 180,     // how far the hue wanders across one cloud, degrees — half the wheel,
+                      // so one cloud runs from a colour to its opposite and no two edges of it
+                      // are the same hue
+    nebPar:   0.60,   // the share of the sky's movement they take. Under 1 they lag behind the
+                      // stars, which is the whole reason to have them on a layer of their own.
+    // ---- the stars ----
+    starN:  260,      // per field
+    starGap: 46,      // ...and how big that field is before it tiles, in patches
+    starA:    0.68,   // the floor of the breath; each star pulses from here to 1
+    clump:    1.00,   // 0 scatters them evenly, 1 pulls every one into a cluster
+    clumpN:   5,      // stars to a cluster
+    clumpSpread: 4,   // ...and how far from its middle they may fall, in patches
+    // ---- ...and a second, slower field behind them ----
+    farN:     0,      // OFF. The clouds are doing the depth now: they are on a layer of their
+                      // own at 0.6, and a third field of single pixels behind two of those was
+                      // one more thing in a sky that had stopped being empty.
+    farPar:   0.50,   // the share of the near field's movement it would take
+    farA:     0.61,
+    // ---- shooting stars ----
+    shootMs: 4000,    // one every this often
+    shootDur: 520,    // how long a fall lasts
+    shootTail: 15,    // the trail, in patches — long enough to cross a good part of the screen
+    shootA:   1.00,
+    shootT0:  0,      // where the clock is counted from. The lab's "one now" moves it; nothing
+                      // else ever touches it, and at 0 the falls simply run off the page clock.
+  };
+  // The quilt's palette, walked round the wheel from the block. Mutated in place rather than
+  // rebuilt, because DEFAULT_THEME's shape is what buildPatchPattern reads and the patch cache
+  // keys on the colours — so changing them here is enough to invalidate it, with nothing to
+  // remember to clear.
+  const VOID_THEME = { colors: [], patchW: 0.55, drift: 0.5, dir: 1, stripeW: 3 };
+  function applyCosmos() {
+    const C = COSMOS, n = Math.max(1, Math.round(C.hues));
+    VOID_THEME.colors = Array.from({ length: n }, (_, i) =>
+      "hsl(" + Math.round(C.hue0 + i * C.span / n) + "," + C.sat + "%," + C.lig + "%)");
+    VOID_THEME.stripeW = Math.max(1, Math.round(C.stripeW));
+  }
+  applyCosmos();
   // Pieced at the level's OWN cell, always — never at whatever the win sequence's zoom has
   // wound `cell` down to. The cosmos is what the levels hang in: it is not part of any one of
   // them, and a starfield that shrinks along with the board it is behind turns the pull-back
@@ -17429,26 +17635,142 @@
   // are pinned to the QUILT rather than the screen — same scroll offset, same wrap — so they
   // travel with the backdrop instead of sitting on the glass in front of it.
   const WORLD_STARS = 190, WORLD_STAR_FIELD = 900;   // over a field this many px square, tiled
-  function drawWorldStars(ts, off) {
-    const F = WORLD_STAR_FIELD;
-    const ox = ((off.x % F) + F) % F, oy = ((off.y % F) + F) % F;
-    ctx.save();
+  // ONE FIELD OF STARS, tiled. `par` scales the offset before it is wrapped, so the same routine
+  // draws the near field at the sky's own pace and the far one behind it at a share of that —
+  // which is the only thing that separates them, and the only thing depth ever is.
+  //
+  // CLUSTERED. A field placed by one hash per star is evenly scattered, which is the one thing a
+  // real sky never is: it has drifts and voids. Each star belongs to a cluster (its index over
+  // COSMOS.clumpN), and its position is a blend between where the plain hash put it and where
+  // its cluster is — so `clump` at 0 is the old even scatter, at 1 every star is in a drift, and
+  // in between the two are mixed without any star ever being in two places.
+  function starField(ts, off, n, par, alpha, sizes) {
+    const C = COSMOS, w = Math.max(4, patchStepPx || 45);
+    const F = Math.max(80, C.starGap * w);
+    const px = off.x * par, py = off.y * par;
+    const ox = ((px % F) + F) % F, oy = ((py % F) + F) % F;
+    const cn = Math.max(1, Math.round(C.clumpN)), mix = clamp(C.clump, 0, 1);
     for (let ty = -1; ty <= Math.ceil(viewH / F); ty++)
       for (let tx = -1; tx <= Math.ceil(viewW / F); tx++) {
-        for (let i = 0; i < WORLD_STARS; i++) {
+        for (let i = 0; i < n; i++) {
           const h = bgHash(i * 17 + 3, i * 29 + 11);
-          const sx = (h % F) + tx*F - ox, sy = ((h >>> 8) % F) + ty*F - oy;
-          if (sx < -2 || sy < -2 || sx > viewW + 2 || sy > viewH + 2) continue;
+          let fx = h % F, fy = (h >>> 8) % F;
+          if (mix > 0) {
+            const ch = bgHash(Math.floor(i / cn) * 131 + 5, Math.floor(i / cn) * 97 + 23);
+            // ...and where it sits IN its cluster: its own hash again, so two stars of one
+            // cluster never land on each other.
+            const a = ((h >>> 13) % 1000) / 1000 * Math.PI * 2;
+            const r = Math.sqrt(((h >>> 23) % 1000) / 1000) * C.clumpSpread * w;   // even over the disc
+            const cx2 = (ch % F) + Math.cos(a) * r, cy2 = ((ch >>> 8) % F) + Math.sin(a) * r;
+            fx += (cx2 - fx) * mix; fy += (cy2 - fy) * mix;
+          }
+          const sx = fx + tx*F - ox, sy = fy + ty*F - oy;
+          if (sx < -4 || sy < -4 || sx > viewW + 4 || sy > viewH + 4) continue;
           // a slow breath, out of step star to star, so the field is never all at one brightness
           const k = 0.5 + 0.5*Math.sin(ts/2600 + ((h >>> 17) % 1000)/1000 * Math.PI*2);
-          const sz = 2 + ((h >>> 5) % 3 === 0 ? 2 : 0);      // most are two squares, some are four
-          // White, and solid. The blue-white at part strength read as dust on the lens; a star
-          // is a hard white square or it is nothing. The breath is still there — it just runs
-          // between bright and brighter now instead of between faint and less faint.
-          ctx.fillStyle = "rgba(255,255,255," + (0.62 + 0.38*k*k) + ")";
+          const sz = sizes + ((h >>> 5) % 3 === 0 ? sizes : 0);
+          // White, and solid. A star is a hard white square or it is nothing; the breath runs
+          // between bright and brighter rather than between faint and less faint.
+          ctx.fillStyle = "rgba(255,255,255," + (alpha + (1 - alpha)*k*k).toFixed(3) + ")";
           ctx.fillRect(Math.round(sx), Math.round(sy), sz, sz);
         }
       }
+  }
+  // NEBULAE, PIECED OUT OF THE QUILT'S OWN SQUARES. Not a soft airbrushed cloud — everything in
+  // this game is a square, and a blur out here would be the one thing on screen that is not made
+  // of the same stuff as everything else. So a cloud is a disc of patches, each one lit
+  // additively by how near the middle it is, with its hue walking a little across the width so a
+  // cloud is a piece of the rainbow rather than a wash of one colour.
+  // On a LAYER OF ITS OWN: nebPar is the share of the sky's movement they take, so they lag
+  // behind the stars in front of them.
+  function drawNebulae(ts, off) {
+    const C = COSMOS;
+    if (!(C.nebA > 0.002) || !(C.nebN >= 1)) return;
+    const w = Math.max(4, patchStepPx || 45), F = Math.max(200, C.nebGap * w);
+    const px = off.x * C.nebPar, py = off.y * C.nebPar;
+    const ox = ((px % F) + F) % F, oy = ((py % F) + F) % F;
+    const R = Math.max(1, Math.round(C.nebR));
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (let ty = -1; ty <= Math.ceil(viewH / F); ty++)
+      for (let tx = -1; tx <= Math.ceil(viewW / F); tx++) {
+        for (let i = 0; i < Math.round(C.nebN); i++) {
+          const h = bgHash(i * 61 + 7, i * 113 + 19);
+          const cx2 = (h % F) + tx*F - ox, cy2 = ((h >>> 7) % F) + ty*F - oy;
+          const rp = R * w;
+          if (cx2 + rp < 0 || cy2 + rp < 0 || cx2 - rp > viewW || cy2 - rp > viewH) continue;
+          const hue = (h >>> 15) % 360;
+          // Squashed a little, and never the same way twice: a perfectly round cloud reads as a
+          // ball, and a ball out here reads as a planet.
+          const sq = 0.55 + ((h >>> 3) % 100) / 100 * 0.7;
+          for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+            const d = Math.hypot(dx / 1, dy / sq) / R;
+            if (d >= 1) continue;
+            const g = bgHash(i * 7 + dx + 512, i * 11 + dy + 512);
+            const n2 = 0.45 + ((g % 1000) / 1000) * 0.55;      // ...and eaten into, patch by patch
+            const a = Math.pow(1 - d, 2) * C.nebA * n2;
+            if (a < 0.004) continue;
+            ctx.globalAlpha = a;
+            ctx.fillStyle = "hsl(" + Math.round(hue + dx / R * C.nebSpan) + ","
+                          + C.nebSat + "%," + C.nebLig + "%)";
+            // EDGE TO EDGE, never a size. A patch used to be drawn at a rounded position with a
+            // width of ceil(w) — and w is fractional, so consecutive squares overlapped by up to
+            // a pixel. Under `lighter` an overlap is not a seam you have to look for: it is drawn
+            // twice and comes out at double strength, so the cloud was ruled through with a grid
+            // of bright lines. Each square now runs from one rounded lattice edge to the NEXT, so
+            // neighbours share an edge exactly — no overlap, and no gap either.
+            const x0 = Math.round(cx2 + (dx - 0.5)*w), x1 = Math.round(cx2 + (dx + 0.5)*w);
+            const y0 = Math.round(cy2 + (dy - 0.5)*w), y1 = Math.round(cy2 + (dy + 0.5)*w);
+            ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+          }
+        }
+      }
+    ctx.restore();
+  }
+  // ONE FALLING STAR AT A TIME, on a clock rather than on a random roll. Which one it is and
+  // where it comes from is hashed off the number of periods elapsed, so it needs no state, is
+  // the same on every frame it is drawn, and cannot ever fire twice at once.
+  // Drawn as a run of squares with the head bright and the tail going out, because a line with a
+  // round cap would be the only smooth thing in the sky.
+  function drawShooting(ts) {
+    const C = COSMOS;
+    if (!(C.shootA > 0.01) || !(C.shootMs > 0)) return;
+    const tt = ts - (C.shootT0 || 0);
+    const n = Math.floor(tt / C.shootMs), k = (((tt % C.shootMs) + C.shootMs) % C.shootMs) / C.shootMs;
+    const dur = clamp(C.shootDur / C.shootMs, 0.01, 1);
+    if (k > dur) return;                       // ...most of the period is empty sky
+    const t = k / dur;
+    const h = bgHash(n * 977 + 13, n * 397 + 7);
+    const ang = -0.35 - ((h % 100) / 100) * 0.5;                 // down and to the right
+    const x0 = ((h >>> 7) % 100) / 100 * viewW * 1.3 - viewW*0.15;
+    const y0 = ((h >>> 15) % 100) / 100 * viewH * 0.55;
+    const run = (viewW + viewH) * 0.55;
+    const x = x0 + Math.cos(ang) * run * t, y = y0 - Math.sin(ang) * run * t;
+    // In at the start and out at the end, so it never appears or vanishes at full strength.
+    const fade = Math.sin(Math.PI * t);
+    const len = C.shootTail * Math.max(4, patchStepPx || 45);
+    const steps = Math.max(2, Math.round(len / 5));
+    ctx.save();
+    for (let i = 0; i < steps; i++) {
+      const f = i / steps;
+      const a = C.shootA * fade * (1 - f) * (1 - f);
+      if (a < 0.01) continue;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = "#ffffff";
+      const sz = i < 2 ? 2 : 1;
+      ctx.fillRect(Math.round(x - Math.cos(ang) * len * f),
+                   Math.round(y + Math.sin(ang) * len * f), sz, sz);
+    }
+    ctx.restore();
+  }
+  // The sky, back to front. Everything here reads the same `off` the quilt was painted at, so
+  // the whole thing travels together — each layer at its own share of it.
+  function drawWorldStars(ts, off) {
+    ctx.save();
+    drawNebulae(ts, off);
+    if (COSMOS.farN > 0) starField(ts, off, Math.round(COSMOS.farN), COSMOS.farPar, COSMOS.farA, 1);
+    starField(ts, off, Math.round(COSMOS.starN), 1, COSMOS.starA, 2);
+    drawShooting(ts);
     ctx.restore();
   }
   function drawPatchwork(ts, themeOverride, stars, mode, cellPx) {
@@ -19069,7 +19391,15 @@
   document.getElementById("win-tv").addEventListener("click", () => {
     if (!menuEl.classList.contains("show")) return;
     Sound.unlock(); Sound.swish();
-    if (menuReturn) menuReturn(); else { closeMenu(); showWinUI(); }
+    const go = () => { menuEl.classList.remove("whip-out");
+                       if (menuReturn) menuReturn(); else { closeMenu(); showWinUI(); } };
+    // The map is not a DOM screen, so what pans here is the menu going away — off in the same
+    // direction, leaving the map behind it. The direction has to be taken now: the close runs
+    // syncWinTabs, which is what would otherwise work it out, and by then this is over.
+    const dir = tabDir(_tabWas, "tv");
+    if (!dir) { go(); return; }
+    whipMenu("whip-out", dir);
+    setTimeout(go, TAB_MS);
   });
   // The whole card is the button now. A pop-up that explains one thing and then asks you to
   // find a control to agree with it is two actions where the game only needed one — every other
@@ -20502,7 +20832,14 @@
     // What the cosmos is being drawn at RIGHT NOW: its parallax offset while the map owns the
     // frame, and the patch size that follows from it. Reading this is the only way to tell a
     // backdrop that is parallaxing from one that is drifting on a clock, since both move.
-    cosmos: () => ({ sky: voidWas && { ...voidWas }, quilt: quiltWas && { ...quiltWas } }),
+    // What the last paint used — the two layers separately, because the board's quilt goes over
+    // the cosmos in the same frame and one slot would only report whichever went on last.
+    lastSky: () => ({ sky: voidWas && { ...voidWas }, quilt: quiltWas && { ...quiltWas } }),
+    // cosmos-lab.html drives this: the sky's own block, live.
+    cosmos: (patch) => { if (patch) Object.assign(COSMOS, patch); applyCosmos(); return { ...COSMOS }; },
+    // ...and one falling star right now, without waiting out the clock: the phase is counted
+    // from shootT0, so moving it to this instant starts a fall on the next frame.
+    shootNow: () => { COSMOS.shootT0 = performance.now(); },
     // crumble-lab.html drives this: the Singularity's mouth, its swirl and its eye.
     rift: (patch) => { if (patch) Object.assign(RIFT, patch); return { ...RIFT }; },
     // pile-lab.html drives these: the heap block, and a fall on demand so there is a heap to
