@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta http-equiv="Cache-Control" content="no-store"/>
+<title>Tile Runner — Glow Lab</title>
+<style>
+  :root{ --bg:#12102a; --panel:#1b1838; --line:#2b2850; --ink:#cfe9ff; --accent:#8dff78; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:10px 14px;border-bottom:1px solid var(--line);
+         display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;}
+  header h1{font-size:15px;margin:0 12px 0 0;font-weight:700;letter-spacing:.5px;}
+  #status{font-size:12px;opacity:.8;}
+  .app{display:grid;grid-template-columns:300px minmax(0,1fr);gap:14px;padding:14px;align-items:start;}
+  .rail{display:flex;flex-direction:column;gap:12px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;}
+  .card h2{font-size:11px;letter-spacing:1px;opacity:.55;margin:0 0 8px;
+           font-weight:700;text-transform:uppercase;}
+  .row{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:12px;}
+  .row label{flex:0 0 84px;opacity:.85;}
+  .row input[type=range]{flex:1;min-width:0;accent-color:var(--accent);}
+  .row output{flex:0 0 50px;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent);}
+  button{background:#233;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+         padding:8px 12px;cursor:pointer;font:inherit;font-size:12px;width:100%;}
+  button:hover{border-color:var(--accent);}
+  button.prim{background:#1c6;color:#04120a;font-weight:700;border:none;}
+  button.on{border-color:var(--accent);color:var(--accent);}
+  .presets, .opts{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+  .presets button{padding:7px 0;font-size:11px;}
+  .hint{font-size:11px;line-height:1.5;opacity:.65;margin:8px 0 0;}
+  .stage{display:flex;flex-direction:column;gap:8px;align-items:center;min-width:0;
+         position:sticky;top:14px;}
+  iframe{width:100%;max-width:460px;height:82vh;border:1px solid var(--line);
+         border-radius:12px;background:#000;display:block;}
+  .legend{font-size:11px;opacity:.7;line-height:1.6;max-width:460px;}
+  code{color:var(--accent);}
+  .warn{color:#ffd24a;}
+  @media (max-width:720px){
+    .app{grid-template-columns:minmax(0,1fr);}
+    .stage{position:static;}
+    iframe{max-width:none;height:70vh;}
+  }
+  textarea{width:100%;height:250px;background:#0d0b22;color:var(--ink);border:1px solid var(--line);
+           border-radius:8px;padding:8px;font:inherit;font-size:11px;line-height:1.5;resize:vertical;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Glow Lab</h1>
+  <span id="status">booting the game…</span>
+</header>
+
+<div class="app">
+  <div class="rail">
+    <div class="card">
+      <h2>1 · The wide black</h2>
+      <div class="row"><label>width</label><input id="backW" type="range" min="0" max="4" step="0.05"><output id="backWOut"></output></div>
+      <div class="row"><label>strength</label><input id="backA" type="range" min="0" max="1" step="0.01"><output id="backAOut"></output></div>
+      <div class="hint">The place's shade on the sky round it. Width is in tiles; strength is what it
+        reaches right at the edge.</div>
+    </div>
+
+    <div class="card">
+      <h2>2 · The colour</h2>
+      <div class="row"><label>width</label><input id="midW" type="range" min="0" max="2" step="0.01"><output id="midWOut"></output></div>
+      <div class="row"><label>strength</label><input id="midA" type="range" min="0" max="1" step="0.01"><output id="midAOut"></output></div>
+      <div class="row"><label>core</label><input id="midCore" type="range" min="0.05" max="1" step="0.01"><output id="midCoreOut"></output></div>
+      <div class="row"><label>tail</label><input id="midTail" type="range" min="0" max="1" step="0.01"><output id="midTailOut"></output></div>
+      <div class="row"><label>saturation</label><input id="midSat" type="range" min="0" max="3" step="0.05"><output id="midSatOut"></output></div>
+      <div class="row"><label>lift</label><input id="midLift" type="range" min="-60" max="120" step="1"><output id="midLiftOut"></output></div>
+      <div class="hint">The colour of the tile or patch nearest each stretch of edge, made vivid.
+        <b>core</b> is how wide its bright edge is (a share of width); <b>tail</b> is how strong
+        the rest of it is out to the full width (a share of strength). A small core and a low tail
+        is a colour that drops away fast.</div>
+    </div>
+
+    <div class="card">
+      <h2>3 · The edge</h2>
+      <div class="row"><label>width</label><input id="frontW" type="range" min="0" max="1" step="0.01"><output id="frontWOut"></output></div>
+      <div class="row"><label>strength</label><input id="frontA" type="range" min="0" max="1" step="0.01"><output id="frontAOut"></output></div>
+      <div class="hint">A thin black hugging the boundary, so the colour starts a hair off it.</div>
+    </div>
+
+    <div class="card">
+      <h2>Presets</h2>
+      <div class="presets">
+        <button data-p="shipped">shipped</button>
+        <button data-p="soft">soft</button>
+        <button data-p="neon">neon</button>
+        <button data-p="tight">tight</button>
+        <button data-p="dramatic">dramatic</button>
+        <button data-p="colour">colour only</button>
+        <button data-p="black">black only</button>
+        <button data-p="off">off</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Look at</h2>
+      <div class="opts">
+        <button id="vMap" class="on">Tileverse</button>
+        <button id="vTall">Level · tall</button>
+        <button id="vWide">Level · wide</button>
+        <button id="reload">Reload game</button>
+      </div>
+      <div class="hint">The two levels are throwaway boards narrower than the screen, so there is sky
+        all round the quilt. The runner crawls, so they hold still while you tune.</div>
+    </div>
+
+    <div class="card">
+      <h2>Keep</h2>
+      <div class="opts">
+        <button id="restore">Restore</button>
+        <button id="reset">Reset to shipped</button>
+      </div>
+      <div style="height:6px"></div>
+      <button class="prim" id="copy">Copy EDGE_GLOW block</button>
+      <div style="height:8px"></div>
+      <textarea id="out" spellcheck="false" readonly></textarea>
+      <div class="hint">Paste it over the <code>EDGE_GLOW</code> block in <code>index.html</code>.
+        Your settings autosave as you move them; <b>Restore</b> puts them back after a preset or a
+        reset.</div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <iframe id="frame" title="Tile Runner"></iframe>
+    <div class="legend">The running game, not a copy of it: every slider goes straight into
+      <code>__TR.edgeGlow()</code>, and the glow is rebuilt from the block you are looking at.
+      This page must be <b>served</b>.</div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const frame = $("frame");
+let W = null;
+
+// The game, cache-busted so a tuning session is never looking at yesterday's build.
+const GAME_SRC = () => "index.html?lab=glow&t=" + Date.now();
+
+const KEYS = ["backW","backA","midW","midA","midCore","midTail","midSat","midLift","frontW","frontA"];
+const DP = { backW:2, backA:2, midW:2, midA:2, midCore:2, midTail:2, midSat:2, midLift:0, frontW:2, frontA:2 };
+// The comment each key wears in index.html, so the copied block pastes over the real one and
+// reads the same.
+const NOTE = { backW:"the wide black, in tiles", backA:"...its strength at the edge",
+               midW:"the vibrant colour: how far it spreads, in tiles",
+               midA:"...and how strong it is right at the edge",
+               midCore:"...the core's width, as a share of midW",
+               midTail:"...the tail's strength, as a share of midA",
+               midSat:"...how much more saturated than the tile it comes from",
+               midLift:"...and how much lighter, out of 255",
+               frontW:"the thin black hugging the edge", frontA:"" };
+
+// NO COPY OF THE BLOCK LIVES HERE. The shipped values are asked of the running game the first
+// time it comes up, before anything is pushed into it — a copy kept in this file is a copy that
+// drifts, which is the trap the icon lab was rebuilt to get out of.
+let SHIPPED = null;
+
+function values(){ const o = {}; for (const k of KEYS) o[k] = +$(k).value; return o; }
+function setValues(v){ for (const k of KEYS) if (typeof v[k] === "number") $(k).value = v[k]; KEYS.forEach(sync); }
+function sync(k){ const o = $(k + "Out"); if (o) o.textContent = (+$(k).value).toFixed(DP[k]); }
+
+const SAVE_KEY = "tilerunner:glow-lab";
+function save(){ try { localStorage.setItem(SAVE_KEY, JSON.stringify(values())); } catch (e) {} }
+function saved(){
+  try {
+    const v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null")
+           || JSON.parse(localStorage.getItem(SAVE_KEY + ":kept") || "null");
+    return v && typeof v === "object" ? v : null;
+  } catch (e) { return null; }
+}
+
+function push(){
+  if (!W || !W.__TR || !W.__TR.edgeGlow) return;
+  try {
+    W.__TR.edgeGlow(values()); save(); refreshOut();
+    if (!$("status").innerHTML.includes("warn")) $("status").textContent = "live · " + view;
+  } catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+}
+
+function refreshOut(){
+  const v = values();
+  const line = (k) => {
+    const head = "    " + (k + ":").padEnd(9);
+    const val = (+v[k]).toFixed(DP[k]) + ",";
+    return NOTE[k] ? head + val.padEnd(8) + " // " + NOTE[k] + "\n" : head + val + "\n";
+  };
+  $("out").value =
+    "  const EDGE_GLOW = {\n" +
+    line("backW") + line("backA") + line("midW") + line("midA") +
+    "    // Its FALLOFF, as two casts of the same colour: a tight bright CORE hard against the edge and a\n" +
+    "    // fainter TAIL out to the full width — so it stays strong and reaches as far, but the intensity\n" +
+    "    // drops away quickly once it leaves the edge instead of easing off evenly all the way out.\n" +
+    line("midCore") + line("midTail") + line("midSat") + line("midLift") +
+    line("frontW") + line("frontA") +
+    "  };";
+}
+
+const PRESETS = {
+  soft:     { backW:1.80, backA:0.30, midW:0.60, midA:0.60, midCore:0.50, midTail:0.60, midSat:1.30, midLift:24, frontW:0.10, frontA:0.35 },
+  neon:     { backW:1.20, backA:0.45, midW:0.50, midA:1.00, midCore:0.20, midTail:0.35, midSat:2.20, midLift:60, frontW:0.08, frontA:0.60 },
+  tight:    { backW:0.80, backA:0.45, midW:0.25, midA:0.95, midCore:0.30, midTail:0.40, midSat:1.80, midLift:40, frontW:0.06, frontA:0.50 },
+  dramatic: { backW:2.60, backA:0.60, midW:0.90, midA:1.00, midCore:0.25, midTail:0.55, midSat:2.00, midLift:50, frontW:0.16, frontA:0.70 },
+};
+function preset(name){
+  const base = SHIPPED || values();
+  if (name === "shipped") return { ...base };
+  if (name === "colour")  return { ...base, backA:0, frontA:0 };
+  if (name === "black")   return { ...base, midA:0 };
+  if (name === "off")     return { ...base, backA:0, midA:0, frontA:0 };
+  return { ...PRESETS[name] };
+}
+
+// ---- what is on the stage ------------------------------------------------------------------
+let view = "Tileverse", pending = "map", crawlTimer = 0;
+const BOARDS = {
+  tall: { n:0, name:"GLOW", cols:3, rows:11, cps:0.4, intro:[], start:[1,10],
+          init:[[1,9],[1,8],[1,7]], goal:[1,0], walls:[], stone:[], platforms:[], doors:[],
+          keys:[], coins:[], talismans:[], crumble:[], blocks:[], hazards:[] },
+  wide: { n:0, name:"GLOW", cols:7, rows:4, cps:0.4, intro:[], start:[0,2],
+          init:[[1,2],[2,2],[3,2]], goal:[6,2], walls:[], stone:[], platforms:[], doors:[],
+          keys:[], coins:[], talismans:[], crumble:[], blocks:[], hazards:[] },
+};
+function lightButtons(id){ ["vMap","vTall","vWide"].forEach(b => $(b).classList.toggle("on", b === id)); }
+function tapGame(){
+  const cv = W && W.document.getElementById("game"); if (!cv) return;
+  for (const t of ["pointerdown", "pointerup"])
+    cv.dispatchEvent(new W.PointerEvent(t, { bubbles:true, pointerId:1,
+                     clientX: cv.clientWidth/2, clientY: cv.clientHeight*0.6 }));
+}
+// The Tileverse only exists behind the title (and, on a fresh save, the film). Rather than guess
+// at a sequence, tap whatever is in the way and stop the moment the map's own bar is up.
+function reachMap(){
+  let tries = 0;
+  (function tick(){
+    if (!W || !W.__TR || pending !== "map") return;
+    const D = W.document, tabs = D.getElementById("wintabs");
+    if (tabs && tabs.classList.contains("show")) { push(); $("status").textContent = "live · Tileverse"; return; }
+    const poem = D.getElementById("poem");
+    if (poem && poem.classList.contains("show"))
+      poem.dispatchEvent(new W.PointerEvent("pointerdown", { bubbles:true, pointerId:1 }));
+    const mech = D.getElementById("mechpop");
+    if (mech && mech.classList.contains("show")) mech.dispatchEvent(new W.MouseEvent("click", { bubbles:true }));
+    const cv = D.getElementById("game"), menu = D.getElementById("menu");
+    if (cv && !(menu && menu.classList.contains("show")))
+      cv.dispatchEvent(new W.PointerEvent("pointerdown", { bubbles:true, pointerId:1 }));
+    if (++tries > 500) {
+      $("status").innerHTML = '<span class="warn">could not get to the Tileverse — play a chapter ' +
+        'once in the game, then reload this page</span>';
+      return;
+    }
+    setTimeout(tick, 60);
+  })();
+}
+// A throwaway board, narrower than the screen so there is sky round it. Past its card and its
+// intro, and then held to a crawl, so the level sits still under the glow being tuned.
+function showBoard(which){
+  if (!W || !W.__TR || !W.__TR.demo) return;
+  pending = which; view = "Level · " + which;
+  W.__TR.demo(JSON.parse(JSON.stringify(BOARDS[which])), "GLOW");
+  push();
+  let tries = 0;
+  (function tick(){
+    if (pending !== which) return;
+    const s = W.__TR.state && W.__TR.state();
+    // The card a level opens on is the #poem overlay, and the game is PAUSED under it — a tap on
+    // the board does nothing until the card itself is tapped.
+    if (s && s.status === "hold" && tries % 6 === 0) {
+      const poem = W.document.getElementById("poem");
+      if (poem && W.getComputedStyle(poem).display !== "none")
+        for (const t of ["pointerdown", "pointerup", "click"])
+          poem.dispatchEvent(new W.PointerEvent(t, { bubbles:true, pointerId:1 }));
+      else tapGame();
+    }
+    if (s && s.status === "intro" && s.introT < 2900) s.introT = 2900;
+    if (s && s.status === "play") { $("status").textContent = "live · " + view; return; }
+    if (++tries < 200) setTimeout(tick, 80);
+  })();
+}
+function crawl(){
+  if (!W || !W.__TR || !W.__TR.state || pending === "map") return;
+  const s = W.__TR.state();
+  if (!s || s.status !== "play") return;
+  if (Math.abs(s.cpsNow - 0.02) < 1e-6) return;
+  s.cpsNow = 0.02; s.msPerCell = 1000 / 0.02;
+}
+
+function attach(){
+  W = frame.contentWindow;
+  let tries = 0;
+  (function wait(){
+    if (W.__TR && W.__TR.edgeGlow) {
+      if (!SHIPPED) {
+        SHIPPED = W.__TR.edgeGlow();          // asked BEFORE anything is pushed into it
+        if (!saved()) setValues(SHIPPED);
+      }
+      push();
+      if (pending === "map") reachMap(); else showBoard(pending);
+      return;
+    }
+    if (++tries > 200) {
+      $("status").innerHTML = '<span class="warn">the game never came up — is this being SERVED? ' +
+        'file:// blocks the frame from being read.</span>';
+      return;
+    }
+    setTimeout(wait, 50);
+  })();
+}
+frame.addEventListener("load", attach);
+
+KEYS.forEach(k => $(k).addEventListener("input", () => { sync(k); push(); }));
+document.querySelectorAll(".presets button").forEach(b => b.onclick = () => {
+  setValues(preset(b.dataset.p)); push(); $("status").textContent = "preset: " + b.dataset.p;
+});
+$("vMap").onclick  = () => { lightButtons("vMap"); pending = "map"; view = "Tileverse"; frame.src = GAME_SRC(); };
+$("vTall").onclick = () => { lightButtons("vTall"); showBoard("tall"); };
+$("vWide").onclick = () => { lightButtons("vWide"); showBoard("wide"); };
+$("reload").onclick = () => { frame.src = GAME_SRC(); };
+$("restore").onclick = () => {
+  const v = saved();
+  if (!v) { $("status").innerHTML = '<span class="warn">nothing saved yet</span>'; return; }
+  setValues(v); push(); $("status").textContent = "your saved settings, put back";
+};
+$("reset").onclick = () => {
+  if (!SHIPPED) return;
+  // The autosave is set aside before the shipped block goes in, so Restore can still reach it.
+  try { const cur = localStorage.getItem(SAVE_KEY); if (cur) localStorage.setItem(SAVE_KEY + ":kept", cur); } catch (e) {}
+  setValues(SHIPPED); push(); $("status").textContent = "back to what index.html ships";
+};
+$("copy").onclick = () => {
+  navigator.clipboard.writeText($("out").value).then(
+    () => $("status").textContent = "EDGE_GLOW block copied — paste it over the one in index.html",
+    () => $("status").innerHTML = '<span class="warn">clipboard refused — copy it out of the box below</span>');
+};
+crawlTimer = setInterval(crawl, 250);
+
+const v0 = saved();
+if (v0) setValues(v0);
+KEYS.forEach(sync);
+refreshOut();
+if (v0) $("status").textContent = "your last settings, put back — booting the game…";
+frame.src = GAME_SRC();
+</script>
+</body>
+</html>

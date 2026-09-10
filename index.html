@@ -439,7 +439,9 @@
      that 34px is margin around it — which is the same subtraction #power's --lift makes. */
   :root { --safe-t: env(safe-area-inset-top);
           --safe-b: max(0px, calc(env(safe-area-inset-bottom) - 16px)); }
-  :root { --head-drop: max(calc(var(--chq) * 2.5), calc(var(--safe-t) + var(--edge-min))); }
+  /* ...plus HALF A SQUARE on the notch side of the max: where the safe-area inset is what decides
+     it — an iPhone — the headings hang a touch lower, and everywhere else nothing moves. */
+  :root { --head-drop: max(calc(var(--chq) * 2.5), calc(var(--safe-t) + var(--edge-min) + var(--chq) * 0.5)); }
   #winfade {
     position:fixed; left:0; right:0; bottom:0; height:calc(var(--chq) * 13);
     z-index:33; pointer-events:none; display:none;
@@ -1653,13 +1655,13 @@
                 3.4px 4px 0 color-mix(in srgb, var(--ink) 57%, #000),
                 4.25px 5px 0 color-mix(in srgb, var(--ink) 51%, #000),
                 var(--head-glow, 0 0 0 transparent); }
-  /* ...and a BLACK GLOW under a room's name, over the spark behind it (see drawHeadSparks, which
-     lays the spark on the board's canvas, under every element on the page). Last in the list, so
+  /* ...and a BLACK GLOW under a room's name — soft and wide, so the name stands off whatever is
+     behind it without a hard dark halo. Last in the list, so
      it is painted beneath the extrusion and the face: text-shadows stack first-on-top. On the
      four headings only — .tv-word also names the way home on a pause or a fall, which has no
      spark to sit over. */
   #menu-title.sec-set, #menu-title.sec-tal, #menu-title.sec-shop, #wintop-title {
-    --head-glow: 0 0 6px rgba(0,0,0,0.70), 0 0 16px rgba(0,0,0,0.65), 0 0 32px rgba(0,0,0,0.55); }
+    --head-glow: 0 0 10px rgba(0,0,0,0.40), 0 0 28px rgba(0,0,0,0.34), 0 0 56px rgba(0,0,0,0.28); }
   /* ...and each room's spark in THE ROOM'S OWN COLOUR, the same one its heading and its lit tab
      wear — pointed at the --sec-* tokens rather than copied, so retinting a room retints its
      spark with it. Read by drawHeadSparks off the heading itself; the heart stays white. */
@@ -4408,7 +4410,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.43";                    // shown on the title & pause screens
+  const VERSION = "v10.44";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -12201,16 +12203,13 @@
     sparkDisc(g, WHITE, size*P.core, P.coreA*tw, 0.45);
     g.restore();
   }
-  // THE SPARK UNDER A SECTION'S NAME. The four rooms' headings are DOM and the spark is canvas,
-  // so it is laid on the board's own canvas — which is under every menu and under the map's
-  // header — at wherever the heading's text actually is this frame. ONE PER LINE: a heading that
-  // runs to two (HOLY / TALISMANS) gets a spark behind each, measured off the text's own line
-  // boxes rather than the heading's full-width block. It leans with the heading, whatever its
-  // transform says, and it fades with it — a whip between rooms carries the heading's opacity,
-  // and the spark takes the same number.
-  // Sized to the TYPE (its font size) with the across streak stretched to overshoot each end of
-  // the line by what it overshoots a square by, so a long word is crossed rather than
-  // swallowed.
+  // GLINTS ON A SECTION'S NAME. Two small sparks ON the word, in the room's own colour, each locked
+  // to a SET place on a set letter — see HEAD_GLINTS, which says which letter (by its occurrence in
+  // the name) and where on it. The same size as the spark on the tab bar (TAB_SPARK grid squares).
+  // They sit OVER the lettering, so they are on a canvas of their own laid over the page — above
+  // the headings and the map's header, below the tab bar and the cards — not on the board's canvas
+  // under it. Measured off the two letters' own boxes every frame, so they follow the heading's
+  // lean, its whip between rooms and its fade.
   const _headRange = document.createRange();
   function sectionHeads() {
     const out = [];
@@ -12221,40 +12220,83 @@
     if (wt && wt.classList.contains("show") && wtt && !wtt.classList.contains("head-off")) out.push(wtt);
     return out;
   }
+  // Where each room's two glints sit. `ch` is the letter and `n` which one of it (1 is the first,
+  // -1 the last); `y` is its top or bottom, `x` its left, middle or right.
+  const HEAD_GLINTS = {
+    tal:  [{ ch:"O", n: 1, y:"top", x:"mid" },   { ch:"S", n:-1, y:"bottom", x:"right" }],   // HOLY TALISMANS
+    tv:   [{ ch:"E", n: 1, y:"top", x:"mid" },   { ch:"S", n: 1, y:"bottom", x:"right" }],   // TILEVERSE
+    shop: [{ ch:"I", n: 1, y:"top", x:"mid" },   { ch:"O", n: 1, y:"bottom", x:"mid" }],     // TILE SHOP
+    set:  [{ ch:"T", n: 1, y:"top", x:"mid" },   { ch:"G", n: 1, y:"bottom", x:"right" }],   // SETTINGS
+  };
+  // ...and all of them nudged a hair off those spots, in font sizes: negative is left, and up.
+  const HEAD_GLINT_NUDGE = { x: -0.05, y: -0.05 };
+  const headRoom = el => el.id === "wintop-title" ? "tv"
+                       : ((/\bsec-(set|tal|shop)\b/.exec(el.className) || [])[1] || null);
+  let _headSpark = null;
+  // Every letter of a heading, as [text node, index] — spaces and the line break left out.
+  function headLetters(el) {
+    const out = [], walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let n = walk.nextNode(); n; n = walk.nextNode())
+      for (let i = 0; i < n.textContent.length; i++) if (/\S/.test(n.textContent[i])) out.push([n, i]);
+    return out;
+  }
+  // The heading's letters, and which of them each glint is on — worked out when its words change.
+  function placeGlints(el) {
+    const letters = headLetters(el), room = headRoom(el), out = [];
+    for (const spec of (HEAD_GLINTS[room] || [])) {
+      const hits = letters.filter(([nd, i]) => nd.textContent[i].toUpperCase() === spec.ch);
+      const hit = spec.n < 0 ? hits[hits.length + spec.n] : hits[spec.n - 1];
+      if (hit) out.push({ node: hit[0], i: hit[1], y: spec.y, x: spec.x });
+    }
+    el._glint = { text: el.textContent, room, spots: out };
+  }
   function drawHeadSparks(ts) {
-    const heads = sectionHeads(); if (!heads.length) return;
-    const o = canvasOrigin();
-    ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const heads = sectionHeads();
+    let cv = _headSpark;
+    if (!heads.length) {
+      if (cv && cv._lit) { cv.getContext("2d").clearRect(0, 0, cv.width, cv.height); cv._lit = false; }
+      return;
+    }
+    if (!cv) {
+      cv = _headSpark = document.createElement("canvas");
+      cv.setAttribute("aria-hidden", "true");
+      cv.style.cssText = "position:fixed;left:0;top:0;pointer-events:none;z-index:34;";
+      document.body.appendChild(cv);
+    }
+    const px = Math.max(1, dpr || 1), VW = window.innerWidth, VH = window.innerHeight;
+    if (cv.width !== Math.round(VW * px) || cv.height !== Math.round(VH * px)) {
+      cv.width = Math.round(VW * px); cv.height = Math.round(VH * px);
+      cv.style.width = VW + "px"; cv.style.height = VH + "px";
+    }
+    const g = cv.getContext("2d");
+    g.setTransform(px, 0, 0, px, 0, 0);
+    g.clearRect(0, 0, VW, VH);
+    const size = uiGrid() * TAB_SPARK;                            // the tab bar's spark, exactly
     heads.forEach((el, hi) => {
+      if (!el._glint || el._glint.text !== el.textContent || el._glint.room !== headRoom(el)) placeGlints(el);
       const cs = getComputedStyle(el), a = +cs.opacity;
-      if (!(a > 0.01)) return;
+      if (!(a > 0.01) || !el._glint.spots.length) return;
       const fs = parseFloat(cs.fontSize) || 46;
-      const spk = cs.getPropertyValue("--spark").trim() || null;   // the room's own spark colour
+      const col = cs.getPropertyValue("--spark").trim() || null;   // the room's own colour
       const m = /matrix\(([^,]+),\s*([^,]+)/.exec(cs.transform);
       const lean = m ? Math.atan2(+m[2], +m[1]) : 0;
-      // The text's own line boxes, merged into one per line: fragments whose middles are within
-      // half a line of each other are the same line.
-      _headRange.selectNodeContents(el);
-      const lines = [];
-      for (const r of _headRange.getClientRects()) {
-        if (r.width < 1 || r.height < 1) continue;
-        const cy = r.top + r.height/2;
-        const L = lines.find(l => Math.abs(l.cy - cy) < fs*0.5);
-        if (L) { L.l = Math.min(L.l, r.left); L.r = Math.max(L.r, r.right); }
-        else lines.push({ cy, l: r.left, r: r.right });
-      }
-      lines.forEach((L, n) => {
-        const half = (L.r - L.l) / 2;
-        ctx.save();
-        ctx.translate(L.l + half - o.x, L.cy - o.y);
-        ctx.rotate(lean);
-        drawSpark(ctx, 0, 0, fs, ts, { alpha: a, seed: hi*0.23 + n*0.41, col: spk,
-                                       tune: { h: half/fs + (SPARK.h - 0.5) } });
-        ctx.restore();
+      // A letter's box runs the full line height; its glyph's top and bottom are in from that by
+      // the half-leading and a little of the cap's shoulder.
+      el._glint.spots.forEach((sp, k) => {
+        _headRange.setStart(sp.node, sp.i); _headRange.setEnd(sp.node, sp.i + 1);
+        const r = _headRange.getBoundingClientRect();
+        if (!(r.width > 0)) return;
+        const lead = Math.max(0, (r.height - fs) / 2);
+        const x = sp.x === "mid" ? (r.left + r.right) / 2
+                : sp.x === "right" ? r.right - fs * 0.06 : r.left + fs * 0.06;
+        const y = r.top + lead + fs * (sp.y === "bottom" ? 0.86 : 0.14);
+        g.save();
+        g.translate(x + fs * HEAD_GLINT_NUDGE.x, y + fs * HEAD_GLINT_NUDGE.y); g.rotate(lean);
+        drawSpark(g, 0, 0, size, ts, { alpha: a, col, seed: 0.17 + k * 0.41 + hi * 0.31 });
+        g.restore();
       });
     });
-    ctx.restore();
+    cv._lit = true;
   }
   // THE SPARK ON TOP OF THE TAB BAR. The game's standard spark on the bar's own canvas, centred on
   // the top edge of the capsule, in the lit tab's colour — the same --tab-rim the outline is drawn
@@ -12306,6 +12348,160 @@
     grainFill(x, y, w, w, TILE.bodyGrain * ctx.globalAlpha);
     ctx.restore();
   }
+  // ---- THE EDGE GLOW -----------------------------------------------------------------------
+  // A light round the EDGE of a place: the Tileverse's cloud of chapters, and a level's quilt where
+  // it stops and the sky starts. Three layers, back to front:
+  //   1. a WIDE black falloff — the place casting its shade onto the sky around it
+  //   2. a VIBRANT colour, the colour of whatever tile or patch is nearest that stretch of edge
+  //   3. a THIN black falloff hugging the edge, so the colour starts a hair off the boundary
+  // All outside the shape and never inside it (the map's chapters are see-through now, and a
+  // shade under them would darken the sky showing through). Widths are in TILES — a map square
+  // or a level cell — so one block reads the same at every size. Strengths are what the layer
+  // reaches right at the edge.
+  //
+  // Built from shadowBlur rather than ctx.filter, which older iPhones do not have: each layer is
+  // the shadow of shapes drawn a long way off the canvas, so only the soft part lands. That is
+  // too much blurring to redo every frame, so each place's glow is painted ONCE into a canvas of
+  // its own and simply laid down wherever the camera has put it. __TR.edgeGlow() tunes it live.
+  const EDGE_GLOW = {
+    backW:   0.40,    // the wide black, in tiles
+    backA:   1.00,    // ...its strength at the edge
+    midW:    0.72,    // the vibrant colour: how far it spreads, in tiles
+    midA:    0.49,    // ...and how strong it is right at the edge
+    // Its FALLOFF, as two casts of the same colour: a tight bright CORE hard against the edge and a
+    // fainter TAIL out to the full width — so it stays strong and reaches as far, but the intensity
+    // drops away quickly once it leaves the edge instead of easing off evenly all the way out.
+    midCore: 0.20,    // ...the core's width, as a share of midW
+    midTail: 0.55,    // ...the tail's strength, as a share of midA
+    midSat:  3.00,    // ...how much more saturated than the tile it comes from
+    midLift: 35,      // ...and how much lighter, out of 255
+    frontW:  0.12,    // the thin black hugging the edge
+    frontA:  1.00,
+  };
+  let _glowGen = 0;                              // bumped when the colours or the block change
+  let _hexPad = null;
+  function cssHex(col) {                         // any CSS colour to #rrggbb, by asking a canvas
+    if (!_hexPad) _hexPad = document.createElement("canvas").getContext("2d");
+    _hexPad.fillStyle = "#000"; _hexPad.fillStyle = col;
+    const v = _hexPad.fillStyle;
+    return /^#[0-9a-f]{6}$/i.test(v) ? v : "#808080";
+  }
+  const glowVivid = col => tintHex(cssHex(col), 0, EDGE_GLOW.midSat, EDGE_GLOW.midLift);
+  // `shape` is the silhouette (rects in the canvas's own pixels), `mids` the pieces of edge that
+  // throw colour ({x,y,w,h,col}), `u` one tile in the same pixels.
+  function paintEdgeGlow(g, W, H, shape, mids, u) {
+    const E = EDGE_GLOW, OFF = W + 10000;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, W, H);
+    g.save();
+    g.beginPath(); g.rect(0, 0, W, H);
+    for (const R of shape) g.rect(R.x, R.y, R.w, R.h);
+    g.clip("evenodd");                            // everywhere EXCEPT the place itself
+    const cast = (list, blur, colour) => {
+      g.shadowOffsetX = OFF; g.shadowOffsetY = 0;
+      g.shadowBlur = Math.max(0.5, blur); g.shadowColor = colour;
+      g.fillStyle = "#000"; g.beginPath();
+      for (const R of list) g.rect(R.x - OFF, R.y, R.w, R.h);
+      g.fill();
+    };
+    // A blurred edge reaches only HALF its colour's strength at the boundary, so a layer is
+    // cast at twice the asked-for strength — as many times over as that needs.
+    const at = (a, fn) => { const want = Math.max(0, a * 2), n = Math.max(1, Math.ceil(want - 1e-6));
+                            for (let k = 0; k < n; k++) fn(Math.min(1, want / n)); };
+    if (E.backA > 0)  at(E.backA,  q => cast(shape, E.backW * u, "rgba(0,0,0," + q.toFixed(3) + ")"));
+    if (E.midA > 0)   for (const R of mids) {
+      at(E.midA * E.midTail, q => cast([R], E.midW * u, hexA(R.col, q)));               // the reach
+      at(E.midA,             q => cast([R], E.midW * E.midCore * u, hexA(R.col, q)));   // the bright edge
+    }
+    if (E.frontA > 0) at(E.frontA, q => cast(shape, E.frontW * u, "rgba(0,0,0," + q.toFixed(3) + ")"));
+    g.restore();
+  }
+  // THE MAP'S. The silhouette is every chapter on it (and the film's square), and the colour
+  // comes off each chapter that has open sky beside it — its own quilt, mixed to one colour and
+  // made vivid. Rebuilt when the cloud, its colours or the block change, or the zoom has moved
+  // far enough that simply scaling the last one would show; laid down scaled in between.
+  // BUILT AT A FIXED RESOLUTION AND LAID DOWN AT ANY SIZE. The cache is painted at GLOW_MAP_PX to a
+  // square and scaled to the map's real square when it is drawn, so a zoom — and the map zooms a
+  // great deal on its way in and out — never rebuilds it; it is soft light, and scales without
+  // showing. Only the cloud, its colours or the block rebuild it.
+  const GLOW_MAP_PX = 32;
+  let _mapGlow = null;
+  function mapEdgeGlow(S, cx0, cy0, o, isLit) {
+    if (!(S > 2)) return;
+    const all = mapCells().map((p, i) => ({ p, i })).concat([{ p: introMapCell(), i: INTRO_CELL }])
+                  .filter(a => !(o.hide && o.hide.has(a.i)));
+    if (!all.length) return;
+    const E = EDGE_GLOW, reach = Math.max(E.backW, E.midW, E.frontW) * 1.25;
+    let minC = Infinity, minR = Infinity, maxC = -Infinity, maxR = -Infinity;
+    for (const a of all) { minC = Math.min(minC, a.p.c); maxC = Math.max(maxC, a.p.c);
+                           minR = Math.min(minR, a.p.r); maxR = Math.max(maxR, a.p.r); }
+    const lit = new Map(all.map(a => [a.i, !isLit || isLit(a.i)]));
+    const key = _glowGen + "|" + all.map(a => a.i + ":" + a.p.c + "," + a.p.r + (lit.get(a.i) ? "" : "g")).join(";");
+    let G = _mapGlow;
+    if (!G || G.key !== key) {
+      const set = new Set(all.map(a => a.p.c + "," + a.p.r));
+      const spanC = maxC - minC + 1 + reach*2, spanR = maxR - minR + 1 + reach*2;
+      const u = Math.min(GLOW_MAP_PX, 1600 / Math.max(spanC, spanR)), pad = reach * u;
+      const c = (G && G.c) || document.createElement("canvas");
+      c.width = Math.max(1, Math.ceil(spanC * u)); c.height = Math.max(1, Math.ceil(spanR * u));
+      const shape = all.map(a => ({ x: pad + (a.p.c - minC)*u, y: pad + (a.p.r - minR)*u, w: u, h: u, a }));
+      const mids = shape.filter(R => [[1,0],[-1,0],[0,1],[0,-1]]
+                     .some(([dc, dr]) => !set.has((R.a.p.c + dc) + "," + (R.a.p.r + dr))))
+                     .map(R => ({ x: R.x, y: R.y, w: R.w, h: R.h,
+                                  col: glowVivid(lit.get(R.a.i) ? themeMean(R.a.i)
+                                                                : drainColour(themeMean(R.a.i), 1, 0.55)) }));
+      paintEdgeGlow(c.getContext("2d"), c.width, c.height, shape, mids, u);
+      G = _mapGlow = { key, c, u, minC, minR, reach };
+    }
+    const k = S / G.u, R0 = mapRectAt({ c: G.minC, r: G.minR }, S, cx0, cy0);
+    const padS = G.reach * S;
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;           // scaled light has to be smooth, whatever the board wants
+    ctx.drawImage(G.c, R0.x - padS, R0.y - padS, G.c.width * k, G.c.height * k);
+    ctx.restore();
+  }
+  // THE LEVEL'S. The silhouette is the board; the colour comes off the quilt itself, one piece of
+  // edge per patch, each the colour of the patch it borders — the quilt is welded to the board, so
+  // the patch at a board position is patchColor at that position over the patch size.
+  // IN CELLS, NOT PIXELS. It was keyed on `cell`, and `cell` is animated — the camera's fit easing,
+  // a fall's zoom, and the pull-back at the end of every chapter all rescale it frame by frame —
+  // so whenever the camera moved, the glow was rebuilt from nothing on every frame: a few hundred
+  // blurs each time, which on a phone is a stutter you can see. Now it is painted once at
+  // GLOW_BOARD_PX to a cell and scaled to the real cell when it is drawn.
+  const GLOW_BOARD_PX = 24;
+  let _boardGlow = null;
+  function boardEdgeGlow(bx, by) {
+    const T = state && state.bgTheme; if (!T || !(cell > 2) || !(COLS > 0) || !(ROWS > 0)) return;
+    const E = EDGE_GLOW, reach = Math.max(E.backW, E.midW, E.frontW) * 1.25;
+    const key = [_glowGen, T.colors.join("|"), T.dir, T.stripeW, COLS, ROWS].join("/");
+    let G = _boardGlow;
+    if (!G || G.key !== key) {
+      const spanC = COLS + reach*2, spanR = ROWS + reach*2;
+      const u = Math.min(GLOW_BOARD_PX, 1600 / Math.max(spanC, spanR)), pad = reach * u;
+      const c = (G && G.c) || document.createElement("canvas");
+      c.width = Math.max(1, Math.ceil(spanC * u)); c.height = Math.max(1, Math.ceil(spanR * u));
+      const bw = COLS * u, bh = ROWS * u;
+      // Two patches to a cell, exactly as the quilt is pieced (see drawPatchwork).
+      const P = Math.max(1, 2*(T.colors.length - 1) * T.stripeW), ws = u * 0.5;
+      const col = (i, j) => glowVivid(patchColor(T, ((i % P) + P) % P, ((j % P) + P) % P));
+      const nx = COLS * 2, ny = ROWS * 2, mids = [];
+      for (let i = 0; i < nx; i++) {
+        mids.push({ x: pad + i*ws, y: pad,               w: ws, h: ws, col: col(i, 0) });
+        mids.push({ x: pad + i*ws, y: pad + bh - ws,     w: ws, h: ws, col: col(i, ny - 1) });
+      }
+      for (let j = 0; j < ny; j++) {
+        mids.push({ x: pad,           y: pad + j*ws, w: ws, h: ws, col: col(0, j) });
+        mids.push({ x: pad + bw - ws, y: pad + j*ws, w: ws, h: ws, col: col(nx - 1, j) });
+      }
+      paintEdgeGlow(c.getContext("2d"), c.width, c.height, [{ x: pad, y: pad, w: bw, h: bh }], mids, u);
+      G = _boardGlow = { key, c, u, reach };
+    }
+    const k = cell / G.u, padS = G.reach * cell;
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;           // scaled light has to be smooth, whatever the board wants
+    ctx.drawImage(G.c, bx - padS, by - padS, G.c.width * k, G.c.height * k);
+    ctx.restore();
+  }
   // The whole map, drawn on the board's own canvas rather than in the menu's DOM: this has to
   // be something the camera can fly through, and a grid of buttons is not.
   function drawMap(ts, S, cx0, cy0, opts) {
@@ -12320,6 +12516,13 @@
     ctx.globalAlpha = A;
     const isDone = k => bestDone(best, k);
     const furthest = bestFurthest(best);
+    // The cloud's edge glow, under everything on it — in the colours the squares are actually
+    // wearing: an unreached chapter is drained to grey on the map, so the light beside it is too.
+    mapEdgeGlow(S, cx0, cy0, o, i => {
+      if (i === INTRO_CELL) return true;
+      if (o.litIdx === i && o.lit != null) return o.lit >= 0.5;
+      return isDone(i) || i <= furthest + 1;
+    });
     // No gap between squares. The menu's map spaces them out because it is a list of places you
     // can press; this one is a PLACE — the cosmos seen close up — and the levels are the ground
     // of it, so they meet edge to edge with nothing showing between.
@@ -18397,6 +18600,7 @@
     // showing around it is the thing that says where you may build.
     if (!bgNoSky) drawVoid(ts);
     const bx = -Math.round(camX - (shx || 0)), by = -Math.round(camY - (shy || 0));
+    if (!bgNoSky) boardEdgeGlow(bx, by);   // the quilt's edge glow, on the sky round the board
     ctx.save();
     ctx.beginPath(); ctx.rect(bx, by, worldW, worldH); ctx.clip();
     drawBackground(ts, undefined, false, undefined, undefined, bgNoSky ? 1 : QUILT_A);
@@ -21345,6 +21549,10 @@
     // Load a level OBJECT, the shape levels.js holds, rather than an index into the campaign.
     // Lets a lab hand the game a board carrying one of everything.
     demo: (L, label) => { titleActive = false;
+                          // ...and never one hidden behind the Tileverse: while the map's sequence
+                          // is running the frame draws only the map, so a board loaded under it
+                          // would sit on its opening card for ever. Leave the map first.
+                          if (win) winEnd();
                           const pf = document.getElementById("pauseFloat");
                           if (pf) pf.style.display = "";
                           beginLevel(L, label || "demo"); },
@@ -21409,18 +21617,20 @@
         const minC = Math.min(...(_mapCells.map(p => p.c).concat([0])));
         const minR = Math.min(...(_mapCells.map(p => p.r).concat([0])));
         for (const p of _mapCells) { p.c -= minC; p.r -= minR; }
-        _splashes = null; _chapTheme.clear(); patchCache.clear();
+        _splashes = null; _chapTheme.clear(); patchCache.clear(); _glowGen++;
         return _mapCells.map((p, i) => ({ c: p.c, r: p.r, cols: chapterTheme(i).colors.slice() }));
       },
       // ...and the block the splashes are thrown by, so the editor can tune the paint too.
       splashBlock: (patch) => { if (patch) Object.assign(SPLASH, patch);
-                                _splashes = null; _chapTheme.clear(); patchCache.clear();
+                                _splashes = null; _chapTheme.clear(); patchCache.clear(); _glowGen++;
                                 return { ...SPLASH }; },
     },
     // cosmos-lab.html drives this: the sky's own block, live.
     cosmos: (patch) => { if (patch) Object.assign(COSMOS, patch); applyCosmos(); return { ...COSMOS }; },
     // ...and the standard spark, live, for whatever lab tunes it.
     spark: (patch) => { if (patch) Object.assign(SPARK, patch); return { ...SPARK }; },
+    // ...and the glow round the map's and the level's edges.
+    edgeGlow: (patch) => { if (patch) { Object.assign(EDGE_GLOW, patch); _glowGen++; } return { ...EDGE_GLOW }; },
     // ...and one falling star right now, without waiting out the clock: the phase is counted
     // from shootT0, so moving it to this instant starts a fall on the next frame.
     shootNow: () => { COSMOS.shootT0 = performance.now(); },
