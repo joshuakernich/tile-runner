@@ -132,6 +132,53 @@
   #copyview{display:none;padding:14px;max-width:980px;}
   body.copy #copyview{display:block;}
   body.copy .app{display:none;}
+  /* ---- the Tileverse tab ----------------------------------------------------------------
+     A grid you drag chapters around on, with the paint they end up wearing shown IN the grid —
+     computed by the running game in a hidden frame, never by a copy of the splash maths kept
+     here. See __TR.tileverse.preview. */
+  #tvview{display:none;padding:14px;}
+  body.tv #tvview{display:block;}
+  body.tv .app, body.tv #copyview{display:none;}
+  /* Four columns: what you do, what the paint is, the cloud itself, and the game looking back at
+     you. The map asks for exactly the lattice it is drawing (it sets its own pixel width), so the
+     LAST column takes everything left over. */
+  #tvview .tvwrap{display:grid;grid-template-columns:224px 224px minmax(0,auto) minmax(268px,1fr);
+                  gap:14px;align-items:start;}
+  @media (max-width:1360px){ #tvview .tvwrap{grid-template-columns:224px 224px minmax(0,1fr);} }
+  @media (max-width:1080px){ #tvview .tvwrap{grid-template-columns:224px minmax(0,1fr);} }
+  #tvgrid{position:relative;background:#08061a;border:1px solid var(--line);border-radius:10px;
+          overflow:auto;padding:10px;}
+  #tvgrid .cell{position:absolute;border-radius:3px;cursor:grab;
+                display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);
+                box-shadow:0 0 0 1px rgba(0,0,0,0.5);}
+  #tvgrid .cell.drag{cursor:grabbing;z-index:5;}
+  /* CHOSEN, not dragged. A ring in the accent, so a selection of twenty still reads as one
+     thing being held rather than twenty things that happen to be lit. */
+  #tvgrid .cell.sel{box-shadow:0 0 0 2px var(--accent);z-index:4;}
+  #tvgrid .band{position:absolute;border:1px solid var(--accent);background:rgba(96,214,255,0.12);
+                pointer-events:none;z-index:6;}
+  /* The grab strip round the lattice: drag an edge to grow or shrink the board you may drop on.
+     Same idea, and the same twelve pixels, as the level map's own edges on the Levels tab. */
+  #tvgrid.ew{cursor:ew-resize;} #tvgrid.ns{cursor:ns-resize;}
+  #tvgrid .edge{position:absolute;background:var(--accent);opacity:0;transition:opacity .12s;}
+  #tvgrid.ew .edge.v, #tvgrid.ns .edge.h{opacity:.5;}
+  #tvgrid .cell.tal{box-shadow:0 0 0 2px #fff;}
+  #tvgrid .cell b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+                  font-size:11px;font-weight:700;color:#fff;text-shadow:0 1px 2px #000;
+                  pointer-events:none;}
+  #tvgrid .cell i{display:block;}
+  #tvgrid .slot{position:absolute;border:1px dashed rgba(255,255,255,0.07);border-radius:3px;
+                pointer-events:none;}
+  #tvview .row{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:12px;}
+  #tvview .row label{flex:0 0 74px;opacity:.85;}
+  #tvview .row input[type=range]{flex:1;min-width:0;accent-color:var(--accent);}
+  #tvview .row output{flex:0 0 44px;text-align:right;color:var(--accent);}
+  /* A PHONE. The sky, the cloud and the footer are all laid out against the height of the glass,
+     and a wide little window would show a Tileverse nobody will ever see — the map is fitted to
+     the shorter side, so a landscape frame is a different composition, not a smaller one. */
+  #tvframe{width:100%;max-width:calc((100vh - 190px) * 9 / 19);aspect-ratio:9/19;
+           margin-inline:auto;border:1px solid var(--line);border-radius:12px;
+           background:#000;display:block;}
   #copyview h2{font-size:11px;letter-spacing:1px;text-transform:uppercase;opacity:.55;margin:0 0 8px;}
   #copyview .card{margin-bottom:14px;}
   #copyview .fld{display:block;margin:0 0 10px;}
@@ -154,6 +201,7 @@
   <div class="tabs">
     <button id="tabLevels" class="on">Levels</button>
     <button id="tabCopy">Copy</button>
+    <button id="tabTv">Tileverse</button>
   </div>
 </header>
 
@@ -435,6 +483,58 @@
   </div>
 </section>
 
+<section id="tvview">
+  <div class="tvwrap">
+    <aside>
+      <div class="card">
+        <h2>The shape</h2>
+        <button id="tvSave" class="act prim wide">Save to levels.js</button>
+        <button id="tvPick" class="wide" style="margin-top:6px">Choose the file…</button>
+        <div style="height:10px"></div>
+        <button id="tvReset" class="wide">Put them all back</button>
+        <div style="height:6px"></div>
+        <button id="tvPlace" class="wide">Pin every chapter where it is</button>
+        <div style="height:6px"></div>
+        <button id="tvSelAll" class="wide">Select all</button>
+        <div style="height:6px"></div>
+        <button id="tvSelNone" class="wide">Select none</button>
+      </div>
+    </aside>
+    <aside>
+      <div class="card">
+        <h2>The paint</h2>
+        <div class="row"><label>reach</label><input id="tvReach" type="range" min="2" max="20" step="0.5" value="14"><output id="tvReachOut">14</output></div>
+        <div class="row"><label>fall</label><input id="tvFall" type="range" min="0.6" max="4" step="0.1" value="2.9"><output id="tvFallOut">2.9</output></div>
+        <div class="row"><label>bite</label><input id="tvBite" type="range" min="1" max="6" step="0.1" value="6"><output id="tvBiteOut">6</output></div>
+        <div class="row"><label>streaks</label><input id="tvLobes" type="range" min="0" max="12" step="1" value="0"><output id="tvLobesOut">0</output></div>
+        <div class="row"><label>…reach</label><input id="tvStreak" type="range" min="0" max="3" step="0.05" value="0"><output id="tvStreakOut">0</output></div>
+        <div class="row"><label>…point</label><input id="tvSharp" type="range" min="0.5" max="8" step="0.1" value="2.4"><output id="tvSharpOut">2.4</output></div>
+        <div class="row"><label>…curl</label><input id="tvTwist" type="range" min="0" max="0.3" step="0.005" value="0.055"><output id="tvTwistOut">0.055</output></div>
+        <div class="row"><label>colour</label><input id="tvSat" type="range" min="0" max="100" step="1" value="64"><output id="tvSatOut">64</output></div>
+        <div class="row"><label>…far</label><input id="tvSatFar" type="range" min="0" max="100" step="1" value="20"><output id="tvSatFarOut">20</output></div>
+        <div class="row"><label>light</label><input id="tvLig" type="range" min="2" max="70" step="1" value="34"><output id="tvLigOut">34</output></div>
+        <div class="row"><label>…far</label><input id="tvLigFar" type="range" min="1" max="40" step="1" value="9"><output id="tvLigFarOut">9</output></div>
+        <div class="row"><label>grain</label><input id="tvGrain" type="range" min="0" max="1" step="0.01" value="0.22"><output id="tvGrainOut">0.22</output></div>
+        <div style="height:8px"></div>
+        <button id="tvCopy" class="wide">Copy SPLASH block</button>
+        <div class="hint">The sliders drive the frame only. Paste the block into
+          <code>index.html</code> to keep them.</div>
+      </div>
+    </aside>
+    <div id="tvgrid"></div>
+    <aside>
+      <div class="card">
+        <h2>The game, answering</h2>
+        <iframe id="tvframe" title="Tile Runner"></iframe>
+        <div class="hint">This page must be <b>served</b> — <code>file://</code> blocks it from
+          reading the frame.</div>
+      </div>
+    </aside>
+  </div>
+  <textarea id="tvout" spellcheck="false" style="margin-top:12px;height:180px"></textarea>
+</section>
+
+
 <script src="levels.js"></script>
 <script src="copy.js"></script>
 <script>
@@ -478,6 +578,7 @@ function toWorking(o){
   w.stone = (o.stone||[]).map(s=>s.slice());   // [c,r,hp] breakable stones
   w.platforms = (o.platforms||[]).map(p=>p.slice());   // [c,r,"ns"] fixed free track
   w.talismans = (o.talismans||[]).map(t=>t.slice());   // [c,r,"id"] one-off collectibles
+  if(Array.isArray(o.tv) && o.tv.length === 2) w.tv = [o.tv[0]|0, o.tv[1]|0];
   w.coins = (o.coins||[]).map(c=>c.slice());           // [c,r] floating golden tiles
   // [c,r] holes in the floor. Cross one and the tile you crossed on is swallowed for good.
   w.singularity = (o.singularity||[]).map(c=>c.slice());
@@ -516,6 +617,10 @@ function toStored(w){
   if((w.by||"").trim() && (w.poem||"").trim()) o.by = w.by.trim();   // an attribution needs a verse
   if(w.music && Object.keys(w.music).length) o.music = w.music;   // passed through untouched
   if(w.goal) o.goal = w.goal.slice();          // omitted entirely on a level with no exit
+  // WHERE IT SITS ON THE TILEVERSE. Written only when it has been placed by hand — an unplaced
+  // chapter falls back to the game's own generated slot, so a campaign that has never been near
+  // the Tileverse tab writes exactly the file it always did.
+  if(Array.isArray(w.tv) && w.tv.length === 2) o.tv = [w.tv[0]|0, w.tv[1]|0];
   o.walls = [...w.walls].map(s=>s.split(",").map(Number)).sort((a,b)=>a[1]-b[1]||a[0]-b[0]);
   if(w.blocks.length)  o.blocks  = w.blocks.map(b=>({...b}));
   // `phase` was stripped from every monster on the belief that it was a saw idea — but the game
@@ -2444,17 +2549,333 @@ if(!FS_OK){ $("cSave").textContent="Download copy.js"; $("cPick").disabled=true;
             $("cPick").title="needs a Chromium browser"; }
 idbGet("copyHandle").then(h=>{ if(h){ copyHandle=h; $("cSave").title="writes over "+h.name; } });
 
+// ---- THE TILEVERSE TAB ---------------------------------------------------------------------
+// The cloud's SHAPE, dragged by hand, and the paint that falls out of it. Both answered by the
+// running game in a hidden frame — __TR.tileverse.preview takes a whole candidate layout and
+// hands back the nine pixels each chapter ends up wearing. Nothing about the splash maths is
+// written twice: a copy of it here would be a copy that drifts, which is the trap this file
+// already carries three warnings about.
+// The lattice: how big a board you may drop chapters on. Kept HERE and not in levels.js — the
+// game works its own bounds out from where the chapters actually are, so this is a drawing board
+// and not campaign data. Remembered between sessions all the same; a board you have to resize
+// every time you open the tab is a board you stop resizing.
+const TV = { cell: 30, pad: 3, rim: 14, edge: 10, cols: 12, rows: 12, ready: false, W: null,
+             sel: new Set() };
+try { const v = JSON.parse(localStorage.getItem("tilerunner:editor:tvgrid") || "null");
+      if (v && v.cols) { TV.cols = v.cols; TV.rows = v.rows; } } catch(e){}
+const tvSaveGrid = () => { try { localStorage.setItem("tilerunner:editor:tvgrid",
+                            JSON.stringify({ cols: TV.cols, rows: TV.rows })); } catch(e){} };
+function tvFrame(){ return $("tvframe"); }
+// The campaign as the editor has it — shipped, with whatever has been edited on top. The same
+// list every save writes, so what this tab moves is what ends up in levels.js.
+const tvLevels = () => allLevels();
+function tvLayout(){
+  // Every chapter's cell: hand-placed where it has one, and the game's own generated slot where
+  // it has not.
+  return tvLevels().map((o, i) => (Array.isArray(o.tv) && o.tv.length === 2)
+    ? [o.tv[0]|0, o.tv[1]|0]
+    : (TV.gen && TV.gen[i] ? [TV.gen[i].c, TV.gen[i].r] : [i % 8, Math.floor(i / 8)]));
+}
+// Writing a position is an EDIT like any other — it goes into `edited` under the chapter's own
+// number, which is what allLevels merges and what every save writes out.
+function tvEdit(i, fn){
+  const list = tvLevels(), o = list[i]; if (!o) return;
+  const cur = edited[o.n] ? edited[o.n] : JSON.parse(JSON.stringify(o));
+  fn(cur);
+  edited[o.n] = cur;
+  if (L && L.n === o.n) { if (cur.tv) L.tv = cur.tv.slice(); else delete L.tv; }
+}
+function tvSplashKeys(){
+  return { reach:+$("tvReach").value, fall:+$("tvFall").value, bite:+$("tvBite").value,
+           lobes:+$("tvLobes").value, streak:+$("tvStreak").value, sharp:+$("tvSharp").value,
+           twist:+$("tvTwist").value, sat:+$("tvSat").value, satFar:+$("tvSatFar").value,
+           lig:+$("tvLig").value, ligFar:+$("tvLigFar").value, grain:+$("tvGrain").value };
+}
+const tvStep = () => TV.cell + TV.pad;
+const tvX = (c) => TV.rim + c * tvStep();
+const tvY = (r) => TV.rim + r * tvStep();
+// The lattice always has to be at least big enough to hold what is on it. Shrinking past the
+// far chapter would hide it rather than move it, and a chapter you cannot see is a chapter you
+// cannot get back.
+function tvFit(lay){
+  TV.cols = Math.max(TV.cols, ...lay.map(p => p[0] + 1));
+  TV.rows = Math.max(TV.rows, ...lay.map(p => p[1] + 1));
+}
+// Ask the game what this layout paints, and lay the answer out as a grid of chapters. Called on
+// every drop and on every slider, which is cheap: it is fifty chapters of nine pixels.
+function tvDraw(){
+  const g = $("tvgrid"); if (!g) return;
+  if (!TV.ready || !TV.W || !TV.W.__TR) { g.innerHTML = '<div class="hint" style="padding:20px">waiting for the game…</div>'; return; }
+  const lay = tvLayout();
+  tvFit(lay);
+  let out;
+  try {
+    TV.W.__TR.tileverse.splashBlock(tvSplashKeys());
+    out = TV.W.__TR.tileverse.preview(lay);
+  } catch(e){ setStatus("the frame refused: " + e.message); return; }
+  g.style.width  = (TV.rim*2 + TV.cols*tvStep()) + "px";
+  g.style.height = (TV.rim*2 + TV.rows*tvStep()) + "px";
+  g.innerHTML = "";
+  const lvls = tvLevels();
+  // The empty lattice under them, so a gap in the cloud is visibly a place a chapter could go
+  // rather than the edge of the picture.
+  for (let r = 0; r < TV.rows; r++) for (let c = 0; c < TV.cols; c++) {
+    const d = document.createElement("div"); d.className = "slot";
+    d.style.left = tvX(c) + "px"; d.style.top = tvY(r) + "px";
+    d.style.width = TV.cell + "px"; d.style.height = TV.cell + "px";
+    g.appendChild(d);
+  }
+  // ...and the four edges, lit when the pointer is over their strip.
+  for (const k of ["l","r","t","b"]) {
+    const e = document.createElement("div");
+    e.className = "edge " + (k === "l" || k === "r" ? "v" : "h");
+    if (k === "l" || k === "r") { e.style.top = "0"; e.style.bottom = "0"; e.style.width = "3px";
+                                  e.style[k === "l" ? "left" : "right"] = "3px"; }
+    else { e.style.left = "0"; e.style.right = "0"; e.style.height = "3px";
+           e.style[k === "t" ? "top" : "bottom"] = "3px"; }
+    g.appendChild(e);
+  }
+  // `out` is renormalised by the game (it pulls the cloud back to the origin); the grid shows
+  // the layout as EDITED, or a chapter would jump the moment its neighbour moved past it.
+  lay.forEach((p, i) => {
+    const el = document.createElement("div");
+    el.className = "cell" + ((lvls[i].talismans || []).length ? " tal" : "")
+                          + (TV.sel.has(i) ? " sel" : "");
+    el.style.left = tvX(p[0]) + "px"; el.style.top = tvY(p[1]) + "px";
+    el.style.width = TV.cell + "px"; el.style.height = TV.cell + "px";
+    el.dataset.i = i;
+    for (const col of (out[i] ? out[i].cols : [])) {
+      const q = document.createElement("i"); q.style.background = col; el.appendChild(q);
+    }
+    const b = document.createElement("b"); b.textContent = (i + 1); el.appendChild(b);
+    el.title = "Chapter " + (i+1) + ((lvls[i].talismans||[]).length
+      ? " — holds " + lvls[i].talismans.map(t=>t[2]).join(", ") : "");
+    g.appendChild(el);
+  });
+  tvOut(lay);
+}
+function tvOut(lay){
+  $("tvout").value =
+    "// paste over the SPLASH block in index.html\n" +
+    "  const SPLASH = {\n" +
+    Object.entries(tvSplashKeys()).map(([k,v]) => "    " + k + ": " + v + ",").join("\n") +
+    "\n  };\n\n// ...and the shape, for reference — the Save writes it into levels.js as a `tv`\n" +
+    "// on each chapter.\n" +
+    "// " + lay.map((p,i) => (i+1) + ":" + p[0] + "," + p[1]).join("  ");
+}
+// ---- DRAG: one chapter, a whole selection, a marquee, or an edge of the board ----------------
+// Pointer events on the GRID rather than a listener per cell: fifty of them come and go on every
+// redraw, and a handler that has to be re-bound fifty times is one that will eventually be bound
+// forty-nine. What the press means is decided once, on the way down, and the rest of the gesture
+// follows from that — which is why there is a single `mode` rather than four sets of state.
+(function tvDragInit(){
+  const g = $("tvgrid"); if (!g) return;
+  let mode = null, held = null, ox = 0, oy = 0, sx = 0, sy = 0, moved = 0;
+  let band = null, start = null, base = null, edge = null, c0 = 0, r0 = 0;
+  const local = (e) => { const r = g.getBoundingClientRect();
+                         return { x: e.clientX - r.left + g.scrollLeft,
+                                  y: e.clientY - r.top  + g.scrollTop, w: r.width, h: r.height }; };
+  // Which edge strip the pointer is in, if any.
+  function edgeAt(e){
+    const r = g.getBoundingClientRect(), E = TV.edge;
+    if (e.clientX - r.left < E) return "l";
+    if (r.right - e.clientX < E) return "r";
+    if (e.clientY - r.top  < E) return "t";
+    if (r.bottom - e.clientY < E) return "b";
+    return null;
+  }
+  g.addEventListener("pointermove", (e) => {
+    if (!mode) {                                   // ...just the cursor, saying what a press does
+      const k = edgeAt(e);
+      g.classList.toggle("ew", k === "l" || k === "r");
+      g.classList.toggle("ns", k === "t" || k === "b");
+      return;
+    }
+    const L2 = local(e);
+    moved = Math.max(moved, Math.hypot(e.clientX - sx, e.clientY - sy));
+    if (mode === "move") {
+      const dx = L2.x - start.x, dy = L2.y - start.y;
+      for (const el of g.querySelectorAll(".cell.drag")) {
+        const b2 = base.get(+el.dataset.i);
+        el.style.left = (b2[0] + dx) + "px"; el.style.top = (b2[1] + dy) + "px";
+      }
+    } else if (mode === "band") {
+      const x0 = Math.min(start.x, L2.x), y0 = Math.min(start.y, L2.y);
+      band.style.left = x0 + "px"; band.style.top = y0 + "px";
+      band.style.width = Math.abs(L2.x - start.x) + "px";
+      band.style.height = Math.abs(L2.y - start.y) + "px";
+    } else if (mode === "edge") {
+      // Live, so the board grows under the pointer rather than after it.
+      const S = tvStep();
+      if (edge === "r") TV.cols = Math.max(1, Math.round((L2.x - TV.rim) / S));
+      if (edge === "b") TV.rows = Math.max(1, Math.round((L2.y - TV.rim) / S));
+      // The near edges move the CONTENT: growing off the left means every chapter shifts right,
+      // which is the only way "more room over there" can mean anything on a lattice with no
+      // negative side.
+      if (edge === "l" || edge === "t") {
+        const want = Math.round((L2.x - TV.rim) / S), wantR = Math.round((L2.y - TV.rim) / S);
+        const d = edge === "l" ? -want : -wantR;
+        if (d !== 0) {
+          const lay = tvLayout();
+          const can = Math.min(...lay.map(p => edge === "l" ? p[0] : p[1])) + d >= 0 || d > 0;
+          if (can) {
+            lay.forEach((p, i) => tvEdit(i, o => {
+              o.tv = edge === "l" ? [p[0] + d, p[1]] : [p[0], p[1] + d]; }));
+            if (edge === "l") TV.cols += d; else TV.rows += d;
+            start = L2;
+          }
+        }
+        tvDraw(); return;
+      }
+      tvDraw(); return;
+    }
+  });
+  g.addEventListener("pointerdown", (e) => {
+    const k = edgeAt(e);
+    sx = e.clientX; sy = e.clientY; moved = 0; start = local(e);
+    // Capture so the gesture survives the pointer leaving the board — and guarded, because a
+    // pointer that is not actually down THROWS here, which would abandon the press before the
+    // mode below is decided and leave a drag that does nothing.
+    try { g.setPointerCapture(e.pointerId); } catch(err) {}
+    e.preventDefault();
+    if (k) { mode = "edge"; edge = k; c0 = TV.cols; r0 = TV.rows; return; }
+    const el = e.target.closest && e.target.closest(".cell");
+    if (el) {
+      const i = +el.dataset.i;
+      // Pressing something already chosen takes the whole choice with it; pressing anything else
+      // makes that one the choice. Shift adds, so a selection can be built up a chapter at a time.
+      if (e.shiftKey) { TV.sel.has(i) ? TV.sel.delete(i) : TV.sel.add(i); tvDraw(); mode = null; return; }
+      if (!TV.sel.has(i)) { TV.sel.clear(); TV.sel.add(i); }
+      mode = "move"; held = el;
+      base = new Map();
+      for (const c of g.querySelectorAll(".cell")) {
+        if (!TV.sel.has(+c.dataset.i)) continue;
+        c.classList.add("drag");
+        base.set(+c.dataset.i, [parseFloat(c.style.left), parseFloat(c.style.top)]);
+      }
+      return;
+    }
+    // Empty lattice: a marquee. Starting one clears whatever was chosen, the way it does
+    // everywhere else — a band that ADDS by default cannot be used to start again.
+    mode = "band"; TV.sel.clear();
+    band = document.createElement("div"); band.className = "band";
+    band.style.left = start.x + "px"; band.style.top = start.y + "px";
+    band.style.width = "0"; band.style.height = "0";
+    g.appendChild(band);
+  });
+  g.addEventListener("pointerup", (e) => {
+    if (!mode) return;
+    const L2 = local(e), S = tvStep();
+    if (mode === "move") {
+      // A CLICK IS NOT A MOVE. Without this, touching a chapter pinned it where it already was —
+      // writing a `tv` onto a level that had never been placed for a tap that did nothing.
+      if (moved > 4) {
+        const dc = Math.round((L2.x - start.x) / S), dr = Math.round((L2.y - start.y) / S);
+        if (dc || dr) {
+          const lay = tvLayout();
+          // Clamped as a GROUP, so a selection dragged into the corner keeps its shape instead
+          // of collapsing as its leading chapters hit zero one by one.
+          const ids = [...TV.sel];
+          const lo = ids.reduce((m, i) => [Math.min(m[0], lay[i][0]), Math.min(m[1], lay[i][1])],
+                                [1e9, 1e9]);
+          const ddc = Math.max(dc, -lo[0]), ddr = Math.max(dr, -lo[1]);
+          ids.forEach(i => tvEdit(i, o => { o.tv = [lay[i][0] + ddc, lay[i][1] + ddr]; }));
+          scheduleAuto();
+          setStatus(ids.length + (ids.length === 1 ? " chapter" : " chapters") + " moved");
+        }
+      }
+    } else if (mode === "band") {
+      const x0 = Math.min(start.x, L2.x), x1 = Math.max(start.x, L2.x);
+      const y0 = Math.min(start.y, L2.y), y1 = Math.max(start.y, L2.y);
+      tvLayout().forEach((p, i) => {
+        const cx = tvX(p[0]) + TV.cell/2, cy = tvY(p[1]) + TV.cell/2;
+        if (cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1) TV.sel.add(i);
+      });
+      if (band && band.parentNode) band.parentNode.removeChild(band);
+      band = null;
+      setStatus(TV.sel.size + " selected");
+    } else if (mode === "edge") {
+      tvFit(tvLayout()); tvSaveGrid();
+      setStatus("board " + TV.cols + " x " + TV.rows);
+    }
+    mode = null; held = null; base = null;
+    for (const c of g.querySelectorAll(".cell.drag")) c.classList.remove("drag");
+    tvDraw();
+  });
+})();
+$("tvReset").onclick = () => {
+  if (!confirm("Throw away every hand-placed position and go back to the generated cloud?")) return;
+  // Only the ones that actually carry a position. Touching all fifty would mark every chapter
+  // as edited to say nothing about forty-five of them, and "edited" is what the Levels tab
+  // colours its list by.
+  tvLevels().forEach((o, i) => { if (Array.isArray(o.tv)) tvEdit(i, x => { delete x.tv; }); });
+  scheduleAuto(); tvDraw(); setStatus("back to the generated layout");
+};
+$("tvPlace").onclick = () => {
+  const lay = tvLayout();
+  lay.forEach((p, i) => tvEdit(i, o => { o.tv = p.slice(); }));
+  scheduleAuto(); tvDraw(); setStatus("all " + lay.length + " chapters pinned where they are");
+};
+$("tvCopy").onclick = () => { copy($("tvout").value); setStatus("SPLASH block copied"); };
+$("tvSelAll").onclick  = () => { TV.sel = new Set(tvLevels().map((_, i) => i)); tvDraw();
+                                 setStatus(TV.sel.size + " selected"); };
+$("tvSelNone").onclick = () => { TV.sel.clear(); tvDraw(); setStatus("nothing selected"); };
+// The SAME saveToDisk the Levels tab uses, and deliberately not a second one that writes only
+// positions: levels.js is one file and one file is written whole. A separate writer would be a
+// second thing that has to know the format, and the two would drift the first time the format
+// moved. Redrawn afterwards because commit() may have folded the open level into `edited`.
+$("tvSave").onclick = async () => { await saveToDisk(); tvDraw(); };
+$("tvPick").onclick = async () => { await pickTarget(); };
+if (!FS_OK) { $("tvSave").textContent = "Download levels.js"; $("tvPick").disabled = true;
+              $("tvPick").title = "needs a Chromium browser"; }
+["tvReach","tvFall","tvBite","tvLobes","tvStreak","tvSharp","tvTwist",
+ "tvSat","tvSatFar","tvLig","tvLigFar","tvGrain"].forEach(id => {
+  const el = $(id), o = $(id + "Out");
+  el.addEventListener("input", () => { o.textContent = el.value; tvDraw(); });
+});
+function tvBoot(){
+  const f = tvFrame(); if (!f || f.src) return;
+  f.src = "index.html?editor=tv&t=" + Date.now();
+  f.addEventListener("load", () => {
+    TV.W = f.contentWindow;
+    let n = 0;
+    (function wait(){
+      if (TV.W.__TR && TV.W.__TR.tileverse) {
+        TV.gen = TV.W.__TR.tileverse.cells();       // the generated slots, for anything unplaced
+        // The sliders start from the GAME's block, not from their own value attributes: every
+        // redraw pushes the sliders into the frame, so a stale default here would quietly paint
+        // over a SPLASH that had just been pasted into index.html.
+        const sp = TV.W.__TR.tileverse.splashBlock();
+        const ids = { reach:"tvReach", fall:"tvFall", bite:"tvBite", lobes:"tvLobes",
+                      streak:"tvStreak", sharp:"tvSharp", twist:"tvTwist", sat:"tvSat",
+                      satFar:"tvSatFar", lig:"tvLig", ligFar:"tvLigFar", grain:"tvGrain" };
+        for (const [k, id] of Object.entries(ids)) if (k in sp) {
+          $(id).value = sp[k]; $(id + "Out").textContent = $(id).value;
+        }
+        TV.ready = true; tvDraw(); return;
+      }
+      if (++n > 200) { setStatus("the game never came up in the frame — is this being SERVED?"); return; }
+      setTimeout(wait, 50);
+    })();
+  });
+}
+
 // ---- the tabs themselves ----
 function showTab(which){
   document.body.classList.toggle("copy", which === "copy");
+  document.body.classList.toggle("tv",   which === "tv");
   $("tabCopy").classList.toggle("on", which === "copy");
-  $("tabLevels").classList.toggle("on", which !== "copy");
+  $("tabTv").classList.toggle("on", which === "tv");
+  $("tabLevels").classList.toggle("on", which !== "copy" && which !== "tv");
+  if (which === "tv") { tvBoot(); tvDraw(); }
   try { localStorage.setItem("tilerunner:editor:tab", which); } catch(e){}
 }
 $("tabLevels").onclick = () => showTab("levels");
 $("tabCopy").onclick   = () => showTab("copy");
+$("tabTv").onclick     = () => showTab("tv");
 copyInit();
-try { if (localStorage.getItem("tilerunner:editor:tab") === "copy") showTab("copy"); } catch(e){}
+try { const t = localStorage.getItem("tilerunner:editor:tab");
+      if (t === "copy" || t === "tv") showTab(t); } catch(e){}
 
 $("copyOne2").onclick=()=>{ commit(); copy($("out").value); setStatus("level JSON copied"); };
 // Play the level you are looking at, in the real game, without saving it first: park the DRAFT

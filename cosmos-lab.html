@@ -117,9 +117,10 @@
 
     <div class="card">
       <h2>Shooting stars</h2>
-      <div class="row"><label>one every</label><input id="shootMs" type="range" min="800" max="20000" step="100" value="4000"><output id="shootMsOut">4000</output></div>
+      <div class="row"><label>one every</label><input id="shootMs" type="range" min="800" max="20000" step="100" value="2600"><output id="shootMsOut">2600</output></div>
       <div class="row"><label>fall lasts</label><input id="shootDur" type="range" min="150" max="2500" step="10" value="520"><output id="shootDurOut">520</output></div>
       <div class="row"><label>trail</label><input id="shootTail" type="range" min="1" max="40" step="0.5" value="15"><output id="shootTailOut">15.0</output></div>
+      <div class="row"><label>size</label><input id="shootSize" type="range" min="1" max="8" step="1" value="3"><output id="shootSizeOut">3</output></div>
       <div class="row"><label>strength</label><input id="shootA" type="range" min="0" max="1" step="0.01" value="1"><output id="shootAOut">1.00</output></div>
       <button id="shoot">One now</button>
       <p class="hint">On a clock rather than a random roll — which one it is and where it comes
@@ -187,13 +188,13 @@ const KEYS = ["hues","span","hue0","sat","lig","stripeW",
               "nebN","nebGap","nebR","nebA","nebSat","nebLig","nebSpan","nebPar",
               "starN","starGap","starA","clump","clumpN","clumpSpread",
               "farN","farPar","farA",
-              "shootMs","shootDur","shootTail","shootA"];
+              "shootMs","shootDur","shootTail","shootSize","shootA"];
 // How many places each is written back with, so the copied block reads like the one it replaces.
 const DP = { hues:0, span:0, hue0:0, sat:0, lig:1, stripeW:0,
              nebN:0, nebGap:0, nebR:0, nebA:2, nebSat:0, nebLig:0, nebSpan:0, nebPar:2,
              starN:0, starGap:0, starA:2, clump:2, clumpN:0, clumpSpread:1,
              farN:0, farPar:2, farA:2,
-             shootMs:0, shootDur:0, shootTail:1, shootA:2 };
+             shootMs:0, shootDur:0, shootTail:1, shootSize:0, shootA:2 };
 
 const values = () => { const o = {}; for (const k of KEYS) o[k] = +$(k).value; return o; };
 
@@ -235,7 +236,8 @@ function refreshOut(){
     "    farN: " + f("farN") + ", farPar: " + f("farPar") + ", farA: " + f("farA") + ",\n" +
     "    // ---- shooting stars ----\n" +
     "    shootMs: " + f("shootMs") + ", shootDur: " + f("shootDur") +
-    ", shootTail: " + f("shootTail") + ", shootA: " + f("shootA") + ", shootT0: 0,\n" +
+    ", shootTail: " + f("shootTail") + ", shootSize: " + f("shootSize") +
+    ", shootA: " + f("shootA") + ", shootT0: 0,\n" +
     "  };";
 }
 
@@ -244,32 +246,32 @@ const PRESETS = {
               nebN:6, nebGap:30, nebR:8, nebA:0.35, nebSat:100, nebLig:54, nebSpan:180, nebPar:0.60,
               starN:260, starGap:46, starA:0.68, clump:1.00, clumpN:5, clumpSpread:4,
               farN:0, farPar:0.50, farA:0.61,
-              shootMs:4000, shootDur:520, shootTail:15, shootA:1.00 },
+              shootMs:2600, shootDur:520, shootTail:15, shootSize:3, shootA:1.00 },
   deep:     { hues:6, span:300, hue0:220, sat:38, lig:5, stripeW:4,
               nebN:2, nebGap:120, nebR:11, nebA:0.26, nebSat:60, nebLig:38, nebSpan:25, nebPar:0.35,
               starN:150, starGap:56, starA:0.55, clump:0.85, clumpN:7, clumpSpread:5.5,
               farN:180, farPar:0.30, farA:0.26,
-              shootMs:9000, shootDur:800, shootTail:6, shootA:0.8 },
+              shootMs:9000, shootDur:800, shootTail:6, shootSize:2, shootA:0.8 },
   vivid:    { hues:12, span:360, hue0:0, sat:70, lig:12, stripeW:2,
               nebN:6, nebGap:50, nebR:10, nebA:0.55, nebSat:86, nebLig:54, nebSpan:80, nebPar:0.6,
               starN:240, starGap:40, starA:0.68, clump:0.6, clumpN:4, clumpSpread:3,
               farN:160, farPar:0.5, farA:0.4,
-              shootMs:4000, shootDur:520, shootTail:5.5, shootA:1 },
+              shootMs:4000, shootDur:520, shootTail:5.5, shootSize:3, shootA:1 },
   dusty:    { hues:9, span:360, hue0:30, sat:40, lig:8, stripeW:3,
               nebN:10, nebGap:46, nebR:4, nebA:0.22, nebSat:55, nebLig:42, nebSpan:30, nebPar:0.7,
               starN:420, starGap:40, starA:0.45, clump:0.9, clumpN:10, clumpSpread:3,
               farN:320, farPar:0.55, farA:0.22,
-              shootMs:6500, shootDur:700, shootTail:3.5, shootA:0.7 },
+              shootMs:6500, shootDur:700, shootTail:3.5, shootSize:2, shootA:0.7 },
   empty:    { hues:8, span:360, hue0:0, sat:46, lig:7, stripeW:3,
               nebN:0, nebGap:70, nebR:8, nebA:0, nebSat:72, nebLig:46, nebSpan:40, nebPar:0.55,
               starN:190, starGap:46, starA:0.62, clump:0, clumpN:5, clumpSpread:3.5,
               farN:0, farPar:0.45, farA:0.34,
-              shootMs:20000, shootDur:620, shootTail:4.5, shootA:0 },
+              shootMs:20000, shootDur:620, shootTail:4.5, shootSize:2, shootA:0 },
   carnival: { hues:18, span:360, hue0:0, sat:90, lig:18, stripeW:1,
               nebN:12, nebGap:40, nebR:12, nebA:0.7, nebSat:100, nebLig:60, nebSpan:160, nebPar:0.8,
               starN:500, starGap:36, starA:0.7, clump:0.5, clumpN:3, clumpSpread:2,
               farN:400, farPar:0.6, farA:0.5,
-              shootMs:1500, shootDur:500, shootTail:8, shootA:1 },
+              shootMs:1500, shootDur:500, shootTail:8, shootSize:4, shootA:1 },
 };
 function apply(p){ for (const k of KEYS) if (p[k] != null) $(k).value = p[k]; KEYS.forEach(sync); push(); }
 

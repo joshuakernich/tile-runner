@@ -47,7 +47,7 @@ bump and installed home-screen copies keep serving the old icons and manifest.
 | `sw.js` | Service worker. Bump `CACHE` every ship. |
 | `levels.js` | The campaign, and the only copy of it. Loaded by the game and the editor as a `<script src>`, and by Node via `require()`. |
 | `copy.js` | Every line the game **says** that is not part of a level: the mechanic cards, and the headings and bylines on a fall, a pause and a clear. Same dual-format arrangement as `levels.js`, same reasons, and edited on the editor's **Copy** tab. Chapter verses are *not* here — they belong to their level. |
-| `level-editor.html` | Visual level editor, on two tabs. **Levels: Level list on the left (drag to reorder — that renumbers the campaign), map in the middle (drag its edges to resize), tool matrix on the right. **Save to levels.js** writes the real file via the File System Access API. **Copy:** every line of writing outside the levels — mech cards, fall, pause, clear — writing `copy.js` through the same machinery under its own file handle. Both tabs autosave drafts to `localStorage`. |
+| `level-editor.html` | Visual level editor, on three tabs. **Levels: Level list on the left (drag to reorder — that renumbers the campaign), map in the middle (drag its edges to resize), tool matrix on the right. **Save to levels.js** writes the real file via the File System Access API. **Copy:** every line of writing outside the levels — mech cards, fall, pause, clear — writing `copy.js` through the same machinery under its own file handle. **Tileverse:** the cloud's shape and its colour — drag a chapter to move it (that writes a `tv:[c,r]` onto the level, and a chapter without one keeps the game's generated slot), and every chapter holding a talisman throws a splash of that charm's colour across the canvas. The colours are not drawn here: the tab keeps a hidden frame of the running game and asks it through `__TR.tileverse.preview()`, so the splash maths has no second copy. Sliders drive `SPLASH` in that frame; **Copy SPLASH block** to keep them. All tabs autosave drafts to `localStorage`. |
 | `runner-lab.html` | Live editor for the runner. A slider per `RUNNER` key, onion skin, stride scrub, guides, real-size previews standing on real track. **Copy RUNNER block** → paste wholesale. |
 | `icon-lab.html` | App-icon composer. Hands the **running game** a canvas and a size and lets it paint the icon with the board's own routines — the cosmos, two tiles and the runner mid-stride — so the icon can't drift from the game. Exports `icon-1024/512/192/180.png` named for the manifest. `tools/check.mjs` fails if this page ever grows its own copy of the art again. |
 | `music-lab.html` | Backing-track editor with per-level overrides and a piano roll. Not yet wired into the game. |
@@ -99,6 +99,13 @@ for the browser, `module.exports = LEVELS_DATA` for `require()`. Two consequence
 **served**, never opened off the filesystem, and `levels.js` has to stay in `sw.js`'s precache or
 the campaign is empty offline. `tools/check.mjs` guards both, and fails if either page grows its
 own inline copy again.
+
+**A chapter's palette is not its own.** It used to be generated from the level's name. It is now
+cut out of ONE canvas that the whole Tileverse is painted on: every chapter holding a talisman
+throws a splash in that charm's colour, the splashes streak and mix, and a chapter's nine colours
+are just the nine pixels its square covers. Moving a chapter on the map therefore RECOLOURS it and
+its neighbours — the map square, the level's own ground, the footer's little map, the answer's ink.
+That is the point, but it means the editor's Tileverse tab is a colour tool as much as a layout one.
 
 **No U-turns.** The runner can't re-enter the cell it's on or the one it just left (the `foldsBack`
 rule). A dead-end pocket therefore doesn't work — the runner must be able to *flow through*. This

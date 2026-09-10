@@ -4332,7 +4332,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.36";                    // shown on the title & pause screens
+  const VERSION = "v10.37";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -5849,7 +5849,13 @@
     // a neon sign is not a tiled pattern.
     { id:"neon",   name:"Neon",      cost:30, earthMode:"scatter",
       earth:["#0b0b14","#0b0b14","#0b0b14","#0b0b14",
-             "#ff2fd0","#2fe8ff","#c6ff2f","#8b2fff"] },
+             "#ff2fd0","#2fe8ff","#c6ff2f","#8b2fff"],
+      // ...but the SHOP does not get the scatter. Eight squares is all a card or the figure's
+      // tile shows of it, and the hash at the origin hands those eight a stripe of black and
+      // two of the four tubes. So the shop is dealt its hand on purpose: every tube once, black
+      // between, not quite a check. Row by row, four across; the board never reads this.
+      shopQuilt:["#0b0b14","#ff2fd0","#0b0b14","#2fe8ff",
+                 "#c6ff2f","#0b0b14","#0b0b14","#8b2fff"] },
     // Every colour it can find, one to a square, fixed per place on the board so the ground
     // does not shimmer as the camera moves.
     { id:"poly",   name:"Polychrome", cost:30, earthMode:"scatter",
@@ -5895,6 +5901,9 @@
   };
   TRACKS.forEach(t => { if (t.earth) t.rail = railFrom(t.earth); });
 
+  // A design's `shopQuilt` as a layout: two rows of four, repeated, so any two rows of a tile
+  // show the same eight. Bitwise, so it holds either side of the origin.
+  const quiltLay = q => (cols, gi, gj) => q[((gj & 1) << 2) | (gi & 3)];
   // One swatch routine for all twelve: the earth, laid out as this design lays it out. Drawn
   // from the SAME fields the board draws from, so a swatch can never show a design the game
   // does not paint.
@@ -5909,12 +5918,12 @@
     // of the height to say it. What is bought here is the ground.
     t.swatch = (g,S) => {
       const cols = t.earth || TRACK_DEFAULT.earth;
-      const lay = EARTH_LAYOUT[t.earthMode || "check"] || EARTH_LAYOUT.check;
+      const lay = t.shopQuilt ? quiltLay(t.shopQuilt)
+                : EARTH_LAYOUT[t.earthMode || "check"] || EARTH_LAYOUT.check;
       // Sized from the SQUARES out, not the card in: four across is a tile's own quarter-grid,
       // and the height is a whole number of rows of them, so a design whose pattern repeats
-      // every two rows — every one of them does — shows its repeat. TWO rows is that repeat
-      // and nothing more: a third row is the first one again, which buys height without
-      // telling you anything the card had not already said.
+      // every two rows shows its repeat. TWO rows is that repeat and nothing more. (A scatter
+      // has no repeat, which is what a `shopQuilt` is for — see Neon.)
       const n = 4, ROWS = 2;
       const w = S*0.88, q = w/n;
       const h = ROWS*q, x = (S-w)/2, y = (S-h)/2;
@@ -6051,6 +6060,7 @@
   // It rides in FRONT of `settings.look` rather than replacing it, so the moment it is cleared
   // the real look is back: there is nothing to restore and so nothing to get wrong.
   let shopPreview = null;                 // { key, id }, or null
+  let shopQuiltOn = false;                // true only while the shop's figure paints its tile
   // How far the figure was slid over last time the shop was built, in pixels. The menu is
   // rebuilt from scratch on every tap, so the canvas that would animate is a NEW element each
   // time with no old position to leave — this is that position, remembered.
@@ -6360,7 +6370,13 @@
     updateScoreHud();
     updateKeyHud();
     const seed = hashSeed(label);            // the melody's seed: unsalted, so tunes never move
-    state.bgTheme = genTheme(themeSeed(label));   // ...and the look, which the salt does move
+    // THE SAME PAINT THE MAP IS MADE OF. A chapter's ground used to be generated from its own
+    // name — a palette that existed nowhere else and answered to nothing — so the square you
+    // pressed on the map and the level it opened were two unrelated colour schemes. It is the
+    // nine pixels of the canvas this chapter covers now, which is what its square on the map is
+    // drawn from: dive into a blue square and you land on blue ground.
+    // themeSeed is still what the CINEMATIC's own quilt is made from; only a chapter's has moved.
+    state.bgTheme = chapterTheme(levelIdx);
     Sound.setMusic(L.music);                 // this level's music block, over the defaults
     Sound.setSong(seed);                     // per-level melody
     Sound.resetMelody();
@@ -11034,8 +11050,24 @@
     route:1500,    // the rebuild takes this long however long the route is
   };
   let win = null;
-  let _mapCells = null;                         // tileverseLayout is a search; do it once
-  const mapCells = () => (_mapCells || (_mapCells = tileverseLayout(LEVELS.length)));
+  // WHERE EACH CHAPTER SITS ON THE MAP. tileverseLayout is a search that packs the cloud into a
+  // wobbling disc; a chapter that carries `tv: [c, r]` in levels.js overrides its slot, so the
+  // shape can be built by hand in the editor's Tileverse tab. Per level rather than all-or-
+  // nothing, so moving one chapter does not force the other fifty to be placed by hand first.
+  // The generated slots are still worked out either way — they are what an unplaced chapter
+  // falls back to, and they cost one search on the first frame the map is looked at.
+  let _mapCells = null;
+  const mapCells = () => (_mapCells || (_mapCells = (() => {
+    const gen = tileverseLayout(LEVELS.length);
+    const out = LEVELS.map((L, i) => Array.isArray(L.tv) && L.tv.length === 2
+      ? { c: L.tv[0] | 0, r: L.tv[1] | 0 }
+      : (gen[i] || { c: 0, r: 0 }));
+    // ...and pulled back to the origin, because a hand-placed cloud can be anywhere and every
+    // measurement downstream (the camera's bounds, the chip, the finale) assumes it starts at 0.
+    const minC = Math.min(...out.map(p => p.c)), minR = Math.min(...out.map(p => p.r));
+    for (const p of out) { p.c -= minC; p.r -= minR; }
+    return out;
+  })()));
   const easeOut  = k => 1 - Math.pow(1 - k, 3);
   const easeIn   = k => k*k*k;
   const easeBoth = k => k < 0.5 ? 4*k*k*k : 1 - Math.pow(-2*k + 2, 3)/2;
@@ -11261,7 +11293,7 @@
   // Tileverse chip lifts it to read on a dark map, the answer darkens it to read on white — so
   // the mixing lives here and the tinting lives with them.
   function themeMean(i) {
-    const cols = (i === INTRO_CELL ? VOID_THEME : genTheme(themeSeed(String(i + 1)))).colors;
+    const cols = (i === INTRO_CELL ? VOID_THEME : chapterTheme(i)).colors;
     let r = 0, g = 0, b = 0;
     for (const col of cols) {
       const m = /hsl\((-?[\d.]+),\s*([\d.]+)%,\s*([\d.]+)%\)/.exec(col);
@@ -11826,6 +11858,141 @@
   // The quilt and the paper only: no number, no cross, no ring. Those are things the MAP says
   // about a chapter you might go to, and a square being dragged into a black hole is not one.
   // At the size these reach a number would be two illegible pixels anyway.
+  // ---- THE PAINT ---------------------------------------------------------------------------
+  // THE TILEVERSE IS ONE CANVAS, not fifty separate pictures. Every chapter is a 3x3 block of
+  // pixels in it — the same LEVEL_SWATCH quilt its square on the map has always been drawn from —
+  // so the whole cloud is a single sheet of paint that happens to be cut into chapters.
+  //
+  // Where the paint comes from: every chapter that HOLDS A TALISMAN is a splash centred on its
+  // own square, in that charm's colour. The splash reaches a long way and it is not round — it
+  // throws streaks, and two splashes that reach each other mix. What a chapter's palette IS, is
+  // whatever the paint happens to be doing across its nine pixels. Nothing is generated per
+  // chapter any more: a chapter next door to the Bell is blue because the Bell is next door,
+  // which is a thing you can see on the map and a thing the editor lets you compose.
+  const SPLASH = {
+    reach:   14,     // how far a splash carries, in PIXELS — a chapter is three of them wide.
+                     // This is where it has fallen to a third of its strength, not where it
+                     // stops: it goes on past that, quietly, which is what lets two splashes a
+                     // long way apart still mix somewhere in the middle.
+    fall:   2.90,    // the shape of that fall. 2 is a bell; below it the shoulders are wider.
+    bite:   6.00,    // how hard the NEAREST splash wins the mix. At 1 the colours are averaged
+                     // in proportion to their reach, which over five splashes is an average of
+                     // the whole rainbow — and the average of the whole rainbow is brown. This
+                     // is the power the weights are raised to before they mix, and it is the
+                     // difference between paint thrown and paint stirred.
+    lobes:     0,    // streaks thrown from each middle
+    streak: 0.00,    // how much further a streak reaches than the gaps between them
+    sharp:  2.40,    // ...and how pointed it is. High is a starfish, low is a blob.
+    twist:  0.055,   // how much the streaks curl as they go out, radians per pixel
+    sat:      64,    // saturation at the middle of a splash
+    satFar:   20,    // ...and out where nothing much reaches
+    lig:      34,    // lightness at the middle
+    ligFar:    9,    // ...and out in the dark between splashes
+    grain:  0.22,    // per-pixel jitter, so a splash is paint and not a gradient
+  };
+  // Every splash on the map: a chapter's cell, and the colour of the charm it holds. Worked out
+  // once — the campaign does not move while the game is running — and cleared with _mapCells,
+  // which is the other thing that would have to change for this to be wrong.
+  let _splashes = null;
+  function splashes() {
+    if (_splashes) return _splashes;
+    const cells = mapCells();
+    const out = [];
+    LEVELS.forEach((L, i) => {
+      const p = cells[i]; if (!p) return;
+      for (const t of (L.talismans || [])) {
+        const def = talById(Array.isArray(t) ? t[2] : t.id);
+        if (!def) continue;
+        // The middle of the chapter's own 3x3 block, in pixel coordinates.
+        out.push({ x: p.c*LEVEL_SWATCH + 1, y: p.r*LEVEL_SWATCH + 1,
+                   rgb: hexRGB(talFace(def)),
+                   // Each splash is thrown at its own angle, so two neighbours never streak the
+                   // same way. Off the charm's id, so it is the same every time the game runs.
+                   ph: (bgHash(i * 31 + 5, 17) % 1000) / 1000 * Math.PI * 2 });
+      }
+    });
+    return (_splashes = out);
+  }
+  const hexRGB = (hex) => { const n = parseInt(String(hex).replace("#",""), 16) || 0;
+                            return [(n>>16)&255, (n>>8)&255, n&255]; };
+  // ONE PIXEL OF THE CANVAS. Every splash within reach is weighted by how far away it is and by
+  // whether this pixel is standing in one of its streaks; the colours are mixed in those
+  // proportions, and the TOTAL weight — how much paint landed here at all — is what decides
+  // whether the pixel is a bright piece of a splash or the dark between two of them.
+  function paintAt(px, py) {
+    const S = SPLASH, list = splashes();
+    let r = 0, g = 0, b = 0, W = 0, top = 0;
+    for (const s of list) {
+      const dx = px - s.x, dy = py - s.y;
+      const d = Math.hypot(dx, dy);
+      // The streaks CURL: the angle they are measured at turns with distance, so a splash is a
+      // catherine wheel rather than a star, and two of them tangle where they meet.
+      const th = Math.atan2(dy, dx) + s.ph + d * S.twist;
+      const lobe = Math.pow(0.5 + 0.5*Math.cos(th * S.lobes), S.sharp);
+      const reach = S.reach * (1 + S.streak * lobe);
+      // EXPONENTIAL, not a rational falloff. `1/(1 + (d/reach)^n)` is nearly flat for anything
+      // inside the reach — every splash within eleven pixels came out at a weight of about one,
+      // so the mix was five colours averaged equally and the whole map went the brown that the
+      // average of a rainbow is. This has a real gradient from the first pixel: at the reach it
+      // is down to a third, at twice the reach to a twentieth.
+      // ...and the streaks are in the WEIGHT as well as the range. Extending the reach alone
+      // moved where a splash ended without changing how strong it was on the way there, which
+      // is a longer smudge rather than a ray.
+      // ...but NOT at the middle. A splash whose streaks happened to point away from its own
+      // centre was throttled to a third of its strength ON ITS OWN CHAPTER, and a neighbour with
+      // a ray pointing that way beat it — so the Bell's chapter came out orange. The rays fade
+      // in over the first reach: at the middle there is only the splash, and the shape of it is
+      // something that develops on the way out.
+      const rayK = Math.min(1, d / S.reach);
+      const ray = 1 - rayK * 0.70 * (1 - lobe);
+      const w = ray * Math.exp(-Math.pow(d / reach, S.fall));
+      if (w > top) top = w;                      // ...how much the STRONGEST one landed here
+      const m = Math.pow(w, S.bite);             // ...and how much it gets to say about the hue
+      r += s.rgb[0]*m; g += s.rgb[1]*m; b += s.rgb[2]*m; W += m;
+    }
+    if (W <= 1e-6) return { h: 250, k: 0 };
+    // The MIX, as a hue. Only the hue is kept: a weighted average of three saturated colours is
+    // a muddy middle grey, and what is wanted is the colour they mix TO, laid down at this
+    // canvas's own saturation.
+    const mx = Math.max(r, g, b) / W, mn = Math.min(r, g, b) / W;
+    const R = r/W, G = g/W, B = b/W, dd = mx - mn;
+    let h = 0;
+    if (dd > 0.5) h = (mx === R ? ((G-B)/dd + (G < B ? 6 : 0)) : mx === G ? ((B-R)/dd + 2)
+                                                                          : ((R-G)/dd + 4)) * 60;
+    // ...and HOW MUCH paint is here is the strongest splash alone, not the crowd. Summed, five
+    // faint splashes reaching the same empty corner would light it as brightly as standing in
+    // the middle of one — and then there is no dark between them for the splashes to be
+    // dramatic against.
+    return { h: (h + 360) % 360, k: Math.min(1, top) };
+  }
+  // ...and that pixel as a colour, with a little jitter on it so a splash reads as paint thrown
+  // rather than as a gradient laid down. Hashed off the pixel, so it never crawls.
+  function paintPx(px, py) {
+    const S = SPLASH, p = paintAt(px, py);
+    const n = bgHash(px + 4096, py + 4096);
+    const j = ((n % 1000) / 1000 - 0.5) * 2;
+    const k = p.k;
+    const sat = (S.satFar + (S.sat - S.satFar) * k) * (1 + j * S.grain);
+    const lig = (S.ligFar + (S.lig - S.ligFar) * k) * (1 + j * S.grain * 0.7);
+    return "hsl(" + Math.round(p.h + j * 14) + "," + clamp(sat, 0, 100).toFixed(1) + "%,"
+                  + clamp(lig, 1, 70).toFixed(1) + "%)";
+  }
+  // A CHAPTER'S PALETTE, cut out of the canvas: the nine pixels its square covers, in reading
+  // order — which is exactly the order drawMapSquare lays a LEVEL_SWATCH quilt in, so the map
+  // square IS those nine pixels rather than a picture of them. The level's own ground takes the
+  // same nine, where they run as diagonal stripes instead; it is the same paint either way.
+  const _chapTheme = new Map();
+  function chapterTheme(i) {
+    let hit = _chapTheme.get(i);
+    if (hit) return hit;
+    const p = mapCells()[i] || { c: 0, r: 0 }, q = LEVEL_SWATCH, cols = [];
+    for (let k = 0; k < q*q; k++)
+      cols.push(paintPx(p.c*q + (k % q), p.r*q + Math.floor(k/q)));
+    hit = { colors: cols, patchW: 0.55, drift: 0.5, dir: 1, stripeW: 2 };
+    if (_chapTheme.size > 200) _chapTheme.clear();
+    _chapTheme.set(i, hit);
+    return hit;
+  }
   function drawMapSquare(i, x, y, w) {
     if (!(w > 0.5)) return;
     // The film's square has no palette — it is a scatter of white on the map and nothing else —
@@ -11838,7 +12005,7 @@
       ctx.restore();
       return;
     }
-    const cols = genTheme(themeSeed(String(i + 1))).colors;
+    const cols = chapterTheme(i).colors;
     ctx.save();
     rrect(x, y, w, w, tileR(w)); ctx.clip();
     const q = LEVEL_SWATCH, qs = w/q;
@@ -11880,7 +12047,7 @@
       // you watch, which is the whole of "the next level comes alive".
       let lit = (isDone(i) || i <= furthest + 1) ? 1 : 0;
       if (o.litIdx === i && o.lit != null) lit = o.lit;
-      const cols = genTheme(themeSeed(String(i + 1))).colors;
+      const cols = chapterTheme(i).colors;
       ctx.save();
       rrect(x, y, w, w, r); ctx.clip();
       const q = LEVEL_SWATCH, qs = w/q;
@@ -12744,9 +12911,11 @@
     farPar:   0.50,   // the share of the near field's movement it would take
     farA:     0.61,
     // ---- shooting stars ----
-    shootMs: 4000,    // one every this often
+    shootMs: 2600,    // one every this often
     shootDur: 520,    // how long a fall lasts
     shootTail: 15,    // the trail, in patches — long enough to cross a good part of the screen
+    shootSize:  3,    // the head, in px. The trail is one less: a fall that thins as it goes is
+                      // the only thing that says which end of it is the front.
     shootA:   1.00,
     shootT0:  0,      // where the clock is counted from. The lab's "one now" moves it; nothing
                       // else ever touches it, and at 0 the falls simply run off the page clock.
@@ -15655,7 +15824,8 @@
   function drawGroundQuilt(x, y, s, c, r) {
     const N = Math.max(1, Math.round(TILE.strataN)), it = lookItem("track");
     const cols = it.earth || TRACK_DEFAULT.earth;
-    const lay = EARTH_LAYOUT[it.earthMode || "check"] || EARTH_LAYOUT.check;
+    const lay = shopQuiltOn && it.shopQuilt ? quiltLay(it.shopQuilt)
+              : EARTH_LAYOUT[it.earthMode || "check"] || EARTH_LAYOUT.check;
     const q = s/N;
     ctx.globalAlpha = Math.max(0, Math.min(1, TILE.strata));   // how far the piecing shows
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
@@ -17757,7 +17927,7 @@
       if (a < 0.01) continue;
       ctx.globalAlpha = a;
       ctx.fillStyle = "#ffffff";
-      const sz = i < 2 ? 2 : 1;
+      const sz = i < 2 ? C.shootSize : Math.max(1, C.shootSize - 1);
       ctx.fillRect(Math.round(x - Math.cos(ang) * len * f),
                    Math.round(y + Math.sin(ang) * len * f), sz, sz);
     }
@@ -19822,7 +19992,10 @@
       withCanvas(g, rs, foot.x - rs/2, foot.y - rs/2, () => {
         const n = { c:0, r:0 };
         drawGlass(0, 0, cell);
-        drawPlatformSurface(n, tileSurface(n, { c:-1, r:0 }, { c:1, r:0 }), curTrack());
+        // The same eight squares the card shows, where the design deals the shop a hand of its own.
+        shopQuiltOn = true;
+        try { drawPlatformSurface(n, tileSurface(n, { c:-1, r:0 }, { c:1, r:0 }), curTrack()); }
+        finally { shopQuiltOn = false; }
       });
       // ...and the hole the tag's string is threaded through, PUNCHED in its top-right corner —
       // destination-out, so what shows through it is whatever is behind the canvas, exactly as
@@ -20835,6 +21008,28 @@
     // What the last paint used — the two layers separately, because the board's quilt goes over
     // the cosmos in the same frame and one slot would only report whichever went on last.
     lastSky: () => ({ sky: voidWas && { ...voidWas }, quilt: quiltWas && { ...quiltWas } }),
+    // The editor's Tileverse tab drives these. `preview` takes a whole candidate layout — one
+    // [c,r] per chapter — installs it, and hands back the paint it produces, so the editor can
+    // ask what a move would look like before anything is written to levels.js. It is the GAME
+    // answering, which is the whole point: the splash maths lives in one place and the editor
+    // has no copy of it to drift from.
+    tileverse: {
+      cells:   () => mapCells().map(p => ({ c: p.c, r: p.r })),
+      splash:  () => splashes().map(s => ({ x: s.x, y: s.y })),
+      paint:   (i) => chapterTheme(i).colors.slice(),
+      preview: (tv) => {
+        _mapCells = (tv || []).map(p => ({ c: p[0] | 0, r: p[1] | 0 }));
+        const minC = Math.min(...(_mapCells.map(p => p.c).concat([0])));
+        const minR = Math.min(...(_mapCells.map(p => p.r).concat([0])));
+        for (const p of _mapCells) { p.c -= minC; p.r -= minR; }
+        _splashes = null; _chapTheme.clear(); patchCache.clear();
+        return _mapCells.map((p, i) => ({ c: p.c, r: p.r, cols: chapterTheme(i).colors.slice() }));
+      },
+      // ...and the block the splashes are thrown by, so the editor can tune the paint too.
+      splashBlock: (patch) => { if (patch) Object.assign(SPLASH, patch);
+                                _splashes = null; _chapTheme.clear(); patchCache.clear();
+                                return { ...SPLASH }; },
+    },
     // cosmos-lab.html drives this: the sky's own block, live.
     cosmos: (patch) => { if (patch) Object.assign(COSMOS, patch); applyCosmos(); return { ...COSMOS }; },
     // ...and one falling star right now, without waiting out the clock: the phase is counted
@@ -21288,7 +21483,7 @@
   // overlapping its neighbours twice reads as a grid of dark lines nobody drew.
   function cinePanel(pts, idx, alpha, shade, palette, k){
     if (alpha <= 0.004) return;
-    const cols = genTheme(themeSeed(String(idx + 1))).colors;
+    const cols = chapterTheme(idx).colors;
     const N = LEVEL_SWATCH, P = N + 1;
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -21457,7 +21652,7 @@
     if (alpha <= 0.004 || !(q > 0.4)) return;
     // The LEVEL's own theme, not a palette borrowed from it — so what the tile resolves into
     // as we go in is literally the ground level one is played on.
-    const T = genTheme(themeSeed(String(idx + 1))), cols = T.colors;
+    const T = chapterTheme(idx), cols = T.colors;
     const K = LEVEL_SWATCH, over = 1;
     const i1 = Math.floor((bx - ox)/q + 1e-6), i2 = Math.ceil((bx + bw - ox)/q - 1e-6);
     const j1 = Math.floor((by - oy)/q + 1e-6), j2 = Math.ceil((by + bh - oy)/q - 1e-6);
@@ -22687,10 +22882,16 @@
     const spectrum = shimmerGrad(span, phase);
     ctx.save();
     ctx.translate(X, Y);
-    // the bloom: the same word a hair larger, added, so colour spills past the edge
+    // NOTHING HERE IS SCALED. The bloom used to be the same word drawn a hair larger, so colour
+    // spilled a little past the edge — which meant the spectrum was landing on a shape 3.5% wider
+    // than the letters it was meant to be light ON, and the mismatch showed as a coloured fringe
+    // that grew with the size of the type: at title size it stood a good two pixels off the gold
+    // all the way round. Every pass now lands on exactly the glyphs, so what you see is the word
+    // catching light rather than a word with a halo behind it. It is still added rather than laid
+    // over — the lift is the point, the spill was not.
     ctx.globalCompositeOperation = "lighter";
     ctx.globalAlpha = A * 0.20;
-    ctx.save(); ctx.scale(1.035, 1.045); ctx.fillStyle = spectrum; ctx.fillText(text, 0, 0); ctx.restore();
+    ctx.fillStyle = spectrum; ctx.fillText(text, 0, 0);
     // the spectrum, over the gold rather than instead of it
     ctx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = A * 0.72;
