@@ -711,16 +711,18 @@
   /* No slab means no slab to press down: the press is the item dimming. */
   #wintabs button:active { transform:none; opacity:0.4; }
   /* The Tileverse's own mark is THE TILEVERSE — every chapter as one pixel, in the shape they
-     actually make. It takes the map's own proportions from --quilt-ar rather than being forced
-     square: the campaign is wider than it is tall, and a square crop of it would be a different
-     map. Bounded on BOTH axes — the tab's width less its padding, and a mark's height — so a
-     campaign that grows in either direction still fits the tab rather than bursting it.
-     Pixelated, like every other quilt in the game, which is the whole point here: one chapter
-     has to land on one hard-edged pixel. */
+     actually make, at the map's own proportions rather than forced square.
+     AN <img>, NOT A BACKGROUND. It used to be an empty <i> wearing the map as a background, with
+     its width left to `aspect-ratio` and capped at `max-width:100%` of a box that is itself only
+     as wide as its content — a percentage of a width that depends on the thing it caps. Chrome
+     settles that circle generously; WebKit is entitled to settle it at nothing, and on iPhone
+     the mark did not show. An image has pixels of its own, so `height` alone decides its width
+     in every engine, and the cap is a fixed number with object-fit keeping the map's shape if a
+     campaign ever grows wide enough to reach it.
+     Pixelated, like every other quilt in the game: one chapter lands on one hard-edged pixel. */
   #wintabs .tv-chip { display:block; image-rendering:pixelated;
-    max-width:100%; max-height:var(--wt-mark); width:auto; height:var(--wt-mark);
-    aspect-ratio:var(--quilt-ar, 1);
-    background-image:var(--quilt, none); background-size:100% 100%; }
+    height:var(--wt-mark); width:auto; max-width:calc(var(--wt-mark) * 2.5);
+    object-fit:contain; }
   /* THE MARK'S SIZE, once, for all three. Two grid squares: with a two-line caption under it and
      one square of air above and below, that is what fits inside five. It used to be 46 — the
      orrery's own ATOM_PX, sized when a tab was as tall as a chapter square. The atom canvas is
@@ -1635,7 +1637,55 @@
                 1.7px 2px 0 color-mix(in srgb, var(--ink) 71%, #000),
                 2.55px 3px 0 color-mix(in srgb, var(--ink) 64%, #000),
                 3.4px 4px 0 color-mix(in srgb, var(--ink) 57%, #000),
-                4.25px 5px 0 color-mix(in srgb, var(--ink) 51%, #000); }
+                4.25px 5px 0 color-mix(in srgb, var(--ink) 51%, #000),
+                var(--head-glow, 0 0 0 transparent); }
+  /* ...and a BLACK GLOW under a room's name, over the spark behind it (see drawHeadSparks, which
+     lays the spark on the board's canvas, under every element on the page). Last in the list, so
+     it is painted beneath the extrusion and the face: text-shadows stack first-on-top. On the
+     four headings only — .tv-word also names the way home on a pause or a fall, which has no
+     spark to sit over. */
+  #menu-title.sec-set, #menu-title.sec-tal, #menu-title.sec-shop, #wintop-title {
+    --head-glow: 0 0 6px rgba(0,0,0,0.70), 0 0 16px rgba(0,0,0,0.65), 0 0 32px rgba(0,0,0,0.55); }
+  /* ...and each room's spark in THE ROOM'S OWN COLOUR, the same one its heading and its lit tab
+     wear — pointed at the --sec-* tokens rather than copied, so retinting a room retints its
+     spark with it. Read by drawHeadSparks off the heading itself; the heart stays white. */
+  #menu-title.sec-tal  { --spark:var(--sec-tal); }
+  #wintop-title        { --spark:var(--sec-tv); }
+  #menu-title.sec-shop { --spark:var(--sec-shop); }
+  #menu-title.sec-set  { --spark:var(--sec-set); }
+  /* ...and a SHIMMER over the name: a bright white band crossing it, over a rainbow at half strength that
+     drifts the other way round — the title screen's own two clocks, 2.6s for the glint and 5.2s
+     for the spectrum. On a COPY of the word laid over the real one (content off data-t, which
+     the screens set, line break and all), because text-shadow paints OVER a clipped background:
+     put on the heading itself, the extrusion would have buried it. The copy wears no shadow of
+     its own, so the extrusion, the glow and the spark all stay where they are underneath.
+     The rainbow's stops are laid down twice in a band two boxes wide, so sliding it one box is
+     one whole turn and the loop has no seam. The glint crosses from the left and is off the far
+     edge at both ends of its travel, so its jump back is never on screen. */
+  #menu-title.sec-set::after, #menu-title.sec-tal::after, #menu-title.sec-shop::after,
+  #wintop-title::after {
+    content:attr(data-t); position:absolute; left:0; right:0; top:0; bottom:0;
+    white-space:pre-line; pointer-events:none; text-shadow:none;
+    color:transparent; -webkit-text-fill-color:transparent;
+    background-image:
+      linear-gradient(100deg, rgba(255,255,255,0) 43%, rgba(255,255,255,0.55) 47%,
+                              rgba(255,255,255,1) 50%, rgba(255,255,255,0.55) 53%,
+                              rgba(255,255,255,0) 57%),
+      linear-gradient(96deg,
+        rgba(255,86,86,0.50) 0%,     rgba(255,176,60,0.46) 8.3%,  rgba(250,232,70,0.44) 16.7%,
+        rgba(90,230,120,0.48) 25%,   rgba(70,190,255,0.50) 33.3%, rgba(190,120,255,0.50) 41.7%,
+        rgba(255,86,86,0.50) 50%,    rgba(255,176,60,0.46) 58.3%, rgba(250,232,70,0.44) 66.7%,
+        rgba(90,230,120,0.48) 75%,   rgba(70,190,255,0.50) 83.3%, rgba(190,120,255,0.50) 91.7%,
+        rgba(255,86,86,0.50) 100%);
+    background-size:300% 100%, 200% 100%; background-repeat:no-repeat;
+    -webkit-background-clip:text; background-clip:text;
+    animation:head-shimmer 5200ms linear infinite; }
+  @keyframes head-shimmer {
+    0%     { background-position:100% 0, 0% 0; }
+    50%    { background-position:0% 0,   50% 0; }
+    50.01% { background-position:100% 0, 50% 0; }
+    100%   { background-position:0% 0,   100% 0; }
+  }
   /* the shop: him at the top, tucked right under the title, then a tab per category */
   /* No scaling. The width is set INLINE, to whatever the canvas was drawn at, so one canvas
      pixel is one CSS pixel and the tile under him comes out exactly the size of the tile he
@@ -2038,7 +2088,7 @@
          same plate going to the thing you just pressed. -->
     <i class="wt-plate"></i>
     <button id="win-tal"><span class="wt-ico"></span><span class="wt-lbl">Talismans</span></button>
-    <button id="win-tv" class="on" aria-current="page"><span class="wt-ico"><i class="tv-chip"></i></span><span class="wt-lbl">Tileverse</span></button>
+    <button id="win-tv" class="on" aria-current="page"><span class="wt-ico"><img class="tv-chip" alt=""></span><span class="wt-lbl">Tileverse</span></button>
     <button id="win-shop"><span class="wt-ico"></span><span class="wt-lbl">Tile Shop</span></button>
     <button id="win-cog" aria-label="Settings"><span class="wt-ico"></span><span class="wt-lbl">Settings</span></button>
   </div>
@@ -4241,7 +4291,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.38";                    // shown on the title & pause screens
+  const VERSION = "v10.39";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -11210,7 +11260,7 @@
   // Tileverse chip lifts it to read on a dark map, the answer darkens it to read on white — so
   // the mixing lives here and the tinting lives with them.
   function themeMean(i) {
-    const cols = (i === INTRO_CELL ? VOID_THEME : chapterTheme(i)).colors;
+    const cols = (i === INTRO_CELL ? INTRO_THEME : chapterTheme(i)).colors;
     let r = 0, g = 0, b = 0;
     for (const col of cols) {
       const m = /hsl\((-?[\d.]+),\s*([\d.]+)%,\s*([\d.]+)%\)/.exec(col);
@@ -11267,8 +11317,7 @@
     // INTO and far too dark for a pixel you look AT — on a lit tab they all went to the same
     // near-black. The hue and the relationship between the chapters are untouched.
     for (const a of all) {
-      g.fillStyle = a.i === INTRO_CELL ? "rgba(232,230,255,0.55)"
-                                       : tintHex(themeMean(a.i), 0, 1.25, 22);
+      g.fillStyle = tintHex(themeMean(a.i), 0, 1.25, 22);   // the film is a quilt now too
       g.fillRect(a.p.c - minC, a.p.r - minR, 1, 1);
     }
     return (_tvChip = { url: c.toDataURL(), w, h, canvas: c });
@@ -11533,8 +11582,7 @@
         inkWash(c2.getContext("2d"), tvc.canvas, vInk);
         tvc.inked[vInk] = c2.toDataURL();
       }
-      chip.style.setProperty("--quilt", "url(" + tvc.inked[vInk] + ")");
-      chip.style.setProperty("--quilt-ar", tvc.w + " / " + tvc.h);
+      if (chip.getAttribute("src") !== tvc.inked[vInk]) chip.src = tvc.inked[vInk];
     }
   }
   // NOTE that this does not touch the music. It runs on the way to a MENU as much as on the way
@@ -11791,6 +11839,13 @@
   // it is set in rather than a level's palette. It is not a chapter and does not answer to
   // winOpen — hence an index of its own, which is what winCellAt hands back for it.
   const INTRO_CELL = -1;
+  // THE FILM'S QUILT. It has no chapter and no splash, so it is pieced out of the dark instead:
+  // nine grey-to-black tones with the cosmos's cool cast, one to each square of its 3x3, so it
+  // reads as a square laid out of tiles rather than as a gap in the map. Its map square, the
+  // square it is swallowed as, its pixel on the Tileverse tab and the answer that opens it all
+  // read from here.
+  const INTRO_THEME = { colors: ["#141419", "#23232a", "#0c0c10", "#2c2c34", "#1a1a20",
+                                 "#30303a", "#101014", "#26262e", "#1d1d23"] };
   function introMapCell() { const p = mapCells()[0] || { c: 0, r: 0 }; return { c: p.c - 1, r: p.r }; }
   // ONE chapter, at an arbitrary place and size — for the finale, which throws them about.
   // The quilt and the paper only: no number, no cross, no ring. Those are things the MAP says
@@ -12023,19 +12078,66 @@
     sparkDisc(g, WHITE, size*P.core, P.coreA*tw, 0.45);
     g.restore();
   }
+  // THE SPARK UNDER A SECTION'S NAME. The four rooms' headings are DOM and the spark is canvas,
+  // so it is laid on the board's own canvas — which is under every menu and under the map's
+  // header — at wherever the heading's text actually is this frame. ONE PER LINE: a heading that
+  // runs to two (HOLY / TALISMANS) gets a spark behind each, measured off the text's own line
+  // boxes rather than the heading's full-width block. It leans with the heading, whatever its
+  // transform says, and it fades with it — a whip between rooms carries the heading's opacity,
+  // and the spark takes the same number.
+  // Sized to the TYPE (its font size) with the across streak stretched to overshoot each end of
+  // the line by what it overshoots a square by, so a long word is crossed rather than
+  // swallowed.
+  const _headRange = document.createRange();
+  function sectionHeads() {
+    const out = [];
+    const mt = document.getElementById("menu-title");
+    if (menuEl && menuEl.classList.contains("show") && mt && !mt.classList.contains("head-off")
+        && /\bsec-(set|tal|shop)\b/.test(mt.className)) out.push(mt);
+    const wt = document.getElementById("wintop"), wtt = document.getElementById("wintop-title");
+    if (wt && wt.classList.contains("show") && wtt && !wtt.classList.contains("head-off")) out.push(wtt);
+    return out;
+  }
+  function drawHeadSparks(ts) {
+    const heads = sectionHeads(); if (!heads.length) return;
+    const o = canvasOrigin();
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    heads.forEach((el, hi) => {
+      const cs = getComputedStyle(el), a = +cs.opacity;
+      if (!(a > 0.01)) return;
+      const fs = parseFloat(cs.fontSize) || 46;
+      const spk = cs.getPropertyValue("--spark").trim() || null;   // the room's own spark colour
+      const m = /matrix\(([^,]+),\s*([^,]+)/.exec(cs.transform);
+      const lean = m ? Math.atan2(+m[2], +m[1]) : 0;
+      // The text's own line boxes, merged into one per line: fragments whose middles are within
+      // half a line of each other are the same line.
+      _headRange.selectNodeContents(el);
+      const lines = [];
+      for (const r of _headRange.getClientRects()) {
+        if (r.width < 1 || r.height < 1) continue;
+        const cy = r.top + r.height/2;
+        const L = lines.find(l => Math.abs(l.cy - cy) < fs*0.5);
+        if (L) { L.l = Math.min(L.l, r.left); L.r = Math.max(L.r, r.right); }
+        else lines.push({ cy, l: r.left, r: r.right });
+      }
+      lines.forEach((L, n) => {
+        const half = (L.r - L.l) / 2;
+        ctx.save();
+        ctx.translate(L.l + half - o.x, L.cy - o.y);
+        ctx.rotate(lean);
+        drawSpark(ctx, 0, 0, fs, ts, { alpha: a, seed: hi*0.23 + n*0.41, col: spk,
+                                       tune: { h: half/fs + (SPARK.h - 0.5) } });
+        ctx.restore();
+      });
+    });
+    ctx.restore();
+  }
   function drawMapSquare(i, x, y, w) {
     if (!(w > 0.5)) return;
     // The film's square has no palette — it is a scatter of white on the map and nothing else —
     // so falling into the hole it is a pale square rather than a chapter's quilt.
-    if (i === INTRO_CELL) {
-      ctx.save();
-      rrect(x, y, w, w, tileR(w)); ctx.clip();
-      ctx.fillStyle = "rgba(232,230,255,0.30)"; ctx.fillRect(x, y, w, w);
-      grainFill(x, y, w, w, TILE.bodyGrain * ctx.globalAlpha);
-      ctx.restore();
-      return;
-    }
-    const cols = chapterTheme(i).colors;
+    const cols = (i === INTRO_CELL ? INTRO_THEME : chapterTheme(i)).colors;
     ctx.save();
     rrect(x, y, w, w, tileR(w)); ctx.clip();
     const q = LEVEL_SWATCH, qs = w/q;
@@ -12069,6 +12171,13 @@
     // light comes from behind the place you picked rather than across its face. Everything else
     // keeps its order.
     const sel = o.ring > 0 && o.ringIdx >= 0 && o.ringIdx < cells.length ? o.ringIdx : -1;
+    // EVERY SQUARE BUT THE CHOSEN ONE IS A LITTLE SEE-THROUGH, so the one you picked is the only
+    // solid thing in the cloud. The tile only — its number or cross stays at full strength.
+    // At anything under 1 the quilt's patches must MEET rather than overlap: the half-pixel
+    // overdraw that closes their seams when opaque composites twice when not, and draws the
+    // lattice back in as bright lines. So their edges are snapped to device pixels and shared.
+    const UNSEL_A = 0.82;
+    const snap = v => Math.round(v * dpr) / dpr;
     const order = [];
     for (let i = 0; i < cells.length; i++) if (i !== sel) order.push(i);
     if (sel >= 0) order.push(sel);
@@ -12106,10 +12215,15 @@
       // what the menu's own map does to a locked tile, so the two agree.
       ctx.save();
       const grey = 1 - lit, bright = 1 - 0.45*(1 - lit);
+      const tileA = i === sel ? 1 : UNSEL_A;
+      ctx.globalAlpha = A * tileA;
       for (let k = 0; k < q*q; k++) {
         const base = cols[k % cols.length];
         ctx.fillStyle = lit < 1 ? drainColour(base, grey, bright) : base;
-        ctx.fillRect(x + (k % q)*qs - 0.5, y + Math.floor(k/q)*qs - 0.5, qs + 1, qs + 1);
+        const ci = k % q, cj = Math.floor(k/q);
+        const x0 = snap(x + ci*qs), x1 = snap(x + (ci+1)*qs);
+        const y0 = snap(y + cj*qs), y1 = snap(y + (cj+1)*qs);
+        ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
       }
       // ...and the paper over it, the same grain every other surface in the game wears. A
       // chapter on this map is a TILE — it is the thing you are about to stand on, drawn small —
@@ -12117,7 +12231,7 @@
       // Inside the grey filter with the quilt, so an unreached chapter's paper is drained along
       // with its colours rather than staying bright over a tile that has gone quiet.
       // The grain is monochrome already, so draining it is only the brightness half.
-      grainFill(x, y, w, w, TILE.bodyGrain * bright * A);
+      grainFill(x, y, w, w, TILE.bodyGrain * bright * A * tileA);
       ctx.restore();
       ctx.restore();
       // The chapter's NUMBER, on every square you have been let into. Without them the pan from
@@ -12199,12 +12313,10 @@
     if (!(o.hide && o.hide.has(INTRO_CELL))) {
       const R = mapRectAt(introMapCell(), S, cx0, cy0);
       if (!(R.x > viewW + S || R.y > viewH + S || R.x + S < -S || R.y + S < -S)) {
-        // Not a chapter's quilt and not the cosmos's either: a scatter of WHITE sub-tiles, most
-        // of them barely there and a few lit. The film is not a place on the map — it is what
-        // the places are made of — and a square of ordinary ground next to chapter one read as
-        // a chapter you had somehow missed. White because it is the only ink on this map that
-        // belongs to nothing, and mostly transparent because it is a suggestion of a square
-        // rather than a square.
+        // THE FILM'S QUILT: its own dark tones (INTRO_THEME), laid exactly as a chapter's square is
+        // laid — opaque, overdrawn half a pixel to close the seams, and grained. It used to be a
+        // chequer of faint white the cosmos showed through, which read as a hole in the map with
+        // a play mark floating in it rather than as a square made of tiles.
         const q = LEVEL_SWATCH, qs = S/q;
         // ...and the film's square takes the spark as well when it is the one chosen; it is
         // drawn after every chapter anyway, so it is already on top of them.
@@ -12214,21 +12326,16 @@
         ctx.save();
         ctx.save();
         rrect(R.x, R.y, S, S, r); ctx.clip();
-        ctx.fillStyle = "#ffffff";
-        for (let j = 0; j < q; j++) for (let i = 0; i < q; i++) {
-          // A CHEQUER, not a scatter — the same alternation the game's own finish-line chequer
-          // uses, at two strengths of white a whisker apart. It reads as one woven surface
-          // rather than as a handful of lit squares, which is what the film's square wants: it
-          // is the material the places are made of, and material is regular.
-          ctx.globalAlpha = A * (((i + j) & 1) ? 0.10 : 0.15);
-          // Edges ROUNDED to whole pixels and shared, not overlapped. Every other quilt in the
-          // game overdraws its squares by half a pixel each way to kill the seams between them,
-          // which is free when the fills are opaque — here they are not, and each overlap
-          // composited twice and drew itself as a bright line down the join.
-          const x0 = Math.round(R.x + i*qs),     y0 = Math.round(R.y + j*qs);
-          const x1 = Math.round(R.x + (i+1)*qs), y1 = Math.round(R.y + (j+1)*qs);
+        const introA = (o.ringIdx === INTRO_CELL && o.ring > 0) ? 1 : UNSEL_A;
+        ctx.globalAlpha = A * introA;
+        for (let k = 0; k < q*q; k++) {
+          ctx.fillStyle = INTRO_THEME.colors[k % INTRO_THEME.colors.length];
+          const ci = k % q, cj = Math.floor(k/q);
+          const x0 = snap(R.x + ci*qs), x1 = snap(R.x + (ci+1)*qs);
+          const y0 = snap(R.y + cj*qs), y1 = snap(R.y + (cj+1)*qs);
           ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
         }
+        grainFill(R.x, R.y, S, S, TILE.bodyGrain * A * introA);
         ctx.restore();
         // The one mark that says "this one is a film". Cut to the same cap height as the
         // chapter numbers beside it — it is the square's label, and a label that dwarfs every
@@ -12468,7 +12575,10 @@
     voidPar = { x: cx0 * S * VOID_PARALLAX, y: cy0 * S * VOID_PARALLAX };
     try { drawVoid(ts); } finally { voidPar = null; }   // ...and only for this frame
     placeWinNext(S, cx0, cy0);          // the answer follows the square it is about
-    const opts = { glowIdx: P.idx, glow, glowA, ringIdx: P.next, ring, alpha: mapA };
+    // A chapter PUT BACK DOWN (a re-tap, or a drag) loses its ring and its spark with the button:
+    // what they said was "this one", and nothing is chosen any more. Only an explicit `false`
+    // counts — the sequence that arrives on a square has never set it, and that square is chosen.
+    const opts = { glowIdx: P.idx, glow, glowA, ringIdx: P.next, ring: winPicked() ? ring : 0, alpha: mapA };
     if (P.ph === "pan" || P.ph === "wait" || P.ph === "whip") { opts.litIdx = P.next; opts.lit = litK; }
     // ...and until then it is GREY. Finishing a chapter opens the next one, so the map's own
     // rule — everything cleared, plus the first you have not — lights it the instant you arrive,
@@ -12910,9 +13020,6 @@
   };
   let cere = null;
   function endCeremony() { cere = null; }
-  // The quilt every level wears, in the charm's own colour and mostly not in it: a handful of
-  // near-blacks with the metal itself walked down through them, so the backdrop belongs to the
-  // talisman without ever competing with the beam standing on top of it.
   // ---- the VOID -----------------------------------------------------------------------
   // The place this game happens in, as opposed to any level inside it: a near-black quilt with
   // the hue walked right round the wheel — every level's family of colour represented, none of
@@ -13071,27 +13178,6 @@
     const h = mx === r ? ((g - b)/d + (g < b ? 6 : 0)) : mx === g ? ((b - r)/d + 2) : ((r - g)/d + 4);
     return { h: h*60, s: sat*100, l: l*100 };
   }
-  // The field the charm leaves him standing in: THE CHARM'S OWN COLOUR, taken apart and put
-  // back at a dozen slightly different strengths. Everything here is measured FROM the charm
-  // rather than written down — the hue moves at most eleven degrees either way, the saturation
-  // is the charm's own less a little, and the lightness is its own scaled right down, because
-  // this is the ground the charm stands on and a ground as bright as the thing on it is not a
-  // ground. So a pale charm gets a pale field and a deep one a deep field, without either
-  // being decided here.
-  //
-  // Pieced at the COSMOS's size, not the board's, because by this point there is no board.
-  function ceremonyField(def) {
-    const c = hexHSL(def.col || "#ffd24a");
-    const sat = clamp(c.s * 0.86, 16, 60);
-    const lit = clamp(c.l * 0.30,  7, 19);
-    const hs = (dh, ds, dl) =>
-      "hsl(" + Math.round(((c.h + dh) % 360 + 360) % 360) + "," +
-               Math.round(clamp(sat + ds, 0, 100)) + "%," +
-               Math.round(clamp(lit + dl, 2, 44)) + "%)";
-    return { colors: [ hs( 0, -6, -4), hs(  0,  4,  4), hs(-9, -2, -1), hs( 6,  0,  7),
-                       hs( 0, -8, -6), hs( 11,  3,  2), hs(-5,  6,  5), hs( 3, -4, -2) ],
-             patchW: 0.55, drift: 0.5, dir: 1, stripeW: 3 };
-  }
   function startCeremony(def, last, purseWas, purseGain) {
     // Where he IS, on the screen, at the moment the flag was reached — so the ceremony can pick
     // him up from there rather than cutting to a figure already standing in the middle. Taken
@@ -13099,7 +13185,6 @@
     // left to ask.
     const rp = visualAt(state.runIdx + state.runT), ri = runnerInfo();
     cere = { def, last, t:0, beat:0, ready:false, snd:{},
-             silver: ceremonyField(def),
              was: purseWas || 0, gain: purseGain || 0,
              fromX: rp.x - camX, fromY: rp.y - camY, fromA: ri.angle, cell0: cell };
     paused = false;
@@ -13197,23 +13282,17 @@
       // something else is behind it was the one place that was NOT the place everything else in
       // the game is behind. He is lifted out of the level into the game's own dark, not into a
       // room built for the charm.
-      const dark = clamp01(T / C.gather);
-      ctx.globalAlpha = dark;
+      // Faded in over the board as he lifts off it, and then simply the sky — not pressed
+      // darker: it is the standard cosmos, stars and all, the same as everywhere else.
+      ctx.globalAlpha = clamp01(T / C.gather);
       drawVoid(ts);
       ctx.globalAlpha = 1;
-      // Barely pressed. The cosmos is near-black already; the old 0.62 was there to knock back
-      // a quilt carrying the charm's own colour at strength, and over this it just puts out
-      // the stars.
-      ctx.fillStyle = "rgba(5,4,13," + (0.18*dark).toFixed(3) + ")";
-      ctx.fillRect(0, 0, W, H);
     } else {
-      // 7. ...and on the other side of the contact, silver. Coloured metal at the COSMOS's own
-      //    patch size — the size everything outside a level is pieced at — drifting slowly past.
-      //    It is a different place, which is the point: he has been taken out of the room.
-      drawBackground(ts, cere.silver, true, "drift", voidCell());
-      drawGlints(ts, { x:bgScrollX, y:bgScrollY }, patchStepPx || voidCell()*0.55, 1.9);
-      ctx.fillStyle = "rgba(5,4,13,0.12)";             // ...barely pressed: the field is dark already
-      ctx.fillRect(0, 0, W, H);
+      // 7. ...and on the other side of the contact, THE SAME SKY. It used to change to a field
+      //    of silver in the charm's colours here, on the argument that he had been taken out of
+      //    the room — but the flash is already the seam, and the one sky the whole game hangs in
+      //    is what every other step of the game stands on.
+      drawVoid(ts);
     }
 
     // ---- where the charm is, all the way down ----------------------------------------------
@@ -13306,6 +13385,9 @@
       // the thing coming down it, so the one moment the charm is the only object on the screen
       // was the one moment it was not wearing its own colour.
       charmGlow(fx, charmY, charmR*2.9, rgbOf(hexA(talFace(cere.def), 1)), 0.80);
+      // ...and the standard SPARK over that light and under the charm, sized to its badge
+      // (r*1.9 across) and shrinking with it as it falls.
+      drawSpark(ctx, fx, charmY, charmR*1.9, ts, { seed: 0.19 });
       talHook(ctx, fx, charmY, charmR, cere.def);
       cere.def.draw(ctx, fx, charmY, charmR);
       ctx.restore();
@@ -13322,6 +13404,7 @@
       ctx.rotate(0);
       // ...and the same again on the card, where it is the only thing left on the screen.
       charmGlow(fx, cy0, R*2.9, rgbOf(hexA(talFace(cere.def), 1)), 0.95*e);
+      drawSpark(ctx, fx, cy0, R*1.9, ts, { alpha: e, seed: 0.19 });   // the same spark, still behind it
       ctx.save();
       ctx.translate(fx, cy0); ctx.rotate(Math.sin(ts/1100)*0.06); ctx.translate(-fx, -cy0);
       talHook(ctx, fx, cy0, R, cere.def);
@@ -18590,10 +18673,10 @@
     let dt = ts - lastTs; lastTs = ts;
     if (dt > 100) dt = 100;
     if (cineActive)  { tickCine(dt);  drawCine(ts);  requestAnimationFrame(frame); return; }
-    if (titleActive) { tickTitle(dt); drawTitle(ts); requestAnimationFrame(frame); return; }
+    if (titleActive) { tickTitle(dt); drawTitle(ts); drawHeadSparks(ts); requestAnimationFrame(frame); return; }
     // The victory sequence owns the frame outright: it is a camera move over a board that has
     // stopped, so nothing of the level's own update has any business running under it.
-    if (win) { tickWin(dt); drawWin(ts); updatePauseBtn(); requestAnimationFrame(frame); return; }
+    if (win) { tickWin(dt); drawWin(ts); drawHeadSparks(ts); updatePauseBtn(); requestAnimationFrame(frame); return; }
     if (!paused) {
       if (state.status === "hold") tickHold(dt);
       else if (state.status === "campan") tickCamPan(dt);
@@ -18627,6 +18710,7 @@
     updateCamera(dt);
     draw(state.crunch ? state.crunch.ts : ts);   // a caught board is a still frame, bobs and all
     if (paused) drawPausedOverlay();
+    drawHeadSparks(ts);                  // under a section's name, when one is on screen
     updatePauseBtn();
     updatePowerBtn();
     tickRelicShow(dt);
@@ -20036,7 +20120,7 @@
     if (screen === "shop" || screen.indexOf("shop:") === 0) {
       if (screen.indexOf("shop:") === 0) shopTab = screen.slice(5);
       if (!LOOK.some(l => l.key === shopTab)) shopTab = LOOK[0].key;
-      title.textContent = "Tile Shop"; title.className = "shop big sec-shop";
+      title.textContent = "Tile Shop"; title.className = "shop big sec-shop"; title.dataset.t = "Tile Shop";
       saveWallet();                                   // banks whatever the last run earned
 
       // A picture of him wearing everything currently on, standing on a real tile. It sits
@@ -20447,6 +20531,7 @@
       // a phone with its tilt carrying the last letters off the edge; stacked, it sits inside
       // the screen and matches TILE RUNNER's own two-line treatment on the pause menu.
       title.innerHTML = "Holy<br>Talismans"; title.className = "shop big sec-tal";
+      title.dataset.t = "Holy\nTalismans";          // the shimmer's copy, on the same two lines
       menuEl.classList.add("orrery-page");
       // The backing beat is gated off elsewhere, but the thing you can actually hear on this
       // screen is the AMBIENT bed — a separate loop on a timer and a bus of its own, switched
@@ -20757,7 +20842,7 @@
     // player actually wants (sound off) and the things only I want (give me a hundred tiles)
     // were in two different places, neither of them called Settings.
     if (screen === "settings") {
-      title.textContent = "Settings"; title.className = "shop sec-set";
+      title.textContent = "Settings"; title.className = "shop sec-set"; title.dataset.t = "Settings";
       menuBody.appendChild(toggle("Sound", !Sound.isMuted(),
         () => { Sound.unlock(); Sound.setMuted(!Sound.isMuted()); buildMenu(screen); }));
       menuBody.appendChild(toggle("Colorblind", colorblind,
