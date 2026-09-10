@@ -37,11 +37,12 @@
 <body>
 <header>
   <h1>Coin Lab</h1>
-  <p>The little golden tile. <b>Shine is four separate things</b>, which is why one slider was
-     never going to do it: a fixed diagonal <b>gloss</b> that gives it a lit side, a <b>rim</b>
-     along the top edge, a <b>sweep</b> that travels across the face on a timer, and a
-     <b>spark</b> that twinkles off one corner. Drawing is lifted from <code>index.html</code>,
-     so what you see is what the board draws. Tune, then <b>Copy COIN block</b>.</p>
+  <p>The little golden tile, drawn <b>flat</b>: its face and its pressed-in panel in the same flat
+     colours as the coin icon, stood on its extruded edge, floating and rocking. Drawing is lifted
+     from <code>index.html</code>, so what you see is what the board draws — except the
+     <b>spark</b> on its edge, which is the game's standard spark and is drawn by the game (its size
+     and colour are <code>COIN_SPARK</code> in <code>index.html</code>). Tune, then
+     <b>Copy COIN block</b>.</p>
 </header>
 <div class="wrap">
   <div class="stage"><canvas id="cv" width="620" height="360"></canvas></div>
@@ -53,13 +54,7 @@
       <div class="row"><label>rock</label><input type="range" id="rock" min="0" max="0.5" step="0.005"><output></output></div>
       <div class="row"><label>shadow</label><input type="range" id="shadowA" min="0" max="1" step="0.01"><output></output></div>
     </div>
-    <div class="grp"><h2>Shine</h2>
-      <div class="row"><label>gloss</label><input type="range" id="gloss" min="0" max="1" step="0.01"><output></output></div>
-      <div class="row"><label>rim</label><input type="range" id="rim" min="0" max="1" step="0.01"><output></output></div>
-      <div class="row"><label>sweep</label><input type="range" id="sweep" min="0" max="1" step="0.01"><output></output></div>
-      <div class="row"><label>sweep ms</label><input type="range" id="sweepMs" min="400" max="6000" step="50"><output></output></div>
-      <div class="row"><label>spark</label><input type="range" id="spark" min="0" max="1" step="0.01"><output></output></div>
-      <div class="row"><label>spark ms</label><input type="range" id="sparkMs" min="400" max="6000" step="50"><output></output></div>
+    <div class="grp"><h2>Face</h2>
       <div class="row"><label>panel pad</label><input type="range" id="panelPad" min="0" max="0.3" step="0.005"><output></output></div>
       <div class="row"><label>panel dark</label><input type="range" id="panelA" min="0" max="1" step="0.01"><output></output></div>
     </div>
@@ -81,12 +76,6 @@ const SHIPPED = {
   floatMs: 620,
   rock: 0.08,
   shadowA: 0.28,
-  gloss: 0.45,
-  rim: 0.55,
-  sweep: 0.55,
-  sweepMs: 2200,
-  spark: 0.80,
-  sparkMs: 2600,
   panelPad: 0.18,
   panelA: 1.00,
 };
@@ -103,7 +92,8 @@ function rrect(x,y,w,h,r){ r=Math.max(0,Math.min(r,w/2,h/2));
   ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
   ctx.arcTo(x,y+h,x,y,r);     ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
 
-const COIN_EDGE = "#c78b16";        // mirrors index.html: the panel is filled with it too
+const COIN_EDGE = "#c78b16";        // mirrors index.html: the edge it stands on
+const COIN_PANEL = "#c98d13";       // mirrors index.html: the flat panel, the coin icon's own
 function drawCoin(x, y, ts) {
   const s2 = cell * COIN.size, r = tileR(s2), h = s2/2;
   const t = ts / COIN.floatMs;
@@ -124,47 +114,11 @@ function drawCoin(x, y, ts) {
   rrect(-h, -h, s2, s2, r); ctx.clip();                         // everything below stays on the tile
   if (COIN.panelA > 0) {                                        // the inscribed, pressed-in panel
     const ip = s2*COIN.panelPad;
-    ctx.globalAlpha = COIN.panelA; ctx.fillStyle = COIN_EDGE;
+    ctx.globalAlpha = COIN.panelA; ctx.fillStyle = COIN_PANEL;
     rrect(-h + ip, -h + ip, s2 - 2*ip, s2 - 2*ip, Math.max(0, r - ip*0.6)); ctx.fill();
     ctx.globalAlpha = 1;
   }
-  if (COIN.gloss > 0) {                                         // lit from the top-left
-    const g = ctx.createLinearGradient(-h, -h, h, h);
-    g.addColorStop(0,    "rgba(255,255,255," + COIN.gloss + ")");
-    g.addColorStop(0.45, "rgba(255,255,255,0)");
-    g.addColorStop(1,    "rgba(120,72,0," + (COIN.gloss*0.5) + ")");
-    ctx.fillStyle = g; ctx.fillRect(-h, -h, s2, s2);
-  }
-  if (COIN.sweep > 0) {                                         // a glint travelling across
-    const u = (ts % COIN.sweepMs) / COIN.sweepMs;
-    const px = (-1.6 + 3.2*u) * h;
-    ctx.save(); ctx.rotate(-0.6);
-    const g2 = ctx.createLinearGradient(px - s2*0.30, 0, px + s2*0.30, 0);
-    g2.addColorStop(0,   "rgba(255,255,255,0)");
-    g2.addColorStop(0.5, "rgba(255,255,255," + COIN.sweep + ")");
-    g2.addColorStop(1,   "rgba(255,255,255,0)");
-    ctx.fillStyle = g2; ctx.fillRect(-s2, -s2, s2*2, s2*2);
-    ctx.restore();
-  }
   ctx.restore();
-  if (COIN.rim > 0) {                                           // bright top edge
-    ctx.strokeStyle = "rgba(255,255,255," + COIN.rim + ")";
-    ctx.lineWidth = Math.max(1, s2*0.05);
-    ctx.beginPath(); ctx.moveTo(-h + r, -h + ctx.lineWidth*0.5);
-    ctx.lineTo(h - r, -h + ctx.lineWidth*0.5); ctx.stroke();
-  }
-  if (COIN.spark > 0) {                                         // corner twinkle
-    const u = (ts % COIN.sparkMs) / COIN.sparkMs;
-    const a = Math.pow(Math.max(0, Math.sin(u*Math.PI*2)), 8) * COIN.spark;
-    if (a > 0.01) {
-      const sx = h*0.62, sy = -h*0.66, L = s2*0.30*(0.6 + 0.4*a);
-      ctx.strokeStyle = "rgba(255,255,255," + a + ")";
-      ctx.lineWidth = Math.max(1, s2*0.05); ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(sx - L, sy); ctx.lineTo(sx + L, sy);
-      ctx.moveTo(sx, sy - L); ctx.lineTo(sx, sy + L); ctx.stroke();
-    }
-  }
   ctx.restore();
 }
 
@@ -173,10 +127,10 @@ function frame(ts){
   ctx.clearRect(0,0,cv.width,cv.height);
   ctx.fillStyle = DARK ? "#0a0817" : "#3d6b46";     // the quilt is usually mid-tone, not black
   ctx.fillRect(0,0,cv.width,cv.height);
-  // three at different phases, so the sweep and spark can be judged against each other
+  // three at different points in the float, so the bob and the rock can be judged against each other
   drawCoin(cv.width*0.25, cv.height*0.5, ts);
-  drawCoin(cv.width*0.50, cv.height*0.5, ts + COIN.sweepMs*0.33);
-  drawCoin(cv.width*0.75, cv.height*0.5, ts + COIN.sweepMs*0.66);
+  drawCoin(cv.width*0.50, cv.height*0.5, ts + COIN.floatMs*0.33);
+  drawCoin(cv.width*0.75, cv.height*0.5, ts + COIN.floatMs*0.66);
   // and one at real in-game size for reference
   const keep = cell; cell = 116;
   drawCoin(cv.width*0.5, cv.height*0.86, ts);
@@ -187,8 +141,7 @@ function frame(ts){
 }
 requestAnimationFrame(frame);
 
-const KEYS = ["size","float","floatMs","rock","shadowA","gloss","rim","sweep","sweepMs","spark","sparkMs",
-              "panelPad","panelA"];
+const KEYS = ["size","float","floatMs","rock","shadowA","panelPad","panelA"];
 
 // Everything on this page is written down as you move it and put back when you come back. A
 // tuning page you have to set up again every time you open it is a tuning page you stop opening
