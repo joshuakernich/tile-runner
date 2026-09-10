@@ -3559,19 +3559,24 @@
     // Two tones, not one swoop. A single oscillator sliding 620->360 reads as a chirp; a
     // real click is a hard tick and then a lower body landing a beat later, close enough
     // together to be heard as one event. 26ms apart is about the limit before they separate.
-    function tap(){
+    // `mul` raises or lowers the whole tap — both tones, together — and `vol` scales how loud it
+    // is; both are 1 unless a caller asks. Anything that is not a positive number (an Event, if
+    // this is ever handed straight to a listener) is ignored, so every button that already calls
+    // tap() sounds exactly as it did.
+    function tap(mul, vol){
       if (muted || !ac || ac.state !== "running") return;
-      const t0 = ac.currentTime;
+      const t0 = ac.currentTime, m = (typeof mul === "number" && mul > 0) ? mul : 1;
+      const v = (typeof vol === "number" && vol > 0) ? vol : 1;
       const TWO = [ { at:0,     hz:1180, wave:"square",   vel:0.11, dur:0.028 },   // the tick
                     { at:0.026, hz:520,  wave:"triangle", vel:0.15, dur:0.070 } ]; // the body
       for (const n of TWO){
         const t = t0 + n.at;
         const o = ac.createOscillator(), g = ac.createGain();
         o.type = n.wave;
-        o.frequency.setValueAtTime(n.hz, t);
-        o.frequency.exponentialRampToValueAtTime(n.hz*0.72, t + n.dur);   // a little fall on each
+        o.frequency.setValueAtTime(n.hz*m, t);
+        o.frequency.exponentialRampToValueAtTime(n.hz*m*0.72, t + n.dur);   // a little fall on each
         g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(n.vel, t + 0.002);
+        g.gain.exponentialRampToValueAtTime(Math.max(0.0008, n.vel*v), t + 0.002);
         g.gain.exponentialRampToValueAtTime(0.0006, t + n.dur);
         o.connect(g); g.connect(master); o.start(t); o.stop(t + n.dur + 0.02);
       }
@@ -3694,13 +3699,13 @@
         o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.18);
       });
     }
-    // MOVING BETWEEN TABS IS NOT A BUTTON PRESS. tapBig is a struck thing — a hard attack and
-    // two triangle notes — which is the right sound for choosing a chapter and the wrong one for
-    // sliding a plate three inches sideways. This is air instead of impact: a band of noise
-    // whose window sweeps UP and away over the length of the slide, with a soft low body under
-    // it so it has somewhere to land. No transient at the front — the attack is 18ms rather
-    // than 2, which is the whole difference between a click and a breath.
-    function swish(){
+    // A BREATH OF AIR: a band of noise whose window sweeps UP and away, with a soft low body
+    // under it so it has somewhere to land, and no transient at the front. It was the tab sound
+    // (v10.35) and the film's unfold still takes it.
+    // ...and it has its OWN NAME now. It used to be a second `function swish` in the same scope
+    // as the rail monster's oar-stroke above, and a later function declaration silently replaces
+    // an earlier one — so every monster stroke was playing this instead of its own row and grunt.
+    function airSwish(){
       if (muted || !ac || ac.state !== "running" || !noiseBuf) return;
       const t0 = ac.currentTime, dur = 0.26;
       const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
@@ -3723,6 +3728,50 @@
       og.gain.exponentialRampToValueAtTime(0.055, t0 + 0.03);
       og.gain.exponentialRampToValueAtTime(0.0006, t0 + dur*0.9);
       o.connect(og); og.connect(master); o.start(t0); o.stop(t0 + dur);
+    }
+    // A TAB: a BLIP and a WHIP. The blip is the game's own tap, the same one a charm makes when
+    // you pick it out of the orbit; the whip is the plate being flicked across the bar, and it
+    // is the louder half: the movement is the event here, the blip only starts it. tapBig still belongs to a choice being struck.
+    // Each tab its own pitch: up a pentatonic step at a time from left to right, so four taps in
+    // any order are four different notes and none of them sour. `step` is the tab's place in
+    // TAB_ORDER; anything else is the first tab's note.
+    const TAB_SEMIS = [0, 2, 4, 7];
+    const TAB_BLIP  = 0.45;          // how loud the tab's tap is, against a button's
+    function tabClick(step){
+      if (muted || !ac || ac.state !== "running" || !noiseBuf) return;
+      const t0 = ac.currentTime;
+      // THE BLIP IS THE TAP — the very sound choosing a charm on the Holy Talismans page makes,
+      // a tick and a lower body landing just behind it — called rather than copied, so the two
+      // can never drift apart.
+      tap(Math.pow(2, (TAB_SEMIS[step] || 0) / 12), TAB_BLIP);   // ...and held back: the whip leads
+      {                                                       // ...and the WHIP
+        // A whip is not a whoosh that fades — it BUILDS. The band sweeps up fast and keeps getting
+        // louder all the way to the top of its travel, then cuts off, with a soft snap where it
+        // peaks. Softened on purpose: a crack at full strength is exactly the click this was
+        // asked not to be.
+        const ts = t0 + 0.02, dur = 0.19, peak = ts + dur*0.86;
+        const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+        const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 1.8;
+        bp.frequency.setValueAtTime(480, ts);
+        bp.frequency.exponentialRampToValueAtTime(5200, peak);            // accelerating up...
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, ts);
+        g.gain.exponentialRampToValueAtTime(0.02, ts + dur*0.35);
+        g.gain.exponentialRampToValueAtTime(0.13, peak);                  // ...and swelling into it
+        g.gain.exponentialRampToValueAtTime(0.0005, ts + dur);            // then gone
+        src.connect(bp); bp.connect(g); g.connect(master);
+        src.start(ts); src.stop(ts + dur + 0.02);
+        // ...the snap, at the peak
+        const sn = ac.createBufferSource(); sn.buffer = noiseBuf;
+        const sbp = ac.createBiquadFilter(); sbp.type = "bandpass"; sbp.Q.value = 0.9;
+        sbp.frequency.value = 3400;
+        const sg = ac.createGain();
+        sg.gain.setValueAtTime(0.0001, peak);
+        sg.gain.exponentialRampToValueAtTime(0.06, peak + 0.002);
+        sg.gain.exponentialRampToValueAtTime(0.0005, peak + 0.04);
+        sn.connect(sbp); sbp.connect(sg); sg.connect(master);
+        sn.start(peak, Math.random() * Math.max(0, noiseBuf.duration - 0.06)); sn.stop(peak + 0.05);
+      }
     }
     // The saw whir is gone. It only ever rose for a hazard of kind "saw", and the campaign has
     // none left — every one of the seventeen is a monster now — so it was a second continuous
@@ -4252,10 +4301,10 @@
     }
     function isMuted() { return muted; }
     return { unlock, clearTile, smash, charmBreak, charmGrow, coinSpill, roar, win, lose, fall, death, boost, slow, coin, coinBank, coinSlam, key, doorOpen,
-             slide, clack, tap, tapBig, swish, power, warp, vortex, thrum, crunch, growl, trapWind,
+             slide, clack, tap, tapBig, swish, airSwish, tabClick, power, warp, vortex, thrum, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck, choir,
              ambient,
-             swish, introGather, introFlash, rumble, flap, life, claim, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
+             introGather, introFlash, rumble, flap, life, claim, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
              levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, talismanTheme, choirLift, setMusicGate,
              musicNow: () => ({ ...MU }) };
   })();
@@ -4291,7 +4340,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.39";                    // shown on the title & pause screens
+  const VERSION = "v10.40";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -11840,12 +11889,15 @@
   // winOpen — hence an index of its own, which is what winCellAt hands back for it.
   const INTRO_CELL = -1;
   // THE FILM'S QUILT. It has no chapter and no splash, so it is pieced out of the dark instead:
-  // nine grey-to-black tones with the cosmos's cool cast, one to each square of its 3x3, so it
-  // reads as a square laid out of tiles rather than as a gap in the map. Its map square, the
+  // nine tones a step lighter than the cosmos behind it, each leaning a different way round the
+  // wheel — indigo, teal, plum, forest, violet, rust, wine, deep blue, slate — so it reads as a
+  // square laid out of tiles with a little colour caught in them, lifted off the sky but still
+  // the darkest square on the map. Laid row by row, with no two neighbours sharing a family. Its map square, the
   // square it is swallowed as, its pixel on the Tileverse tab and the answer that opens it all
   // read from here.
-  const INTRO_THEME = { colors: ["#141419", "#23232a", "#0c0c10", "#2c2c34", "#1a1a20",
-                                 "#30303a", "#101014", "#26262e", "#1d1d23"] };
+  const INTRO_THEME = { colors: ["#2b234e", "#183a3e", "#402246",
+                                 "#203d2b", "#301e55", "#452b25",
+                                 "#462235", "#1a2b4e", "#23364b"] };
   function introMapCell() { const p = mapCells()[0] || { c: 0, r: 0 }; return { c: p.c - 1, r: p.r }; }
   // ONE chapter, at an arbitrary place and size — for the finale, which throws them about.
   // The quilt and the paper only: no number, no cross, no ring. Those are things the MAP says
@@ -19750,9 +19802,9 @@
   function winDoor(screen) {
     return () => {
       if (!win) return;
-      // swish, not tapBig: this is the footer's plate sliding across, not a decision being
+      // tabClick, not tapBig: this is the footer's plate sliding across, not a decision being
       // struck. tapBig still belongs to choosing a chapter, which IS one.
-      Sound.unlock(); Sound.swish();
+      Sound.unlock(); Sound.tabClick(TAB_ORDER.indexOf(screen));
       hideWinUI();
       openMenu(screen, () => { closeMenu(); showWinUI(); });
     };
@@ -19765,7 +19817,7 @@
   // puts the map back. Standing on the map it is the tab you are already on, and does nothing.
   document.getElementById("win-tv").addEventListener("click", () => {
     if (!menuEl.classList.contains("show")) return;
-    Sound.unlock(); Sound.swish();
+    Sound.unlock(); Sound.tabClick(TAB_ORDER.indexOf("tv"));
     const go = () => { menuEl.classList.remove("whip-out");
                        if (menuReturn) menuReturn(); else { closeMenu(); showWinUI(); } };
     // The map is not a DOM screen, so what pans here is the menu going away — off in the same
@@ -22270,7 +22322,7 @@
     once(64, CINE.seed[0],   () => Sound.rumble && Sound.rumble(CINE.seed[1] - CINE.seed[0]));
     once(1,  CINE.born,      () => { Sound.introFlash && Sound.introFlash(); Sound.power && Sound.power(); });
     once(128,CINE.gather[0], () => Sound.introGather && Sound.introGather());
-    once(2,  CINE.unfold[0], () => Sound.swish && Sound.swish());
+    once(2,  CINE.unfold[0], () => Sound.airSwish && Sound.airSwish());
     once(4,  CINE.grow[1],   () => Sound.introFlash && Sound.introFlash());
     once(8,  CINE.dive[0],   () => Sound.warp && Sound.warp());
     once(16, CINE.plinth,    () => Sound.introFlash && Sound.introFlash());   // the tile's own note comes from cineLays
