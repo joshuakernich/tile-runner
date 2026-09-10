@@ -181,6 +181,11 @@
            background:#000;display:block;}
   #copyview h2{font-size:11px;letter-spacing:1px;text-transform:uppercase;opacity:.55;margin:0 0 8px;}
   #copyview .card{margin-bottom:14px;}
+  /* ONE CATEGORY AT A TIME. The page was every line of copy in the game stacked down one long
+     scroll; the strip picks which card is out, and the introduction and Save stay put. The strip
+     wears the header's own pills, without the push to the right the header gives them. */
+  #copyview .cptabs{margin:0 0 14px;flex-wrap:wrap;}
+  #copyview .card.cp-off{display:none;}
   #copyview .fld{display:block;margin:0 0 10px;}
   #copyview .fld > span{display:block;font-size:11px;opacity:.7;margin-bottom:3px;}
   #copyview input[type=text]{width:100%;}
@@ -407,14 +412,23 @@
   <div class="card">
     <h2>What this is</h2>
     <div class="hint">Every line of writing the game says that is <b>not</b> part of a level —
-      the cards that introduce a mechanic, and the headings and lines on a fall, a pause and a
-      clear. It lives in <code>copy.js</code>, which the game loads exactly the way it loads
+      the cards that introduce a mechanic, the talismans' names and lines, and the headings and lines
+      on a fall, a pause and a clear. It lives in <code>copy.js</code>, which the game loads exactly the way it loads
       <code>levels.js</code>. The verses on the chapter cards are <i>not</i> here: those belong
       to their level, and you edit them on the Levels tab.
       <br><br>Lists are one entry per line. Blank lines are dropped.</div>
   </div>
 
-  <div class="card">
+  <div class="tabs cptabs" id="cpTabs">
+    <button data-cat="mech" class="on">Mechanic cards</button>
+    <button data-cat="tal">Talismans</button>
+    <button data-cat="shop">Shop prompt</button>
+    <button data-cat="fall">A fall</button>
+    <button data-cat="pause">A pause</button>
+    <button data-cat="clear">A clear</button>
+  </div>
+
+  <div class="card" data-cat="mech">
     <h2>Mechanic cards</h2>
     <div class="hint" style="margin-bottom:10px">Shown once, the first time a chapter uses the
       thing. The <b>key</b> is what a level's <code>intro</code> list names — it is not copy, so
@@ -422,7 +436,16 @@
     <div id="mechList"></div>
   </div>
 
-  <div class="card">
+  <div class="card" data-cat="tal">
+    <h2>Holy Talismans</h2>
+    <div class="hint" style="margin-bottom:10px">Each charm's <b>name</b> — on the shelf, in the
+      ceremony that gives it to you, on the rack at the foot of a level — and the <b>line</b> that
+      says what it does. The <b>key</b> is the charm's id, which levels and saves name, so it is not
+      editable here.</div>
+    <div id="talList"></div>
+  </div>
+
+  <div class="card" data-cat="shop">
     <h2>The tile shop prompt</h2>
     <div class="hint" style="margin-bottom:10px">Shown once, the first time there is a shop to
       go to. It is a mechanic card in every way except that this one carries a door straight
@@ -433,15 +456,15 @@
       <textarea id="cShopDesc" rows="3"></textarea></label>
   </div>
 
-  <div class="two">
-    <div class="card">
+  <div class="cp-pair">
+    <div class="card" data-cat="fall">
       <h2>A fall</h2>
       <label class="fld"><span>headings — one per line, picked at random</span>
         <textarea id="cLoseTitles" rows="7"></textarea></label>
       <label class="fld"><span>lines — one per line, never the same one twice running</span>
         <textarea id="cLoseQuips" rows="9"></textarea></label>
     </div>
-    <div class="card">
+    <div class="card" data-cat="pause">
       <h2>A pause</h2>
       <label class="fld"><span>heading — always this one</span>
         <input type="text" id="cPauseTitle" maxlength="40"></label>
@@ -450,7 +473,7 @@
     </div>
   </div>
 
-  <div class="card">
+  <div class="card" data-cat="clear">
     <h2>A clear</h2>
     <div class="two">
       <label class="fld"><span>heading</span><input type="text" id="cWinTitle" maxlength="40"></label>
@@ -2376,6 +2399,23 @@ function buildMechRows(){
     el.addEventListener("input", () => { readCopyForm(); saveCopyDraft(); setStatus("copy edited"); }));
 }
 
+// ...and the talismans the same way: one row per charm the FILE names, a name and a line each.
+function buildTalRows(){
+  const host = $("talList"); host.innerHTML = "";
+  for (const k of Object.keys(COPY_TRUTH.talismans || {})) {
+    const row = document.createElement("div"); row.className = "mech";
+    row.innerHTML =
+      '<div class="key">' + k + '</div>' +
+      '<label class="fld"><span>name</span>' +
+        '<input type="text" data-tal="' + k + '" data-f="name" maxlength="40"></label>' +
+      '<label class="fld"><span>line</span>' +
+        '<textarea rows="2" data-tal="' + k + '" data-f="blurb"></textarea></label>';
+    host.appendChild(row);
+  }
+  host.querySelectorAll("[data-tal]").forEach(el =>
+    el.addEventListener("input", () => { readCopyForm(); saveCopyDraft(); setStatus("copy edited"); }));
+}
+
 function fillCopyForm(){
   for (const id in TEXT_FIELDS) $(id).value = copyDraft[TEXT_FIELDS[id]] || "";
   $("cShopName").value = (copyDraft.shopIntro || {}).name || "";
@@ -2384,6 +2424,10 @@ function fillCopyForm(){
   document.querySelectorAll("[data-mech]").forEach(el => {
     const m = copyDraft.mechs[el.dataset.mech] || {};
     el.value = m[el.dataset.f] || "";
+  });
+  document.querySelectorAll("[data-tal]").forEach(el => {
+    const t = (copyDraft.talismans || {})[el.dataset.tal] || {};
+    el.value = t[el.dataset.f] || "";
   });
 }
 function readCopyForm(){
@@ -2394,6 +2438,12 @@ function readCopyForm(){
     const k = el.dataset.mech;
     copyDraft.mechs[k] = copyDraft.mechs[k] || { name:"", desc:"" };
     copyDraft.mechs[k][el.dataset.f] = el.value;
+  });
+  copyDraft.talismans = copyDraft.talismans || {};
+  document.querySelectorAll("[data-tal]").forEach(el => {
+    const k = el.dataset.tal;
+    copyDraft.talismans[k] = copyDraft.talismans[k] || { name:"", blurb:"" };
+    copyDraft.talismans[k][el.dataset.f] = el.value;
   });
 }
 function saveCopyDraft(){ try { localStorage.setItem(COPY_KEY, JSON.stringify(copyDraft)); } catch(e){} }
@@ -2428,6 +2478,16 @@ function copyFile(){
   out += "  // one carries a door through to the shop itself.\n";
   out += "  shopIntro: { name: " + q(copyDraft.shopIntro.name) + ",\n" +
          "               desc: " + q(copyDraft.shopIntro.desc) + " },\n";
+  out += "  // The HOLY TALISMANS. `name` is what a charm is called — on the shelf, in the ceremony, on the\n";
+  out += "  // rack at the foot of a level — and `blurb` the line that says what it does. The KEY is the\n";
+  out += "  // charm's id, which levels and saves name, so change the text, not the key.\n";
+  out += "  talismans: {\n";
+  for (const k of Object.keys(copyDraft.talismans || {})) {
+    const t = copyDraft.talismans[k];
+    out += "    " + q(k) + ": { name: " + q(t.name) + ",\n" +
+           " ".repeat(6 + q(k).length + 2) + "blurb: " + q(t.blurb) + " },\n";
+  }
+  out += "  },\n";
   out += "  // A FALL. The heading is picked from these and the line under it from the next\n";
   out += "  // list — both fresh every death, and never the same one twice running.\n";
   out += list("loseTitles", copyDraft.loseTitles);
@@ -2492,7 +2552,7 @@ async function copyReload(){
     const data = fn();
     if(!data || !data.mechs) throw new Error("no COPY_DATA in it");
     COPY_TRUTH = data;
-    copyDraft = clone(data); buildMechRows(); fillCopyForm(); saveCopyDraft();
+    copyDraft = clone(data); buildMechRows(); buildTalRows(); fillCopyForm(); saveCopyDraft();
     setStatus("reloaded copy.js");
   }catch(e){ setStatus("couldn't read copy.js — " + e.message); }
 }
@@ -2517,6 +2577,10 @@ function copyFillGaps(){
   copyDraft.mechs = copyDraft.mechs || {};
   for (const k in (COPY_TRUTH.mechs || {}))
     if (!copyDraft.mechs[k]) copyDraft.mechs[k] = clone(COPY_TRUTH.mechs[k]);
+  // ...and the talismans, which a draft saved before they were copy has no opinion on at all.
+  copyDraft.talismans = copyDraft.talismans || {};
+  for (const k in (COPY_TRUTH.talismans || {}))
+    if (!copyDraft.talismans[k]) copyDraft.talismans[k] = clone(COPY_TRUTH.talismans[k]);
   // ...and a shopIntro that is present but EMPTY is repaired too, not just a missing one: that
   // is what a draft saved from a stale baseline looks like, and it is indistinguishable from
   // someone deliberately clearing both fields. Restoring is the kinder of the two mistakes —
@@ -2532,7 +2596,7 @@ async function copyInit(){
   COPY_TRUTH = await freshShipped();
   copyDraft = (draft && draft.mechs) ? draft : clone(COPY_TRUTH);
   copyFillGaps();
-  buildMechRows(); fillCopyForm();
+  buildMechRows(); buildTalRows(); fillCopyForm();
 }
 ["cShopName", "cShopDesc", ...Object.keys(LIST_FIELDS), ...Object.keys(TEXT_FIELDS)].forEach(id =>
   $(id).addEventListener("input", () => { readCopyForm(); saveCopyDraft(); setStatus("copy edited"); }));
@@ -2873,6 +2937,19 @@ function showTab(which){
 $("tabLevels").onclick = () => showTab("levels");
 $("tabCopy").onclick   = () => showTab("copy");
 $("tabTv").onclick     = () => showTab("tv");
+// The Copy page's own strip: one category's card out at a time, and the one you were on is the one
+// you come back to. Only which card is SHOWN changes — every field stays in the page, filled and
+// autosaving, so hiding a card can never drop an edit.
+function showCopyCat(cat){
+  const btns = [...document.querySelectorAll("#cpTabs button")];
+  if (!btns.some(b => b.dataset.cat === cat)) cat = btns.length ? btns[0].dataset.cat : null;
+  btns.forEach(b => b.classList.toggle("on", b.dataset.cat === cat));
+  document.querySelectorAll("#copyview .card[data-cat]")
+    .forEach(c => c.classList.toggle("cp-off", c.dataset.cat !== cat));
+  try { localStorage.setItem("tilerunner:editor:copytab", cat); } catch(_) {}
+}
+document.querySelectorAll("#cpTabs button").forEach(b => { b.onclick = () => showCopyCat(b.dataset.cat); });
+{ let t = null; try { t = localStorage.getItem("tilerunner:editor:copytab"); } catch(_) {} showCopyCat(t); }
 copyInit();
 try { const t = localStorage.getItem("tilerunner:editor:tab");
       if (t === "copy" || t === "tv") showTab(t); } catch(e){}

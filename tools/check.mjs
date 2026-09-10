@@ -275,6 +275,26 @@ function levelsFrom(file, marker) {
       else ok("sw.js precaches copy.js");
     }
 
+    // ...and the six Holy Talismans' names and lines are copy as well. The live ids are read out of
+    // the game — TALISMANS less TAL_OFF — rather than listed here, and each must have an entry in
+    // copy.js; the game must not have gone back to naming one of them inline, which is how two
+    // copies of a name start disagreeing.
+    {
+      const src = read("index.html");
+      const talBlock = (src.match(/const TALISMANS = \[[\s\S]*?\n  \];/) || [""])[0];
+      const offList = (src.match(/const TAL_OFF = new Set\(\[([^\]]*)\]\)/) || [, ""])[1];
+      const off = new Set((offList.match(/"(\w+)"/g) || []).map(x => x.slice(1, -1)));
+      const ids = [...talBlock.matchAll(/\{ id:"(\w+)"/g)].map(m => m[1]).filter(id => !off.has(id));
+      const copyTal = (read("copy.js").match(/talismans: \{[\s\S]*?\n  \},/) || [""])[0];
+      const named = new Set([...copyTal.matchAll(/^    "(\w+)"\s*:/gm)].map(m => m[1]));
+      const missing = ids.filter(id => !named.has(id));
+      if (ids.length < 6) bad("could not read the live talismans out of index.html");
+      else if (missing.length) bad("copy.js has no name for talisman(s): " + missing.join(", "));
+      else if (ids.some(id => new RegExp('\\{ id:"' + id + '", name:').test(talBlock)))
+        bad("index.html names a live talisman inline again — its name belongs in copy.js");
+      else ok("every live talisman takes its name and line from copy.js");
+    }
+
     // ---- per-level sanity ----
     // Read the live keys out of MECHS rather than keeping a list here. A hand-kept copy is a
     // third place to remember, and it only ever fails the day someone adds a card.

@@ -51,6 +51,23 @@ var COPY_DATA = {
   // one carries a door through to the shop itself.
   shopIntro: { name: "The Tile Shop",
                desc: "Time to spend those hard-earned pennies on some new drip." },
+  // The HOLY TALISMANS. `name` is what a charm is called — on the shelf, in the ceremony, on the
+  // rack at the foot of a level — and `blurb` the line that says what it does. The KEY is the
+  // charm's id, which levels and saves name, so change the text, not the key.
+  talismans: {
+    "magnet": { name: "Lodestone",
+                blurb: "A means to attract" },
+    "finger": { name: "Hammer of God",
+                blurb: "A fell voice\nthat transforms stone" },
+    "brake": { name: "Millstone",
+               blurb: "Slows the heart and body" },
+    "ankh": { name: "Ankh",
+              blurb: "A second chance to die" },
+    "pulse": { name: "Bell of Unmaking",
+               blurb: "A mighty scream\nto unmake monsters" },
+    "mush": { name: "Mushroom",
+              blurb: "A gift from the Gods" },
+  },
   // A FALL. The heading is picked from these and the line under it from the next
   // list — both fresh every death, and never the same one twice running.
   loseTitles: [

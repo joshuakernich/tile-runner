@@ -636,8 +636,22 @@
      spread — a haze falling inwards off it. The clip takes both round the chamfers. */
   #wintabs .wt-glow { position:absolute; inset:0; pointer-events:none;
     clip-path:var(--bar-clip);
-    box-shadow:inset 0 0 0 var(--f-rim, 0px) var(--f-rimcol, transparent),
-               inset 0 0 var(--f-inglow, 0px) var(--f-inglowcol, transparent); }
+    box-shadow:inset 0 0 0 var(--f-rim, 0px) var(--tab-rim, var(--f-rimcol, transparent)),
+               inset 0 0 var(--f-inglow, 0px) var(--f-inglowcol, transparent);
+    /* ...on the plate's own clock, so the outline changes colour as the plate slides across. */
+    transition:box-shadow 260ms cubic-bezier(.22,1,.36,1); }
+  /* THE OUTLINE IS THE LIT TAB'S COLOUR — the room you are in, drawn round the whole bar, the
+     same colour its heading, its spark and its tab already wear. FOOTER's rim colour is what it
+     falls back to when no tab is lit. */
+  /* ...and a SPARK on the very top of the bar, dead centre, shining in that same colour. Its own
+     canvas, OVER the row rather than on the board's canvas under it, so the glass does not dim it;
+     #wintabs clips nothing, so the half above the bar is free to shine on the map. Placed, sized
+     and painted by drawTabSpark. */
+  #wintabs .wt-spark { position:absolute; pointer-events:none; z-index:2; }
+  #wintabs:has(#win-cog.on)  { --tab-rim:var(--sec-set); }
+  #wintabs:has(#win-tal.on)  { --tab-rim:var(--sec-tal); }
+  #wintabs:has(#win-shop.on) { --tab-rim:var(--sec-shop); }
+  #wintabs:has(#win-tv.on)   { --tab-rim:var(--sec-tv); }
   /* THE CHAMFER. Eight points, one grid square off each corner, cut at 45° — the same angle the
      game leans everything else at and the same measure it builds everything else from. A radius
      would have been a softer object than anything else on this screen; a chamfer is a corner
@@ -1653,15 +1667,13 @@
   #wintop-title        { --spark:var(--sec-tv); }
   #menu-title.sec-shop { --spark:var(--sec-shop); }
   #menu-title.sec-set  { --spark:var(--sec-set); }
-  /* ...and a SHIMMER over the name: a bright white band crossing it, over a rainbow at half strength that
-     drifts the other way round — the title screen's own two clocks, 2.6s for the glint and 5.2s
-     for the spectrum. On a COPY of the word laid over the real one (content off data-t, which
-     the screens set, line break and all), because text-shadow paints OVER a clipped background:
-     put on the heading itself, the extrusion would have buried it. The copy wears no shadow of
-     its own, so the extrusion, the glow and the spark all stay where they are underneath.
-     The rainbow's stops are laid down twice in a band two boxes wide, so sliding it one box is
-     one whole turn and the loop has no seam. The glint crosses from the left and is off the far
-     edge at both ends of its travel, so its jump back is never on screen. */
+  /* ...and a SHIMMER over the name: a bright white band crossing it every 2.6s, the title
+     screen's own glint clock. No rainbow in it any more — just the light. On a COPY of the word
+     laid over the real one (content off data-t, which the screens set, line break and all),
+     because text-shadow paints OVER a clipped background: put on the heading itself, the
+     extrusion would have buried it. The copy wears no shadow of its own, so the extrusion, the
+     glow and the spark all stay where they are underneath. The glint is off the far edge at both
+     ends of its travel, so its jump back is never on screen. */
   #menu-title.sec-set::after, #menu-title.sec-tal::after, #menu-title.sec-shop::after,
   #wintop-title::after {
     content:attr(data-t); position:absolute; left:0; right:0; top:0; bottom:0;
@@ -1670,21 +1682,13 @@
     background-image:
       linear-gradient(100deg, rgba(255,255,255,0) 43%, rgba(255,255,255,0.55) 47%,
                               rgba(255,255,255,1) 50%, rgba(255,255,255,0.55) 53%,
-                              rgba(255,255,255,0) 57%),
-      linear-gradient(96deg,
-        rgba(255,86,86,0.50) 0%,     rgba(255,176,60,0.46) 8.3%,  rgba(250,232,70,0.44) 16.7%,
-        rgba(90,230,120,0.48) 25%,   rgba(70,190,255,0.50) 33.3%, rgba(190,120,255,0.50) 41.7%,
-        rgba(255,86,86,0.50) 50%,    rgba(255,176,60,0.46) 58.3%, rgba(250,232,70,0.44) 66.7%,
-        rgba(90,230,120,0.48) 75%,   rgba(70,190,255,0.50) 83.3%, rgba(190,120,255,0.50) 91.7%,
-        rgba(255,86,86,0.50) 100%);
-    background-size:300% 100%, 200% 100%; background-repeat:no-repeat;
+                              rgba(255,255,255,0) 57%);
+    background-size:300% 100%; background-repeat:no-repeat;
     -webkit-background-clip:text; background-clip:text;
-    animation:head-shimmer 5200ms linear infinite; }
+    animation:head-shimmer 2600ms linear infinite; }
   @keyframes head-shimmer {
-    0%     { background-position:100% 0, 0% 0; }
-    50%    { background-position:0% 0,   50% 0; }
-    50.01% { background-position:100% 0, 50% 0; }
-    100%   { background-position:0% 0,   100% 0; }
+    from { background-position:100% 0; }
+    to   { background-position:0% 0; }
   }
   /* the shop: him at the top, tucked right under the title, then a tab per category */
   /* No scaling. The width is set INLINE, to whatever the canvas was drawn at, so one canvas
@@ -2092,6 +2096,7 @@
     <button id="win-shop"><span class="wt-ico"></span><span class="wt-lbl">Tile Shop</span></button>
     <button id="win-cog" aria-label="Settings"><span class="wt-ico"></span><span class="wt-lbl">Settings</span></button>
   </div>
+  <canvas class="wt-spark" aria-hidden="true"></canvas>
 </div>
 <div id="winfadetop"></div>
 <div id="winfade"></div>
@@ -4403,7 +4408,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.42";                    // shown on the title & pause screens
+  const VERSION = "v10.43";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -4494,9 +4499,8 @@
 
     // A lodestone is magnetite that has been struck by lightning and come out magnetic — which
     // is what this is. The name was on the charm below until this one earned it.
-    { id:"magnet", name:"Lodestone", col:"#f1645f", ms:3000,
+    { id:"magnet", col:"#f1645f", ms:3000,
       face:"#f2685f", edge:"#8f2820",
-      blurb:"Pulls coins in",
       etch:(g,x,y,r)=>{
         g.lineCap="butt"; g.lineWidth=r*0.28;                    // a horseshoe: half-ring, two legs
         g.beginPath(); g.arc(x, y-r*0.08, r*0.46, Math.PI, 0); g.stroke();
@@ -4508,9 +4512,8 @@
     // The id stays "finger": it is written into level 16's data, into the editor's picker and
     // into every save that has unlocked it, and none of that is worth churning for a name only
     // the player ever sees.
-    { id:"finger", name:"Hammer of God", col:"#f7933b", ms:0,
+    { id:"finger", col:"#f7933b", ms:0,
       face:"#e8dcc0", edge:"#8d7c58",
-      blurb:"A fell voice that shatters stone",
       etch:(g,x,y,r)=>{
         // A sledge, head-on: a broad head with the haft hanging from the middle of it. The
         // two overlap by a hair so they fill as one solid silhouette rather than a head
@@ -4533,9 +4536,8 @@
         // what you would see looking at one head-on.
         rr(x-r*0.13, y-r*0.80, r*0.26, r*1.50, r*0.10); } },
 
-    { id:"brake", name:"Millstone", col:"#f6cd28", ms:REST_MS,
+    { id:"brake", col:"#f6cd28", ms:REST_MS,
       face:"#8b95ab", edge:"#3a4152",
-      blurb:"Slows the heart and body",
       etch:(g,x,y,r)=>{
         // A SILHOUETTE: one solid stone with its eye and its dressing grooves cut OUT of it,
         // rather than a thin ring with spokes laid across it and a solid square in the middle
@@ -4567,9 +4569,8 @@
     // which also waits for something to happen rather than running on a clock — and it is
     // spent the instant the run would have ended, putting him back on the last tile he stood
     // on and holding him there while you work out what went wrong.
-    { id:"ankh", name:"Ankh", col:"#49d47c", ms:0,
+    { id:"ankh", col:"#49d47c", ms:0,
       face:"#63cbb1", edge:"#1f5f50",
-      blurb:"A second chance to die",
       etch:(g,x,y,r)=>{
         // A SILHOUETTE, like the sledge and the stone: filled, not traced. Three shapes wound
         // the same way and one wound the other, filled NON-ZERO — so where the shaft runs up
@@ -4590,9 +4591,8 @@
         g.arc(x, CY, RI, 0, Math.PI*2, true);
         g.fill(); } },
 
-    { id:"pulse", name:"Bell of Unmaking", col:"#4baff1", ms:0,
+    { id:"pulse", col:"#4baff1", ms:0,
       face:"#b49df5", edge:"#4a3080",
-      blurb:"A mighty scream to unmake monsters",
       etch:(g,x,y,r)=>{
         // A BELL. It used to be three rings going out from a struck centre — the shape of the
         // thing it does rather than the thing itself, which is the better rule in general, but
@@ -4624,9 +4624,8 @@
         g.beginPath(); g.rect(x - r*0.72, lipY, r*1.44, r*0.17); g.fill();
         g.beginPath(); g.arc(x, lipY + r*0.34, r*0.15, 0, 7); g.fill(); } },  // the clapper
 
-    { id:"mush", name:"Mushroom", col:"#c37ef1", ms:0,
+    { id:"mush", col:"#c37ef1", ms:0,
       face:"#ff7fb8", edge:"#9e2a60",
-      blurb:"A gift from the Gods",
       // ONE OUTLINE, filled ONCE. It was three shapes — a stem, a dome and a band — each with a
       // fill of its own, which is invisible while the ink is opaque and falls apart the moment
       // it is not: laid in at the junction hint's translucent white, every place two of them
@@ -4728,6 +4727,15 @@
         tri(tip, tip, half); tri(-tail, -tail, half*0.72);
         g.beginPath(); g.arc(x, y, r*0.13, 0, 7); g.fill(); } },
   ];
+  // THEIR NAMES AND LINES ARE COPY, and live in copy.js with every other thing the game says —
+  // edited on the level editor's Copy tab. Taken here, straight after the list is made and
+  // before anything reads it, so everywhere a charm's name or line is shown asks the same object.
+  // The shelved charms (see TAL_OFF) are not in copy.js; they keep what is written above.
+  for (const t of TALISMANS) {
+    const c = (COPY.talismans || {})[t.id];
+    if (c) { t.name = c.name || ""; t.blurb = c.blurb || ""; }
+    else if (t.name == null) { t.name = ""; t.blurb = ""; }
+  }
   // One painter for all five. Each keeps its own metal; the shape, the shading and the
   // engraving are shared, so a talisman can never drift into looking like a different class
   // of object from the coin it sits next to on the board.
@@ -11519,7 +11527,7 @@
     rimA:    0.30,       // so the capsule has a lit edge AND a light inside it, and the two do
                          // different jobs. Painted over the inner glow, being the sharper of the
                          // two: the edge is where the eye is told the shape ends.
-    inGlow:  18,         // A LIGHT INSIDE THE CAPSULE'S OWN EDGE, px. An inset shadow rather
+    inGlow:   0,         // A LIGHT INSIDE THE CAPSULE'S OWN EDGE, px (off: the outline is the lit tab's colour now). An inset shadow rather
     inGlowCol: "#ffffff",// than a border: it hugs all four sides and the two chamfers with it,
     inGlowA: 0.22,       // and reads as glass catching light rather than as a line drawn round.
     glow:    0.0,        // a light behind the lit icon, px — 0 is off
@@ -12247,6 +12255,41 @@
       });
     });
     ctx.restore();
+  }
+  // THE SPARK ON TOP OF THE TAB BAR. The game's standard spark on the bar's own canvas, centred on
+  // the top edge of the capsule, in the lit tab's colour — the same --tab-rim the outline is drawn
+  // in. It EASES to a new colour rather than jumping, so it changes with the outline as the plate
+  // slides. Sized in UI grid squares, like the bar it sits on.
+  const TAB_SPARK = 2.2;
+  let _tabSparkRGB = null;
+  function drawTabSpark(ts) {
+    const bar = document.getElementById("wintabs");
+    const cv = bar && bar.querySelector(".wt-spark"); if (!cv) return;
+    const g = cv.getContext("2d");
+    if (!bar.classList.contains("show")) {
+      if (cv._lit) { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height); cv._lit = false; }
+      _tabSparkRGB = null;                          // ...and it comes back in the colour of wherever it is
+      return;
+    }
+    const row = bar.querySelector(".wt-row"); if (!row) return;
+    const sz = uiGrid() * TAB_SPARK, grow = 1 + SPARK.breathe, px = Math.max(1, dpr || 1);
+    const W = Math.ceil(sz * 2 * Math.max(SPARK.h, SPARK.d, SPARK.glow) * grow);
+    const H = Math.ceil(sz * 2 * Math.max(SPARK.v, SPARK.d, SPARK.glow) * grow);
+    if (cv.width !== Math.round(W * px) || cv.height !== Math.round(H * px)) {
+      cv.width = Math.round(W * px); cv.height = Math.round(H * px);
+      cv.style.width = W + "px"; cv.style.height = H + "px";
+    }
+    cv.style.left = Math.round(row.offsetLeft + row.offsetWidth / 2 - W / 2) + "px";
+    cv.style.top  = Math.round(row.offsetTop - H / 2) + "px";
+    const hex = getComputedStyle(bar).getPropertyValue("--tab-rim").trim();
+    const want = /^#[0-9a-f]{6}$/i.test(hex) ? hexRGB(hex) : [255, 255, 255];
+    if (!_tabSparkRGB) _tabSparkRGB = want.slice();
+    for (let i = 0; i < 3; i++) _tabSparkRGB[i] += (want[i] - _tabSparkRGB[i]) * 0.16;
+    const col = "#" + _tabSparkRGB.map(v => Math.round(v).toString(16).padStart(2, "0")).join("");
+    g.setTransform(px, 0, 0, px, 0, 0);
+    g.clearRect(0, 0, W, H);
+    drawSpark(g, W / 2, H / 2, sz, ts, { col, seed: 0.83 });
+    cv._lit = true;
   }
   function drawMapSquare(i, x, y, w) {
     if (!(w > 0.5)) return;
@@ -18795,10 +18838,10 @@
     let dt = ts - lastTs; lastTs = ts;
     if (dt > 100) dt = 100;
     if (cineActive)  { tickCine(dt);  drawCine(ts);  requestAnimationFrame(frame); return; }
-    if (titleActive) { tickTitle(dt); drawTitle(ts); drawHeadSparks(ts); requestAnimationFrame(frame); return; }
+    if (titleActive) { tickTitle(dt); drawTitle(ts); drawHeadSparks(ts); drawTabSpark(ts); requestAnimationFrame(frame); return; }
     // The victory sequence owns the frame outright: it is a camera move over a board that has
     // stopped, so nothing of the level's own update has any business running under it.
-    if (win) { tickWin(dt); drawWin(ts); drawHeadSparks(ts); updatePauseBtn(); requestAnimationFrame(frame); return; }
+    if (win) { tickWin(dt); drawWin(ts); drawHeadSparks(ts); drawTabSpark(ts); updatePauseBtn(); requestAnimationFrame(frame); return; }
     if (!paused) {
       if (state.status === "hold") tickHold(dt);
       else if (state.status === "campan") tickCamPan(dt);
@@ -18833,6 +18876,7 @@
     draw(state.crunch ? state.crunch.ts : ts);   // a caught board is a still frame, bobs and all
     if (paused) drawPausedOverlay();
     drawHeadSparks(ts);                  // under a section's name, when one is on screen
+    drawTabSpark(ts);                    // ...and on top of the tab bar, when it is up
     updatePauseBtn();
     updatePowerBtn();
     tickRelicShow(dt);

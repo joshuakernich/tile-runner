@@ -1,6 +1,6 @@
 // Tile Runner service worker — NETWORK-FIRST so the newest deploy always wins,
 // with an offline fallback to the last cached copy.
-const CACHE = "tile-runner-v143";
+const CACHE = "tile-runner-v144";
 const ASSETS = [
   "./",
   "./index.html",
@@ -26,11 +26,23 @@ self.addEventListener("activate", (e) => {
   );
 });
 
+// NETWORK-FIRST, AND REALLY THE NETWORK. A plain fetch() from here still reads through the
+// browser's own HTTP cache, which will happily hand back a copy.js or levels.js from before the
+// last deploy alongside the index.html from after it — and since the talismans' names moved into
+// copy.js, that pairing draws them blank. So the game's own files are asked for with "no-cache":
+// the browser must check with the server first, which is one cheap 304 when nothing changed.
+// Page NAVIGATIONS are left exactly as they were — refetching one by URL loses its redirect
+// handling — and anything from another origin (fonts) is fetched as it always was.
+const fresh = (req) => {
+  if (req.mode === "navigate" || new URL(req.url).origin !== self.location.origin) return fetch(req);
+  return fetch(req.url, { cache: "no-cache", credentials: "same-origin" });
+};
+
 // NETWORK-FIRST: try the network (and refresh the cache); only use the cache when offline.
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
   e.respondWith(
-    fetch(e.request)
+    fresh(e.request)
       .then((resp) => {
         const copy = resp.clone();
         caches.open(CACHE).then((c) => c.put(e.request, copy));
