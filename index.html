@@ -2559,24 +2559,87 @@
       noiseBuf = ac.createBuffer(1, Math.floor(ac.sampleRate * 0.2), ac.sampleRate);
       const d = noiseBuf.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      // ...and whenever it WAKES — the first unlock, or coming back from a call or another app —
+      // anything that asked for a bed while it was asleep gets it now. ambient() remembers the
+      // mode it was given while the context was locked; ambientResume() is what starts it, and it
+      // can only start once the context is actually running.
+      ac.onstatechange = () => { if (ac.state === "running") ambientResume(); };
       return true;
     }
+    // ---- iPHONE: SOUND WITH THE RINGER OFF ----------------------------------------------
+    // iOS treats Web Audio as AMBIENT sound, which the Silent switch mutes — while a media element
+    // plays as PLAYBACK, which it does not. Two ways over that, newest first:
+    //   1. The Audio Session API, where Safari has it: ask for "playback" outright.
+    //   2. Otherwise, a media element playing on a loop — half a second of silence — which puts the
+    //      page's whole session into playback, Web Audio included. It has to be started inside a
+    //      gesture like the context does, so unlock() starts it, and it is paused while the page is
+    //      hidden (so the lock screen does not show something "playing") and while the game's own
+    //      Sound is off (so a muted game does not take over the phone's audio for nothing).
+    // The cost of PLAYBACK, on either route: starting the game's sound stops whatever else the
+    // phone was playing, the way a video does. That is what sound through the Silent switch means.
+    let unmuteEl = null;
+    function silentWav() {
+      const rate = 8000, n = 4000, buf = new ArrayBuffer(44 + n), v = new DataView(buf);
+      const str = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+      str(0, "RIFF"); v.setUint32(4, 36 + n, true); str(8, "WAVE"); str(12, "fmt ");
+      v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+      v.setUint32(24, rate, true); v.setUint32(28, rate, true); v.setUint16(32, 1, true);
+      v.setUint16(34, 8, true); str(36, "data"); v.setUint32(40, n, true);
+      for (let i = 0; i < n; i++) v.setUint8(44 + i, 128);        // 8-bit silence is the midpoint
+      return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+    }
+    function sessionPlayback() {
+      try {
+        if (navigator.audioSession) { navigator.audioSession.type = "playback"; return; }
+      } catch (_) {}
+      if (muted || (typeof document !== "undefined" && document.hidden)) return;
+      try {
+        if (!unmuteEl) {
+          unmuteEl = document.createElement("audio");
+          unmuteEl.src = silentWav(); unmuteEl.loop = true; unmuteEl.preload = "auto";
+          unmuteEl.setAttribute("x-webkit-airplay", "deny");
+          unmuteEl.disableRemotePlayback = true;
+        }
+        if (unmuteEl.paused) { const pr = unmuteEl.play(); if (pr && pr.catch) pr.catch(() => {}); }
+      } catch (_) {}
+    }
+    function sessionPause() { try { if (unmuteEl && !unmuteEl.paused) unmuteEl.pause(); } catch (_) {} }
+    try { if (typeof navigator !== "undefined" && navigator.audioSession) navigator.audioSession.type = "playback"; } catch (_) {}
     // Must be triggered from a user gesture so iOS/Safari unlocks audio.
+    // Called from EVERY gesture now, not just the first (see below), so once the context is awake
+    // it does almost nothing.
     function unlock() {
       if (!ensure()) return;
-      if (ac.state !== "running") ac.resume();
+      sessionPlayback();        // inside the gesture: the Silent switch (see above)
+      if (ac.state === "running") { ambientResume(); return; }
+      // The bed that was asked for while locked comes in when the resume LANDS, not now: resume()
+      // is asynchronous, and asked synchronously the context is still asleep and ambientResume
+      // quietly did nothing — which is how the intro's music went missing until some later tap.
+      const pr = ac.resume();
+      if (pr && pr.then) pr.then(ambientResume, () => {});
       // iOS needs an actual sound started inside the gesture to fully wake the context
       try {
         const b = ac.createBufferSource();
         b.buffer = ac.createBuffer(1, 1, ac.sampleRate);
         b.connect(ac.destination); b.start(0);
       } catch (_) {}
-      ambientResume();          // the title asks for music before a gesture is allowed
     }
     // iOS suspends the audio context when the app is backgrounded / the phone locks — wake it on return
     if (typeof document !== "undefined") {
       const wake = () => { if (ac && ac.state !== "running") ac.resume(); };
-      document.addEventListener("visibilitychange", () => { if (!document.hidden) wake(); });
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) sessionPause(); else { wake(); if (ac && !muted) sessionPlayback(); }
+      });
+      // THE UNLOCK LISTENS FOR THE GESTURES THAT COUNT. A browser only lets audio start inside an
+      // event it treats as a real user activation — keydown, a mouse press, and for a FINGER the
+      // release: pointerup and touchend. A touch's pointerdown is not one. Every tap on the board
+      // calls unlock() from pointerdown, which works with a mouse and silently fails on a phone:
+      // the tap that leaves the title and starts the film was never allowed to wake the audio, nor
+      // were the taps inside the film, so the intro played to nothing until something with a click
+      // handler was pressed. Capture phase, passive, on the document, so no handler that stops an
+      // event can keep it from getting here.
+      for (const ev of ["pointerup", "touchend", "click", "keydown"])
+        document.addEventListener(ev, () => unlock(), { capture: true, passive: true });
       window.addEventListener("focus", wake);
       window.addEventListener("pageshow", wake);
     }
@@ -4115,8 +4178,8 @@
     function setMuted(m) { muted = !!m;
       if (m) {
                if (ambTimer) { clearInterval(ambTimer); ambTimer = null; }
-               warp(false); }
-      else ambientResume(); }
+               warp(false); sessionPause(); }
+      else { ambientResume(); if (ac) sessionPlayback(); } }
     // ---- the hunter's heartbeat ---------------------------------------------------------
     // Not the monster's noise — YOURS. It is the one sound in the game that says something
     // about the player rather than about the board, which is why it works where a growl did
@@ -4340,7 +4403,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.41";                    // shown on the title & pause screens
+  const VERSION = "v10.42";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
