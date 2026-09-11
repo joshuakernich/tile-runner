@@ -790,30 +790,25 @@
      the square it points at — two different brightnesses of the same place, and the eye read
      them as two different places. The label stands on the palette unaided, the way the map's
      numbers do over those very same colours. */
+  /* The Tileverse's own BLUE, with black type — the section colour, the way Settings' rows wear its
+     green. The chequer is the lift every bright plate wears, and the shadow the blue darkened, the
+     rule every coloured button follows. (It used to be white with the chosen chapter's ink in the
+     type and the weave; the chapter still says itself in the square and the spark behind this.) */
   #winui #win-next {
-    background-color:#fff;
-    color:var(--quilt-ink, #242043);
-    /* The chequer every button in the game wears, in the CHAPTER'S OWN colour at a tenth. The
-       shared --chq-ink and --chq-lift are both whites, for dark plates and bright ones, and on
-       a white plate neither is there at all. This is the third case: a light ground that wants a
-       dark weave — and taking it from the chapter means the tie to the square is said twice, once
-       loudly in the type and once under it. */
+    background-color:var(--sec-tv);
+    color:#000;
     background-image:
-      conic-gradient(transparent 0 25%, var(--quilt-wash, transparent) 0 50%,
-                     transparent 0 75%, var(--quilt-wash, transparent) 0);
+      conic-gradient(transparent 0 25%, var(--chq-lift) 0 50%,
+                     transparent 0 75%, var(--chq-lift) 0);
     background-size:var(--chq2) var(--chq2);
     background-position:0 0;
     background-origin:border-box;
-    /* ...and the shadow is the button's own colour darkened, which is the rule the gold and the
-       amber ones follow. The button's own colour is white now, so it is a grey. */
-    box-shadow:0 var(--btn-drop) 0 #b9bdd2;
+    box-shadow:0 var(--btn-drop) 0 color-mix(in srgb, var(--sec-tv) 52%, #000);
   }
   /* ...but not the arrow on it. image-rendering inherits, and the chip is drawn at twice its
      size and scaled down — pixelated turned the one round-capped thing in the row to gravel. */
   #winui #win-next canvas { image-rendering:auto; }
-  /* NO GLOW BEHIND THE ANSWER IN CSS any more. It is the game's standard SPARK, drawn on the
-     board's own canvas under the button — see drawWin and winNextAt — so it is the same light
-     as the one behind the chosen square, and it crosses the map rather than washing it. */
+  /* NO GLOW OR SPARK ON THE ANSWER. The light is on the chosen square itself — see drawMap. */
   #poem {
     position:fixed; inset:0; display:none; flex-direction:column;
     align-items:center; justify-content:center; gap:var(--chq2);
@@ -935,6 +930,12 @@
   #ready { color:var(--free); }
   #board-wrap { flex:1; width:100%; display:flex; align-items:stretch; justify-content:center; min-height:0; overflow:hidden; }
   canvas { image-rendering:pixelated; touch-action:none; display:block; }
+  /* ...but not a picture INSIDE a menu button. `none` is for the board, which takes every touch
+     itself; on a shop item the swatch is most of the button, so a finger landing on it to scroll
+     the rack was refused the pan outright — touch-action is the intersection of everything under
+     the finger, and `none` wins that. These take the button's own `manipulation`: a drag scrolls
+     the rack it sits in, a tap is still a tap. */
+  #menu button canvas { touch-action:manipulation; }
   footer { padding:10px 0 16px; display:flex; gap:var(--chq); }
   /* No outline. The shadow sits DIRECTLY below rather than down-and-right: an offset to the
      corner implies a light source the rest of the game does not have, where a shadow straight
@@ -1537,6 +1538,9 @@
      is its own: 46px is the size of a screen's name and this is the name of a thing ON one,
      and half the charms would wrap on a phone at that. */
   .orrery-cap b { font-size:min(30px, 8.4vw); line-height:1.1; text-transform:uppercase; }
+  /* A line break in a talisman's name or blurb is a line break on the page. */
+  .orrery-cap b, .orrery-cap i { white-space:pre-line; }
+  .orrery-cap { position:relative; }   /* hung from its last line by the page — see placeCap */
   /* ...and the blurb is BODY COPY, set exactly as the mechanic cards set theirs — the game's
      one voice for a sentence explaining something. It was 9px at 0.2 tracking, from before
      there was a standard to be out of step with. */
@@ -3666,6 +3670,67 @@
         o2.start(t); o2.stop(t + 0.26);
       });
     }
+    // A CHAPTER CHOSEN on the Tileverse: a shimmer — ethereal, not arcade. Not a run of notes but
+    // a CHORD that blooms: six very high, open tones (E major, spread over two octaves with the fifth
+    // and no third below it) coming in loosely a breath apart, each a slow swell rather than a
+    // strike. Every tone is three sines a few cents apart with a slow vibrato of its own, so the
+    // voices drift through each other — that drifting is the shimmer — and they hang for a couple
+    // of seconds, mostly in the reverb. Each tone STARTS sharp — the attack is a few milliseconds —
+    // so the chord glints as it lands. A band of soft air rises underneath and goes with them.
+    // ...and IN A DIFFERENT KEY EVERY TIME: the whole chord moved by one of these, never the one it
+    // was last time, so choosing chapter after chapter is a phrase rather than one chime repeated.
+    // Steps of the major pentatonic either side of home, so any two in a row sit well together.
+    const SHIMMER_KEYS = [-5, -3, 0, 2, 4, 7, 9];
+    let shimmerKey = null;
+    function shimmer() {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime;
+      const keys = SHIMMER_KEYS.filter(k => k !== shimmerKey);
+      const key = shimmerKey = keys[Math.floor(Math.random() * keys.length)];
+      const dry = ac.createGain(), wet = ac.createGain();
+      dry.gain.value = 0.5; wet.gain.value = 1.5;              // far more room than direct sound
+      dry.connect(master); wet.connect(sendBus);
+      const NOTES = [31, 38, 43, 47, 50, 55];                  // E6 B6 E7 G#7 B7 E8 — high, glassy
+      NOTES.forEach((semi, i) => {
+        // The FIRST tone sounds on the tap itself — no gap, no lead-in — and the rest bloom out of
+        // it, loosely, a breath apart.
+        const t = t0 + (i ? i*0.075 + Math.random()*0.05 : 0);
+        const hz = BASE * Math.pow(2, (semi + key)/12);
+        const peak = 0.018 * (1 - i*0.07);
+        const life = 1.5 + Math.random()*0.9;
+        for (const cents of [-7, 0, 7]) {
+          const o = ac.createOscillator(), g = ac.createGain();
+          o.type = "sine";
+          o.frequency.setValueAtTime(hz, t);
+          o.detune.setValueAtTime(cents, t);
+          const lfo = ac.createOscillator(), depth = ac.createGain();   // its own slow waver
+          lfo.frequency.value = 3.5 + Math.random()*2.0;
+          depth.gain.value = 5;                                          // cents
+          lfo.connect(depth); depth.connect(o.detune);
+          g.gain.setValueAtTime(0.0001, t);
+          // A SHARP onset on every tone — a few milliseconds, so each one catches like light on
+          // glass — and the softness is all in the long tail and the room it rings into.
+          g.gain.exponentialRampToValueAtTime(peak, t + (i ? 0.012 : 0.004));
+          g.gain.exponentialRampToValueAtTime(0.0002, t + life);
+          o.connect(g); g.connect(dry); g.connect(wet);
+          o.start(t); lfo.start(t);
+          o.stop(t + life + 0.05); lfo.stop(t + life + 0.05);
+        }
+      });
+      if (noiseBuf) {                                           // the air, rising slowly under it
+        const t = t0;
+        const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;   // the buffer is only 0.2s
+        const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 0.6;
+        const kk = Math.pow(2, key/12);                        // the air moves with the chord
+        bp.frequency.setValueAtTime(4200*kk, t); bp.frequency.exponentialRampToValueAtTime(10500*kk, t + 1.0);
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.012, t + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.0002, t + 1.4);
+        src.connect(bp); bp.connect(g); g.connect(dry); g.connect(wet);
+        src.start(t); src.stop(t + 1.45);
+      }
+    }
     // ---- UI ----------------------------------------------------------------------
     // Every button in the game makes this noise. Short, dry, no reverb send: it is a
     // control surface, not part of the world, so it must not sound like it is in the room.
@@ -4417,7 +4482,7 @@
              slide, clack, tap, tapBig, swish, airSwish, tabClick, power, warp, vortex, thrum, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck, choir,
              ambient,
-             introGather, introFlash, rumble, flap, life, claim, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
+             introGather, introFlash, rumble, flap, life, claim, shimmer, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
              levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, talismanTheme, choirLift, setMusicGate,
              musicNow: () => ({ ...MU }) };
   })();
@@ -4453,7 +4518,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.45";                    // shown on the title & pause screens
+  const VERSION = "v10.46";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -11438,7 +11503,7 @@
           // know this screen can now be steered.
           win.next = i; win.pick = true;
           win.camTo = (i === INTRO_CELL ? introMapCell() : mapCells()[i]);
-          Sound.tapBig(); haptic(8);
+          Sound.tapBig(); Sound.shimmer(); haptic(8);
           showWinUI();
         }
       }
@@ -11455,16 +11520,10 @@
   // to a chapter you just chose. Two custom properties rather than two style writes of `top` and
   // `transform`, so the whole placement is one rule in the sheet and this only feeds it numbers.
   const winPicked = () => !!win && win.pick !== false;
-  // WHERE THE ANSWER'S SPARK GOES, in canvas pixels, and when it arrived so it can come up with
-  // the button rather than before it. Null whenever the answer is not on screen. Only the
-  // PLACE is the button's: the size is the map square's (see drawWin), so it is the same spark
-  // as the one behind the chosen chapter. Sized off the plate's own height it came out at two
-  // thirds of that one, and its streaks had faded to nothing by the time they cleared the plate.
-  let winNextAt = null;
   function placeWinNext(S, cx0, cy0) {
     const el = document.getElementById("winui");
-    if (!el || !el.classList.contains("show") || !win) { winNextAt = null; return; }
-    const btn = document.getElementById("win-next"); if (!btn) { winNextAt = null; return; }
+    if (!el || !el.classList.contains("show") || !win) return;
+    const btn = document.getElementById("win-next"); if (!btn) return;
     const p = win.next === INTRO_CELL ? introMapCell() : (mapCells()[win.next] || { c: 0, r: 0 });
     const r = mapRectAt(p, S, cx0, cy0), o = canvasOrigin(), pad = uiGrid();
     const bw = btn.offsetWidth, bh = btn.offsetHeight;
@@ -11485,8 +11544,6 @@
     el.classList.add("at-cell");
     el.style.setProperty("--wn-x", Math.round(cx - window.innerWidth/2) + "px");
     el.style.setProperty("--wn-y", Math.round(y) + "px");
-    winNextAt = { x: cx - o.x, y: y + btn.offsetTop + bh/2 - o.y,
-                  born: winNextAt ? winNextAt.born : performance.now() };
   }
   // Putting the chosen square back down. The button goes, the map keeps its camera, and
   // `win.next` is left alone — it is still what would load, and the moment anything selects
@@ -11514,18 +11571,6 @@
     }
     const k = Math.max(1, cols.length);
     return "#" + [r/k, g/k, b/k].map(v => Math.round(v).toString(16).padStart(2, "0")).join("");
-  }
-  // THE ANSWER WEARS THE CHAPTER IN ITS INK, not on its ground. It used to be the chapter's own
-  // quilt blown up — nine of its colours as the button's background — which said "the same
-  // place" plainly but made the one thing you press on this screen the same value as the map it
-  // is standing on. White reads at any size against any chapter, and the writing carries the
-  // colour instead: same information, said by the type rather than by the plate.
-  // Darkened and saturated a step, because a chapter's palette lives at 24-42% lightness — right
-  // for a square you look INTO and too pale for six letters on white.
-  function winNextInk(el, idx) {
-    const ink = tintHex(themeMean(idx), 0, 1.35, -14);
-    el.style.setProperty("--quilt-ink", ink);
-    el.style.setProperty("--quilt-wash", fRGBA(ink, 0.10));
   }
   // THE WHOLE TILEVERSE, ONE PIXEL TO A CHAPTER. Not a picture of the map — the map itself, at
   // the smallest scale it can still be itself: every chapter in its own cell, in its own colour,
@@ -11582,10 +11627,7 @@
     // hangs directly under the square, and that square has the number written across it: a button
     // an inch below a big 16 does not need to say sixteen. What is left is the one thing the
     // square cannot tell you, which is whether you have been there.
-    // The ink first: labelWithArrow draws the arrow in the button's COMPUTED colour, so the
-    // chapter's colour has to be on the element before the label is built or the chip comes out
-    // in whatever the last chapter left behind.
-    winNextInk(nx, idx);
+    // labelWithArrow draws the arrow in the button's COMPUTED colour — the black the sheet gives it.
     labelWithArrow(nx, idx === INTRO_CELL ? "Replay"
                      : (b && (b.done || b.stars) ? "Replay" : "Play"));
     el.classList.toggle("show", winPicked());
@@ -11883,7 +11925,8 @@
     lift:   0.18,   // how far up the orbit's middle goes from home, in box heights
     shrink: 0.55,   // the orbit's radius, as a fraction of what it was
     small:  0.62,   // ...and the charms riding it, likewise
-    sit:    1.00,   // where the featured charm ends up, down the box
+    sit:    1.00,   // where the featured charm ends up, down the box, until its name is laid out...
+    frontGap: 2.0,  // ...and then: grid squares between its lowest edge and the top of its name
     // ROOM FOR THE LIGHT. The glow reaches nearly three radii out from a charm that is already
     // most of the way down the box, so on a canvas the size of the box it was cut off square at
     // the bottom and both sides — a light with edges, which is the one thing a light has not
@@ -11897,7 +11940,7 @@
     // below the whole of it put them a screen away from the charm they are naming. This is the
     // one number that says how close they sit under it, and it is a fraction of the box like
     // everything else here so it follows the box on any screen.
-    capUp:  0.44,
+    capUp:  0.54,
     // ...and it is not a diagram of a charm, it is the charm. It leans a few degrees the way
     // every heading in the game leans, and breathes on a long clock — the same float the
     // ceremony holds him in, for the same reason: a thing held still is a picture of a thing.
@@ -12331,7 +12374,7 @@
   // They sit OVER the lettering, so they are on a canvas of their own laid over the page — above
   // the headings and the map's header, below the tab bar and the cards — not on the board's canvas
   // under it. Measured off the two letters' own boxes every frame, so they follow the heading's
-  // lean, its whip between rooms and its fade.
+  // lean, its whip between rooms and its fade — in where they sit; the sparks themselves stay upright.
   const _headRange = document.createRange();
   function sectionHeads() {
     const out = [];
@@ -12395,13 +12438,15 @@
     g.clearRect(0, 0, VW, VH);
     const size = uiGrid() * TAB_SPARK;                            // the tab bar's spark, exactly
     heads.forEach((el, hi) => {
-      if (!el._glint || el._glint.text !== el.textContent || el._glint.room !== headRoom(el)) placeGlints(el);
+      // ...and when the letters it found have been THROWN AWAY. A menu rebuild — every tap in the
+      // shop is one — writes the same words back as a new text node, so the text still matches but
+      // the node the glints were pinned to is gone and measures as nothing: they vanished.
+      if (!el._glint || el._glint.text !== el.textContent || el._glint.room !== headRoom(el)
+          || el._glint.spots.some(sp => !sp.node.isConnected)) placeGlints(el);
       const cs = getComputedStyle(el), a = +cs.opacity;
       if (!(a > 0.01) || !el._glint.spots.length) return;
       const fs = parseFloat(cs.fontSize) || 46;
       const col = cs.getPropertyValue("--spark").trim() || null;   // the room's own colour
-      const m = /matrix\(([^,]+),\s*([^,]+)/.exec(cs.transform);
-      const lean = m ? Math.atan2(+m[2], +m[1]) : 0;
       // A letter's box runs the full line height; its glyph's top and bottom are in from that by
       // the half-leading and a little of the cap's shoulder.
       el._glint.spots.forEach((sp, k) => {
@@ -12412,19 +12457,22 @@
         const x = sp.x === "mid" ? (r.left + r.right) / 2
                 : sp.x === "right" ? r.right - fs * 0.06 : r.left + fs * 0.06;
         const y = r.top + lead + fs * (sp.y === "bottom" ? 0.86 : 0.14);
+        // UPRIGHT: the spot is on the leaning letter, but the spark itself is never turned with it.
         g.save();
-        g.translate(x + fs * HEAD_GLINT_NUDGE.x, y + fs * HEAD_GLINT_NUDGE.y); g.rotate(lean);
+        g.translate(x + fs * HEAD_GLINT_NUDGE.x, y + fs * HEAD_GLINT_NUDGE.y);
         drawSpark(g, 0, 0, size, ts, { alpha: a, col, seed: 0.17 + k * 0.41 + hi * 0.31 });
         g.restore();
       });
     });
     cv._lit = true;
   }
-  // THE SPARK ON TOP OF THE TAB BAR. The game's standard spark on the bar's own canvas, centred on
-  // the top edge of the capsule, in the lit tab's colour — the same --tab-rim the outline is drawn
-  // in. It EASES to a new colour rather than jumping, so it changes with the outline as the plate
+  // THE SPARK ON TOP OF THE TAB BAR. The game's standard spark on the bar's own canvas, on the top
+  // edge of the capsule over the lit tab — rolling there with the plate when the tab changes — in
+  // the lit tab's colour, the same --tab-rim the outline is drawn in. It EASES to a new colour rather than jumping, so it changes with the outline as the plate
   // slides. Sized in UI grid squares, like the bar it sits on.
   const TAB_SPARK = 2.2;
+  const CHARM_SPARK_MS = 4000;                    // one left-to-right pass of a talisman's spark along its top
+  const TAB_SPARK_ROLL = 0.9;                     // its rolling radius, in spark sizes — smaller turns it further
   let _tabSparkRGB = null;
   function drawTabSpark(ts) {
     const bar = document.getElementById("wintabs");
@@ -12437,13 +12485,27 @@
     }
     const row = bar.querySelector(".wt-row"); if (!row) return;
     const sz = uiGrid() * TAB_SPARK, grow = 1 + SPARK.breathe, px = Math.max(1, dpr || 1);
-    const W = Math.ceil(sz * 2 * Math.max(SPARK.h, SPARK.d, SPARK.glow) * grow);
-    const H = Math.ceil(sz * 2 * Math.max(SPARK.v, SPARK.d, SPARK.glow) * grow);
+    // SQUARE, and as wide as the spark's longest reach: it ROLLS, so the long streak spends part of
+    // every move standing on end, and a canvas cut to the upright spark would crop it.
+    const W = Math.ceil(sz * 2 * Math.max(SPARK.h, SPARK.v, SPARK.d, SPARK.glow) * grow), H = W;
     if (cv.width !== Math.round(W * px) || cv.height !== Math.round(H * px)) {
       cv.width = Math.round(W * px); cv.height = Math.round(H * px);
       cv.style.width = W + "px"; cv.style.height = H + "px";
     }
-    cv.style.left = Math.round(row.offsetLeft + row.offsetWidth / 2 - W / 2) + "px";
+    // OVER THE LIT TAB, and it rides the PLATE there. Where it is now is read off the plate's own
+    // box — mid-slide, with the sheet's own easing — and where it is going off the lit button, so
+    // the spark and the plate arrive together and a jumped plate is a jumped spark. It ROLLS along
+    // the top of the capsule: turned by the distance still to go over its radius, which comes to
+    // nothing exactly as it lands, so it always stops upright.
+    const on = row.querySelector("button.on"), plate = row.querySelector(".wt-plate");
+    let at = row.offsetWidth / 2, to = at;
+    if (on) {
+      to = on.offsetLeft + on.offsetWidth / 2;
+      const pr = plate && plate.getBoundingClientRect(), rr = row.getBoundingClientRect();
+      at = pr && pr.width > 0 ? pr.left - rr.left + pr.width / 2 : to;
+    }
+    const roll = (at - to) / (sz * TAB_SPARK_ROLL);
+    cv.style.left = Math.round(row.offsetLeft + at - W / 2) + "px";
     cv.style.top  = Math.round(row.offsetTop - H / 2) + "px";
     const hex = getComputedStyle(bar).getPropertyValue("--tab-rim").trim();
     const want = /^#[0-9a-f]{6}$/i.test(hex) ? hexRGB(hex) : [255, 255, 255];
@@ -12452,8 +12514,50 @@
     const col = "#" + _tabSparkRGB.map(v => Math.round(v).toString(16).padStart(2, "0")).join("");
     g.setTransform(px, 0, 0, px, 0, 0);
     g.clearRect(0, 0, W, H);
-    drawSpark(g, W / 2, H / 2, sz, ts, { col, seed: 0.83 });
+    g.save();
+    g.translate(W / 2, H / 2); g.rotate(roll);
+    drawSpark(g, 0, 0, sz, ts, { col, seed: 0.83 });
+    g.restore();
     cv._lit = true;
+  }
+  // The Tileverse's blue (--sec-tv, from the sheet, read once) at an alpha, for the canvas.
+  let _tvBlue = null, _tvBlueRGB = null;
+  function tvBlueHex() {
+    return _tvBlue || (_tvBlue = getComputedStyle(document.documentElement).getPropertyValue("--sec-tv").trim() || "#4baff1");
+  }
+  const PICK_GLOW = { a: 0.55, blur: 0.28 };      // the chosen square's dark halo: strength, and reach in squares
+  const PICK_TRACE_MS = 15000;                    // one lap of the chosen square by its sparks
+  const PICK_TRACE_SHRINK = 0.75;                 // ...and how much smaller they are along its bottom (0.75 = a quarter size)
+  let _pickTrace = null;                          // which square they are circling, and since when
+  // A point on the edge of a rounded square (corner x0,y0, side s, corner radius r), `u` laps round
+  // it ANTICLOCKWISE on screen from the middle of the top edge: left along the top, down the left
+  // side, right along the bottom, up the right side, and home — round each corner on its arc.
+  function rimPointCCW(x0, y0, s, r, u) {
+    r = Math.max(0, Math.min(r || 0, s/2));
+    const L = s - 2*r, Q = Math.PI*r/2, x1 = x0 + s, y1 = y0 + s, cx = x0 + s/2;
+    const arc = (ax, ay, th) => ({ x: ax + r*Math.cos(th), y: ay + r*Math.sin(th) });
+    const SEG = [
+      [L/2, t => ({ x: cx - t*L/2, y: y0 })],                           // top, heading left
+      [Q,   t => arc(x0 + r, y0 + r, -Math.PI/2 - t*Math.PI/2)],        // top-left corner
+      [L,   t => ({ x: x0, y: y0 + r + t*L })],                         // down the left
+      [Q,   t => arc(x0 + r, y1 - r, Math.PI - t*Math.PI/2)],           // bottom-left corner
+      [L,   t => ({ x: x0 + r + t*L, y: y1 })],                         // along the bottom
+      [Q,   t => arc(x1 - r, y1 - r, Math.PI/2 - t*Math.PI/2)],         // bottom-right corner
+      [L,   t => ({ x: x1, y: y1 - r - t*L })],                         // up the right
+      [Q,   t => arc(x1 - r, y0 + r, -t*Math.PI/2)],                    // top-right corner
+      [L/2, t => ({ x: x1 - r - t*L/2, y: y0 })],                       // ...and back to the middle
+    ];
+    let d = (((u % 1) + 1) % 1) * (4*L + 4*Q);
+    for (const [len, at] of SEG) {
+      if (len <= 0) continue;
+      if (d <= len) return at(d / len);
+      d -= len;
+    }
+    return { x: cx, y: y0 };
+  }
+  function tvBlueA(a) {
+    if (!_tvBlueRGB) _tvBlueRGB = hexRGB(tvBlueHex());
+    return "rgba(" + _tvBlueRGB.join(",") + "," + Math.max(0, Math.min(1, a)).toFixed(3) + ")";
   }
   function drawMapSquare(i, x, y, w) {
     if (!(w > 0.5)) return;
@@ -12668,6 +12772,7 @@
     // point in the order — just before the chosen square — or after everything if that square
     // never gets drawn.
     let underDone = false;
+    let ringTop = null;                                    // the chosen square's top-middle and size, once drawn
     const drawUnder = () => {
       if (underDone) return; underDone = true;
       for (const sp of (o.under || [])) drawSpark(ctx, sp.x, sp.y, sp.size, ts, { alpha: sp.alpha, seed: sp.seed });
@@ -12680,7 +12785,7 @@
       const R = mapRect(i, S, cx0, cy0);
       if (R.x > viewW + S || R.y > viewH + S || R.x + S < -S || R.y + S < -S) continue;   // off screen
       const x = R.x, y = R.y, w = S;
-      if (i === sel) { drawUnder(); drawSpark(ctx, x + w/2, y + w/2, S, ts, { alpha: A * o.ring }); }
+      if (i === sel) drawUnder();       // no spark behind it any more: its light is on its edges (below)
       // How much colour this square has. Everything cleared is in colour and everything past
       // the frontier is grey — and `lit` lets one square be walked from one to the other while
       // you watch, which is the whole of "the next level comes alive".
@@ -12779,11 +12884,13 @@
       }
       if (o.ringIdx === i && o.ring > 0) {                 // the one being pointed at
         // Drawn INSIDE its own square now that they touch: a ring hung outside one would be
-        // sitting on its neighbours.
-        const lw = Math.max(1, S*0.045);
-        ctx.strokeStyle = "rgba(255,255,255," + (0.9*o.ring).toFixed(3) + ")";
+        // sitting on its neighbours. In the Tileverse's BLUE, a pixel heavier than the tab bar's
+        // outline (FOOTER.rim) — the same line round the place you picked, a touch firmer.
+        const lw = FOOTER.rim + 1;
+        ctx.strokeStyle = tvBlueA(o.ring);
         ctx.lineWidth = lw;
         rrect(x + lw/2, y + lw/2, w - lw, w - lw, Math.max(0, r - lw/2)); ctx.stroke();
+        ringTop = { x: x + w/2, y, h: w };                  // its sparks go on last, over everything
       }
     }
     if (!(o.ringIdx === INTRO_CELL && o.ring > 0)) drawUnder();
@@ -12804,7 +12911,7 @@
         // ...and the film's square takes the spark as well when it is the one chosen; it is
         // drawn after every chapter anyway, so it is already on top of them.
         if (o.ringIdx === INTRO_CELL && o.ring > 0) {
-          drawUnder(); drawSpark(ctx, R.x + S/2, R.y + S/2, S, ts, { alpha: A * o.ring });
+          drawUnder();
         }
         ctx.save();
         ctx.save();
@@ -12832,11 +12939,55 @@
         ctx.closePath(); ctx.fill();
         // ...and it takes the ring when it is the one you have chosen, exactly as a chapter does
         if (o.ringIdx === INTRO_CELL && o.ring > 0) {
-          const lw = Math.max(1, S*0.045);
-          ctx.strokeStyle = "rgba(255,255,255," + (0.9*o.ring).toFixed(3) + ")";
+          const lw = FOOTER.rim + 1;
+          ctx.strokeStyle = tvBlueA(o.ring);
           ctx.lineWidth = lw;
           rrect(R.x + lw/2, R.y + lw/2, S - lw, S - lw, Math.max(0, r - lw/2)); ctx.stroke();
+          ringTop = { x: R.x + S/2, y: R.y, h: S };
         }
+        ctx.restore();
+      }
+    }
+    // A SUBTLE DARK GLOW ROUND THE CHOSEN SQUARE, lifting it off the map. Outside it only — the
+    // square is cut out of the clip, so its own colours are untouched — and cast as a SHADOW from a
+    // copy of the square drawn a long way off-canvas, so all that lands is the soft falloff. Drawn
+    // after every square, so the neighbours it spills onto do not paint back over it.
+    if (ringTop) {
+      const gx = ringTop.x - ringTop.h/2, gy = ringTop.y, gs = ringTop.h, far = 20000;
+      const path = (px) => { if (ctx.roundRect) ctx.roundRect(px, gy, gs, gs, r); else ctx.rect(px, gy, gs, gs); };
+      ctx.save();
+      ctx.beginPath(); ctx.rect(-far, -far, far*2 + viewW, far*2 + viewH); path(gx); ctx.clip("evenodd");
+      const k = Math.max(1, dpr || 1);
+      ctx.shadowColor = "rgba(0,0,0," + (PICK_GLOW.a * A * o.ring).toFixed(3) + ")";
+      ctx.shadowBlur = gs * PICK_GLOW.blur * k;          // shadows ignore the transform: device px
+      ctx.shadowOffsetX = far * k;
+      ctx.fillStyle = "#000";
+      ctx.beginPath(); path(gx - far); ctx.fill();
+      ctx.restore();
+    }
+    // TWO SPARKS ON THE CHOSEN SQUARE, in the Tileverse's blue — each the tab bar's spark, the same
+    // size — TRACING ITS EDGE, slowly and anticlockwise, opposite one another. They set off from the
+    // middle of the top edge and the middle of the bottom edge the moment the square is chosen, and
+    // follow its rounded corners rather than cutting them, rolling. Drawn after every square rather than with
+    // its own, or the rows around it, painted later, would cover the half that stands off the edge.
+    if (ringTop) {
+      if (!_pickTrace || _pickTrace.idx !== o.ringIdx) _pickTrace = { idx: o.ringIdx, t0: ts };
+      const u = Math.max(0, ts - _pickTrace.t0) / PICK_TRACE_MS;
+      // ...and each ROLLS as it goes, like the tab bar's: turned by the distance it has travelled
+      // over its rolling radius. Round the outside of the square anticlockwise, so it spins that
+      // way too.
+      const sz = uiGrid() * TAB_SPARK, gs = ringTop.h, rr = Math.max(0, Math.min(r || 0, gs/2));
+      const lap = 4*(gs - 2*rr) + 2*Math.PI*rr;
+      for (const [off, seed] of [[0, 0.61], [0.5, 0.19]]) {
+        const q = rimPointCCW(ringTop.x - gs/2, ringTop.y, gs, r, u + off);
+        // SMALLER THE LOWER IT GOES: full size along the top edge, easing down to a small glint
+        // along the bottom — as if the light were on the top of the square and the bottom were
+        // turned away from it.
+        const dn = Math.max(0, Math.min(1, (q.y - ringTop.y) / gs)), ease = dn*dn*(3 - 2*dn);
+        const kz = 1 - PICK_TRACE_SHRINK * ease;
+        ctx.save();
+        ctx.translate(q.x, q.y); ctx.rotate(-(u + off) * lap / (sz * TAB_SPARK_ROLL));
+        drawSpark(ctx, 0, 0, sz * kz, ts, { alpha: A * o.ring, col: tvBlueHex(), seed });
         ctx.restore();
       }
     }
@@ -13075,10 +13226,6 @@
     else if ((P.ph === "out" || P.ph === "name") && !P.nextWasOpen) {
       opts.litIdx = P.next; opts.lit = 0;
     }
-    // The answer's spark goes UNDER the chosen square with that square's own — see drawMap —
-    // and comes up over the 260ms the button takes to arrive.
-    if (winNextAt) opts.under = [{ x: winNextAt.x, y: winNextAt.y, size: S, seed: 0.37,
-      alpha: mapA * Math.min(1, (performance.now() - winNextAt.born) / 260) }];
     drawMap(ts, S, cx0, cy0, opts);
     // ...and the level itself, shrinking from the whole screen into that one square. The rect
     // is walked from one to the other and the picture is drawn to COVER it, so the level never
@@ -13497,7 +13644,7 @@
     meetY:  0.50,  // ...and where the two of them meet, which is the middle of it
     gap:    0.80,  // how far the charm holds above him before the slam, in cells
     cardR:  0.48,  // the charm on the card that follows, in cells
-    nameGap:1.55,  // ...and the air under it before its name, in heading-heights
+    nameGap:1.00,  // ...and the air under it before its name, in heading-heights
     sheenMs:2600,  // one pass of the glisten across the charm and its name
     sheen:  0.34,  // ...and how bright that band is on the charm
   };
@@ -13924,7 +14071,7 @@
       // The game's own heading size, the one winHeading uses for CHAPTER N COMPLETE — this is
       // the same kind of announcement on the same kind of screen, and it was working its size
       // out from the board's cell, which made it a different heading on every level.
-      const nameSz = Math.min(46, W*0.11);
+      const nameSz = 46;          // exactly the section headings' size (#menu-title's 46px), on every screen
       // Measured from the charm's own bottom edge and the HEADING's own size, not from the
       // charm's radius alone — halving the badge should open the gap under it, not close it.
       const ny = cy0 + R*0.95 + nameSz*C.nameGap;
@@ -13937,16 +14084,27 @@
       // the FILL rather than as a pass over the top: draw3DText takes whatever fillStyle it is
       // handed, and a canvas gradient is one — so the letters are filled with the charm's colour
       // brightening through the middle of the band, with no second draw and nothing to clip to.
-      const nm = cere.def.name.toUpperCase();
       ctx.font = "900 " + Math.round(nameSz) + "px " + UI_FONT;
-      const tw = ctx.measureText(nm).width, face = talFace(cere.def);
+      // ITS OWN LINES (talNameLines: the copy's line breaks, and the names that always go on two).
+      // The size is the headings' and does not give way, so a name still on one line that will not
+      // fit is broken at the space nearest its middle as well, the way HOLY TALISMANS is.
+      let nameLines = talNameLines(cere.def).map(l => l.toUpperCase());
+      const nm = nameLines[0];
+      if (nameLines.length === 1 && ctx.measureText(nm).width > W*0.9 && nm.includes(" ")) {
+        let at = -1, best = Infinity;
+        for (let k = nm.indexOf(" "); k >= 0; k = nm.indexOf(" ", k + 1))
+          if (Math.abs(k - nm.length/2) < best) { best = Math.abs(k - nm.length/2); at = k; }
+        nameLines = [nm.slice(0, at), nm.slice(at + 1)];
+      }
+      const nameLH = nameSz*1.05;                                  // the headings' own leading
+      const tw = Math.max(...nameLines.map(l => ctx.measureText(l).width)), face = talFace(cere.def);
       const cyc = ((ts + C.sheenMs*0.18) / C.sheenMs) % 1;
       const gx0 = -tw*0.75 + cyc*tw*2.2;
       const gt = ctx.createLinearGradient(gx0 - tw*0.34, 0, gx0 + tw*0.34, 0);
       gt.addColorStop(0,   face);
       gt.addColorStop(0.5, tintHex(face, 0, 1, 74));
       gt.addColorStop(1,   face);
-      draw3DText(nm, 0, 0, nameSz, gt, talSide(cere.def));
+      nameLines.forEach((l, i) => draw3DText(l, 0, i*nameLH, nameSz, gt, talSide(cere.def)));
       ctx.restore();
       // ...and what it does, set the way every other line the game says on a canvas is set:
       // UI_PX at UI_TRACK, wrapped rather than shrunk, on a lead of 1.9. It was carrying a size
@@ -13956,17 +14114,20 @@
       ctx.font = "900 " + UI_PX + "px " + UI_FONT;
       ctx.letterSpacing = UI_TRACK;
       ctx.fillStyle = "#ffffff";
-      const maxW = W*0.84, words = String(cere.def.blurb || "").split(/\s+/).filter(Boolean);
-      const lines = [];
-      let line = "";
-      for (const wd of words) {
-        const t2 = line ? line + " " + wd : wd;
-        if (line && ctx.measureText(t2).width > maxW) { lines.push(line); line = wd; }
-        else line = t2;
+      // Line breaks written into the copy are KEPT — each one starts a new line — and anything
+      // still too wide is wrapped within its own line.
+      const maxW = W*0.84, lines = [];
+      for (const para of String(cere.def.blurb || "").split("\n")) {
+        let line = "";
+        for (const wd of para.split(/\s+/).filter(Boolean)) {
+          const t2 = line ? line + " " + wd : wd;
+          if (line && ctx.measureText(t2).width > maxW) { lines.push(line); line = wd; }
+          else line = t2;
+        }
+        if (line) lines.push(line);
       }
-      if (line) lines.push(line);
       const lead = UI_PX * 1.9;
-      lines.forEach((ln, i) => ctx.fillText(ln, fx, ny + nameSz*1.05 + i*lead));
+      lines.forEach((ln, i) => ctx.fillText(ln, fx, ny + nameLH*nameLines.length + i*lead));
       ctx.restore();
     }
 
@@ -15798,6 +15959,19 @@
       g.lineTo(x,          y + r*0.22);
       g.stroke();
       g.fillRect(x - r*0.13, y + r*0.48, r*0.26, r*0.26); } };   // ...and the dot under it
+  // A talisman's NAME AS LINES. A line break written into its name in copy.js is kept; failing
+  // that, the ones in TAL_NAME_SPLIT always go on two lines, broken at the space nearest the middle
+  // (BELL OF / UNMAKING, HAMMER / OF GOD); everything else is one line.
+  const TAL_NAME_SPLIT = new Set(["pulse", "finger"]);
+  function talNameLines(def) {
+    const nm = String((def && def.name) || "");
+    if (nm.includes("\n")) return nm.split("\n").map(l => l.trim()).filter(Boolean);
+    if (!TAL_NAME_SPLIT.has(def && def.id) || !nm.includes(" ")) return [nm];
+    let at = -1, best = Infinity;
+    for (let k = nm.indexOf(" "); k >= 0; k = nm.indexOf(" ", k + 1))
+      if (Math.abs(k - nm.length/2) < best) { best = Math.abs(k - nm.length/2); at = k; }
+    return [nm.slice(0, at), nm.slice(at + 1)];
+  }
   const talFace = def => def.col || def.face || "#e8dcc0";
   const talSide = def => tintHex(talFace(def), 0, 1, -TAL_SIDE_SHADE);
   // How far a badge falls, against everything else the game extrudes. NOT in TAL: that block is
@@ -21249,6 +21423,8 @@
         wrap.style.top = dy + "px";
         hint.style.top = Math.round(floor - chq*2 - hint.offsetHeight
                                     - wrap.getBoundingClientRect().top) + "px";
+        hintMid = hint.getBoundingClientRect().top + hint.offsetHeight/2;   // on the SCREEN — see placeCap
+        placeCap();
       });
 
       // One out front, and everything else still going round behind it. `cur` is kept while it
@@ -21263,10 +21439,58 @@
       // is built like every other heading in the game and not merely coloured like one.
       const headRamp = (face) => [56, 70, 84, 98, 112].map((d, i) =>
         (0.85*(i+1)).toFixed(2) + "px " + (i+1) + "px 0 " + shadeHex(face, -d)).join(",");
+      // THE CAPTION IS HUNG FROM ITS LAST LINE. However many lines the name and the blurb come to,
+      // the middle of the bottom one lands exactly where the middle of TAP A TALISMAN sits — so the
+      // words always stand the same distance off the panel, and a two-line name grows UP toward
+      // the charm rather than down onto the tabs. `hintMid` is that line, on the screen,
+      // taken when the prompt is placed (it is hidden while a charm is named, so it cannot be
+      // measured then). The caption is moved by a relative `top`, so nothing reflows under it.
+      let hintMid = null, frontSitY = null, orbitSelY = null;
+      const placeCap = () => {
+        if (hintMid == null || !wrap.isConnected) return;
+        // Measured off the LAYOUT (offsetTop/offsetHeight and the line height), never off the
+        // rendered line boxes: a line break kept by pre-line comes back as a stray box of its own,
+        // and the name is turned four degrees, and both threw a box measurement off by a line.
+        //
+        // On the SCREEN, not in the orrery's own box: the card is centred in the space under the
+        // heading, so a caption that grows by a line moves the whole orrery up half a line — the
+        // prompt's spot moving with it — and a caption hung inside the box was left a line short
+        // of where TAP A TALISMAN actually reads. The prompt's place on the screen does not move.
+        cap.style.top = "0px";
+        const el = bl.textContent ? bl : (nm.textContent ? nm : null); if (!el) return;
+        const lh = parseFloat(getComputedStyle(el).lineHeight) || el.offsetHeight;
+        const lastMid = cap.getBoundingClientRect().top + el.offsetTop + el.offsetHeight - lh/2;
+        cap.style.top = Math.round(hintMid - lastMid) + "px";
+        // ...and THE FEATURED CHARM SITS A FIXED GAP ABOVE ITS NAME. Its lowest edge — the face
+        // and the wall extruded under it — is ORRERY.frontGap grid squares over the top of the
+        // name, however many lines the name and blurb take; so it rises with a two-line name
+        // instead of standing on it. In the canvas's own pixels, which the paint reads.
+        if (nm.textContent) {
+          const chq = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--chq")) || 15;
+          const k = c.height / (c.offsetHeight || 1);
+          const nameTop = cap.offsetTop + nm.offsetTop - c.offsetTop;          // in the canvas, CSS px
+          const fr = orreryFrontR(), below = fr*0.95 + fr*1.9*EXTRUDE*TAL_DEEP;
+          frontSitY = (nameTop - ORRERY.frontGap*chq) * k - below;
+          // ...and THE REST GATHER HALFWAY UP TO THE HEADING: the middle of their shrunken orbit
+          // sits exactly between the bottom of HOLY TALISMANS and the top of the featured charm's
+          // face — so however high a long name lifts that charm, the others stay centred in the
+          // room it leaves above it. Both in the canvas's own pixels.
+          const head = document.getElementById("menu-title");
+          if (head) {
+            const headBot = (head.getBoundingClientRect().bottom - c.getBoundingClientRect().top) * k;
+            orbitSelY = (headBot + (frontSitY - fr*0.95)) / 2;
+          }
+        }
+      };
+      // Whatever changes the caption's size — the words, a wrap, a font arriving late — hangs it
+      // again. It only ever moves the caption, never resizes it, so this cannot feed itself.
+      if (window.ResizeObserver) new ResizeObserver(() => placeCap()).observe(cap);
       const say = () => {
         const got = named && talUnlocked.has(named.id);
         hint.style.display = named ? "none" : "";
-        nm.textContent = named ? (got ? named.name : "???") : "";
+        // ...in its own lines — see talNameLines — and the blurb with its copy's line breaks, both
+        // laid out by the sheet's `white-space:pre-line` (.orrery-cap).
+        nm.textContent = named ? (got ? talNameLines(named).join("\n") : "???") : "";
         bl.textContent = named && got ? (named.blurb || "") : "";
         // ...and it is the CHARM'S colour, not the game's gold. Every other heading names a
         // screen and gold is what a screen's name is; this one names an object that already
@@ -21279,6 +21503,7 @@
         const face = named ? talFace(named) : null;
         nm.style.color = face || "";
         nm.style.textShadow = face ? headRamp(face) : "";
+        placeCap();
       };
       say();
       // S is still the geometry: every fraction in ORRERY is of the BOX, not of the canvas the
@@ -21301,7 +21526,10 @@
         // Everything about the orbit is a function of kk: as a charm comes out, the ring rises,
         // draws in and shrinks, all on the one clock that carries the charm down.
         const mid = off + S/2;
-        const cy  = S*(ORRERY.home - ORRERY.lift*kk);
+        // ...rising, as a charm comes out, from home to halfway between the heading and that charm
+        // (see placeCap) — or by ORRERY.lift, until the caption has been laid out to say where that is.
+        const cySel = orbitSelY != null ? orbitSelY : S*(ORRERY.home - ORRERY.lift);
+        const cy  = S*ORRERY.home + (cySel - S*ORRERY.home)*kk;
         const R   = S*ORRERY.ring  * (1 - (1 - ORRERY.shrink)*kk);
         const rad = S*ORRERY.charm * (1 - (1 - ORRERY.small)*kk);
         const t = (ts % ORRERY.ms)/ORRERY.ms;
@@ -21394,6 +21622,27 @@
         // A charm's own lean at this moment. Its index is the phase, so the six of them are
         // never at the same angle at the same time.
         const lean = (i) => Math.sin(ts/ORRERY.spinMs*Math.PI*2 + i*1.7) * ORRERY.spinA;
+        // A SPARK ON EACH CHARM, in its own colour, on its top edge — the tab bar's spark, the same
+        // size — ROLLING slowly along that edge LEFT TO RIGHT, corner to corner of the flat: faint as
+        // it sets off, full at the middle, faint again at the far end, and then back at the left to
+        // go again. It is at nothing at both ends, so the jump home is never seen. It turns by the
+        // distance it has come, like something actually rolling there. Each charm is on its own
+        // phase. The edge tilts with the charm's lean; the spark rides it. A charm you have not
+        // found wears the unknown badge's colour, as its face does.
+        const charmSpark = (def, x, y, r, ang, alpha, k) => {
+          const h = r*0.95;                               // the badge is r*1.9 across...
+          const span = Math.max(0, h - r*1.9*TILE.radius) * 0.9;   // ...and its top is flat this far out
+          const u = (((ts / CHARM_SPARK_MS + k*0.37) % 1) + 1) % 1;   // 0 at the left end, 1 at the right
+          const dx = span * (2*u - 1);
+          alpha *= Math.sin(Math.PI * u);                                // low, high, low
+          const sz = uiGrid() * TAB_SPARK * ICON_SCALE;
+          const X = x + dx*Math.cos(ang) + h*Math.sin(ang), Y = y + dx*Math.sin(ang) - h*Math.cos(ang);
+          g.save();
+          g.translate(X, Y); g.rotate(dx / (sz * TAB_SPARK_ROLL));
+          if (alpha > 0.003) drawSpark(g, 0, 0, sz, ts, { alpha, seed: 0.13 + k*0.29,
+                                       col: talFace(talUnlocked.has(def.id) ? def : TAL_UNKNOWN) });
+          g.restore();
+        };
         for (const p of pts) {
           if (cur && p.def.id === cur.id) continue;     // it is drawn last, over everything
           g.save();
@@ -21407,6 +21656,7 @@
           if (talUnlocked.has(p.def.id)) p.def.draw(g, p.x, p.y, p.r);
           else talBadge(g, p.x, p.y, p.r, TAL_UNKNOWN);
           g.restore();
+          charmSpark(p.def, p.x, p.y, p.r, lean(p.i), 1 - ORRERY.back*kk, p.i);
         }
         if (cur) {
           const p = pts.find(q => q.def.id === cur.id) || { x:mid, y:cy, r:rad };
@@ -21416,7 +21666,7 @@
           // size you actually pick one up. playCell rather than `cell`, for the reason the
           // shop's figure uses it: this page is reached from the Tileverse, where the win
           // sequence's pull-back has left `cell` wound down to a fraction of a level's.
-          const x = p.x + (mid - p.x)*e, y = p.y + (S*ORRERY.sit - p.y)*e;
+          const x = p.x + (mid - p.x)*e, y = p.y + ((frontSitY != null ? frontSitY : S*ORRERY.sit) - p.y)*e;
           const r = p.r + (orreryFrontR() - p.r)*e;
           // The lean and the float both scale with e, so they arrive as it does rather than
           // switching on when it lands. Rotated about its OWN centre — which is why the drained
@@ -21452,6 +21702,7 @@
           if (talUnlocked.has(cur.id)) cur.draw(g, x, yy, r);
           else talBadge(g, x, yy, r, TAL_UNKNOWN);
           g.restore();
+          charmSpark(cur, x, yy, r, ang, 1, idx < 0 ? 0 : pts[idx].i);
         }
       };
       // A tap lands on whatever charm is nearest it, and on nothing if it is nowhere near one.
@@ -23657,9 +23908,11 @@
     ctx.fillText(VERSION, viewW - viewW*0.05, viewH - viewH*0.02);
     ctx.globalAlpha = 1;
   }
-  // WHITE SPARKS ON THE TITLE. The game's standard spark, the size of the one on the tab bar, locked
-  // to a corner of a set letter: `ch` is the letter, `n` which one of it, and `x`/`y` the corner.
-  // Drawn inside the word's own transform, so each rides the pop-in, the lean and the drift with
+  // SPARKS ON THE TITLE, in the colour of the spectrum passing under them — each asks the shimmer
+  // what colour it is laying at that corner right now. The game's standard spark, the size of the
+  // one on the tab bar, locked to a corner of a set letter: `ch` is the letter, `n` which one of
+  // it, and `x`/`y` the corner.
+  // Placed inside the word's own transform, so each rides the pop-in, the lean and the drift with
   // its letter. Placed off the glyph's real ink box (not the em box), a hair in from the corner.
   const TITLE_GLINTS = {
     TILE:   [{ ch:"T", n:1, y:"top",    x:"left"  }],   // the top left of the T
@@ -23683,7 +23936,15 @@
                                 : lx + m.actualBoundingBoxRight - size*TITLE_GLINT_IN;
       const y = sp.y === "top"  ? -m.actualBoundingBoxAscent    + size*TITLE_GLINT_IN
                                 :  m.actualBoundingBoxDescent   - size*TITLE_GLINT_IN;
-      drawSpark(ctx, x, y, uiGrid() * TAB_SPARK, ts, { alpha, col:"#ffffff", seed: 0.23 + j*0.37 + word.length*0.11 });
+      // UPRIGHT: the corner is found in the word's leaning frame, but the spark is drawn with the
+      // lean taken out — the same scale, no rotation — so it stands straight while the word tilts.
+      const M = ctx.getTransform();
+      ctx.save();
+      ctx.setTransform(Math.hypot(M.a, M.b), 0, 0, Math.hypot(M.c, M.d),
+                       M.a*x + M.c*y + M.e, M.b*x + M.d*y + M.f);
+      drawSpark(ctx, 0, 0, uiGrid() * TAB_SPARK, ts, { alpha, col: shimmerColourAt(x, y, size*SHIMMER_SPAN, ts),
+                                                       seed: 0.23 + j*0.37 + word.length*0.11 });
+      ctx.restore();
     });
     ctx.restore();
   }
@@ -23701,7 +23962,7 @@
     ctx.translate(X + fl.dx*w, y + fl.dy*w);
     ctx.rotate(TITLE_TILT + fl.rot*w); ctx.scale(k, k);   // ~-4°, matching the headers
     draw3DText(word, 0, 0, size, null, null, ts);   // ...and the rainbow runs over it
-    drawTitleGlints(word, size, a, ts);             // ...and its white sparks over that
+    drawTitleGlints(word, size, a, ts);             // ...and its sparks over that, in its colours
     ctx.restore();
     ctx.globalAlpha = 1;
   }
@@ -23760,7 +24021,7 @@
     extrude(ctx, size, side || TITLE_SIDE, (dx, dy) => ctx.fillText(text, X + dx, Y + dy));
     ctx.fillStyle = face || "#ffd24a"; ctx.fillText(text, X, Y);
     // `shimTs` is the title lockup and nothing else: light travelling over the gold face.
-    if (shimTs != null) shimmerText(text, X, Y, size * 5.2, shimTs);
+    if (shimTs != null) shimmerText(text, X, Y, size * SHIMMER_SPAN, shimTs);
   }
 
   // ---- the rainbow that runs through the lockup ------------------------------------------
@@ -23775,6 +24036,7 @@
   // however saturated, just looks painted on; it is the moving highlight that makes it shimmer.
   const SHIMMER_MS = 5200;                        // one full turn of the spectrum
   const GLINT_MS   = 2600;                        // ...and one pass of the white band across it
+  const SHIMMER_SPAN = 5.2;                       // how wide one turn of the title's spectrum is, in font sizes
   // A whole turn of hue laid along a shallow diagonal. Seamless because the hue at the two ends
   // of the span is the same angle, so nothing pops as the band wraps around.
   function shimmerGrad(w, phase){
@@ -23784,6 +24046,19 @@
       g.addColorStop(p, "hsl(" + h.toFixed(1) + ",100%,62%)");
     }
     return g;
+  }
+  // ...and the colour that gradient has at one point (x, y) of the word's own frame at time ts, as
+  // hex — the same projection onto the same diagonal, the same phase, the same hsl — so something
+  // sitting on the lettering can wear the light passing under it (the title's sparks do).
+  function shimmerColourAt(x, y, w, ts){
+    const u = Math.max(0, Math.min(1, ((x + w/2) + 0.40*(y + w*0.20)) / (1.16*w)));
+    const phase = (ts % SHIMMER_MS) / SHIMMER_MS;
+    const h = ((((u - phase) % 1) + 1) % 1) * 6;               // hsl(h, 100%, 62%), in sixths
+    const C = 0.76, X = C*(1 - Math.abs(h % 2 - 1)), m = 0.24;
+    const [r, g, b] = h < 1 ? [C, X, 0] : h < 2 ? [X, C, 0] : h < 3 ? [0, C, X]
+                    : h < 4 ? [0, X, C] : h < 5 ? [X, 0, C] : [C, 0, X];
+    const hx = v => Math.round((v + m)*255).toString(16).padStart(2, "0");
+    return "#" + hx(r) + hx(g) + hx(b);
   }
   // The glint. Its span is wider than the word so the band enters and leaves off the ends of
   // the ink rather than fading up in the middle of a letter.

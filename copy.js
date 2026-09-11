@@ -58,7 +58,7 @@ var COPY_DATA = {
     "magnet": { name: "Lodestone",
                 blurb: "A means to attract" },
     "finger": { name: "Hammer of God",
-                blurb: "A fell voice\nthat transforms stone" },
+                blurb: "A fell voice\nto transform stone" },
     "brake": { name: "Millstone",
                blurb: "Slows the heart and body" },
     "ankh": { name: "Ankh",
