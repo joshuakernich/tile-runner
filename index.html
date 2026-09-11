@@ -759,6 +759,11 @@
      21px figure was the picture shouting over the value. Stated once so the two cannot drift. */
   #wintabs { --wt-tally:var(--f-tally, 21px); }
   #wintabs .wt-ico .n { font-size:var(--wt-tally); letter-spacing:1px; color:inherit; font-weight:900; }
+  /* EVERY FIGURE BESIDE A COIN sits on the coin's middle by its INK, not by its line box: SquareFont's
+     digits stand high in the box, so each is moved down by --ink-nudge, measured off the font at boot
+     (see setInkNudge). The tab bar's tally, the shop's purse, a price in the rack and the price tag. */
+  #wintabs .wt-ico .n, .shop-purse span, .tal-grid .tal .price span, .shop-tag .st-tag span {
+    translate:0 var(--ink-nudge, 0); }
   /* `canvas.wallet` is pinned to 17px with an !important, because the wallet glyph has one size
      everywhere it appears in a LIST of prices. This is not that — it is the shop's own purse,
      said again on the way in — so it takes the purse's size, and needs the same weapon to do it. */
@@ -3760,6 +3765,67 @@
         src.start(t); src.stop(t + 1.45);
       }
     }
+    // THE LODESTONE'S PULL — one for each ring of its field closing in, lasting exactly that ring's beat
+    // (`dur`, seconds). A low tone sliding UP an octave as the ring closes, with a band of air sweeping
+    // up and swelling under it, and a soft pluck where the ring lands on him. `step` is which ring of
+    // the three: each is pitched a little higher than the last, so the pull builds — and each opens on a twinkle.
+    const MAGNET_PULL_STEPS = [0, 3, 7];
+    function magnetPull(dur, step) {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime, D = Math.max(0.12, dur || 0.3);
+      const up = MAGNET_PULL_STEPS[Math.max(0, Math.min(MAGNET_PULL_STEPS.length - 1, step | 0))];
+      const hz = BASE * 0.5 * Math.pow(2, up/12), land = t0 + D;
+      // ...a TWINKLE as the ring leaves the rim: three high bell notes a few ms apart, up the ring's own
+      // chord, struck hard and gone in a breath, ringing into the room — the glint before the pull.
+      [0, 7, 12].forEach((iv, i) => {
+        const t = t0 + i*0.028;
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "sine";
+        o.frequency.setValueAtTime(BASE * Math.pow(2, (36 + up + iv)/12), t);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.10 - i*0.018, t + 0.003);
+        g.gain.exponentialRampToValueAtTime(0.0005, t + 0.22);
+        o.connect(g); g.connect(master); g.connect(sendBus);
+        o.start(t); o.stop(t + 0.26);
+      });
+      {                                                         // the pull — an octave above the pluck's root
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "sine";
+        o.frequency.setValueAtTime(hz * 2, t0);
+        o.frequency.exponentialRampToValueAtTime(hz * 4, land);
+        // A FAST attack — most of its strength in the first 15ms, so the pull is there the instant the
+        // ring leaves the rim — and then the rest of the swell as it closes in.
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.16, t0 + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.24, t0 + D*0.85);   // swelling as it closes in...
+        g.gain.exponentialRampToValueAtTime(0.0005, land + 0.03); // ...and gone as it lands
+        o.connect(g); g.connect(master);
+        o.start(t0); o.stop(land + 0.06);
+      }
+      if (noiseBuf) {                                           // the air it drags in with it
+        const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+        const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 2.2;
+        bp.frequency.setValueAtTime(420, t0); bp.frequency.exponentialRampToValueAtTime(2600, land);
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.06, t0 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.10, t0 + D*0.85);
+        g.gain.exponentialRampToValueAtTime(0.0005, land + 0.02);
+        src.connect(bp); bp.connect(g); g.connect(master); g.connect(sendBus);
+        src.start(t0); src.stop(land + 0.05);
+      }
+      {                                                         // ...and where the ring lands on him
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "triangle";
+        o.frequency.setValueAtTime(hz * 4, land);
+        o.frequency.exponentialRampToValueAtTime(hz * 2, land + 0.09);
+        g.gain.setValueAtTime(0.0001, land);
+        g.gain.exponentialRampToValueAtTime(0.26, land + 0.003);
+        g.gain.exponentialRampToValueAtTime(0.0006, land + 0.16);
+        o.connect(g); g.connect(master); g.connect(sendBus);
+        o.start(land); o.stop(land + 0.2);
+      }
+    }
     // ---- UI ----------------------------------------------------------------------
     // Every button in the game makes this noise. Short, dry, no reverb send: it is a
     // control surface, not part of the world, so it must not sound like it is in the room.
@@ -4511,7 +4577,7 @@
              slide, clack, tap, tapBig, swish, airSwish, tabClick, power, warp, vortex, thrum, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck, choir,
              ambient,
-             introGather, introFlash, rumble, flap, life, claim, shimmer, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
+             introGather, introFlash, rumble, flap, life, claim, shimmer, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
              levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, talismanTheme, choirLift, setMusicGate,
              musicNow: () => ({ ...MU }) };
   })();
@@ -4547,7 +4613,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.50";                    // shown on the title & pause screens
+  const VERSION = "v10.51";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -4641,12 +4707,44 @@
     { id:"magnet", col:"#f1645f", ms:3000,
       face:"#f2685f", edge:"#8f2820",
       etch:(g,x,y,r)=>{
-        g.lineCap="butt"; g.lineWidth=r*0.28;                    // a horseshoe: half-ring, two legs
-        g.beginPath(); g.arc(x, y-r*0.08, r*0.46, Math.PI, 0); g.stroke();
+        // A STONE WITH ITS FIELD: a lump of rock in the middle, and on each side of it the field it
+        // throws — leaving at the top, bowing out round the side and coming home at the bottom. It
+        // used to be a horseshoe magnet, which is the diagram of a magnet rather than the thing a
+        // lodestone is: a stone that happens to pull.
+        //
+        // The stone is a filled, uneven seven-sided lump (a round rock at badge size reads as a
+        // coin). The field is drawn below.
+        //
+        // The whole mark is turned 90 degrees about its own middle, so the field lies left and right
+        // of the stone rather than above and below it.
+        g.save(); g.translate(x, y); g.rotate(Math.PI/2); g.translate(-x, -y);
+        const RS = r*0.30, LUMP = [1.00, 0.84, 1.04, 0.88, 0.97, 0.82, 0.93];
         g.beginPath();
-        g.moveTo(x-r*0.46, y-r*0.08); g.lineTo(x-r*0.46, y+r*0.52);
-        g.moveTo(x+r*0.46, y-r*0.08); g.lineTo(x+r*0.46, y+r*0.52);
-        g.stroke(); } },
+        LUMP.forEach((k, i) => {
+          const a = -Math.PI/2 + 0.25 + i * Math.PI*2/LUMP.length;
+          const px = x + Math.cos(a)*RS*k*1.08, py = y + Math.sin(a)*RS*k;   // a touch wider than tall
+          if (i) g.lineTo(px, py); else g.moveTo(px, py);
+        });
+        g.closePath(); g.lineJoin = "round"; g.fill();
+        // THE FIELD, one to a side: not two lines of force but the SPACE BETWEEN them, filled — a
+        // distorted crescent that leaves the stone at its top, swells out round its side and comes
+        // home at its bottom. Out along the outer curve and back along the inner one, both starting
+        // and ending inside the stone's edge, so the crescent's two points are buried in the stone.
+        // Taller than wide, the way a field stands off the poles. (Control points well past the
+        // ends are what give the height.)
+        const pole = RS*0.80, px0 = RS*0.22;
+        // The VOID inside each crescent — the space between it and the stone — reaches well out toward
+        // the edge: the inner curve swells to ~0.47r out, while the outer one stays out by the badge's
+        // edge (~0.69r).
+        const IN = [r*0.60, r*1.40], OUT = [r*0.90, r*1.90];
+        for (const sd of [-1, 1]) {
+          g.beginPath();
+          g.moveTo(x + sd*px0, y - pole);
+          g.bezierCurveTo(x + sd*OUT[0], y - OUT[1], x + sd*OUT[0], y + OUT[1], x + sd*px0, y + pole);
+          g.bezierCurveTo(x + sd*IN[0],  y + IN[1],  x + sd*IN[0],  y - IN[1],  x + sd*px0, y - pole);
+          g.closePath(); g.fill();
+        }
+        g.restore(); } },
 
     // The id stays "finger": it is written into level 16's data, into the editor's picker and
     // into every save that has unlocked it, and none of that is worth churning for a name only
@@ -4772,15 +4870,31 @@
       // is one object, so it is one path — up the stem, out under the cap, over the dome and
       // back down — and nothing in it can overlap anything else because there is nothing else.
       etch:(g,x,y,r)=>{
+        // A REAL MUSHROOM, taller than it is wide and PERFECTLY SYMMETRICAL about its middle: a
+        // slender stem on a swollen foot, under a cap shaped like a wizard's hat — a wide brim flaring
+        // OUT before the sides lean gently IN on their way up, and a small round knob sitting on the tip.
+        // It used to be a toadstool diagram: a flat half-ellipse on a straight post, wider than tall.
+        // Still ONE outline filled ONCE (see above): round the foot, up the stem, out under the cap,
+        // up one side, over the knob and down the other, back in under the cap and down the stem.
+        const P = (dx, dy) => [x + dx*r, y + dy*r];
+        const M = (a) => g.moveTo(...P(...a)), Q = (c, e) => g.quadraticCurveTo(...P(...c), ...P(...e));
+        const C = (c1, c2, e) => g.bezierCurveTo(...P(...c1), ...P(...c2), ...P(...e));
+        const A = (cx, cy, rad, a0, a1) => g.arc(x + cx*r, y + cy*r, rad*r, a0, a1, true);
+        const KH = 0.06, KW = 0.10;                                // the knob: a LOW round bump on the tip,
+        const KR = (KW*KW + KH*KH) / (2*KH), KCY = -0.62 - KH + KR;  // standing only KH above its shoulders —
+        const KA = Math.atan2(-0.62 - KCY, KW);                   // an arc through them, not a ball on a stalk
         g.beginPath();
-        g.moveTo(x-r*0.17, y+r*0.62);                            // the foot of the stem...
-        g.lineTo(x-r*0.22, y+r*0.04);                            // ...up its left side
-        g.lineTo(x-r*0.76, y+r*0.04);                            // ...out along under the cap
-        g.lineTo(x-r*0.76, y-r*0.02);
-        g.ellipse(x, y-r*0.02, r*0.76, r*0.56, 0, Math.PI, 0);   // ...over the dome
-        g.lineTo(x+r*0.76, y+r*0.04);                            // ...down the far edge
-        g.lineTo(x+r*0.22, y+r*0.04);                            // ...back in to the stem
-        g.lineTo(x+r*0.17, y+r*0.62);                            // ...and down to its foot
+        M([-0.16, 0.72]);                                         // the foot...
+        Q([0.00, 0.76], [0.16, 0.72]);                            // ...its underside
+        C([0.22, 0.62], [0.12, 0.30], [0.11, -0.12]);            // up the stem's right side
+        Q([0.36, -0.10], [0.70, -0.14]);                          // out under the cap to the brim
+        C([0.76, -0.24], [0.62, -0.34], [0.44, -0.40]);          // the brim FLARES out first...
+        C([0.30, -0.46], [0.18, -0.54], [0.10, -0.62]);          // ...then the side leans gently IN up to the tip
+        A(0.00, KCY, KR, KA, Math.PI - KA);                       // over the low round KNOB on top
+        C([-0.18, -0.54], [-0.30, -0.46], [-0.44, -0.40]);       // down the other side, hollowed...
+        C([-0.62, -0.34], [-0.76, -0.24], [-0.70, -0.14]);       // ...flaring out again to the brim
+        Q([-0.36, -0.10], [-0.11, -0.12]);                        // back in under the cap to the stem
+        C([-0.12, 0.30], [-0.22, 0.62], [-0.16, 0.72]);          // down the stem's left side to the foot
         g.closePath(); g.fill(); } },
     // Each is the golden tile in its own metal, with the motif cut into the face — see
     // talBadge. `etch` draws GEOMETRY ONLY: the badge painter sets the colour before each of
@@ -6124,6 +6238,9 @@
     { id:"midnight", name:"Midnight", cost:15, earth:["#09080e","#181628"] },
     // ...and its opposite, which is harder to read and worse for you.
     { id:"bone",   name:"Bone",      cost:15, earth:["#e2e0ec","#fcfbff"] },
+    // ...and the two of them at once: a hard black-and-white check, the one design here with no
+    // colour in it at all. The rail comes off the white, as every rail comes off its brighter half.
+    { id:"blackwhite", name:"Black & White", cost:20, earth:["#101016","#f4f4f7"] },
     { id:"blood",  name:"Blood",     cost:20, earth:["#4a0a0f","#7d1219"] },
     // Neon: tube colours scattered over a night-black ground. Black takes half the entries, so
     // it wins half the squares and the bright ones stay sparse — a sign lit against the dark,
@@ -6140,8 +6257,10 @@
                  "#c6ff2f","#0b0b14","#0b0b14","#8b2fff"] },
     // The spectrum, ordered and by COLUMN, so it runs across the ground in stripes. (Polychrome,
     // the same colours scattered one to a square, is gone — Patchwork below does that job now.)
+    // In the RAINBOW PALETTE — the six core colours, the Holy Talismans' own, in shelf order — the same
+    // hexes as the rainbow coats, trails and checks, rather than a spectrum of its own.
     { id:"rainbow", name:"Rainbow",  cost:30, earthMode:"bands",
-      earth:["#ff4d4d","#ff9f1c","#ffe14d","#3ddc84","#3db4ff","#8f6cff"] },
+      earth:["#f1645f","#f7933b","#f6cd28","#49d47c","#4baff1","#c37ef1"] },
     // A PATCHWORK of the six core colours — the Holy Talismans' own, the rainbow checks' brighter
     // cut — pieced so no patch sits beside its own colour (see EARTH_LAYOUT.patch). The shop is
     // dealt a fixed hand, as Neon is: every colour at least once, and nothing matching along an
@@ -6366,7 +6485,7 @@
                           return cat.items.find(i => i.id === lookWorn(k)) || lookDefault(cat); };
   // Prices are live. The six zero-cost items are the kit you start in — they have to stay
   // owned or the runner would have nothing to wear on level 1 — and everything else is locked
-  // until it is bought. The whole shop totals 372 tiles against 111 coins in the campaign, so
+  // until it is bought. The whole shop totals 392 tiles against 111 coins in the campaign, so
   // it is two full clears, every coin collected, to own the lot.
   const UNLOCK_ALL = false;
   const owns = it => UNLOCK_ALL || it.cost === 0 || wallet.owned.has(it.id);
@@ -6543,7 +6662,7 @@
       // been spent; `kind`/`t`/`ms` is the timed effect currently running, if any; `ankh` is
       // its own latch because it is not an effect at all — it sits waiting for a death that
       // may never come, and it must not be clobbered by the next charm you press.
-      power: { used: new Set(), kind: null, t: 0, ms: 0, armed: false, ankh: false },
+      power: { used: new Set(), kind: null, t: 0, ms: 0, armed: false, ankh: false, beat: null },
       coinFly: [],                          // coins on their way to him, pulled by the Magnet
       coinRun: [],                          // ...and coins on their way from him to the counter
       coinsShown: 0,                        // what the counter is SAYING, which lags coinsGot
@@ -9373,7 +9492,11 @@
     chequer: 1,      // alternates the two tones square by square
   };
   const MAGNET_TONE = { mid: "rgba(255,140,140,", rim: "rgba(255,236,236," };
-  const COIN_FLY_MS = 240;     // how long a pulled coin takes to reach him
+  const COIN_FLY_MS = 240;     // how long a pulled coin takes to reach him, when it carries no time of its own
+  // A pulled coin flies at a CONSTANT SPEED rather than in a fixed time, so a coin at the edge of the
+  // Lodestone's reach arrives after one lying beside him — the field visibly reeling in from the rim.
+  const COIN_FLY_PER_TILE = 200;   // ms for every tile it has to come — 2.5 tiles out is half a second
+  const COIN_FLY_MIN = 60;     // ...but never less than this many ms, so one at his feet is still seen to move
   // ...and the run from there to the counter at the top of the screen. A coin used to be
   // answered by a card that popped up over the board saying what you now had, which is a
   // caption: it told you the number rather than showing you the coin becoming it. This is the
@@ -9449,6 +9572,20 @@
     s.power.ms = def.ms;
     s.power.t = def.ms;
     s.power.armed = true;
+    // THE LODESTONE KEEPS TIME WITH HIM. A beat is one tile at the pace he is running at the moment
+    // it is pressed (msPerCell — the current tiles/s turned into ms per tile). He STOPS for exactly
+    // one beat as it takes hold (the Ankh's `hold`, the same stop), each ring of its field takes one
+    // beat to close in on him (see drawMagnetField), and the whole thing — stop included — lasts
+    // three beats rather than a fixed three seconds, so a fast runner's pull is quick and a slow
+    // runner's is slow, and the rings always land on his steps.
+    s.power.beat = null;
+    if (def.id === "magnet") {
+      const beat = Math.max(1, s.msPerCell || 1000 / Math.max(0.01, s.cpsNow || 1));
+      s.power.beat = beat;
+      s.power.pulls = -1;                       // which of its rings has sounded (see tickPower)
+      s.power.ms = s.power.t = 3 * beat;
+      s.hold = Math.max(s.hold || 0, beat);
+    }
     if (def.id === "star") Sound.starTheme(def.ms);
     // The Spur starts the effect the floor pads start, and its own clock is set to the same half
     // second, so the draining bar on the button and the thing it is draining for are one
@@ -10263,21 +10400,30 @@
     }
     if (s.coinFly.length) {                       // coins already in flight, wherever from
       for (const f of s.coinFly) f.t += dt;
-      for (const f of s.coinFly) if (f.t >= COIN_FLY_MS && !f.done) { f.done = true; grabCoin(f.c, f.r, true); }
+      for (const f of s.coinFly) if (f.t >= (f.dur || COIN_FLY_MS) && !f.done) { f.done = true; grabCoin(f.c, f.r, true); }
       s.coinFly = s.coinFly.filter(f => !f.done);
     }
     if (!s.power.kind || s.power.t <= 0) return;
     s.power.t -= dt;
     if (s.power.kind === "magnet") {
+      // ONE PULL SOUND PER RING: when the beat it has been running for ticks over, the ring for that
+      // beat has just left the rim, so its sound starts now and lasts the beat. Latched on the power
+      // itself, so each of the three sounds exactly once whatever the frame rate does.
+      const B = s.power.beat;
+      if (B) {
+        const ring = Math.min(2, Math.floor((s.power.ms - s.power.t) / B));
+        if (ring > (s.power.pulls == null ? -1 : s.power.pulls)) { s.power.pulls = ring; Sound.magnetPull(B / 1000, ring); }
+      }
       // Anything within reach comes off the board now and flies in; the pickup itself
       // lands when it arrives, so the sound and the score follow the coin rather than
       // the button press.
       const rp = visualAt(s.runIdx + s.runT), rx = rp.x/cell, ry = rp.y/cell;
       for (const ck of Array.from(s.coinCells)) {
         const i = ck.indexOf(","), c = +ck.slice(0, i), r = +ck.slice(i+1);
-        if (Math.hypot(rx - (c+0.5), ry - (r+0.5)) > MAGNET.radius) continue;
+        const d = Math.hypot(rx - (c+0.5), ry - (r+0.5));      // how far it has to come, in tiles
+        if (d > MAGNET.radius) continue;
         s.coinCells.delete(ck);
-        s.coinFly.push({ c, r, t: 0, done: false });
+        s.coinFly.push({ c, r, t: 0, done: false, dur: Math.max(COIN_FLY_MIN, d * COIN_FLY_PER_TILE) });
       }
     }
     if (s.power.t <= 0) {                          // done — put everything back
@@ -12922,32 +13068,36 @@
         }
         ctx.restore();
       }
-      // A cleared level SHINES: a band of light drawn across it, and a rim to lift it off the
-      // cosmos. It is the only thing on the map that is doing anything, so it does not need to
-      // do much.
+      // A cleared level SHINES: the headings' shimmer crossing it, and the Tileverse's blue ring.
       const ga = o.glowA == null ? 1 : o.glowA;
       if (o.glowIdx === i && o.glow > 0 && ga > 0) {
         // The shine PASSES rather than sits: a band of light crosses the square and then there
         // is a beat of nothing before the next one. A permanent white wash bleaches the palette
         // it is supposed to be showing off.
-        const cyc = o.glow % 1.8;
-        if (cyc < 1) {
+        // It shimmers the way the HEADINGS do now: the same white band, three widths long, sliding
+        // across it on the same 2.6s clock at the same slant — added rather than laid over, and
+        // held under full strength so the palette it crosses is lit rather than bleached.
+        {
+          const u = (ts % 2600) / 2600, L = w*3, ang = 10 * Math.PI/180, gx = x - 2*w*(1 - u);
+          const gd = ctx.createLinearGradient(gx, y + w/2, gx + L*Math.cos(ang), y + w/2 + L*Math.sin(ang));
+          const a = (v) => "rgba(255,255,255," + (v * 0.55 * ga).toFixed(3) + ")";
+          gd.addColorStop(0.00, a(0)); gd.addColorStop(0.43, a(0));
+          gd.addColorStop(0.47, a(0.55)); gd.addColorStop(0.50, a(1)); gd.addColorStop(0.53, a(0.55));
+          gd.addColorStop(0.57, a(0)); gd.addColorStop(1.00, a(0));
           ctx.save();
           rrect(x, y, w, w, r); ctx.clip();
           ctx.globalCompositeOperation = "lighter";
-          const gx = x - w + cyc*w*3;
-          const g = ctx.createLinearGradient(gx, y, gx + w*0.8, y + w);
-          g.addColorStop(0, "rgba(255,255,255,0)");
-          g.addColorStop(0.5, "rgba(255,255,255," + (0.38*ga).toFixed(3) + ")");
-          g.addColorStop(1, "rgba(255,255,255,0)");
-          ctx.fillStyle = g; ctx.fillRect(x, y, w, w);
+          ctx.fillStyle = gd; ctx.fillRect(x, y, w, w);
           ctx.restore();
         }
-        // ...and a rim that breathes, which is what says "this one" once the band has gone by
-        const pul = (0.45 + 0.30*Math.sin(o.glow*3.4)) * ga;
-        ctx.strokeStyle = "rgba(255,255,255," + pul.toFixed(3) + ")";
-        ctx.lineWidth = Math.max(1, S*0.03);
-        rrect(x, y, w, w, r); ctx.stroke();
+        // ...and it is RINGED in the Tileverse's blue, exactly as a chosen chapter is (below): the
+        // same weight, drawn inside its own square so it does not sit on its neighbours.
+        {
+          const lw = FOOTER.rim + 1;
+          ctx.strokeStyle = tvBlueA(ga);
+          ctx.lineWidth = lw;
+          rrect(x + lw/2, y + lw/2, w - lw, w - lw, Math.max(0, r - lw/2)); ctx.stroke();
+        }
       }
       if (o.ringIdx === i && o.ring > 0) {                 // the one being pointed at
         // Drawn INSIDE its own square now that they touch: a ring hung outside one would be
@@ -13062,15 +13212,78 @@
     ctx.restore();
   }
   // The heading, in the same extruded gold the title screen and the menus use.
-  function winHeading(text, y, size, k) {
-    if (k <= 0) return;
+  // CHAPTER N / COMPLETE, DRESSED AS THE TILEVERSE'S OWN HEADING — it is the Tileverse's screen it is
+  // written on. Everything #wintop-title wears in CSS, drawn here the same way: the Tileverse's blue;
+  // the five-step extrusion shaded from it (the same offsets and the same mixes to black as the
+  // sheet's text-shadow); the soft black glow under it; the four-degree lean; the white shimmer
+  // crossing it on the headings' 2.6s clock; and a spark in its blue locked to a set letter (see
+  // HEAD_GLINTS — here the A of CHAPTER, top middle, and the last E of COMPLETE, bottom right),
+  // upright, the tab bar's spark's size. `span` is the width the shimmer is laid across, so the two
+  // lines share one band the way the two lines of a DOM heading do.
+  const WIN_HEAD_MIX = [0.78, 0.71, 0.64, 0.57, 0.51];
+  const WIN_HEAD_GLOW = [[10, 0.40], [28, 0.34], [56, 0.28]];
+  function winHeadingSpan(lines, size) {
     ctx.save();
-    ctx.globalAlpha = Math.min(1, k);
+    ctx.font = "900 " + Math.round(size) + "px " + UI_FONT; ctx.letterSpacing = "2px";
+    const w = Math.max(...lines.map(t => ctx.measureText(t).width));
+    ctx.restore();
+    return w;
+  }
+  function winHeading(text, y, size, k, span, glint) {
+    if (k <= 0) return;
+    const ink = tvBlueHex(), rgb = hexRGB(ink), A = Math.min(1, k);
+    ctx.save();
+    ctx.globalAlpha = A;
     ctx.font = "900 " + Math.round(size) + "px " + UI_FONT;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.letterSpacing = Math.round(size*0.14) + "px";
-    extrude(ctx, size, TITLE_SIDE, (dx, dy) => ctx.fillText(text, viewW/2 + dx, y + dy));
-    ctx.fillStyle = "#ffd24a"; ctx.fillText(text, viewW/2, y);
+    ctx.letterSpacing = "2px";                                   // the headings' own tracking
+    ctx.translate(viewW/2, y); ctx.rotate(-4 * Math.PI/180);
+    const M = ctx.getTransform();
+    // the glow: the word drawn a long way off and only its shadow brought back, so all that lands
+    // is the blur. The offset is carried through the lean, or the shadow would land rotated off.
+    const far = 20000;
+    for (const [blur, a] of WIN_HEAD_GLOW) {
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0," + (a * A).toFixed(3) + ")";
+      ctx.shadowBlur = blur * Math.hypot(M.a, M.b);
+      ctx.shadowOffsetX = far * M.a; ctx.shadowOffsetY = far * M.b;
+      ctx.fillStyle = "#000"; ctx.fillText(text, -far, 0);
+      ctx.restore();
+    }
+    // the extrusion, deepest first, then the face
+    for (let i = 5; i >= 1; i--) {
+      const m = WIN_HEAD_MIX[i - 1];
+      ctx.fillStyle = "rgb(" + rgb.map(c => Math.round(c * m)).join(",") + ")";
+      ctx.fillText(text, 0.85*i, i);
+    }
+    ctx.fillStyle = ink; ctx.fillText(text, 0, 0);
+    // the shimmer: a white band three widths long sliding right to left across the word, at the
+    // CSS gradient's own stops and 100-degree slant, so its jump back is always off the far edge
+    const W = span || ctx.measureText(text).width, u = (performance.now() % 2600) / 2600;
+    const L = W * 3, ang = 10 * Math.PI/180, gx = -W/2 - 2*W*(1 - u);
+    const gd = ctx.createLinearGradient(gx, 0, gx + L*Math.cos(ang), L*Math.sin(ang));
+    gd.addColorStop(0.00, "rgba(255,255,255,0)");  gd.addColorStop(0.43, "rgba(255,255,255,0)");
+    gd.addColorStop(0.47, "rgba(255,255,255,0.55)"); gd.addColorStop(0.50, "rgba(255,255,255,1)");
+    gd.addColorStop(0.53, "rgba(255,255,255,0.55)"); gd.addColorStop(0.57, "rgba(255,255,255,0)");
+    gd.addColorStop(1.00, "rgba(255,255,255,0)");
+    ctx.fillStyle = gd; ctx.fillText(text, 0, 0);
+    // the spark
+    if (glint) {
+      const low = text.toUpperCase(), hits = [];
+      for (let i = 0; i < low.length; i++) if (low[i] === glint.ch) hits.push(i);
+      const at = glint.n < 0 ? hits[hits.length + glint.n] : hits[glint.n - 1];
+      if (at != null) {
+        const full = ctx.measureText(text).width, lx = -full/2 + ctx.measureText(text.slice(0, at)).width;
+        const cw = ctx.measureText(text[at]).width - 2;
+        const gxp = (glint.x === "mid" ? lx + cw/2 : glint.x === "right" ? lx + cw - size*0.06 : lx + size*0.06)
+                  + size*HEAD_GLINT_NUDGE.x;
+        const gyp = (glint.y === "bottom" ? size*0.36 : -size*0.36) + size*HEAD_GLINT_NUDGE.y;
+        const px = Math.max(1, dpr || 1);
+        ctx.setTransform(px, 0, 0, px, M.a*gxp + M.c*gyp + M.e, M.b*gxp + M.d*gyp + M.f);   // upright
+        drawSpark(ctx, 0, 0, uiGrid() * TAB_SPARK, performance.now(),
+                  { alpha: A, col: ink, seed: 0.29 + (glint.y === "bottom" ? 0.41 : 0) });
+      }
+    }
     ctx.restore();
   }
 
@@ -13331,8 +13544,10 @@
       // Level with every other header in the game — the Tileverse's, the shop's, the shelf's —
       // rather than a sixth of the way down a screen of its own. See headTextY.
       const hy = headTextY(size);
-      winHeading("Chapter " + (P.idx + 1), hy, size, inK(0)*outK);
-      winHeading(P.skip ? "Skipped" : "Complete", hy + size*1.15, size, inK(340)*outK);
+      const l1 = "Chapter " + (P.idx + 1), l2 = P.skip ? "Skipped" : "Complete";
+      const span = winHeadingSpan([l1, l2], size);
+      winHeading(l1, hy, size, inK(0)*outK, span, { ch:"A", n: 1, y:"top", x:"mid" });
+      winHeading(l2, hy + size*1.15, size, inK(340)*outK, span, { ch:"E", n:-1, y:"bottom", x:"right" });
       // ...and what you came away with, arriving after the words that name it. The WHOLE
       // game's purse, with this chapter's takings falling into it — see drawPurseTally. A skip
       // came away with nothing, and a tally under the word is the screen rubbing it in.
@@ -13456,6 +13671,36 @@
   // takes and the one radius-lab.html tunes. It used to carry a rounding of its own (0.26 of
   // its width, and half that on the inner panel), which at the shipped radius of zero made it
   // the only rounded object on a screen of square ones.
+  // TEXT THAT LINES UP WITH ITS ICON. A figure is set beside a coin by its MIDDLE, but "middle" is
+  // the middle of the font's box, not of its letters — and SquareFont's digits and capitals stand
+  // high in that box (measured: their ink centre is ~7% of the size above the canvas's middle anchor,
+  // and ~3% above the middle of a DOM line box). So every tally's text is moved down by exactly that
+  // much, measured off the font itself rather than written in, so it stays right if the font changes.
+  // `inkNudge(font)` is the canvas's version, in pixels at that font; the page's version is --ink-nudge,
+  // in ems, set once the font has loaded (see setInkNudge) and read by the DOM tallies' number spans.
+  const _inkNudge = new Map();
+  let _inkCtx = null;
+  function inkNudge(font) {
+    if (_inkNudge.has(font)) return _inkNudge.get(font);
+    if (!_inkCtx) _inkCtx = document.createElement("canvas").getContext("2d");
+    _inkCtx.font = font; _inkCtx.textBaseline = "middle";
+    const m = _inkCtx.measureText("0123456789");
+    const v = (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2;   // ink centre, above the anchor
+    // Only KEPT once the real font is in: measured against a fallback it would be a different number.
+    if (!document.fonts || document.fonts.status === "loaded") _inkNudge.set(font, v);
+    return v;
+  }
+  function setInkNudge() {
+    const c = document.createElement("canvas").getContext("2d");
+    c.font = "900 100px " + UI_FONT; c.textBaseline = "alphabetic";
+    const m = c.measureText("0123456789");
+    const ink = (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2;   // ink centre over the baseline
+    const box = (m.fontBoundingBoxAscent - m.fontBoundingBoxDescent) / 2;       // the line box's centre over it
+    if (!(isFinite(ink) && isFinite(box))) return;
+    document.documentElement.style.setProperty("--ink-nudge", ((ink - box) / 100).toFixed(4) + "em");
+    _inkNudge.clear();                                                           // re-measure the canvas too
+  }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(setInkNudge); else setInkNudge();
   function hudCoin(x, y, w) {
     const ip = w*0.26;                                   // the inscribed panel's inset
     rrect(x, y - w/2, w, w, tileR(w)); ctx.fillStyle = COIN_FACE; ctx.fill();
@@ -13491,10 +13736,10 @@
     hudCoin(x0, y, cw);
     ctx.font = numF;
     ctx.fillStyle = COIN_FACE;
-    ctx.fillText(num, x0 + cw + gap, y);
+    ctx.fillText(num, x0 + cw + gap, y + inkNudge(numF));
     ctx.font = restF;
     ctx.fillStyle = "rgba(214,218,240,0.66)";
-    ctx.fillText(rest, x0 + cw + gap + nw, y);
+    ctx.fillText(rest, x0 + cw + gap + nw, y + inkNudge(restF));
     ctx.restore();
   }
   // A CHARM, NAMED A SECOND TIME. The badge itself, its name in its own colour, and the one
@@ -13621,7 +13866,7 @@
     hudCoin(x0, y, cw);
     ctx.font = numF;
     ctx.fillStyle = COIN_FACE;
-    ctx.fillText(num, x0 + cw + gap, y);
+    ctx.fillText(num, x0 + cw + gap, y + inkNudge(numF));
     ctx.restore();
     }
     // ---- ...and what is on its way into it ------------------------------------------------
@@ -13667,12 +13912,12 @@
       hudCoin(px0, py, cw);
       ctx.font = numF;
       ctx.fillStyle = COIN_FACE;
-      ctx.fillText(ptxt, px0 + cw + gap, py);
+      ctx.fillText(ptxt, px0 + cw + gap, py + inkNudge(numF));
       if (ofA > 0.004) {
         ctx.globalAlpha = alpha * pa * ofA;
         ctx.font = restF;
         ctx.fillStyle = "rgba(214,218,240,0.66)";
-        ctx.fillText(rest, px0 + cw + gap + pw, py);
+        ctx.fillText(rest, px0 + cw + gap + pw, py + inkNudge(restF));
       }
       ctx.restore();
     }
@@ -14110,32 +14355,10 @@
       ctx.save();
       ctx.globalAlpha = e;
       ctx.rotate(0);
-      // ...and the same again on the card, where it is the only thing left on the screen.
-      charmGlow(fx, cy0, R*2.9, rgbOf(hexA(talFace(cere.def), 1)), 0.95*e);
-      drawSpark(ctx, fx, cy0, R*1.9, ts, { alpha: e, seed: 0.19 });   // the same spark, still behind it
-      ctx.save();
-      ctx.translate(fx, cy0); ctx.rotate(Math.sin(ts/1100)*0.06); ctx.translate(-fx, -cy0);
-      talHook(ctx, fx, cy0, R, cere.def);
-      cere.def.draw(ctx, fx, cy0, R);
-      // ...and a band of light crossing its face. Clipped to the face and composited with
-      // `lighter`, which is the same way a cleared chapter shines on the map: the band adds to
-      // what is already there rather than painting over it, so what you see brighten is the
-      // charm's own colour and not a white streak laid on top of it.
-      {
-        const half = R*0.95;                       // talBadge draws its face at r*1.9 across
-        const cyc = (ts / C.sheenMs) % 1;
-        ctx.save();
-        ctx.beginPath(); ctx.rect(fx - half, cy0 - half, half*2, half*2); ctx.clip();
-        ctx.globalCompositeOperation = "lighter";
-        const gx = fx - half*3 + cyc*half*6;
-        const gb = ctx.createLinearGradient(gx, cy0 - half, gx + half*1.5, cy0 + half);
-        gb.addColorStop(0,   "rgba(255,255,255,0)");
-        gb.addColorStop(0.5, "rgba(255,255,255," + C.sheen.toFixed(3) + ")");
-        gb.addColorStop(1,   "rgba(255,255,255,0)");
-        ctx.fillStyle = gb;
-        ctx.fillRect(fx - half, cy0 - half, half*2, half*2);
-        ctx.restore();
-      }
+      // ...and the charm dressed EXACTLY as it is out front on the Holy Talismans page — its light, the
+      // spark behind it, the lean, the hover, the shimmer on its frame and icon and the spark along its
+      // top (drawFeaturedCharm) — on the loop it hangs from.
+      drawFeaturedCharm(ctx, cere.def, fx, cy0, R, ts, e, { hook: true, seed: 0.19 });
       ctx.restore();
       // ...its name, in the lettering everything else in the game is titled with, and then in
       // plain words what it actually does.
@@ -14411,9 +14634,9 @@
     // block passing over one used to swallow it and the player would never know it was there.
     for (const ck of state.coinCells) { const [c,r] = ck.split(",").map(Number); drawCoin((c+0.5)*cell, (r+0.5)*cell, ts, bgHash(c, r)); }
     drawMagnetField(ts);
-    for (const f of state.coinFly) {                 // reeled in: coin -> runner, over COIN_FLY_MS
+    for (const f of state.coinFly) {                 // reeled in: coin -> runner, over its own time (see COIN_FLY_PER_TILE)
       const rp = visualAt(state.runIdx + state.runT);
-      const u = Math.min(1, f.t / COIN_FLY_MS), e = u*u*(3 - 2*u);   // ease so it accelerates in
+      const u = Math.min(1, f.t / (f.dur || COIN_FLY_MS)), e = u*u*(3 - 2*u);   // ease so it accelerates in
       drawCoin((f.c+0.5)*cell + ((rp.x) - (f.c+0.5)*cell)*e,
                (f.r+0.5)*cell + ((rp.y - cell*0.3) - (f.r+0.5)*cell)*e, ts, bgHash(f.c, f.r));
     }
@@ -14430,6 +14653,9 @@
     }
     drawCharmFx(ts);                              // ...and the shouting charms over the lot
     if (state.hole) drawHole(ts);                 // ...and the end of the world over even those
+    // ...and the WHITE of the level's edge over absolutely everything on it: the sharp band just
+    // inside the edge and the sparks rolling along it. Its colour half went down with the quilt.
+    if (_innerWhite) { boardInnerGlow(0, 0, ts, "white"); _innerWhite = false; }   // once per backdrop, never stale
     ctx.restore();
 
     // Off-screen indicators (screen space): the exit, and any key not yet taken. Shown only
@@ -14774,10 +15000,10 @@
     // The COIN's gold, not the HUD's white. The speedo's figure takes the rail's colour because
     // the rail is what it is measuring; this one is counting coins, so it is the colour of one.
     ctx.fillStyle = COIN_FACE;
-    ctx.fillText(B.num, B.textX, B.midY + 1);
+    ctx.fillText(B.num, B.textX, B.midY + inkNudge(B.font));
     ctx.font = B.restFont;                          // ...and what it is OUT OF, dim behind it
     ctx.fillStyle = "rgba(214,218,240,0.66)";       // the speedo's own suffix ink
-    ctx.fillText(B.rest, B.restX, B.midY + 1);
+    ctx.fillText(B.rest, B.restX, B.midY + inkNudge(B.restFont));
     ctx.restore();
   }
   // The run itself, in SCREEN space: it starts on the board and finishes on the glass, so it
@@ -14906,7 +15132,7 @@
     // No plate and no outline: a plate popping in and out over the board is noisier than the
     // number it carries, and the black stroke around it was doing the same job twice as hard.
     const tx = cxm - w/2 + ic + gap;
-    ctx.fillStyle = COIN_FACE; ctx.fillText(txt, tx, cym);
+    ctx.fillStyle = COIN_FACE; ctx.fillText(txt, tx, cym + inkNudge("900 " + f2 + "px " + UI_FONT));
     ctx.restore();
   }
   // The Magnet's reach, while it is up: rings that keep falling inward onto him, so the
@@ -14928,7 +15154,12 @@
     // few radii for the whole field, and a square only has to ask how near it is to one.
     const at = [];
     for (let i = 0; i < rings; i++) {
-      const u = ((ts / Math.max(1, MAGNET.ms)) + i/rings) % 1;
+      // ONE BEAT A RING when it was fired in play: counted from the press, so the first ring leaves the
+      // rim as it goes on and the last lands as it ends. The lab's hand-switched pull has no beat and
+      // keeps the free-running MAGNET.ms clock.
+      const B = state.power.beat;
+      const u = B ? (((state.power.ms - state.power.t) / B) + i/rings) % 1
+                  : ((ts / Math.max(1, MAGNET.ms)) + i/rings) % 1;
       // In as it leaves the rim, out as it lands, so nothing pops into or out of being.
       at.push({ rad: R*(1 - u), life: Math.pow(Math.sin(Math.PI*u), MAGNET.ease) });
     }
@@ -15844,15 +16075,11 @@
       def.draw(ctx, x, y0, cell * 0.24);
       ctx.restore(); return;
     }
-    const y = y0 + Math.sin(ts/320) * cell * 0.05;
-    ctx.save();
-    // THE SPARK BEHIND IT, the game's standard one (see drawSpark), sized to the badge — a
-    // badge drawn at r is r*1.9 across — and riding the bob with it. Seeded off its cell so two
-    // on one board glint out of step. A charm already taken is a ghost and gets none.
-    drawSpark(ctx, x, y, cell * 0.26 * 1.9, ts, { seed: t.c*0.131 + t.r*0.297 });
-    talHook(ctx, x, y, cell * 0.26, def);
-    def.draw(ctx, x, y, cell * 0.26);
-    ctx.restore();
+    // Dressed the way the Holy Talismans page dresses the one out front (drawFeaturedCharm): its light,
+    // the spark behind it, the lean, the hover, the shimmer on its frame and icon and the spark along
+    // its top — at the size it lies on a tile, and phased off its cell so two on one board move out of step.
+    drawFeaturedCharm(ctx, def, x, y0, cell * 0.26, ts, 1, {
+      hook: true, seed: t.c*0.131 + t.r*0.297, phase: (t.c*1.3 + t.r*0.7), k: t.c*0.71 + t.r*0.37 });
   }
   // "New Talisman" card, low on the screen. It used to sit across the TOP, which is exactly
   // where the runner is heading and where the speed and coin plates already live — so the one
@@ -16054,6 +16281,117 @@
   // offset of its own rather than through extrude — a key it cannot move would be a slider that
   // does nothing.
   const TAL_DEEP = 0.62;
+  // A SHIMMER ON A CHARM THAT ONLY LANDS ON THE METAL: the headings' white band, crossing the badge
+  // every 2.6s at their slant, but lighting the OUTER FRAME (the face, less the inscribed panel) and
+  // the raised ICON and nothing else — the dark panel between them stays dark, which is what makes
+  // it read as light catching the raised parts rather than a sheet of white wiped over the lot.
+  // Built as a mask on a scratch canvas in g's own transform (so it leans with the charm), the band
+  // kept only where the mask is, and the result added onto g. Geometry is talBadge's, read the same
+  // way: the face is r*1.9 across, the panel inset by TAL.panelPad, the icon etched at r*0.80.
+  const _talShim = document.createElement("canvas");
+  function talShimmer(g, def, x, y, r, ts, alpha) {
+    if (!(alpha > 0.004)) return;
+    const M = g.getTransform();
+    const s2 = r*1.9, h = s2/2, rad = s2*TILE.radius, ip = s2*TAL.panelPad;
+    // ONLY THE BADGE'S OWN BOX, in device pixels: the four corners of its face through g's transform
+    // (lean included), a pixel of room, and nothing else — so a board with a few charms on it is a
+    // few small blits a frame, not one full-screen composite per charm.
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [cx, cy] of [[x-h, y-h], [x+h, y-h], [x-h, y+h], [x+h, y+h]]) {
+      const X = M.a*cx + M.c*cy + M.e, Y = M.b*cx + M.d*cy + M.f;
+      if (X < x0) x0 = X; if (X > x1) x1 = X; if (Y < y0) y0 = Y; if (Y > y1) y1 = Y;
+    }
+    const bx = Math.floor(x0) - 2, by = Math.floor(y0) - 2;
+    const bw = Math.ceil(x1) - bx + 2, bh = Math.ceil(y1) - by + 2;
+    if (!(bw > 0 && bh > 0)) return;
+    if (_talShim.width < bw || _talShim.height < bh) {
+      _talShim.width = Math.max(_talShim.width, bw); _talShim.height = Math.max(_talShim.height, bh);
+    }
+    const m = _talShim.getContext("2d");
+    const rr = (X, Y, Wd, Ht, R) => { m.beginPath(); m.moveTo(X+R, Y);
+      m.arcTo(X+Wd, Y, X+Wd, Y+Ht, R); m.arcTo(X+Wd, Y+Ht, X, Y+Ht, R);
+      m.arcTo(X, Y+Ht, X, Y, R); m.arcTo(X, Y, X+Wd, Y, R); m.closePath(); };
+    m.setTransform(1, 0, 0, 1, 0, 0); m.globalCompositeOperation = "source-over"; m.clearRect(0, 0, bw, bh);
+    m.setTransform(M.a, M.b, M.c, M.d, M.e - bx, M.f - by);
+    m.fillStyle = m.strokeStyle = "#fff";
+    rr(x-h, y-h, s2, s2, rad); m.fill();                                         // the face...
+    m.globalCompositeOperation = "destination-out";
+    rr(x-h+ip, y-h+ip, s2-2*ip, s2-2*ip, Math.max(0, rad - ip*0.6)); m.fill();   // ...less the panel
+    m.globalCompositeOperation = "source-over";
+    if (def && def.etch) { m.save(); m.lineJoin = "round"; def.etch(m, x, y, r*0.80); m.restore(); }  // ...and the icon
+    const u = (ts % 2600) / 2600, L = s2*3, ang = 10 * Math.PI/180, gx = (x - h) - 2*s2*(1 - u);
+    const gd = m.createLinearGradient(gx, y, gx + L*Math.cos(ang), y + L*Math.sin(ang));
+    gd.addColorStop(0.00, "rgba(255,255,255,0)");    gd.addColorStop(0.43, "rgba(255,255,255,0)");
+    gd.addColorStop(0.47, "rgba(255,255,255,0.55)"); gd.addColorStop(0.50, "rgba(255,255,255,1)");
+    gd.addColorStop(0.53, "rgba(255,255,255,0.55)"); gd.addColorStop(0.57, "rgba(255,255,255,0)");
+    gd.addColorStop(1.00, "rgba(255,255,255,0)");
+    m.globalCompositeOperation = "source-in";
+    m.fillStyle = gd; m.fillRect(x - h - 2, y - h - 2, s2 + 4, s2 + 4);
+    m.globalCompositeOperation = "source-over";
+    g.save();
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalCompositeOperation = "lighter";
+    g.globalAlpha = Math.min(1, alpha) * TAL_SHIMMER_A;
+    g.drawImage(_talShim, 0, 0, bw, bh, bx, by, bw, bh);
+    g.restore();
+  }
+  const TAL_SHIMMER_A = 0.70;                     // how bright the shimmer on the featured charm is
+  // THE SPARK ALONG A CHARM'S TOP. The game's standard spark in `def`'s face colour, rolling LEFT TO
+  // RIGHT along the flat of the badge's top edge — faint as it sets off, full mid-way, faint at the
+  // far end, then back at the left to go again, so the jump home is never seen — turning by the
+  // distance it has come. `k` is the charm's own phase; `ang` the lean its edge is tilted by; `sz` the
+  // spark's size. Shared by the Holy Talismans page, the ceremony and the charms lying on the board.
+  function charmTopSpark(g, def, x, y, r, ang, alpha, k, ts, sz) {
+    const h = r*0.95;                                          // the badge is r*1.9 across...
+    const span = Math.max(0, h - r*1.9*TILE.radius) * 0.9;    // ...and its top is flat this far out
+    const u = (((ts / CHARM_SPARK_MS + k*0.37) % 1) + 1) % 1;  // 0 at the left end, 1 at the right
+    const dx = span * (2*u - 1);
+    alpha *= Math.sin(Math.PI * u);                             // low, high, low
+    if (!(alpha > 0.003)) return;
+    const X = x + dx*Math.cos(ang) + h*Math.sin(ang), Y = y + dx*Math.sin(ang) - h*Math.cos(ang);
+    g.save();
+    g.translate(X, Y); g.rotate(dx / (sz * TAB_SPARK_ROLL));
+    drawSpark(g, 0, 0, sz, ts, { alpha, seed: 0.13 + k*0.29, col: talFace(def) });
+    g.restore();
+  }
+  // THE FEATURED CHARM — dressed the way the Holy Talismans page dresses the one out front, and used
+  // everywhere a charm is the thing to look at: that page, the ceremony's card and the charms lying on
+  // a board. Its light in its own colour, the standard spark over that and under it, the lean, the
+  // hover, the shimmer on its frame and icon, and the spark rolling along its top — all coming up on
+  // `e`. Returns where it is floating this frame. Options: `unknown` draws the blank badge (the light
+  // keeps the real colour, as the page does); `lean` overrides the rest lean; `amp` the hover's height
+  // in pixels (default CHARM_HOVER of its radius); `phase` offsets the hover; `seed` the spark behind;
+  // `k` the top spark's phase; `sz` its size; `hook` adds the loop it hangs from.
+  const CHARM_HOVER = 0.25;                       // how far a featured charm floats, in its own radii
+  function drawFeaturedCharm(g, def, x, y, r, ts, e, o) {
+    o = o || {};
+    const shown = o.unknown ? TAL_UNKNOWN : def;
+    const amp = o.amp == null ? r * CHARM_HOVER : o.amp;
+    const yy = y + Math.sin(ts/ORRERY.bobMs*Math.PI*2 + (o.phase || 0)) * amp * e;
+    const ang = o.lean == null ? ORRERY.tilt * e : o.lean;
+    {                                              // the light it stands in, its own colour and nothing else's
+      const face = talFace(def), RG = r*2.9;
+      const gd = g.createRadialGradient(x, yy, r*0.15, x, yy, RG);
+      gd.addColorStop(0,    hexA(face, 0.95));
+      gd.addColorStop(0.34, hexA(face, 0.40));
+      gd.addColorStop(1,    hexA(face, 0));
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      g.globalAlpha = ORRERY.glow * e;
+      g.fillStyle = gd;
+      g.beginPath(); g.arc(x, yy, RG, 0, Math.PI*2); g.fill();
+      g.restore();
+    }
+    drawSpark(g, x, yy, r*1.9, ts, { alpha: e, seed: o.seed == null ? 0.61 : o.seed });   // over the light, under it
+    g.save();
+    g.translate(x, yy); g.rotate(ang); g.translate(-x, -yy);
+    if (o.hook) talHook(g, x, yy, r, def);
+    if (o.unknown) talBadge(g, x, yy, r, TAL_UNKNOWN); else def.draw(g, x, yy, r);
+    talShimmer(g, shown, x, yy, r, ts, e);          // light catching its frame and its icon, only those
+    g.restore();
+    charmTopSpark(g, shown, x, yy, r, ang, 1, o.k || 0, ts, o.sz == null ? r*0.82 : o.sz);
+    return yy;
+  }
   function talBadge(g, x, y, r, def) {
     const s2 = r*1.9, h = s2/2, rad = s2*TILE.radius;
     const rr = (X, Y, W, H, R) => { g.beginPath(); g.moveTo(X+R,Y);
@@ -18999,6 +19337,102 @@
     ctx.beginPath(); ctx.rect(bx, by, worldW, worldH); ctx.clip();
     drawBackground(ts, undefined, false, undefined, undefined, bgNoSky ? 1 : QUILT_A);
     ctx.restore();
+    // ...and the level's colour just inside its edge. The WHITE half of that light — the sharp band
+    // and the sparks — is drawn at the very end of the board instead, OVER every level item (see
+    // drawBoard's close), so it is the top thing on the level rather than something tiles cover.
+    _innerWhite = !bgNoSky;
+    if (!bgNoSky) boardInnerGlow(bx, by, ts, "colour");
+  }
+  // THE QUILT'S INNER GLOW. A SHARP white light just inside the board's edge — bright right at the
+  // edge and gone within a fraction of a cell — on all four sides, each strip cut to a mitre at the
+  // corners so no two of them overlap and double up there. Gradients rather than a blur, so it stays
+  // crisp at any zoom and costs four fills. Then a SPARK on each edge — the game's standard one, in
+  // white — rolling slowly along it in ONE direction, at the same speed in tiles on every edge (top left to right, right side downward, and so
+  // on round), turning by the distance it has come, and then starting again from the beginning. It
+  // SHRINKS toward each corner — nothing at either end, full size mid-edge — so it grows in out of
+  // one corner and dwindles away into the next, and the jump back to the start is never seen. Each
+  // edge is a quarter-cycle out from the next, so the four are never in step. Left out of the win
+  // sequence's shot, like the edge glow.
+  // ...and UNDER the white, a wider band of the LEVEL'S OWN COLOUR at full saturation: the quilt's
+  // colours averaged, the hue kept, the saturation driven to 100% and the lightness to the middle,
+  // so the light at the edge runs white → the chapter's colour at its most vivid → nothing.
+  // `tps` is how fast a spark travels, in TILES PER SECOND — the same on every edge, so a spark on a
+  // long side takes longer to cross it than one on a short side, rather than all four sprinting or
+  // dawdling to finish in the same time.
+  const BOARD_INNER = { w: 0.14, a: 0.85, cw: 0.34, ca: 1.00, spark: 0.30, tps: 0.9 };
+  let _innerVivid = null;
+  function innerVivid(T) {
+    const key = T.colors.join("|");
+    if (_innerVivid && _innerVivid.key === key) return _innerVivid.col;
+    let r = 0, g = 0, b = 0;
+    for (const col of T.colors) {
+      const m = /hsl\((-?[\d.]+),\s*([\d.]+)%,\s*([\d.]+)%\)/.exec(col);
+      const n = parseInt(String(m ? hslHex(+m[1], +m[2], +m[3]) : col).replace("#", ""), 16) || 0;
+      r += (n>>16)&255; g += (n>>8)&255; b += n&255;
+    }
+    const k = Math.max(1, T.colors.length); r /= k*255; g /= k*255; b /= k*255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+    let col = null;                                          // a grey quilt has no hue to drive
+    if (d > 0.004) {
+      let h = mx === r ? ((g - b)/d + (g < b ? 6 : 0)) : mx === g ? ((b - r)/d + 2) : ((r - g)/d + 4);
+      col = hexRGB(hslHex(h * 60, 100, 52));
+    }
+    _innerVivid = { key, col };
+    return col;
+  }
+  let _innerWhite = false;        // set by the backdrop when the edge is up this frame; the white pass reads it
+  function boardInnerGlow(bx, by, ts, part) {
+    if (!(cell > 2) || !(worldW > 0) || !(worldH > 0)) return;
+    const W = worldW, H = worldH;
+    // One band of light round the inside of the edge, `gw` deep, in `rgb`, its strength at each stop
+    // given as [position, alpha]. Four mitred strips, so no two of them overlap at a corner.
+    const band = (gw, rgb, stops) => {
+      gw = Math.min(gw, W/2, H/2);
+      const edges = [   // [strip polygon, gradient from, gradient to]
+        [[[0,0],[W,0],[W-gw,gw],[gw,gw]],   [0,0], [0,gw]],       // top
+        [[[W,0],[W,H],[W-gw,H-gw],[W-gw,gw]], [W,0], [W-gw,0]],   // right
+        [[[W,H],[0,H],[gw,H-gw],[W-gw,H-gw]], [0,H], [0,H-gw]],   // bottom
+        [[[0,H],[0,0],[gw,gw],[gw,H-gw]],   [0,0], [gw,0]],       // left
+      ];
+      const tone = "rgba(" + rgb.join(",") + ",";
+      for (const [poly, a, b] of edges) {
+        const gd = ctx.createLinearGradient(a[0], a[1], b[0], b[1]);
+        for (const [at, al] of stops) gd.addColorStop(at, tone + al.toFixed(3) + ")");
+        ctx.beginPath();
+        poly.forEach(([px, py], i) => i ? ctx.lineTo(px, py) : ctx.moveTo(px, py));
+        ctx.closePath();
+        ctx.fillStyle = gd; ctx.fill();
+      }
+    };
+    ctx.save();
+    ctx.translate(bx, by);
+    const T = state && state.bgTheme, vivid = T && T.colors ? innerVivid(T) : null;
+    if (part === "colour") {
+      if (vivid) {                                           // the level's colour, at full saturation, under the level
+        const CA = BOARD_INNER.ca;
+        band(cell * BOARD_INNER.cw, vivid, [[0, CA], [0.30, CA*0.55], [0.70, CA*0.12], [1, 0]]);
+      }
+      ctx.restore();
+      return;
+    }
+    const A = BOARD_INNER.a;                                 // the sharp white, right at the edge, over the level
+    band(cell * BOARD_INNER.w, [255, 255, 255], [[0, A], [0.18, A*0.45], [0.55, A*0.08], [1, 0]]);
+    // the sparks — along the top, right, bottom and left edges in turn
+    const sz = cell * BOARD_INNER.spark, rollR = sz * TAB_SPARK_ROLL;
+    const runs = [[0,0, W,0], [W,0, W,H], [W,H, 0,H], [0,H, 0,0]];
+    runs.forEach(([x0, y0, x1, y1], i) => {
+      const len = Math.hypot(x1 - x0, y1 - y0);
+      const tiles = Math.max(0.5, len / cell);                          // this edge's length, in tiles
+      const u = (((ts / 1000 * BOARD_INNER.tps / tiles + i * 0.25) % 1) + 1) % 1;   // 0 at its start corner, 1 at the next
+      const k = Math.sin(Math.PI * u);                                  // ...and nothing at either corner
+      if (k < 0.02) return;
+      ctx.save();
+      ctx.translate(x0 + (x1 - x0)*u, y0 + (y1 - y0)*u);
+      ctx.rotate(u * len / rollR);
+      drawSpark(ctx, 0, 0, sz * k, ts, { col: "#ffffff", seed: 0.11 + i*0.23 });
+      ctx.restore();
+    });
+    ctx.restore();
   }
   // `mode` is how the quilt is anchored. "weld" pins it to the BOARD — it is the level's own
   // ground, so it must sit still relative to the tiles standing on it. "drift" lets it scroll
@@ -21744,20 +22178,9 @@
         // distance it has come, like something actually rolling there. Each charm is on its own
         // phase. The edge tilts with the charm's lean; the spark rides it. A charm you have not
         // found wears the unknown badge's colour, as its face does.
-        const charmSpark = (def, x, y, r, ang, alpha, k) => {
-          const h = r*0.95;                               // the badge is r*1.9 across...
-          const span = Math.max(0, h - r*1.9*TILE.radius) * 0.9;   // ...and its top is flat this far out
-          const u = (((ts / CHARM_SPARK_MS + k*0.37) % 1) + 1) % 1;   // 0 at the left end, 1 at the right
-          const dx = span * (2*u - 1);
-          alpha *= Math.sin(Math.PI * u);                                // low, high, low
-          const sz = uiGrid() * TAB_SPARK * ICON_SCALE;
-          const X = x + dx*Math.cos(ang) + h*Math.sin(ang), Y = y + dx*Math.sin(ang) - h*Math.cos(ang);
-          g.save();
-          g.translate(X, Y); g.rotate(dx / (sz * TAB_SPARK_ROLL));
-          if (alpha > 0.003) drawSpark(g, 0, 0, sz, ts, { alpha, seed: 0.13 + k*0.29,
-                                       col: talFace(talUnlocked.has(def.id) ? def : TAL_UNKNOWN) });
-          g.restore();
-        };
+        const charmSpark = (def, x, y, r, ang, alpha, k) =>
+          charmTopSpark(g, talUnlocked.has(def.id) ? def : TAL_UNKNOWN, x, y, r, ang, alpha, k, ts,
+                        uiGrid() * TAB_SPARK * ICON_SCALE);
         for (const p of pts) {
           if (cur && p.def.id === cur.id) continue;     // it is drawn last, over everything
           g.save();
@@ -21787,37 +22210,14 @@
           // switching on when it lands. Rotated about its OWN centre — which is why the drained
           // pass still works: the pad holds nothing but this charm, so turning the whole pad
           // about that point turns the charm in place.
-          const yy = y + Math.sin(ts/ORRERY.bobMs*Math.PI*2) * S*ORRERY.bob * e;
-          // ...and the light it is standing in, its own colour and nothing else's. Additive, so
-          // it lifts the cosmos behind it rather than laying a disc of paint over it, and keyed
-          // to e so it comes up with the charm instead of switching on beneath it.
-          {
-            const face = talFace(cur), RG = r*2.9;
-            const gd = g.createRadialGradient(x, yy, r*0.15, x, yy, RG);
-            gd.addColorStop(0,    hexA(face, 0.95));
-            gd.addColorStop(0.34, hexA(face, 0.40));
-            gd.addColorStop(1,    hexA(face, 0));
-            g.save();
-            g.globalCompositeOperation = "lighter";
-            g.globalAlpha = ORRERY.glow * e;
-            g.fillStyle = gd;
-            g.beginPath(); g.arc(x, yy, RG, 0, Math.PI*2); g.fill();
-            g.restore();
-          }
-          // ...and the standard SPARK over that light and under the charm, sized to the badge
-          // (r*1.9 across) and coming up on the same e, so it arrives with the charm.
-          drawSpark(g, x, yy, r*1.9, ts, { alpha: e, seed: 0.61 });
-          // ...and its lean EASES from the drift it had in the orbit to the one it holds out
-          // front, on the same e as everything else, so it does not snap upright on the way
-          // down and back into step on the way home.
+          // Dressed by drawFeaturedCharm — the same routine the ceremony's card and the charms on a board
+          // use — with this page's own hover (a fraction of the box), its lean easing in from the drift
+          // it had in the orbit, and the tab bar's spark size along its top.
           const idx = pts.findIndex(q => q.def.id === cur.id);
           const ang = lean(idx < 0 ? 0 : pts[idx].i)*(1 - e) + ORRERY.tilt*e;
-          g.save();
-          g.translate(x, yy); g.rotate(ang); g.translate(-x, -yy);
-          if (talUnlocked.has(cur.id)) cur.draw(g, x, yy, r);
-          else talBadge(g, x, yy, r, TAL_UNKNOWN);
-          g.restore();
-          charmSpark(cur, x, yy, r, ang, 1, idx < 0 ? 0 : pts[idx].i);
+          drawFeaturedCharm(g, cur, x, y, r, ts, e, {
+            unknown: !talUnlocked.has(cur.id), lean: ang, amp: S*ORRERY.bob, seed: 0.61,
+            k: idx < 0 ? 0 : pts[idx].i, sz: uiGrid() * TAB_SPARK * ICON_SCALE });
         }
       };
       // A tap lands on whatever charm is nearest it, and on nothing if it is nowhere near one.
@@ -22319,6 +22719,7 @@
     pull: (ms) => { const s = state; if (!s || s.status !== "play") return false;
                     s.power.used.delete("magnet");
                     s.power.kind = "magnet"; s.power.t = ms || 3000; s.power.armed = false;
+                    s.power.beat = null;              // hand-switched: the field's own clock, not a beat
                     return true; },
     ring: () => { const s = state; if (!s || s.status !== "play") return false;
                   s.power.used.delete("pulse"); s.roar = null;

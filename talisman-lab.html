@@ -98,13 +98,26 @@ const TALISMANS = [
   { id:"magnet", name:"Lodestone", col:"#ff6d6d", ms:5000,
     face:"#f2685f", edge:"#8f2820",
     blurb:"Pulls coins in",
-    etch:(g,x,y,r)=>{
-      g.lineCap="butt"; g.lineWidth=r*0.28;                    // a horseshoe: half-ring, two legs
-      g.beginPath(); g.arc(x, y-r*0.08, r*0.46, Math.PI, 0); g.stroke();
+    etch:(g,x,y,r)=>{                                          // mirrors index.html: a stone and its field lines
+      g.save(); g.translate(x, y); g.rotate(Math.PI/2); g.translate(-x, -y);   // turned 90 degrees
+      const RS = r*0.30, LUMP = [1.00, 0.84, 1.04, 0.88, 0.97, 0.82, 0.93];
       g.beginPath();
-      g.moveTo(x-r*0.46, y-r*0.08); g.lineTo(x-r*0.46, y+r*0.52);
-      g.moveTo(x+r*0.46, y-r*0.08); g.lineTo(x+r*0.46, y+r*0.52);
-      g.stroke(); } },
+      LUMP.forEach((k, i) => {
+        const a = -Math.PI/2 + 0.25 + i * Math.PI*2/LUMP.length;
+        const px = x + Math.cos(a)*RS*k*1.08, py = y + Math.sin(a)*RS*k;
+        if (i) g.lineTo(px, py); else g.moveTo(px, py);
+      });
+      g.closePath(); g.lineJoin = "round"; g.fill();
+      const pole = RS*0.80, px0 = RS*0.22;
+      const IN = [r*0.60, r*1.40], OUT = [r*0.90, r*1.90];
+      for (const sd of [-1, 1]) {
+        g.beginPath();
+        g.moveTo(x + sd*px0, y - pole);
+        g.bezierCurveTo(x + sd*OUT[0], y - OUT[1], x + sd*OUT[0], y + OUT[1], x + sd*px0, y + pole);
+        g.bezierCurveTo(x + sd*IN[0],  y + IN[1],  x + sd*IN[0],  y - IN[1],  x + sd*px0, y - pole);
+        g.closePath(); g.fill();
+      }
+      g.restore(); } },
 
   // amber rather than gold: gold is what a coin is, and a talisman that reads as currency
   // on the board is a talisman nobody picks up
@@ -133,14 +146,27 @@ const TALISMANS = [
   { id:"mush", name:"Mushroom", col:"#ff8fc8", ms:6000,
     face:"#ff7fb8", edge:"#9e2a60",
     blurb:"Everything goes wobbly",
-    etch:(g,x,y,r)=>{
-      g.beginPath();                                           // stem
-      g.moveTo(x-r*0.22, y-r*0.04); g.lineTo(x+r*0.22, y-r*0.04);
-      g.lineTo(x+r*0.17, y+r*0.62); g.lineTo(x-r*0.17, y+r*0.62);
-      g.closePath(); g.fill();
-      g.beginPath();                                           // cap
-      g.ellipse(x, y-r*0.02, r*0.76, r*0.56, 0, Math.PI, 0); g.fill();
-      g.fillRect(x-r*0.76, y-r*0.04, r*1.52, r*0.08); } },
+    etch:(g,x,y,r)=>{                                          // mirrors index.html: a tall, bent mushroom
+      const P = (dx, dy) => [x + dx*r, y + dy*r];
+      const M = (a) => g.moveTo(...P(...a)), Q = (c, e) => g.quadraticCurveTo(...P(...c), ...P(...e));
+      const C = (c1, c2, e) => g.bezierCurveTo(...P(...c1), ...P(...c2), ...P(...e));
+      const A = (cx, cy, rad, a0, a1) => g.arc(x + cx*r, y + cy*r, rad*r, a0, a1, true);
+      const KH = 0.06, KW = 0.10;
+      const KR = (KW*KW + KH*KH) / (2*KH), KCY = -0.62 - KH + KR;
+      const KA = Math.atan2(-0.62 - KCY, KW);
+      g.beginPath();
+      M([-0.16, 0.72]);
+      Q([0.00, 0.76], [0.16, 0.72]);
+      C([0.22, 0.62], [0.12, 0.30], [0.11, -0.12]);
+      Q([0.36, -0.10], [0.70, -0.14]);
+      C([0.76, -0.24], [0.62, -0.34], [0.44, -0.40]);
+      C([0.30, -0.46], [0.18, -0.54], [0.10, -0.62]);
+      A(0.00, KCY, KR, KA, Math.PI - KA);
+      C([-0.18, -0.54], [-0.30, -0.46], [-0.44, -0.40]);
+      C([-0.62, -0.34], [-0.76, -0.24], [-0.70, -0.14]);
+      Q([-0.36, -0.10], [-0.11, -0.12]);
+      C([-0.12, 0.30], [-0.22, 0.62], [-0.16, 0.72]);
+      g.closePath(); g.fill(); } },
 ];
 // One painter for all five. Each keeps its own metal; the shape, the shading and the
 // engraving are shared, so a talisman can never drift into looking like a different class
