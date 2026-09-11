@@ -1874,7 +1874,8 @@
   /* gap 4, not 9: the coin and its figure are one reading. See #wintop .wt-ico, which says the
      same number on the way in and has to keep saying it the same way. */
   .shop-purse { display:flex; align-items:center; justify-content:center; gap:4px;
-    margin:-4px auto 10px; font-size:26px; letter-spacing:1px; color:var(--sec-shop); font-weight:900; }
+    margin:0 auto; font-size:26px; letter-spacing:1px; color:var(--sec-shop); font-weight:900;
+    transition:translate 240ms cubic-bezier(.4,0,.2,1); }   /* slides with the tile under it */
   .shop-purse canvas { width:26px; height:26px; }
   /* #menu-body button sets width:100%, and an id beats a class — so these have to match it */
   /* THE CATEGORY BAR: A TAB PANE, built the way the footer's is. It used to be six square plates in a
@@ -4546,7 +4547,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.48";                    // shown on the title & pause screens
+  const VERSION = "v10.49";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -20999,6 +21000,16 @@
       // glow, a tall hat and every one of the leaping swaggers went straight out of the top of
       // the picture. The tile still wants half a cell below his feet; the rest is headroom.
       const SH = Math.round(rs*2.05);
+      // THE PURSE GOES FIRST, centred ABOVE the preview tile rather than under it — and it rides the
+      // tile's slide (see the translate below), so it stays centred over the tile when a price tag
+      // pushes the tile left.
+      const purse = document.createElement("div"); purse.className = "shop-purse";
+      const pc = document.createElement("canvas"); pc.width = 34; pc.height = 34;
+      withCanvas(pc.getContext("2d"), 34, 0, 0, () => coinFlatGlyph(17, 17, 26));
+      purse.appendChild(pc);
+      const pv = document.createElement("span"); pv.textContent = wallet.tiles;
+      purse.appendChild(pv);
+      menuBody.appendChild(purse);
       const fig = document.createElement("div"); fig.className = "shop-fig";
       // No width on the BOX. It is the stage now, and the stage is the card — see .shop-fig,
       // which spans it — so that the offer pinned to its right edge lands where every other
@@ -21026,6 +21037,9 @@
       // exactly `foot.y - rs/2`: the top of the tile, which is the highest thing an ordinary
       // outfit paints.
       fig.style.marginTop = -(Math.round(foot.y - rs/2)) + "px";
+      // ...and the little room BELOW the tile (the canvas runs a hair past its foot) is taken back out,
+      // so the tile's bottom edge stands exactly one grid square — #menu-body's gap — over the tabs.
+      fig.style.marginBottom = -(SH - Math.round(foot.y + rs/2)) + "px";
       // ...but never so far up that the headroom is cut off. #menu clips at overflow:hidden, so
       // a pull-up bigger than the room above it would take the top off the very hats this space
       // exists for. Measured after layout rather than reasoned about: the heading's height is
@@ -21188,7 +21202,7 @@
         // finished and moved to its new place a frame later, so the transition has two ends. The
         // menu is torn down and built again on every tap, so without this the element that would
         // animate is brand new and has nowhere to come from.
-        cv.style.translate = _shopSlide + "px 0";
+        cv.style.translate = _shopSlide + "px 0"; purse.style.translate = _shopSlide + "px 0";
         if (wantTag) {
           const afford = wallet.tiles >= pvIt.cost;
           const GAP = uiGrid();                  // ...the shop's own spacing, one grid square
@@ -21247,7 +21261,7 @@
             const tw = tag.offsetWidth;
             const reach = Math.max(TAG_OUT + tw, bw ? GAP + bw : 0);
             const slide = -Math.round(reach / 2);
-            cv.style.translate = slide + "px 0";
+            cv.style.translate = slide + "px 0"; purse.style.translate = slide + "px 0";
             _shopSlide = slide;
             // the tile's right edge, measured from the middle of the stage
             const tileRight = slide + rs*0.5;
@@ -21312,18 +21326,11 @@
         } else {
           // Nothing on trial: the tile goes back to the middle on its own, from wherever the
           // last one left it, so the slide has an ending as well as a beginning.
-          requestAnimationFrame(() => { cv.style.translate = "0px 0"; _shopSlide = 0; });
+          requestAnimationFrame(() => { cv.style.translate = "0px 0"; purse.style.translate = "0px 0"; _shopSlide = 0; });
         }
       }
       menuBody.appendChild(fig);
 
-      const purse = document.createElement("div"); purse.className = "shop-purse";
-      const pc = document.createElement("canvas"); pc.width = 34; pc.height = 34;
-      withCanvas(pc.getContext("2d"), 34, 0, 0, () => coinFlatGlyph(17, 17, 26));
-      purse.appendChild(pc);
-      const pv = document.createElement("span"); pv.textContent = wallet.tiles;
-      purse.appendChild(pv);
-      menuBody.appendChild(purse);
 
       // Six tabs across, so each gets a picture rather than a word — at this width the
       // labels alone were unreadable, and the icon is what you actually scan for.
