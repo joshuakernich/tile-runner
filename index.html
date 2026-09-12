@@ -4809,7 +4809,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.53";                    // shown on the title & pause screens
+  const VERSION = "v10.54";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -23200,7 +23200,7 @@
       head.textContent = end.title;
       menuBody.appendChild(head);
       const by0 = menuBody.querySelector(".menu-byline");
-      if (by0) { menuBody.appendChild(by0); balanceByline(by0); }
+      if (by0) menuBody.appendChild(by0);                // (balanced once the screen is up — see `begin` below)
       const below = menuPush(); below.classList.add("push-more");
       menuBody.appendChild(below);
       // SKIP on the left, RETRY on the right: the one you mean is under your writing thumb,
@@ -23221,26 +23221,37 @@
       const cue = (el, at) => { if (!el) return;
         el.style.animation = "none"; void el.offsetWidth; el.style.animation = "";
         el.classList.add("fell-in"); el.style.animationDelay = at + "ms"; };
-      // The heading FLIES IN, a line at a time as it has wrapped (splitLines) — each line from off one side of the
-      // screen along the heading's own lean, the next from the other side — and then its line TYPES ITSELF OUT, the
-      // way a chapter's card does (typeOut), a line break's pause between its halves. Only once the last letter is
-      // down do the two answers and the way out arrive, in their order.
-      const heads = splitLines(head);
-      heads.forEach(shineLine);                          // ...each line shining, and a spark along its tops
-      heads.forEach((ln, i) => {
-        ln.style.setProperty("--fly-from", (i % 2 ? 1 : -1) * FELL_FLY.reach + "vw");
-        ln.style.animation = "fell-fly " + FELL_FLY.ms + "ms cubic-bezier(.2,.8,.25,1) both";
-        ln.style.animationDelay = (i * FELL_FLY.step) + "ms";
-      });
-      const flown = heads.length ? (heads.length - 1) * FELL_FLY.step + FELL_FLY.ms : 0;
-      const lines = [...menuBody.querySelectorAll(".menu-byline .bl")];
-      const parts = lines.map((ln, i) => ({ el: ln, text: ln.textContent, gap: i === lines.length - 1 ? 0 : TYPE.line }));
-      if (_fallTyping) _fallTyping();
-      const typing = typeOut(parts, flown + FELL_FLY.rest);
-      _fallTyping = typing.stop;
-      const after = typing.total + FELL_STEP;
-      cue(row, after);
-      cue(back, after + FELL_STEP);
+      // NOT MEASURED YET. openMenu builds a screen and only then shows it, so right now nothing here has a position:
+      // the heading cannot be told where it wraps (every word of a two-line heading came back on one "line", which
+      // flew in as one block and gave its spark nothing to find), and the byline cannot tell whether it needs
+      // balancing. So everything that moves is held back, hidden, and it all starts the moment the screen is up.
+      for (const q of [head, by0, row, back]) if (q) q.style.visibility = "hidden";
+      const begin = () => {
+        if (!head.isConnected) return;                   // the screen went before it could begin
+        for (const q of [head, by0, row, back]) if (q) q.style.visibility = "";
+        if (by0) balanceByline(by0);
+        // The heading FLIES IN, a line at a time as it has wrapped (splitLines) — each line from off one side of the
+        // screen along the heading's own lean, the next from the other side — and then its line TYPES ITSELF OUT, the
+        // way a chapter's card does (typeOut), a line break's pause between its halves. Only once the last letter is
+        // down do the two answers and the way out arrive, in their order.
+        const heads = splitLines(head);
+        heads.forEach(shineLine);                          // ...each line shining, and a spark along its tops
+        heads.forEach((ln, i) => {
+          ln.style.setProperty("--fly-from", (i % 2 ? 1 : -1) * FELL_FLY.reach + "vw");
+          ln.style.animation = "fell-fly " + FELL_FLY.ms + "ms cubic-bezier(.2,.8,.25,1) both";
+          ln.style.animationDelay = (i * FELL_FLY.step) + "ms";
+        });
+        const flown = heads.length ? (heads.length - 1) * FELL_FLY.step + FELL_FLY.ms : 0;
+        const lines = [...menuBody.querySelectorAll(".menu-byline .bl")];
+        const parts = lines.map((ln, i) => ({ el: ln, text: ln.textContent, gap: i === lines.length - 1 ? 0 : TYPE.line }));
+        if (_fallTyping) _fallTyping();
+        const typing = typeOut(parts, flown + FELL_FLY.rest);
+        _fallTyping = typing.stop;
+        const after = typing.total + FELL_STEP;
+        cue(row, after);
+        cue(back, after + FELL_STEP);
+      };
+      setTimeout(begin, 0);                              // ...after openMenu has shown the screen
       return;
     }
     const worldBtn = btn("Tileverse", openTileverse);
