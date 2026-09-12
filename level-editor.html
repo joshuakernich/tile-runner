@@ -13,7 +13,7 @@
   header h1{font-size:15px;margin:0 12px 0 0;font-weight:700;letter-spacing:.5px;}
   label{font-size:12px;opacity:.85;}
   select,input[type=number],input[type=text]{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font:inherit;font-size:12px;}
-  input[type=number]{width:54px;} #introBox{width:150px;} #cpsIn{width:62px;}
+  input[type=number]{width:54px;} #introBox,#guidesBox{width:150px;} #cpsIn{width:62px;}
 
   /* Three rails: the running order down the left, the map in the middle, the palette on the
      right. The map is the only thing that should ever be the reason to scroll, so the two
@@ -232,6 +232,7 @@
       <label class="opt">rows <input type="number" id="rowsIn" min="3" max="40" value="8"></label>
       <label class="opt">speed <input type="number" id="cpsIn" value="0.8" step="0.01" min="0.3" max="3"></label>
       <label class="opt">intro <input type="text" id="introBox" placeholder="wall,block …"></label>
+      <label class="opt">guides <input type="text" id="guidesBox" placeholder="front,flag"></label>
       <label class="opt opt-poem">poem
         <textarea id="poemBox" rows="3" placeholder="shown on its own before the level opens — optional"></textarea></label>
       <label class="opt">by <input type="text" id="byBox" placeholder="who said it" maxlength="60"></label>
@@ -606,6 +607,7 @@ function toWorking(o){
   // [c,r] holes in the floor. Cross one and the tile you crossed on is swallowed for good.
   w.singularity = (o.singularity||[]).map(c=>c.slice());
   w.intro = (o.intro||[]).slice();
+  w.guides = (o.guides||[]).slice();   // the instructions written on the board as it plays — see GUIDE in index.html
   w.cps = o.cps || 0.8;          // starting pace, tiles/sec
   w.name = o.name || "";         // what the level is called; optional, and omitted when blank
   w.poem = o.poem || "";         // a verse shown before it opens; optional, same rule
@@ -635,6 +637,7 @@ function toStored(w){
   const o = { n:w.n, start:w.start.slice(), init:w.init.map(p=>p.slice()),
               cols:w.cols, rows:w.rows, intro:(w.intro||[]).slice(),
               cps:w.cps || 0.8 };
+  if((w.guides||[]).length) o.guides = w.guides.slice();   // only levels that write guides on the board
   if((w.name||"").trim()) o.name = w.name.trim();   // only levels that HAVE a name carry one
   if((w.poem||"").trim()) o.poem = w.poem.trim();   // ...and only the ones that have a verse
   if((w.by||"").trim() && (w.poem||"").trim()) o.by = w.by.trim();   // an attribution needs a verse
@@ -679,6 +682,7 @@ function loadLevel(n){
   sel = null; buildInspector();     // the old level's selection belongs to the old level
   $("nIn").value = L.n; $("colsIn").value = L.cols; $("rowsIn").value = L.rows;
   $("introBox").value = (L.intro||[]).join(",");
+  $("guidesBox").value = (L.guides||[]).join(",");
   $("nameIn").value = L.name || "";
   $("poemBox").value = L.poem || "";
   $("byBox").value = L.by || "";
@@ -1377,6 +1381,7 @@ function solvable(o){
 let _lastOob = "";
 function refreshOut(){
   L.n = +$("nIn").value; L.intro = $("introBox").value.split(",").map(s=>s.trim()).filter(Boolean);
+  L.guides = $("guidesBox").value.split(",").map(s=>s.trim()).filter(Boolean);
   L.cps = clamp(+$("cpsIn").value || 0.8, 0.3, 3);
   commit();
   const o = toStored(L);
@@ -2127,6 +2132,7 @@ const swab=$("swab"); COLORS.forEach((c,i)=>{ const d=document.createElement("di
 $("colsIn").addEventListener("change",resizeGrid); $("rowsIn").addEventListener("change",resizeGrid);
 $("nIn").addEventListener("change",()=>{ refreshOut(); });
 $("introBox").addEventListener("input",()=>{ refreshOut(); });
+$("guidesBox").addEventListener("input",()=>{ refreshOut(); });
 $("nameIn").addEventListener("input",()=>{ L.name = $("nameIn").value; commit(); rebuildLevelList(); refreshOut(); });
 $("poemBox").addEventListener("input",()=>{ L.poem = $("poemBox").value; commit(); refreshOut(); });
 $("byBox").addEventListener("input",()=>{ L.by = $("byBox").value; commit(); refreshOut(); });
