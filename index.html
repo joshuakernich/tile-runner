@@ -221,7 +221,7 @@
      bordered buttons down there read as UI chrome competing with the track. */
   #power {
     position:fixed; z-index:15; display:none; align-items:flex-end; justify-content:center;
-    gap:2px; left:0; right:0;
+    gap:0; left:0; right:0;
     /* Snug along the bottom. This was the FULL safe-area inset plus ten more, which on a
        browser with no inset is a tidy 10px and on a home-indicator iPhone is about 44 — the
        charms floating well up the screen with a band of board under them.
@@ -262,14 +262,14 @@
        neighbour by 14px — a fifth of a charm. They hang at different angles and read as a row
        of collected objects rather than a toolbar, so overlapping suits them; and 61px of each
        is still its own, which is a bigger tap target than the whole charm used to be. */
-    position:relative; background:none; border:0; box-shadow:none; padding:0; margin:0 -7px;
+    position:relative; background:none; border:0; box-shadow:none; padding:0; margin:0;
     /* ...and no min-height either. The global button rule sets one so every button in the
        menus comes out the same height; a charm is not that kind of button, it is an object
        lying on the board, and its size is whatever its icon is. It happens to be taller than
        the minimum today, which is exactly why this needs saying now rather than being found
        later as a mysterious gap under a small charm. */
     min-height:0;
-    cursor:pointer; pointer-events:auto; line-height:0;
+    cursor:pointer; pointer-events:none; line-height:0;      /* the touch is its ::after, below */
     /* Each hangs at its own slight angle, set per charm in JS — five identical uprights read
        as a toolbar, a few degrees apart reads as things you collected. The tilt lives in a
        custom property so :active can add its nudge without throwing the rotation away. */
@@ -278,7 +278,19 @@
   }
   /* No size here on purpose. A charm's box has to match the bitmap drawn into it or it goes
      soft, so both come from PW_PX in buildPowerRack and are set inline. */
-  #power .pw canvas { display:block; }
+  #power .pw canvas { display:block; pointer-events:none; }
+  /* THE TOUCH. A box exactly the button's width (PW_PITCH, set inline) so the row's touch areas meet with
+     no gap between them and no overlap, standing --pw-reach above the charm's top — and UPRIGHT: the
+     charm hangs at its own angle, but its touch is turned back square about the button's middle, or a
+     tilted row would open wedges between neighbours. The art hanging past the box (it is wider than the
+     pitch) takes no taps, so a finger on the overlap goes to whichever box it is inside. */
+  #power .pw::after {
+    content:""; position:absolute; left:0; right:0; top:calc(var(--pw-reach, 0px) * -1); bottom:0;
+    transform:rotate(calc(var(--tilt, 0deg) * -1));
+    transform-origin:50% calc(50% + var(--pw-reach, 0px) / 2);
+    pointer-events:auto;
+  }
+  #power .pw.smash::after, #power .pw.gone::after { pointer-events:none; }
   #power .pw:active { transform:rotate(var(--tilt, 0deg)) translateY(2px); }
   /* running: the charm's own frame going out, drawn on a canvas over the badge — see
      drawPwRing. It replaces a three-pixel bar along the foot of the button, which is a loading
@@ -831,7 +843,11 @@
   /* The card lands whole and dark with its NUMBER already on it — you know which chapter you
      are in before you have read a word. Everything after that arrives on its own delay, set in
      JS because the timings run off the verse's own line count. */
-  #poem-text .ln, #poem-by, #poem-tap { animation:poem-line 520ms ease-out both; }
+  #poem-tap { animation:poem-line 520ms ease-out both; }
+  /* Typed text (typeOut — a chapter's card, a fall's screen): every letter is there from the start, holding its
+     place, and shown as it is typed. */
+  .tc { visibility:hidden; }
+  .tc.on { visibility:visible; }
   /* `translate`, the independent property — NOT `transform`. This animation is worn by the
      fall's heading, which is rotated by the rule every heading in the game shares, and a
      keyframe ending in `transform:none` silently threw that rotation away: the word came up
@@ -1320,9 +1336,27 @@
     background-size:var(--chq2) var(--chq2);
     background-position:0 0;
     background-origin:border-box; }
+  /* THE FALL'S TWO ANSWERS, in the rainbow's own colours with black type, plated the way the Tileverse's PLAY is
+     (#win-next): the colour as the slab, the lifted chequer over it, and the colour darkened for the drop. SKIP —
+     the one that gives up on the run you are looking at — in the rainbow's RED; RETRY, the one you mean, in its
+     BLUE. (The pause's RESTART keeps the dark rust above.) */
+  #menu-body button.fall-skip, #menu-body button.fall-retry {
+    --fall:#f1645f; background-color:var(--fall); border-color:transparent; color:#000;
+    box-shadow:0 var(--btn-drop) 0 color-mix(in srgb, var(--fall) 52%, #000);
+    background-image:
+      conic-gradient(transparent 0 25%, var(--chq-lift) 0 50%,
+                     transparent 0 75%, var(--chq-lift) 0);
+    background-size:var(--chq2) var(--chq2);
+    background-position:0 0;
+    background-origin:border-box; }
+  #menu-body button.fall-retry { --fall:#4baff1; }
+  /* ...and their arrow and loop drawn smooth, the way PLAY's arrow is. */
+  #menu-body button.fall-skip canvas, #menu-body button.fall-retry canvas { image-rendering:auto; }
   #menu-body button.gold:active,
   #menu-body button.amber:active,
   #menu-body button.rust:active,
+  #menu-body button.fall-skip:active,
+  #menu-body button.fall-retry:active,
   #menu-body button.void:active { transform:translateY(var(--btn-drop)); box-shadow:none; }
   /* label · coin · count, on one line and centred as a group.
      `> button` matters: a shop item also contains a canvas.wallet — the tile in its price row —
@@ -1669,12 +1703,14 @@
                 2.55px 3px 0 #335688,
                 3.4px 4px 0 #2d4d7a,
                 4.25px 5px 0 #27446c; }
-  #menu-title.dead, .big-word.dead { color:#ff8f74;
-    text-shadow:0.85px 1px 0 #c75a3f,
-                1.7px 2px 0 #b65239,
-                2.55px 3px 0 #a54a33,
-                3.4px 4px 0 #94422d,
-                4.25px 5px 0 #833a27; }
+  /* A fall's heading, in the rainbow's RED (the Holy Talismans' own, #f1645f) on the same five-step side, the red
+     darkened a step at a time. */
+  #menu-title.dead, .big-word.dead { color:#f1645f;
+    text-shadow:0.85px 1px 0 #b8453f,
+                1.7px 2px 0 #a73e39,
+                2.55px 3px 0 #963733,
+                3.4px 4px 0 #85302d,
+                4.25px 5px 0 #742927; }
   /* The end screen's one line of commentary. It is the only thing on a menu that is not a
      control, so it is quiet and it takes its spacing from #menu-body's own grid gap rather
      than inventing a margin. setByline() places the break; 19rem is the narrowest width at
@@ -1685,6 +1721,28 @@
      piece is a screen you have finished reading before it has finished appearing. Each part
      carries its own delay, set in JS because the timing runs off the byline's line count. */
   #menu.fell .fell-in { animation:poem-line 380ms ease-out both; }
+  /* ...and its heading's lines, each flown in from off a side of the screen along the heading's lean (the heading is
+     turned as a whole, so a line's own sideways IS along it). `translate`, not `transform`, for the reason poem-line
+     gives. The side and the timing are set per line in buildMenu. */
+  .fly-ln { display:block; }
+  /* A SHINING LINE (.shine-line — reusable, on any single line of DOM text; see shineLine): the house white shimmer
+     crossing it — the same glint every room's heading wears, on a copy laid over the text off data-t so the text's
+     own extrusion cannot bury it — and a spark in the line's own colour running along its cap line on a canvas of
+     its own, lit only over the letters that reach the top. */
+  .shine-line { position:relative; }
+  .shine-line::after {
+    content:attr(data-t); position:absolute; left:0; right:0; top:0; bottom:0;
+    white-space:pre; pointer-events:none; text-shadow:none;
+    color:transparent; -webkit-text-fill-color:transparent;
+    background-image:
+      linear-gradient(100deg, rgba(255,255,255,0) 43%, rgba(255,255,255,0.55) 47%,
+                              rgba(255,255,255,1) 50%, rgba(255,255,255,0.55) 53%,
+                              rgba(255,255,255,0) 57%);
+    background-size:300% 100%; background-repeat:no-repeat;
+    -webkit-background-clip:text; background-clip:text;
+    animation:head-shimmer var(--shine-ms, 5200ms) linear infinite; }   /* the spark's lap — they are one light */
+  .shine-line > canvas.shine-spark { position:absolute; pointer-events:none; }
+  @keyframes fell-fly { from { translate:var(--fly-from, -110vw) 0; } to { translate:0 0; } }
   .menu-byline { font-size:var(--body); line-height:1.5; color:#fff1ea; letter-spacing:var(--ls);
     /* Eight tenths of the SCREEN, and it has to break out of the column to get there: the
        menu's body is narrower than that, so a max-width capped at 100% of the parent would
@@ -2745,12 +2803,19 @@
         b.connect(ac.destination); b.start(0);
       } catch (_) {}
     }
-    // iOS suspends the audio context when the app is backgrounded / the phone locks — wake it on return
+    // LEAVING THE SCREEN TAKES THE SOUND WITH IT. iOS was trusted to suspend the context itself when the app
+    // went to the background — and in a home-screen app it does not always: minimised, the music played on
+    // over the springboard. So it is put to sleep HERE the moment the page is hidden (or hidden away for good,
+    // pagehide), and woken again when it comes back into view. A context that will not wake without a touch
+    // is woken by the next one, as it always was (unlock).
     if (typeof document !== "undefined") {
-      const wake = () => { if (ac && ac.state !== "running") ac.resume(); };
+      const wake = () => { if (ac && ac.state !== "running") { const pr = ac.resume(); if (pr && pr.then) pr.then(ambientResume, () => {}); } };
+      const sleep = () => { sessionPause(); try { if (ac && ac.state === "running") ac.suspend(); } catch (_) {} };
       document.addEventListener("visibilitychange", () => {
-        if (document.hidden) sessionPause(); else { wake(); if (ac && !muted) sessionPlayback(); }
+        if (document.hidden) sleep(); else { wake(); if (ac && !muted) sessionPlayback(); }
       });
+      window.addEventListener("pagehide", sleep);
+      window.addEventListener("pageshow", () => { if (!document.hidden) { wake(); if (ac && !muted) sessionPlayback(); } });
       // THE UNLOCK LISTENS FOR THE GESTURES THAT COUNT. A browser only lets audio start inside an
       // event it treats as a real user activation — keydown, a mouse press, and for a FINGER the
       // release: pointerup and touchend. A touch's pointerdown is not one. Every tap on the board
@@ -3473,6 +3538,24 @@
       ring(hz,        0.13, 0.42, "triangle");
       ring(hz*2.005,  0.05, 0.30, "sine");   // an octave of shimmer, detuned so it beats slowly
     }
+    // A LETTER BEING TYPED on the chapter card: a soft, very short blip, each a note of a quiet tune that wanders
+    // the opening's own scale (FLAP_SCALE) a step or two at a time — up and down, never far — so a verse typing
+    // itself out is hummed rather than clicked. `fresh` starts the tune again in the middle, for a new card.
+    let typeStep = 5;
+    function typeBlip(fresh) {
+      if (muted || !ac || ac.state !== "running") return;
+      if (fresh) typeStep = 5;
+      const walk = [-2, -1, -1, 1, 1, 2][Math.floor(Math.random() * 6)];
+      typeStep = Math.max(2, Math.min(FLAP_SCALE.length - 1, typeStep + walk));
+      const t = ac.currentTime, hz = BASE * Math.pow(2, (FLAP_SCALE[typeStep] + 12)/12);
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = "triangle"; o.frequency.setValueAtTime(hz, t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.03, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0002, t + 0.085);
+      o.connect(g); g.connect(master);
+      o.start(t); o.stop(t + 0.1);
+    }
     function introFlash() {
       if (muted || !ac || ac.state !== "running") return;
       const t0 = ac.currentTime;
@@ -3861,15 +3944,18 @@
       }
     }
     // THE LODESTONE'S PULL — one for each ring of its field closing in, lasting exactly that ring's beat
-    // (`dur`, seconds). A low tone sliding UP an octave as the ring closes, with a band of air sweeping
-    // up and swelling under it, and a soft pluck where the ring lands on him. `step` is which ring of
-    // the three: each is pitched a little higher than the last, so the pull builds — and each opens on a twinkle.
-    const MAGNET_PULL_STEPS = [0, 3, 7];
-    function magnetPull(dur, step) {
+    // (`dur`, seconds). SNAPPY: a tone struck and dropping an octave the instant the ring leaves the rim, a snap of air
+    // sweeping down with it — both over and done in MAGNET_PULL_SNAP — and a short pluck on the beat where the ring
+    // lands on him, carrying the fall on down. EVERY
+    // ring's is the same — the same pitch and the same descent, three alike — and each opens on a twinkle.
+    // (The caller still says which ring it is; the pull no longer changes with it.)
+    const MAGNET_PULL_SNAP = 0.2;                              // seconds: the pull's drop, however long the beat
+    function magnetPull(dur) {
       if (muted || !ac || ac.state !== "running") return;
       const t0 = ac.currentTime, D = Math.max(0.12, dur || 0.3);
-      const up = MAGNET_PULL_STEPS[Math.max(0, Math.min(MAGNET_PULL_STEPS.length - 1, step | 0))];
+      const up = 0;
       const hz = BASE * 0.5 * Math.pow(2, up/12), land = t0 + D;
+      const Z = Math.min(D, MAGNET_PULL_SNAP);                  // the drop and its air, over and done in this
       // ...a TWINKLE as the ring leaves the rim: three high bell notes a few ms apart, up the ring's own
       // chord, struck hard and gone in a breath, ringing into the room — the glint before the pull.
       [0, 7, 12].forEach((iv, i) => {
@@ -3886,39 +3972,35 @@
       {                                                         // the pull — an octave above the pluck's root
         const o = ac.createOscillator(), g = ac.createGain();
         o.type = "sine";
-        o.frequency.setValueAtTime(hz * 2, t0);
-        o.frequency.exponentialRampToValueAtTime(hz * 4, land);
-        // A FAST attack — most of its strength in the first 15ms, so the pull is there the instant the
-        // ring leaves the rim — and then the rest of the swell as it closes in.
+        o.frequency.setValueAtTime(hz * 4, t0);
+        o.frequency.exponentialRampToValueAtTime(hz * 2, t0 + Z);  // a quick drop of an octave...
         g.gain.setValueAtTime(0.0001, t0);
-        g.gain.exponentialRampToValueAtTime(0.16, t0 + 0.015);
-        g.gain.exponentialRampToValueAtTime(0.24, t0 + D*0.85);   // swelling as it closes in...
-        g.gain.exponentialRampToValueAtTime(0.0005, land + 0.03); // ...and gone as it lands
+        g.gain.exponentialRampToValueAtTime(0.26, t0 + 0.005);     // ...struck, not swelled...
+        g.gain.exponentialRampToValueAtTime(0.0005, t0 + Z);       // ...and gone
         o.connect(g); g.connect(master);
-        o.start(t0); o.stop(land + 0.06);
+        o.start(t0); o.stop(t0 + Z + 0.03);
       }
       if (noiseBuf) {                                           // the air it drags in with it
         const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
         const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 2.2;
-        bp.frequency.setValueAtTime(420, t0); bp.frequency.exponentialRampToValueAtTime(2600, land);
+        bp.frequency.setValueAtTime(2600, t0); bp.frequency.exponentialRampToValueAtTime(420, t0 + Z);
         const g = ac.createGain();
         g.gain.setValueAtTime(0.0001, t0);
-        g.gain.exponentialRampToValueAtTime(0.06, t0 + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.10, t0 + D*0.85);
-        g.gain.exponentialRampToValueAtTime(0.0005, land + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.10, t0 + 0.006);
+        g.gain.exponentialRampToValueAtTime(0.0005, t0 + Z);
         src.connect(bp); bp.connect(g); g.connect(master); g.connect(sendBus);
-        src.start(t0); src.stop(land + 0.05);
+        src.start(t0); src.stop(t0 + Z + 0.03);
       }
       {                                                         // ...and where the ring lands on him
         const o = ac.createOscillator(), g = ac.createGain();
         o.type = "triangle";
-        o.frequency.setValueAtTime(hz * 4, land);
-        o.frequency.exponentialRampToValueAtTime(hz * 2, land + 0.09);
+        o.frequency.setValueAtTime(hz * 2, land);                 // ...picking up where the pull ended
+        o.frequency.exponentialRampToValueAtTime(hz, land + 0.05);
         g.gain.setValueAtTime(0.0001, land);
         g.gain.exponentialRampToValueAtTime(0.26, land + 0.003);
-        g.gain.exponentialRampToValueAtTime(0.0006, land + 0.16);
+        g.gain.exponentialRampToValueAtTime(0.0006, land + 0.09);
         o.connect(g); g.connect(master); g.connect(sendBus);
-        o.start(land); o.stop(land + 0.2);
+        o.start(land); o.stop(land + 0.12);
       }
     }
     // ---- UI ----------------------------------------------------------------------
@@ -4691,7 +4773,7 @@
              slide, clack, tap, tapBig, swish, airSwish, flyWhoosh, tabClick, power, warp, vortex, thrum, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck, choir,
              ambient,
-             introGather, introFlash, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
+             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
              levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, talismanTheme, choirLift, setMusicGate,
              musicNow: () => ({ ...MU }) };
   })();
@@ -4727,7 +4809,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.52";                    // shown on the title & pause screens
+  const VERSION = "v10.53";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -5291,6 +5373,14 @@
     { id:"drip-green",  name:"Green",  cost:5, body:"#49d47c", ink:"#0d3a1c" },
     { id:"drip-blue",   name:"Blue",   cost:5, body:"#4baff1", ink:"#0b2a44" },
     { id:"drip-purple", name:"Purple", cost:5, body:"#c37ef1", ink:"#2e0d47" },
+    // ...and ALL SIX, one at a time: a new coat on every step he takes — or on every landing, for a swagger
+    // that leaps — walking the rainbow in shelf order, its eyes walking it too, three coats along (see stepCoat). `paint` is only
+    // the rack's picture of it, the six side by side; on him it is always one whole colour.
+    { id:"drip-steps", name:"Rainbow Steps", cost:15, body:"#f1645f", ink:"#3a0c0a", steps:true,
+      paint(g, x, y, w, h){
+        const coats = stepCoats(), gd = g.createLinearGradient(x, y, x + w, y);
+        coats.forEach((c, i) => { gd.addColorStop(i/coats.length, c.body); gd.addColorStop((i + 1)/coats.length, c.body); });
+        return gd; } },
     { id:"blackout", name:"Black on Black", cost:5, body:"#15151c", ink:"#22222c" },
     { id:"whiteout", name:"White on White", cost:5, body:"#f4f4f7", ink:"#e0e0e6" },
     // A hard stop, not a blend: the split is what this is, and a gradient between the two
@@ -5942,6 +6032,10 @@
     { id:"cyan",    name:"Shadow",  cost:10, cols:["#000000"] },
     { id:"scarlet", name:"Scarlet", cost:10, cols:["#b3081a"] },
     { id:"rose",    name:"Rose",    cost:10, cols:["#ffd6e8","#ff9ec7","#e0559a"] },
+    // WHITE LIGHT: a plain white ribbon with a talisman's glitter shed along it — the same square grains
+    // that fall behind a charm on the Holy Talismans page — and the game's white spark standing behind him
+    // (`glitter` and `spark`, which any trail may ask for; see paintTrailGlitter and trailSpark).
+    { id:"angelic", name:"Angelic", cost:15, cols:["#ffffff"], glitter:true, spark:true },
     // Ripple, Serpent and Morse are GONE. Two ribbons that wobbled down their own length and
     // one cut into dashes: three variations on the band that were about the band rather than
     // about him, and the only three whose shape you had to be standing still to read. What is
@@ -6046,11 +6140,11 @@
     // jumps a tile, planted at 0, a half and 1, still on the ground between them. Every other
     // swagger is a decoration on a runner who slides along at a constant rate; this one makes
     // the tile grid something he lands on.
-    { id:"jump",    name:"Pogo",      cost:30, leap:2, leapH:0.30, leapHold:0.40,
+    { id:"jump",    name:"Pogo",      cost:30, leap:2, leapH:0.20, leapHold:0.40,
       swing:0, lift:0, bob:0 },
     // The same gearing, thrown wide: he opens at the apex and shuts again to land, so the
     // straddle is the thing the eye reads rather than the height.
-    { id:"splits",  name:"Splits",    cost:35, leap:2, leapH:0.34, leapHold:0.34, leapSplit:0.14,
+    { id:"splits",  name:"Splits",    cost:35, leap:2, leapH:0.22, leapHold:0.34, leapSplit:0.14,
       swing:0, lift:0, bob:0 },
     // One leg does all the work and the other stays folded up out of the way, landing after
     // landing. The onefoot pose already draws exactly that; it just never had a leap under it.
@@ -6060,7 +6154,7 @@
     // thing, one of which was the other with the jump taken out. Its `id` is left alone: it is
     // what a saved wardrobe has written down, and renaming it would take the swagger off
     // everybody who had bought it.
-    { id:"flamingo",name:"Hop",       cost:35, leap:2, leapH:0.28, leapHold:0.38, pose:"onefoot",
+    { id:"flamingo",name:"Hop",       cost:35, leap:2, leapH:0.18, leapHold:0.38, pose:"onefoot",
       swing:0, lift:0, bob:0 },
     // THE MOONWALK, and it is one number: a NEGATIVE swing. The stride reach is sin(phase) and
     // the foot lift is cos(phase), a quarter turn apart — which is a walk. Flip the sign of the
@@ -6081,9 +6175,9 @@
     // One whole turn per leap, timed to the flight rather than to the clock: he leaves the
     // ground upright and arrives upright, having gone all the way over in between. Higher and
     // with a longer flight than the others, because a turn needs room to finish.
-    { id:"somer",   name:"Somersault",cost:45, leap:2, leapH:0.36, leapHold:0.28, leapSpin:1,
+    { id:"somer",   name:"Somersault",cost:45, leap:2, leapH:0.24, leapHold:0.28, leapSpin:1,
       leapSplit:0.028, swing:0, lift:0, bob:0 },
-    { id:"backflip",name:"Backflip",  cost:50, leap:2, leapH:0.38, leapHold:0.28, leapSpin:-1,
+    { id:"backflip",name:"Backflip",  cost:50, leap:2, leapH:0.25, leapHold:0.28, leapSpin:-1,
       leapSplit:0.028, swing:0, lift:0, bob:0 },
   ];
   // Each swatch is the same bust in the pose that style would hold it in — a still frame
@@ -6614,7 +6708,7 @@
                           return cat.items.find(i => i.id === lookWorn(k)) || lookDefault(cat); };
   // Prices are live. The six zero-cost items are the kit you start in — they have to stay
   // owned or the runner would have nothing to wear on level 1 — and everything else is locked
-  // until it is bought. The whole shop totals 392 tiles against 111 coins in the campaign, so
+  // until it is bought. The whole shop totals 422 tiles against 111 coins in the campaign, so
   // it is two full clears, every coin collected, to own the lot.
   const UNLOCK_ALL = false;
   const owns = it => UNLOCK_ALL || it.cost === 0 || wallet.owned.has(it.id);
@@ -6953,6 +7047,49 @@
   // out — arriving in that order. It opens EVERY chapter, including a retry: the number is the
   // thing that tells you where you are, and a retry is still a chapter starting.
   let _poemClose = null;                     // the card currently up, if any
+  let _poemTyping = null;                    // ...and the stop for its typing, while it types
+  // How the card types (see showOpening), in ms: the wait before the first letter; one letter; a space; what a
+  // comma, a sentence's end, a line break and the gap between the card's three parts add; and the way out after.
+  const TYPE = { lead: 300, letter: 36, space: 16, comma: 200, stop: 460, line: 560, section: 900, tap: 600 };
+  let _fallTyping = null;                    // the stop for a fall screen's typing, while it types
+  // TYPING: text that writes itself out a LETTER AT A TIME, every letter a soft blip of a quiet tune (Sound.typeBlip),
+  // and that BREATHES where the writing does — a beat at a comma, longer at the end of a sentence, and whatever each
+  // part asks for after its last letter (a line break, a section). `parts` are [{ el, text, gap }], typed in order,
+  // each element's contents replaced by its letters: every letter is laid out from the start, hidden (.tc), so the
+  // text wraps and balances on the whole of it and nothing moves as it types. Returns how long it all takes, and a
+  // stop. Used by a chapter's card and a fall's screen.
+  // `delay` (ms) holds the first letter back that much longer, for text that follows something else in.
+  function typeOut(parts, delay) {
+    const typed = [];                                    // [letter span, the wait after it (ms), is it a letter]
+    for (const { el, text, gap: endGap } of parts) {
+      el.textContent = "";
+      const chars = [...String(text || "")];
+      chars.forEach((c, i) => {
+        const sp = document.createElement("span"); sp.className = "tc"; sp.textContent = c;
+        el.appendChild(sp);
+        const blank = /\s/.test(c), next = chars[i + 1];
+        let gap = blank ? TYPE.space : TYPE.letter;
+        if (/[,;:]/.test(c)) gap += TYPE.comma;
+        if (/[.!?]/.test(c) && (next == null || /\s/.test(next))) gap += TYPE.stop;
+        if (i === chars.length - 1) gap = Math.max(gap, endGap || 0);
+        typed.push([sp, gap, !blank]);
+      });
+    }
+    const lead = TYPE.lead + (delay || 0);
+    let total = lead;
+    for (const q of typed) total += q[1];
+    let at = 0, timer = 0, fresh = true;
+    const next = () => {
+      timer = 0;
+      if (at >= typed.length) return;
+      const [sp, gap, letter] = typed[at++];
+      sp.classList.add("on");
+      if (letter) { try { Sound.typeBlip && Sound.typeBlip(fresh); } catch (_) {} fresh = false; }
+      timer = setTimeout(next, gap);
+    };
+    timer = setTimeout(next, lead);
+    return { total, stop: () => { if (timer) clearTimeout(timer); timer = 0; at = typed.length; } };
+  }
   let _openedIdx = -1;                       // whose card was last shown — a repeat is a retry
   function showOpening(label, text, by, done) {
     // Whatever was up belongs to a chapter that is no longer loading. Take it down without
@@ -6974,40 +7111,35 @@
     // field to say otherwise, so nothing has to be rewritten to keep reading properly.
     const m = by ? null : body.match(/^([\s\S]+?)\s+[-–—]\s*([^\n]{1,60})$/);
     const verse = (m ? m[1] : body).trim();
-    document.getElementById("poem-n").textContent  = "Chapter " + label;
-    document.getElementById("poem-by").textContent = by ? String(by).trim() : (m ? m[2].trim() : "");
-    // The verse arrives a LINE AT A TIME, and the lines are the ones it was WRITTEN with: if the
-    // poem box in the editor has line breaks in it, those are the breaks, full stop. A verse is
-    // set the way its author set it, and second-guessing that would make the box a lie.
-    //
-    // Only a verse written as one unbroken paragraph is split for it, and then by sentence —
-    // read at the pace it was punctuated at, keeping the stop that ended each one. A single
-    // block fading up is a picture rather than a line of poetry.
+    const byText = by ? String(by).trim() : (m ? m[2].trim() : "");
+    // The verse's LINES are the ones it was WRITTEN with: if the poem box in the editor has line breaks in it,
+    // those are the breaks, full stop. A verse is set the way its author set it, and second-guessing that would
+    // make the box a lie. Only a verse written as one unbroken paragraph is split for it, and then by sentence —
+    // keeping the stop that ended each one.
     const written = verse.split(/\n/).map(l => l.trim()).filter(Boolean);
     const lines = written.length > 1 ? written
                 : (verse.match(/[^.!?]+[.!?]*/g) || [verse]).map(t => t.trim()).filter(Boolean);
-    const txt = document.getElementById("poem-text");
-    txt.textContent = "";
-    // 0.5s a line, starting half a second after the number; the attribution a second after the
-    // last of them, and the way out a second after that.
-    let t = 500;
-    for (const ln of lines) {
-      const q = document.createElement("p"); q.className = "ln"; q.textContent = ln;
-      q.style.animationDelay = t + "ms"; txt.appendChild(q);
-      t += 500;
-    }
-    const last = lines.length ? t - 500 : 0;
-    // Restart the two that PERSIST between cards before their delays are set, not after: the
-    // reset clears the whole `animation` shorthand, and the delay is part of it — setting the
-    // delay first and resetting afterwards wiped it, and every card after the first arrived
-    // fully formed. The verse's own lines are built fresh each time and need no reset.
+    const nEl = document.getElementById("poem-n"), txt = document.getElementById("poem-text");
     const byEl = document.getElementById("poem-by"), tapEl = document.getElementById("poem-tap");
-    for (const q of [byEl, tapEl]) { q.style.animation = "none"; void q.offsetWidth; q.style.animation = ""; }
-    byEl.style.animationDelay  = (last + 1000) + "ms";
-    tapEl.style.animationDelay = (last + 2000) + "ms";
+    // THE CARD TYPES ITSELF OUT — its number, then the verse, then whoever said it — a letter at a time with a
+    // blip for each, breathing where the writing does (see typeOut).
+    txt.textContent = "";
+    const parts = [{ el: nEl, text: "Chapter " + label, gap: TYPE.section }];
+    lines.forEach((ln, i) => {
+      const q = document.createElement("p"); q.className = "ln"; txt.appendChild(q);
+      parts.push({ el: q, text: ln, gap: i === lines.length - 1 ? TYPE.section : TYPE.line });
+    });
+    parts.push({ el: byEl, text: byText, gap: 0 });
+    const typing = typeOut(parts);
+    // ...and the way out, once the last letter is down. Its animation is reset BEFORE its delay is set: the reset
+    // clears the whole `animation` shorthand, the delay included.
+    tapEl.style.animation = "none"; void tapEl.offsetWidth; tapEl.style.animation = "";
+    tapEl.style.animationDelay = (typing.total + TYPE.tap) + "ms";
+    _poemTyping = typing.stop;
     paused = true;
     el.classList.add("show");
     const close = (go) => {
+      if (_poemTyping) { _poemTyping(); _poemTyping = null; }   // ...and it stops typing
       el.removeEventListener("pointerdown", close);
       el.classList.remove("show");
       _poemClose = null;
@@ -12922,6 +13054,9 @@
   const PICK_TRACE_MS = 15000;                    // one lap of the chosen square by its sparks
   const PICK_TRACE_SHRINK = 0.75;                 // ...and how much smaller they are along its bottom (0.75 = a quarter size)
   let _pickTrace = null;                          // which square they are circling, and since when
+  let _glowTrace = null;                          // ...and the same for the chapter just cleared
+  const DONE_GREEN = "#49d47c";                   // that chapter's ring and sparks: the rainbow's green...
+  const SKIP_RED = "#f1645f";                     // ...or, for a chapter walked away from, the rainbow's red
   // A point on the edge of a rounded square (corner x0,y0, side s, corner radius r), `u` laps round
   // it ANTICLOCKWISE on screen from the middle of the top edge: left along the top, down the left
   // side, right along the bottom, up the right side, and home — round each corner on its arc.
@@ -13215,6 +13350,7 @@
     // never gets drawn.
     let underDone = false;
     let ringTop = null;                                    // the chosen square's top-middle and size, once drawn
+    let glowTop = null;                                    // ...and the newly cleared chapter's, the same way
     const drawUnder = () => {
       if (underDone) return; underDone = true;
       for (const sp of (o.under || [])) drawSpark(ctx, sp.x, sp.y, sp.size, ts, { alpha: sp.alpha, seed: sp.seed });
@@ -13311,36 +13447,17 @@
         }
         ctx.restore();
       }
-      // A cleared level SHINES: the headings' shimmer crossing it, and the Tileverse's blue ring.
+      // A newly cleared chapter wears the CHOSEN SQUARE'S LOOK in the rainbow's GREEN (DONE_GREEN) — or a skipped one in
+      // its RED (SKIP_RED; `glowCol` says which): the same ring,
+      // the same dark halo round it and the same two sparks tracing its edge (below, after every square) — where
+      // it used to have a band of light passing over it.
       const ga = o.glowA == null ? 1 : o.glowA;
       if (o.glowIdx === i && o.glow > 0 && ga > 0) {
-        // The shine PASSES rather than sits: a band of light crosses the square and then there
-        // is a beat of nothing before the next one. A permanent white wash bleaches the palette
-        // it is supposed to be showing off.
-        // It shimmers the way the HEADINGS do now: the same white band, three widths long, sliding
-        // across it on the same 2.6s clock at the same slant — added rather than laid over, and
-        // held under full strength so the palette it crosses is lit rather than bleached.
-        {
-          const u = (ts % 2600) / 2600, L = w*3, ang = 10 * Math.PI/180, gx = x - 2*w*(1 - u);
-          const gd = ctx.createLinearGradient(gx, y + w/2, gx + L*Math.cos(ang), y + w/2 + L*Math.sin(ang));
-          const a = (v) => "rgba(255,255,255," + (v * 0.55 * ga).toFixed(3) + ")";
-          gd.addColorStop(0.00, a(0)); gd.addColorStop(0.43, a(0));
-          gd.addColorStop(0.47, a(0.55)); gd.addColorStop(0.50, a(1)); gd.addColorStop(0.53, a(0.55));
-          gd.addColorStop(0.57, a(0)); gd.addColorStop(1.00, a(0));
-          ctx.save();
-          rrect(x, y, w, w, r); ctx.clip();
-          ctx.globalCompositeOperation = "lighter";
-          ctx.fillStyle = gd; ctx.fillRect(x, y, w, w);
-          ctx.restore();
-        }
-        // ...and it is RINGED in the Tileverse's blue, exactly as a chosen chapter is (below): the
-        // same weight, drawn inside its own square so it does not sit on its neighbours.
-        {
-          const lw = FOOTER.rim + 1;
-          ctx.strokeStyle = tvBlueA(ga);
-          ctx.lineWidth = lw;
-          rrect(x + lw/2, y + lw/2, w - lw, w - lw, Math.max(0, r - lw/2)); ctx.stroke();
-        }
+        const lw = FOOTER.rim + 1;
+        ctx.strokeStyle = hexA(o.glowCol || DONE_GREEN, ga);
+        ctx.lineWidth = lw;
+        rrect(x + lw/2, y + lw/2, w - lw, w - lw, Math.max(0, r - lw/2)); ctx.stroke();
+        glowTop = { x: x + w/2, y, h: w, a: ga };            // its halo and sparks go on last, over everything
       }
       if (o.ringIdx === i && o.ring > 0) {                 // the one being pointed at
         // Drawn INSIDE its own square now that they touch: a ring hung outside one would be
@@ -13412,45 +13529,51 @@
     // square is cut out of the clip, so its own colours are untouched — and cast as a SHADOW from a
     // copy of the square drawn a long way off-canvas, so all that lands is the soft falloff. Drawn
     // after every square, so the neighbours it spills onto do not paint back over it.
-    if (ringTop) {
-      const gx = ringTop.x - ringTop.h/2, gy = ringTop.y, gs = ringTop.h, far = 20000;
+    const pickHalo = (top, a) => {
+      const gx = top.x - top.h/2, gy = top.y, gs = top.h, far = 20000;
       const path = (px) => { if (ctx.roundRect) ctx.roundRect(px, gy, gs, gs, r); else ctx.rect(px, gy, gs, gs); };
       ctx.save();
       ctx.beginPath(); ctx.rect(-far, -far, far*2 + viewW, far*2 + viewH); path(gx); ctx.clip("evenodd");
       const k = Math.max(1, dpr || 1);
-      ctx.shadowColor = "rgba(0,0,0," + (PICK_GLOW.a * A * o.ring).toFixed(3) + ")";
+      ctx.shadowColor = "rgba(0,0,0," + (PICK_GLOW.a * A * a).toFixed(3) + ")";
       ctx.shadowBlur = gs * PICK_GLOW.blur * k;          // shadows ignore the transform: device px
       ctx.shadowOffsetX = far * k;
       ctx.fillStyle = "#000";
       ctx.beginPath(); path(gx - far); ctx.fill();
       ctx.restore();
-    }
-    // TWO SPARKS ON THE CHOSEN SQUARE, in the Tileverse's blue — each the tab bar's spark, the same
-    // size — TRACING ITS EDGE, slowly and anticlockwise, opposite one another. They set off from the
-    // middle of the top edge and the middle of the bottom edge the moment the square is chosen, and
-    // follow its rounded corners rather than cutting them, rolling. Drawn after every square rather than with
-    // its own, or the rows around it, painted later, would cover the half that stands off the edge.
-    if (ringTop) {
-      if (!_pickTrace || _pickTrace.idx !== o.ringIdx) _pickTrace = { idx: o.ringIdx, t0: ts };
-      const u = Math.max(0, ts - _pickTrace.t0) / PICK_TRACE_MS;
+    };
+    // TWO SPARKS ON THE CHOSEN SQUARE — each the tab bar's spark, the same size — TRACING ITS EDGE, slowly and
+    // anticlockwise, opposite one another. They set off from the middle of the top edge and the middle of the
+    // bottom edge the moment the square is chosen (`trace.t0`), and follow its rounded corners rather than cutting
+    // them, rolling. Drawn after every square rather than with its own, or the rows around it, painted later,
+    // would cover the half that stands off the edge. In the Tileverse's blue on the chosen square; in green on
+    // the chapter just cleared.
+    const pickSparks = (top, trace, a, col) => {
+      const u = Math.max(0, ts - trace.t0) / PICK_TRACE_MS;
       // ...and each ROLLS as it goes, like the tab bar's: turned by the distance it has travelled
       // over its rolling radius. Round the outside of the square anticlockwise, so it spins that
       // way too.
-      const sz = uiGrid() * TAB_SPARK, gs = ringTop.h, rr = Math.max(0, Math.min(r || 0, gs/2));
+      const sz = uiGrid() * TAB_SPARK, gs = top.h, rr = Math.max(0, Math.min(r || 0, gs/2));
       const lap = 4*(gs - 2*rr) + 2*Math.PI*rr;
       for (const [off, seed] of [[0, 0.61], [0.5, 0.19]]) {
-        const q = rimPointCCW(ringTop.x - gs/2, ringTop.y, gs, r, u + off);
+        const q = rimPointCCW(top.x - gs/2, top.y, gs, r, u + off);
         // SMALLER THE LOWER IT GOES: full size along the top edge, easing down to a small glint
         // along the bottom — as if the light were on the top of the square and the bottom were
         // turned away from it.
-        const dn = Math.max(0, Math.min(1, (q.y - ringTop.y) / gs)), ease = dn*dn*(3 - 2*dn);
+        const dn = Math.max(0, Math.min(1, (q.y - top.y) / gs)), ease = dn*dn*(3 - 2*dn);
         const kz = 1 - PICK_TRACE_SHRINK * ease;
         ctx.save();
         ctx.translate(q.x, q.y); ctx.rotate(-(u + off) * lap / (sz * TAB_SPARK_ROLL));
-        drawSpark(ctx, 0, 0, sz * kz, ts, { alpha: A * o.ring, col: tvBlueHex(), seed });
+        drawSpark(ctx, 0, 0, sz * kz, ts, { alpha: A * a, col, seed });
         ctx.restore();
       }
-    }
+    };
+    if (ringTop && (!_pickTrace || _pickTrace.idx !== o.ringIdx)) _pickTrace = { idx: o.ringIdx, t0: ts };
+    if (glowTop && (!_glowTrace || _glowTrace.idx !== o.glowIdx)) _glowTrace = { idx: o.glowIdx, t0: ts };
+    if (glowTop) pickHalo(glowTop, glowTop.a);
+    if (ringTop) pickHalo(ringTop, o.ring);
+    if (glowTop) pickSparks(glowTop, _glowTrace, glowTop.a, o.glowCol || DONE_GREEN);
+    if (ringTop) pickSparks(ringTop, _pickTrace, o.ring, tvBlueHex());
     drawUnder();
     ctx.restore();
   }
@@ -13738,7 +13861,8 @@
     // A chapter PUT BACK DOWN (a re-tap, or a drag) loses its ring and its spark with the button:
     // what they said was "this one", and nothing is chosen any more. Only an explicit `false`
     // counts — the sequence that arrives on a square has never set it, and that square is chosen.
-    const opts = { glowIdx: P.idx, glow, glowA, ringIdx: P.next, ring: winPicked() ? ring : 0, alpha: mapA };
+    const opts = { glowIdx: P.idx, glow, glowA, glowCol: P.skip ? SKIP_RED : DONE_GREEN,   // cleared green, skipped red
+                   ringIdx: P.next, ring: winPicked() ? ring : 0, alpha: mapA };
     if (P.ph === "pan" || P.ph === "wait" || P.ph === "whip") { opts.litIdx = P.next; opts.lit = litK; }
     // ...and until then it is GREY. Finishing a chapter opens the next one, so the map's own
     // rule — everything cleared, plus the first you have not — lights it the instant you arrive,
@@ -13797,7 +13921,7 @@
       // Lower than the level tally used to sit. This group is TWO rows now — the takings above
       // the purse — and at the Tileverse's own size it is half as tall again as the single line
       // it replaced, which put the "+n" straight through the word COMPLETE.
-      if (!P.skip) drawPurseTally(ts, hy + size*2.9, outK);
+      if (!P.skip && P.ph === "name") drawPurseTally(ts, hy + size*2.9, outK);   // (the pan carries it on — below)
       // ...and if a charm came out of this chapter, it is named ONCE MORE, directly under the
       // money. It was announced when you picked it up — mid-run, with a maze still to finish and
       // a runner who does not stop — which is the worst moment in the game to be told something.
@@ -13806,6 +13930,18 @@
       // the chapter you just finished — what it was called, what it paid, and what it held —
       // and a line hanging on its own at the bottom of the screen is a separate remark.
       if (!P.skip) drawWinCharm(P, payoutEnd(P) + PAYOUT.tail, hy + size*4.35, outK);
+    }
+    // THE PURSE STAYS. The tally the chapter's takings fell into does not leave with the words: over the pan it
+    // rises from under COMPLETE to stand just under the TILEVERSE heading, and it stays there for as long as the
+    // map waits on you — however you came to it, from a chapter, the title or a menu. From here on it is the
+    // settled wallet (drawWalletTally): the takings are already in it (see the payout), and a visit to the shop
+    // changes it. A skipped chapter had no tally to carry, so its purse simply comes up where it will stay.
+    if (P.ph === "pan" || P.ph === "wait") {
+      const size = Math.min(46, viewW*0.11), hy = headTextY(size), under = hy + size*1.15;
+      const from = P.skip ? under : hy + size*2.9;
+      const k = P.ph === "pan" ? easeBoth(Math.min(1, P.t / (WIN.pan*0.6))) : 1;
+      const a = (P.ph === "pan" && P.skip) ? Math.min(1, P.t / 300) : 1;
+      drawWalletTally(from + (under - from)*k, a);
     }
     // ...and last of all, the way out — offered once the purse has taken its takings and
     // settled, never over the top of the number still changing.
@@ -14073,6 +14209,22 @@
   // beat cannot be tapped away in the middle of its own arithmetic.
   const payoutEnd = (P) => (P && !P.skip && P.gain > 0)
     ? PAYOUT.in + PAYOUT.hang + PAYOUT.drop : 700;
+  // THE PURSE, SETTLED: the wallet as it stands, at the tally's own size, spacing and coin — the figure
+  // drawPurseTally comes to rest on, with nothing on its way into it. The Tileverse keeps it under its heading.
+  function drawWalletTally(y, alpha) {
+    if (!(alpha > 0.01)) return;
+    const h = PURSE_PX, gap = PURSE_GAP, cw = h*PURSE_COIN, numF = "900 " + h + "px " + UI_FONT;
+    const num = String(wallet.tiles);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.letterSpacing = "1px";
+    ctx.font = numF;
+    const x0 = viewW/2 - (cw + gap + ctx.measureText(num).width)/2;
+    hudCoin(x0, y, cw);
+    ctx.font = numF; ctx.fillStyle = COIN_FACE;
+    ctx.fillText(num, x0 + cw + gap, y + inkNudge(numF));
+    ctx.restore();
+  }
   function drawPurseTally(ts, y, alpha) {
     const P = win;
     if (!P || alpha <= 0.01) return;
@@ -14714,7 +14866,126 @@
   // How the fall's card comes together: the header first, then a line of the byline every
   // FELL_STEP, then the pair, then the way out. Slow enough to read as one part arriving after
   // another rather than as a stagger.
-  const FELL_HEAD = 320, FELL_STEP = 260;
+  const FELL_STEP = 260;
+  // A fall's heading FLYING IN, a line at a time: how long each line's flight takes, how far behind the one before it
+  // each sets off, how far off the side of the screen it starts (in screen widths, along the heading's lean), and the
+  // beat after the last one lands before the line under it starts typing.
+  const FELL_FLY = { ms: 560, step: 260, reach: 110, rest: 250 };
+  // SHINING LINES — reusable, for any single line of DOM text: shineLine(el) gives it the house white shimmer (CSS,
+  // .shine-line) and a white SPARK that ROLLS left to right along the tops of its capitals on a loop — LIT ONLY WHERE A LETTER REACHES ALL THE WAY UP. Where the top of the
+  // line has a gap (a space, the dip in a U or a V, a stroke that stops short of the cap) it goes out, and comes back
+  // at the next peak. The peaks are found once per line and whenever it changes size or text: the text drawn
+  // off-screen in the line's own computed font and tracking, and each column asked whether its ink reaches the cap
+  // height. The canvas is the line's own child, so the spark flies and leans with the line. One loop runs them all,
+  // and stops when none is left in the document.
+  const SHINE = { lapMs: 5200, size: 0.45, band: 0.10, fade: 0.40, edge: 0.05 };
+  let _shineRaf = 0;
+  function shineLine(el) {
+    if (!el || el._shine) return;
+    el.dataset.t = el.textContent;
+    el.style.setProperty("--shine-ms", SHINE.lapMs + "ms");
+    el.classList.add("shine-line");
+    const cv = document.createElement("canvas"); cv.className = "shine-spark"; cv.setAttribute("aria-hidden", "true");
+    el.appendChild(cv);
+    el._shine = { cv, key: "", peaks: null, a: 0, t0: performance.now() };
+    if (!_shineRaf) _shineRaf = requestAnimationFrame(shineTick);
+  }
+  function shineTick(ts) {
+    const els = [...document.querySelectorAll(".shine-line")].filter(e => e._shine);
+    if (!els.length) { _shineRaf = 0; return; }
+    for (const el of els) shineDraw(el, ts);
+    _shineRaf = requestAnimationFrame(shineTick);
+  }
+  function shineDraw(el, ts) {
+    const S = el._shine, cs = getComputedStyle(el);
+    const W = el.offsetWidth, H = el.offsetHeight;
+    if (!(W > 0 && H > 0)) return;
+    const fs = parseFloat(cs.fontSize) || 46, px = Math.max(1, window.devicePixelRatio || 1);
+    let text = el.dataset.t || "";
+    if (cs.textTransform === "uppercase") text = text.toUpperCase();
+    const key = [text, cs.font, cs.letterSpacing, W, H, px].join("|");
+    const sz = fs * SHINE.size, pad = Math.ceil(sz * 1.2);
+    if (S.key !== key) {
+      S.key = key;
+      const font = cs.font, ls = cs.letterSpacing === "normal" ? "0px" : cs.letterSpacing;
+      const g0 = document.createElement("canvas").getContext("2d");
+      g0.font = font; g0.letterSpacing = ls;
+      const m = g0.measureText(text), capA = g0.measureText("H").actualBoundingBoxAscent;
+      const asc = m.fontBoundingBoxAscent, desc = m.fontBoundingBoxDescent, tw = Math.ceil(m.width);
+      const lh = parseFloat(cs.lineHeight) || fs*1.05;
+      // where its text sits in the line box: centred across, on the line's own baseline
+      const base = (H - lh)/2 + (lh - (asc + desc))/2 + asc;
+      // the peaks: every column whose ink reaches into the top band of the capitals
+      const off = document.createElement("canvas");
+      off.width = tw + 2; off.height = Math.ceil(asc + desc) + 2;
+      const g = off.getContext("2d");
+      g.font = font; g.letterSpacing = ls; g.textBaseline = "alphabetic"; g.fillStyle = "#fff";
+      g.fillText(text, 1, 1 + asc);
+      const img = g.getImageData(0, 0, off.width, off.height).data;
+      const top0 = Math.max(0, Math.round(1 + asc - capA)), band = Math.max(1, Math.round(fs * SHINE.band));
+      const peaks = new Uint8Array(off.width);
+      for (let x = 0; x < off.width; x++)
+        for (let y = top0; y < Math.min(off.height, top0 + band); y++)
+          if (img[(y*off.width + x)*4 + 3] > 96) { peaks[x] = 1; break; }
+      Object.assign(S, { peaks, tw, x0: (W - tw)/2 - 1, capTop: base - capA, pad });
+      const cw = W + 2*pad, ch = H + 2*pad;
+      S.cv.width = Math.round(cw*px); S.cv.height = Math.round(ch*px);
+      S.cv.style.width = cw + "px"; S.cv.style.height = ch + "px";
+      S.cv.style.left = -pad + "px"; S.cv.style.top = -pad + "px";
+    }
+    const g = S.cv.getContext("2d");
+    g.setTransform(px, 0, 0, px, 0, 0); g.clearRect(0, 0, S.cv.width/px, S.cv.height/px);
+    // IN STEP WITH THE SHIMMER: it rides the white band itself. Its clock is the shimmer's own animation (read off the
+    // ::after it runs on, so the two cannot drift), and its place is where the band's middle crosses the tops of the
+    // capitals: the band is a 300%-wide gradient walked from 100% to 0%, so its middle runs from half a line-box
+    // before the line to half one past it, and it is slanted (100deg), leaning right as it rises.
+    if (!S.anim || S.anim.playState === "idle")
+      S.anim = el.getAnimations({ subtree: true }).find(a => a.animationName === "head-shimmer"
+                                                            && a.effect && a.effect.pseudoElement === "::after") || null;
+    const lap = SHINE.lapMs, clock = S.anim && S.anim.currentTime != null ? S.anim.currentTime : ts - S.t0;
+    const f = ((clock % lap) + lap) % lap / lap;
+    const xBand = -0.5*W + 2*W*f + (H/2 - S.capTop) * Math.tan(10 * Math.PI/180);
+    const x = xBand - (S.x0 + 1);                                     // ...along the text
+    if (x < 0 || x > S.tw) { S.a = 0; return; }
+    const on = S.peaks[Math.max(0, Math.min(S.peaks.length - 1, Math.round(x) + 1))];
+    S.a += ((on ? 1 : 0) - S.a) * SHINE.fade;
+    const ends = S.tw * SHINE.edge;
+    const edge = Math.min(1, x / ends, (S.tw - x) / ends);           // ...and out at each end of the text
+    const alpha = S.a * Math.max(0, edge);
+    if (alpha < 0.02) return;
+    g.save();
+    g.translate(S.pad + xBand, S.pad + S.capTop);
+    // Taken out of the line's lean, as a heading's sparks are — and then ROLLED, like the tab bar's: turned by the
+    // distance it has travelled along the line over its rolling radius.
+    const tf = el.parentElement ? getComputedStyle(el.parentElement).transform : "none";
+    if (tf && tf !== "none") { const mm = new DOMMatrixReadOnly(tf); g.rotate(-Math.atan2(mm.b, mm.a)); }
+    g.rotate(x / (sz * TAB_SPARK_ROLL));
+    drawSpark(g, 0, 0, sz, ts, { col: "#ffffff", alpha, seed: 0.37 });   // white, the shimmer's own light
+    g.restore();
+  }
+  // A heading's LINES, as it has actually wrapped: its words are measured where the browser put them and each row of
+  // them becomes a block of its own, so a line can be moved as a line. Asked once it is in the document.
+  function splitLines(el) {
+    const words = String(el.textContent).split(/\s+/).filter(Boolean);
+    el.textContent = "";
+    const spans = words.map((w, i) => {
+      const sp = document.createElement("span"); sp.textContent = w; el.appendChild(sp);
+      if (i < words.length - 1) el.appendChild(document.createTextNode(" "));
+      return sp;
+    });
+    const rows = [];
+    for (const sp of spans) {
+      const top = sp.offsetTop;
+      let row = rows.find(q => Math.abs(q.top - top) < 4);
+      if (!row) rows.push(row = { top, words: [] });
+      row.words.push(sp.textContent);
+    }
+    el.textContent = "";
+    return rows.map(q => {
+      const ln = document.createElement("span"); ln.className = "fly-ln"; ln.textContent = q.words.join(" ");
+      el.appendChild(ln); return ln;
+    });
+  }
   const LOSE_QUIPS = COPY.loseQuips || [""];
   const LOSE_TITLES = COPY.loseTitles || [""];
   let _lastQuip = -1, _lastPause = -1;
@@ -18151,6 +18422,24 @@
   // against. A builder rather than a path, because it is invoked inside the runner's own save()
   // with the world transform put back — see the shadow block.
   let runnerShadowClip = null;
+  // RAINBOW STEPS: the six rainbow coats, off the rack itself, and which of them he is wearing on this frame.
+  // The count is his stride's own: a foot lands every half turn of the phase (a quarter turn in, where the
+  // lifted foot comes down at the front of its reach), so the coat changes as each foot plants; a swagger that
+  // leaps changes on each landing instead, counted the way leapAt counts leaps. Read off the phase alone, so
+  // it is the same on the board, the title and the shop's figure, and it holds still whenever he does.
+  let _stepCoats = null;
+  const stepCoats = () => _stepCoats ||
+    (_stepCoats = ["red", "orange", "yellow", "green", "blue", "purple"]
+      .map(k => SKIN_COLOURS.find(c => c.id === "drip-" + k)).filter(Boolean));
+  // `off` walks that many coats further round: the eyes wear the coat three along, the far side of the wheel.
+  function stepCoat(w, phase, off) {
+    const coats = stepCoats(); if (!coats.length) return null;
+    const ph = phase || 0;
+    const n = (w && w.leap > 0) ? Math.floor(ph / (Math.PI * 2 * STRIDES_PER_TILE) * w.leap)
+                                : Math.floor((ph - Math.PI/2) / Math.PI);
+    const k = n + (off || 0);
+    return coats[((k % coats.length) + coats.length) % coats.length];
+  }
   function paintRunner(sx, sy, s, phase, angle, moving, ts, sq, grounded, as) {
     // SWAGGER rides on top of the stock stride rather than replacing it — every field is a
     // multiplier or an addition, so the numbers in RUNNER still drive all five styles.
@@ -18210,8 +18499,9 @@
     // The Cloak of Light overrides the drip entirely — a finish is a paint job, and this is
     // supposed to read as him being made of the stuff for three seconds.
     const golden = !as && powerActive("star");
-    const pale = golden ? "#ffdf78" : (skin.body || RUNNER.body);
-    const inkCol = golden ? "#6b3f04" : (skin.ink || RUNNER.ink);
+    const stepC = (!golden && skin.steps) ? stepCoat(w, phase) : null;   // Rainbow Steps: this step's coat
+    const pale = golden ? "#ffdf78" : stepC ? stepC.body : (skin.body || RUNNER.body);
+    const inkCol = golden ? "#6b3f04" : stepC ? stepCoat(w, phase, 3).body : (skin.ink || RUNNER.ink);   // ...its eyes, rainbow too
     // A leap folds the legs under him as he lands and stretches them out as he flies. Scaling
     // the leg is the whole of it: the feet are on the ground plane and the body hangs off the
     // hip, so a shorter leg drops him into a crouch with the knees taking up the difference,
@@ -18302,7 +18592,7 @@
     const deadFace = (as && as.dead) || _deadEyes;
     const eyeG = eyeGlance(s, (_restFold > 0.5 || _shutEyes) ? EYES.blinkMs*0.02 : ts, 0);
     const eyeMid = deadFace ? s*EYES.bias*2.2 : s*EYES.bias + (eyeG.shut ? 0 : eyeG.gx);
-    const finish = (!golden && skin.paint) ? skin.paint(ctx, -bodyW/2, byTop, bodyW, bodyH, ts, eyeMid) : pale;
+    const finish = (!golden && !stepC && skin.paint) ? skin.paint(ctx, -bodyW/2, byTop, bodyW, bodyH, ts, eyeMid) : pale;
     // A finish with `legs` colours each leg outright, back then front, instead of with the finish.
     const legInk = hx => (!golden && skin.legs) ? skin.legs[hx < 0 ? 0 : 1] : finish;
     // A GLOW is the one part of a finish that is not clipped to him. `paint` and `sheen` both
@@ -20281,7 +20571,11 @@
   // How big a charm is on screen, and its bitmap at twice that so it stays sharp on a phone.
   // The three fractions below are the old 112px drawing kept as ratios of the box, so the hook
   // goes on standing the same distance above the badge whatever size the charm becomes.
-  const PW_PX = 75, PW_CV = PW_PX * 2, PW_CY = 62/112, PW_R = 34/112;
+  const PW_PX = 90, PW_CV = PW_PX * 2, PW_CY = 62/112, PW_R = 34/112;
+  // THE ROW'S PITCH AND ITS TOUCH. Each charm's button — the thing a finger lands on — is PW_PITCH wide, so
+  // the buttons meet edge to edge with no gap and no overlap however much the charms themselves overlap
+  // (they are PW_PX, and hang over their neighbours), and it reaches PW_REACH above the charm's top.
+  const PW_PITCH = 62, PW_REACH = 14;
   // SPENDING A CHARM. It shudders where it hangs, breaks into pieces off the game's own
   // quarter-tile grid, and the pieces are thrown clear — and only when the last of them has
   // gone does the button leave the row and the rest close up over the gap. A charm that simply
@@ -20458,8 +20752,12 @@
       b.dataset.tal = id;
       // Taller than wide so the hook has somewhere to go: the badge sits low with the loop
       // standing above it, the same object you picked up off the board.
+      b.style.width = PW_PITCH + "px";
+      b.style.setProperty("--pw-reach", PW_REACH + "px");
+      const hang = (PW_PITCH - PW_PX) / 2;                  // the art is wider than the button: centred on it
       const c = document.createElement("canvas"); c.width = c.height = PW_CV;
       c.style.width = c.style.height = PW_PX + "px";
+      c.style.marginLeft = c.style.marginRight = hang + "px";
       const cg = c.getContext("2d");
       const mx = PW_CV/2, my = PW_CV*PW_CY, R = PW_CV*PW_R;
       talHook(cg, mx, my, R, def);
@@ -20467,6 +20765,7 @@
       const ring = document.createElement("canvas"); ring.className = "pw-ring";
       ring.width = ring.height = PW_CV;
       ring.style.width = ring.style.height = PW_PX + "px";
+      ring.style.left = hang + "px";
       // THE SPARK, for when it is fired. Sized to the badge (drawn at R, so R*1.9 across) and
       // cut big enough to hold everything SPARK can reach at the top of its breath, centred on
       // the badge rather than the button — the hook stands above it. Appended LAST: smashCharm
@@ -20477,7 +20776,7 @@
       const SH = Math.ceil(sz * 2 * Math.max(SPARK.v, SPARK.d, SPARK.glow) * grow);
       spark.width = SW * 2; spark.height = SH * 2;
       spark.style.width = SW + "px"; spark.style.height = SH + "px";
-      spark.style.left = (PW_PX/2 - SW/2) + "px";
+      spark.style.left = (PW_PITCH/2 - SW/2) + "px";
       spark.style.top  = (PW_PX*PW_CY - SH/2) + "px";
       spark._size = sz * 2; spark._seed = i * 0.173;
       b.appendChild(c); b.appendChild(ring); b.appendChild(spark);
@@ -21062,8 +21361,13 @@
   // the tail can fade out instead of ending on a hard edge.
   function drawTrail() {
     const s = state, tr = lookItem("trail");
-    if (!tr.cols || !s || !s.trail || s.trail.length < 2) return;
-    paintTrail(tr, s.trail, cell * RUNNER.bodyH, performance.now());
+    if (!tr.cols || !s) return;
+    if (s.trail && s.trail.length >= 2) paintTrail(tr, s.trail, cell * RUNNER.bodyH, performance.now());
+    // the spark behind him, wherever he is while the trail is being laid (the same places it samples from)
+    if (tr.spark && (s.status === "play" || s.status === "falling" || s.status === "squash")) {
+      const ri = (s.status === "falling" && s.fall) ? { sx: s.fall.x, sy: s.fall.y, angle: s.fall.angle } : runnerInfo();
+      trailSpark(tr, ri.sx, ri.sy, ri.angle, cell, performance.now());
+    }
   }
   // The ribbon itself, given a trail and a run of points laid tail-first. Split out of
   // drawTrail so the SHOP can show the real thing: the rack used to carry a second copy of
@@ -21081,6 +21385,53 @@
     ? [(lookItem("drip") || {}).body || RUNNER.body]
     : tr.cols;
   function paintTrail(tr, pts, band, T) {
+    paintTrailBody(tr, pts, band, T);
+    if (tr.glitter) paintTrailGlitter(pts, band, T);
+  }
+  // A TALISMAN'S GLITTER along a trail: square white grains, one on some of the wake's points, scattered UP THE HEIGHT
+  // OF HIM — across the body's own depth along the wake's normal, with only a little spread along it — drifting as
+  // they age and winking on their own clocks: ORRERY's tail (see shedGlitter), counted along the wake rather than
+  // off a clock, and its grains drawn TRAIL_GLITTER_SZ times the size. Each grain's scatter is hashed from its point's own `w`, fixed when the point was
+  // laid, so the grains sit still in the world and never crawl as the oldest points expire.
+  const TRAIL_GLITTER_SZ = 2.0;
+  const TRAIL_GLITTER_N = 0.6;                      // the share of the wake's points that carry a grain (one each)
+  function paintTrailGlitter(pts, band, T) {
+    const N = pts.length; if (N < 2) return;
+    const hs = (n) => { const x = Math.sin(n*127.1 + 311.7)*43758.5453; return (x - Math.floor(x))*2 - 1; };
+    const r = band * 0.5;
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = "#ffffff";
+    for (let k = 0; k < N; k++) {
+      const p = pts[k], u = k / (N - 1);                           // 0 at the tail, 1 at his heels
+      const nx = p.nx != null ? p.nx : 0, ny = p.ny != null ? p.ny : 1;   // his up/down here...
+      const tx = ny, ty = -nx;                                     // ...and along the wake
+      if ((hs((p.w || 0) * 577) + 1) / 2 > TRAIL_GLITTER_N) continue;   // ...most points, not all of them
+      for (let j = 0; j < 1; j++) {
+        const sd = (p.w || 0) * 997 + j * 31.7;
+        const tw = 0.55 + 0.45*Math.pow(Math.abs(Math.sin(T/240 + sd)), 2);
+        const a = ORRERY.tailA * u * tw;
+        if (a < 0.012) continue;
+        const dr = r * ORRERY.tailDrift * (1 - u);
+        const across = hs(sd) * r + hs(sd + 63) * dr;             // the body's height, and a little drift
+        const along  = hs(sd + 41) * r * 0.30 + hs(sd + 99) * dr;
+        const sz = r * ORRERY.tailSz * TRAIL_GLITTER_SZ * (0.45 + 0.55*u);
+        ctx.globalAlpha = a;
+        ctx.fillRect(p.x + nx*across + tx*along - sz/2, p.y + ny*across + ty*along - sz/2, sz, sz);
+      }
+    }
+    ctx.restore();
+  }
+  // ...and a trail that asks for it stands the game's white spark exactly behind his BODY: at the body's own
+  // centre as the ribbon finds it (trailAnchor — the bob, the hover, the lean) plus a leap's lift, carried into
+  // the world by his angle the way wakeSample carries the ribbon's point. `phase`/`moving` as trailAnchor's.
+  const TRAIL_SPARK = 0.32;                           // its size, in tiles
+  function trailSpark(tr, sx, sy, angle, s, ts, phase, moving) {
+    if (!tr || !tr.spark) return;
+    const A = trailAnchor(ts, phase, moving), w = lookItem("swagger");
+    if (w.leap && _leapLift) A.y -= _leapLift * (w.leapH || 0.22);
+    const ca = Math.cos(angle), sa = Math.sin(angle);
+    drawSpark(ctx, sx + s*(A.x*ca - A.y*sa), sy + s*(A.x*sa + A.y*ca), s*TRAIL_SPARK, ts, { col: "#ffffff", seed: 0.53 });
+  }
+  function paintTrailBody(tr, pts, band, T) {
     const N = pts.length;
     const nor = pts.map((p, k) => {
       const a = pts[Math.max(0, k-1)], b = pts[Math.min(N-1, k+1)];
@@ -21519,8 +21870,14 @@
     Sound.talismanTheme(false);
     stopShopFig(); stopRelics(); shopPreview = null; endCeremony();
                          if (state) state.pauseQuip = null;   // the next pause gets its own line
+                         if (_fallTyping) { _fallTyping(); _fallTyping = null; }   // a fall's screen stops typing
                          paused = false; menuReturn = null; menuEl.classList.remove("show");
                          document.body.classList.remove("menu-open");
+                         // ...and the wash a fall or a pause put under its buttons goes with it (buildMenu
+                         // lays it down as `under`). Left up, a RETRY played on beneath a second gradient
+                         // standing over the talismans' own.
+                         { const fd = document.getElementById("winfade");
+                           if (fd && fd.classList.contains("under")) fd.classList.remove("show", "under"); }
                          Sound.ambient(ambBed()); }
 
   // Every generated button clicks when pressed. Wired here rather than at each call site so
@@ -21987,6 +22344,7 @@
           withCanvas(g, rs, foot.x - rs/2, foot.y - rs/2, () =>
             bodyPath(tileSurface(n0, { c:-1, r:0 }, { c:1, r:0 }), nodeCenter(n0)));
         };
+        trailSpark(tr, foot.x, foot.y, 0, rs, ts, param * Math.PI*2*STRIDES_PER_TILE, true);   // (a trail's spark, behind him)
         paintRunner(foot.x, foot.y, rs, param * Math.PI*2*STRIDES_PER_TILE, 0, true, ts, 0, true);
         runnerShadowClip = null;
         resetLeap();                        // the next thing drawn is not leaping
@@ -22824,7 +23182,7 @@
         // of it does the loading, the same as a clear — see winSkip.
         closeMenu(); winSkip();
       });
-      skipBtn.classList.add("rust");
+      skipBtn.classList.add("fall-skip");
     }
     // A FALL offers three answers and stops: go again, go past it, or go back to the map. The
     // shop and the talismans and the settings are all still there, one tap away on the map —
@@ -22849,18 +23207,38 @@
       // and the one that gives up on the run is the one you have to reach for.
       const row = document.createElement("div"); row.className = "menu-row menu-foot";
       if (skipBtn) row.appendChild(skipBtn);
-      row.appendChild(btn("Retry", () => { loadLevel(levelIdx); closeMenu(); }));
+      const retryBtn = btn("Retry", () => { loadLevel(levelIdx); closeMenu(); });
+      retryBtn.classList.add("fall-retry");
+      row.appendChild(retryBtn);
       menuBody.appendChild(row);
+      // ...their arrow and loop drawn again now they are in place: a chip takes its button's COMPUTED colour, and
+      // it was made before these buttons had theirs — black, now.
+      if (skipBtn) labelWithArrow(skipBtn, "Skip");
+      labelWithRestart(retryBtn, "Retry");
       // ...and now the order it all arrives in, which is the order it should be READ in rather
       // than the order it is stacked in: RETURN TO THE TILEVERSE sits above the pair and comes
       // after them, because it is the answer you reach for only once the other two are no.
       const cue = (el, at) => { if (!el) return;
         el.style.animation = "none"; void el.offsetWidth; el.style.animation = "";
         el.classList.add("fell-in"); el.style.animationDelay = at + "ms"; };
-      cue(head, 0);
+      // The heading FLIES IN, a line at a time as it has wrapped (splitLines) — each line from off one side of the
+      // screen along the heading's own lean, the next from the other side — and then its line TYPES ITSELF OUT, the
+      // way a chapter's card does (typeOut), a line break's pause between its halves. Only once the last letter is
+      // down do the two answers and the way out arrive, in their order.
+      const heads = splitLines(head);
+      heads.forEach(shineLine);                          // ...each line shining, and a spark along its tops
+      heads.forEach((ln, i) => {
+        ln.style.setProperty("--fly-from", (i % 2 ? 1 : -1) * FELL_FLY.reach + "vw");
+        ln.style.animation = "fell-fly " + FELL_FLY.ms + "ms cubic-bezier(.2,.8,.25,1) both";
+        ln.style.animationDelay = (i * FELL_FLY.step) + "ms";
+      });
+      const flown = heads.length ? (heads.length - 1) * FELL_FLY.step + FELL_FLY.ms : 0;
       const lines = [...menuBody.querySelectorAll(".menu-byline .bl")];
-      lines.forEach((ln, i) => cue(ln, FELL_HEAD + i*FELL_STEP));
-      const after = FELL_HEAD + Math.max(0, lines.length - 1)*FELL_STEP + FELL_STEP;
+      const parts = lines.map((ln, i) => ({ el: ln, text: ln.textContent, gap: i === lines.length - 1 ? 0 : TYPE.line }));
+      if (_fallTyping) _fallTyping();
+      const typing = typeOut(parts, flown + FELL_FLY.rest);
+      _fallTyping = typing.stop;
+      const after = typing.total + FELL_STEP;
       cue(row, after);
       cue(back, after + FELL_STEP);
       return;
@@ -23096,6 +23474,8 @@
     moveBlock: (i, pos) => { const b = state.blocks[i]; if (b) { b.pos = clamp(pos, b.lo, b.hi); markOccDirty(); } },
     openMDoor: (i) => { const md = state.manualDoors[i]; if (md) { md.left = 1; md.right = 1; markOccDirty(); } },
     ui: {
+      // A shining line (see shineLine) put on any element, with one frame drawn at once, to be looked at.
+      shine: (el) => { shineLine(el); if (el && el._shine) shineDraw(el, performance.now()); return el && el._shine; },
       // The Tile Shop's introduction card, shown without marking it seen (see showShopIntro).
       shopIntro: () => showShopIntro(),
       undo: () => undoLast(),
@@ -24687,6 +25067,7 @@
       wakeSample(W.pts, pos.x, pos.y, angle, s0, ts, phase, true);
       // before him, so his body covers the join and the ribbon reads as attached
       if (W.pts.length > 1) paintTrail(tr, W.pts, s0*RUNNER.bodyH, ts);
+      trailSpark(tr, pos.x, pos.y, angle, s0, ts, phase, true);
     }
     // The two platforms the scene actually drew — `TITLE_QUEUE - 1` of them, from the queue's
     // own index rather than the leap-adjusted one, so that mid-leap the shadow is cut to the
