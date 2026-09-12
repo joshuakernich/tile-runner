@@ -3845,6 +3845,40 @@
         });
       }
     }
+    // A CHARM ON THE CHAPTER'S TALLY: a power-up in glass. A quick arpeggio of struck glass bells climbing an octave and
+    // more — each with a real bell's inharmonic partials, two voices a few cents apart so it beats slowly as it rings,
+    // most of it into the room — over a band of air swept upward under it: something gained, and ringing.
+    function charmReveal() {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime, dry = ac.createGain(), wet = ac.createGain();
+      dry.gain.value = 0.6; wet.gain.value = 1.5;
+      dry.connect(master); wet.connect(sendBus);
+      [19, 24, 28, 31, 36].forEach((semi, n) => {             // E5 A5 C#6 E6 A6: up the chord
+        const t = t0 + n*0.065, hz = BASE * Math.pow(2, semi/12), lvl = 1 - n*0.08;
+        [[1, 0.045, 2.4], [2.76, 0.018, 1.6], [5.40, 0.009, 1.0]].forEach(([mul, peak, life]) => {
+          for (const cents of [-6, 6]) {
+            const o = ac.createOscillator(), g = ac.createGain();
+            o.type = "sine"; o.frequency.setValueAtTime(hz*mul, t); o.detune.setValueAtTime(cents, t);
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.exponentialRampToValueAtTime(peak*lvl, t + 0.004);
+            g.gain.exponentialRampToValueAtTime(0.0002, t + life);
+            o.connect(g); g.connect(dry); g.connect(wet);
+            o.start(t); o.stop(t + life + 0.05);
+          }
+        });
+      });
+      if (noiseBuf) {                                           // the air, rising under it
+        const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+        const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 1.2;
+        bp.frequency.setValueAtTime(900, t0); bp.frequency.exponentialRampToValueAtTime(7200, t0 + 0.45);
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.05, t0 + 0.30);
+        g.gain.exponentialRampToValueAtTime(0.0002, t0 + 0.7);
+        src.connect(bp); bp.connect(g); g.connect(dry); g.connect(wet);
+        src.start(t0); src.stop(t0 + 0.75);
+      }
+    }
     // A TALISMAN COMING HOME, in the opening: it hits its chapter and the colour goes into the map.
     // Not a slam — a bloom. A deep swell under it, a sine falling an octave into the room; a bell of
     // glass, struck, whose partials are the inharmonic ones a real bell rings with; and the chapter
@@ -4773,7 +4807,7 @@
              slide, clack, tap, tapBig, swish, airSwish, flyWhoosh, tabClick, power, warp, vortex, thrum, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck, choir,
              ambient,
-             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
+             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, charmReveal, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
              levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, talismanTheme, choirLift, setMusicGate,
              musicNow: () => ({ ...MU }) };
   })();
@@ -4809,7 +4843,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.54";                    // shown on the title & pause screens
+  const VERSION = "v10.55";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -10832,6 +10866,8 @@
       // summary announcing something you have had for ten chapters is not news.
       // Recorded before the charm-maze exit below, which returns without coming back here.
       if (fresh) (s.freshTal || (s.freshTal = [])).push(t.id);
+      // ...but CHAPTER COMPLETE shows every charm picked up on the level, found before or not (gotTal).
+      (s.gotTal || (s.gotTal = [])).push(t.id);
       spawnPop(t.c, t.r, def ? def.col : "#ffd24a"); spawnLight(t.c, t.r);
       notePick("tal", t.c, t.r, { id: t.id });
       Sound.coin(); haptic([8, 30, 8]);
@@ -11869,7 +11905,7 @@
             was: purseWas || 0, gain: purseGain || 0, nextWasOpen: _nextWasOpen,
             // What this chapter yielded that was not money. Copied, like `picks`: the run's own
             // record must not be chewed up by the thing replaying it.
-            charm: (state.freshTal || []).slice() };
+            charm: (state.gotTal || []).slice() };
     // Whatever cell size shows the whole board with a tile of air around it.
     win.cellFit = Math.max(4, Math.min(viewW/(COLS + 2), viewH/(ROWS + 2)));
     win.stepMs = route.length ? WIN.route / route.length : 40;
@@ -13716,6 +13752,10 @@
           P.sndDown = 1; Sound.coinSlam(); haptic([12, 26, 10]);
         }
       }
+      // ...and the charm arriving under the purse (see drawWinCharm)
+      if (!P.skip && charmShown(P) && !P.sndCharm && P.t >= payoutEnd(P) + PAYOUT.tail) {
+        P.sndCharm = 1; Sound.charmReveal && Sound.charmReveal(); haptic([10, 22, 10]);
+      }
     } else if (P.ph === "wait") {
       // A chapter you have just chosen is brought to the middle rather than cut to — the map is
       // a place, and the camera moves across it. Dragging cancels it: your hand outranks it.
@@ -13921,7 +13961,7 @@
       // Lower than the level tally used to sit. This group is TWO rows now — the takings above
       // the purse — and at the Tileverse's own size it is half as tall again as the single line
       // it replaced, which put the "+n" straight through the word COMPLETE.
-      if (!P.skip && P.ph === "name") drawPurseTally(ts, hy + size*2.9, outK);   // (the pan carries it on — below)
+      if (!P.skip && P.ph === "name") drawPurseTally(ts, hy + size*WIN_TALLY_Y, outK);   // (the pan carries it on — below)
       // ...and if a charm came out of this chapter, it is named ONCE MORE, directly under the
       // money. It was announced when you picked it up — mid-run, with a maze still to finish and
       // a runner who does not stop — which is the worst moment in the game to be told something.
@@ -13929,7 +13969,8 @@
       // Under the tally rather than up off the foot: the three of them are one statement about
       // the chapter you just finished — what it was called, what it paid, and what it held —
       // and a line hanging on its own at the bottom of the screen is a separate remark.
-      if (!P.skip) drawWinCharm(P, payoutEnd(P) + PAYOUT.tail, hy + size*4.35, outK);
+      // (one line under the purse, as far below it as the takings stood above — see drawWinCharm)
+      if (!P.skip) drawWinCharm(P, payoutEnd(P) + PAYOUT.tail, hy + size*WIN_TALLY_Y + PURSE_PX*PAYOUT.rise, outK);
     }
     // THE PURSE STAYS. The tally the chapter's takings fell into does not leave with the words: over the pan it
     // rises from under COMPLETE to stand just under the TILEVERSE heading, and it stays there for as long as the
@@ -13938,7 +13979,7 @@
     // changes it. A skipped chapter had no tally to carry, so its purse simply comes up where it will stay.
     if (P.ph === "pan" || P.ph === "wait") {
       const size = Math.min(46, viewW*0.11), hy = headTextY(size), under = hy + size*1.15;
-      const from = P.skip ? under : hy + size*2.9;
+      const from = P.skip ? under : hy + size*WIN_TALLY_Y;
       const k = P.ph === "pan" ? easeBoth(Math.min(1, P.t / (WIN.pan*0.6))) : 1;
       const a = (P.ph === "pan" && P.skip) ? Math.min(1, P.t / 300) : 1;
       drawWalletTally(from + (under - from)*k, a);
@@ -14128,44 +14169,47 @@
   // routine that quietly showed the first would be a bug nobody found for a year.
   const CHARM_IN = 560, CHARM_HOLD = 900;
   const charmShown = (P) => !!(P && P.charm && P.charm.length);
+  // THE CHARM ON THE TALLY: every talisman picked up on the level, one line UNDER the purse — as far below it as the
+  // takings stood above it, at their size and in their spacing (the purse's own: PURSE_PX, its coin, PURSE_GAP) — a
+  // little white "+", the badge the size of the coin, and the name in the charm's own colour. It rises into place with
+  // a small pop, a white shimmer sweeping across the whole line once as it arrives (CHARM_SHINE_MS), and a glassy
+  // power-up rung for it (Sound.charmReveal, fired from tickWin).
+  const CHARM_SHINE_MS = 900;
   function drawWinCharm(P, at, y, outK) {
     if (!charmShown(P) || P.ph !== "name") return;
-    const k = clamp((P.t - at) / CHARM_IN, 0, 1) * (outK == null ? 1 : outK);
+    const e = clamp((P.t - at) / CHARM_IN, 0, 1), k = e * (outK == null ? 1 : outK);
     if (k <= 0) return;
-    const g = uiGrid(), ids = P.charm;
-    // ONE LINE: the mark, then the name. The charm's badge is a square object and the name is a
-    // line of type, so the badge is sized to the TYPE — a little taller than its caps, the way
-    // an icon sits beside a word — rather than to itself. talBadge draws a square of 1.9r, so
-    // this is that side length worked backwards from the size of the writing.
-    const px = Math.round(g*1.25), r = px*1.15/1.9, bw = r*1.9, gap = g*0.55;
-    ctx.font = "900 " + px + "px " + UI_FONT;
-    ctx.letterSpacing = Math.round(g*0.16) + "px";
-    ctx.textBaseline = "middle";
-    const name = ids.map(id => (talById(id) || {}).name || "").filter(Boolean)
-                    .join("   ·   ").toUpperCase();
-    // Measured and laid out from the left, not centred as two separate things: a badge centred
-    // on one point and a word centred on another are two objects that happen to be near each
-    // other, and what this is meant to be is one line.
-    const tw = ctx.measureText(name).width;
-    const x0 = viewW/2 - (bw*ids.length + gap*ids.length + tw)/2;
+    const ids = P.charm, h = PURSE_PX, gap = PURSE_GAP, bw = h*PURSE_COIN, r = bw/1.9;
+    const numF = "900 " + h + "px " + UI_FONT;
     ctx.save();
+    ctx.font = numF; ctx.letterSpacing = "1px"; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+    const name = ids.map(id => (talById(id) || {}).name || "").filter(Boolean).join("   ·   ").toUpperCase();
+    const plus = "+", pw = ctx.measureText(plus).width, pg = gap*0.6, tw = ctx.measureText(name).width;
+    const lineW = pw + pg + ids.length*(bw + gap) + tw;
+    const x0 = viewW/2 - lineW/2, yy = y + inkNudge(numF);
+    const pop = 0.80 + 0.20*easeOutBack(e), rise = (1 - easeOut(e)) * h * 0.5;
     ctx.globalAlpha = k;
-    // A small overshoot on the way in, the same one the title's words arrive with: it is a
-    // thing being presented, and a thing that fades up is a thing that was always there.
-    const pop = 0.80 + 0.20*easeOutBack(clamp((P.t - at)/CHARM_IN, 0, 1));
-    for (let i = 0; i < ids.length; i++) {
-      const def = talById(ids[i]); if (!def) continue;
-      ctx.save();
-      ctx.translate(x0 + bw/2 + i*(bw + gap), y);
-      ctx.scale(pop, pop);
-      talBadge(ctx, 0, 0, r, def);
-      ctx.restore();
-    }
-    // The name, in the charm's own colour — the colour the badge beside it is struck in, so the
-    // two are plainly one announcement rather than a picture and a caption.
-    ctx.textAlign = "left";
+    ctx.translate(viewW/2, y + rise); ctx.scale(pop, pop); ctx.translate(-viewW/2, -y);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(plus, x0, yy);
+    const bx0 = x0 + pw + pg;
+    ids.forEach((id, i) => { const def = talById(id); if (def) talBadge(ctx, bx0 + bw/2 + i*(bw + gap), y, r, def); });
+    const nx = bx0 + ids.length*(bw + gap);
     ctx.fillStyle = ids.length === 1 ? talFace(talById(ids[0])) : "#ffd24a";
-    ctx.fillText(name, x0 + ids.length*(bw + gap), y);
+    ctx.fillText(name, nx, yy);
+    // ...and the shimmer: a band of white light swept once across the whole line, over the "+", the badges and the name
+    const sh = clamp((P.t - at) / CHARM_SHINE_MS, 0, 1);
+    if (sh > 0 && sh < 1) {
+      const band = h*1.4, bx = x0 - band + (lineW + band*2)*sh;
+      const gd = ctx.createLinearGradient(bx - band, 0, bx + band, 0);
+      gd.addColorStop(0, "rgba(255,255,255,0)"); gd.addColorStop(0.5, "rgba(255,255,255,0.95)");
+      gd.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = gd;
+      ctx.fillText(plus, x0, yy);
+      ctx.fillText(name, nx, yy);
+      ids.forEach((id, i) => { const cx = bx0 + bw/2 + i*(bw + gap); rrect(cx - bw/2, y - bw/2, bw, bw, tileR(bw)); ctx.fill(); });
+    }
     ctx.restore();
   }
   // THE PAYOUT, on the CHAPTER COMPLETE screen. What stands there is the whole game's purse,
@@ -14186,6 +14230,10 @@
   // the next statement, and each was roughly half this long: the tally arrived, the purse
   // arrived under it, the denominator went and the number dropped, all inside a second and a
   // half, which is not enough time to have understood any of it.
+  const WIN_TALLY_Y = 3.25;    // where the purse stands on CHAPTER COMPLETE, in heading sizes below the heading's line
+  // The purse FLASHING as the takings land in it: the whole tally white for a moment, with a spark spinning behind its
+  // coin that shrinks to nothing — `ms` long, the spark starting `spark` coin-widths across.
+  const TALLY_FLASH = { ms: 420, spark: 2.8 };
   const PAYOUT = {
     in:    560,    // ms into the beat before "+n" appears — ALONE, with nothing under it yet
     purse: 900,    // ...and this long after that, the purse it is going into arrives below it
@@ -14258,10 +14306,27 @@
       ctx.scale(1 + (1 - k)*0.35, k);
       ctx.translate(-viewW/2, -y);
     }
+    // ...and FLASHES as they land: a spark spinning behind the coin, shrinking away, and the whole tally white for a
+    // moment over its own colours (TALLY_FLASH).
+    const fk = (landed && gain > 0) ? (t - land) / TALLY_FLASH.ms : 1;
+    if (fk >= 0 && fk < 1) {
+      ctx.save();
+      ctx.translate(x0 + cw/2, y); ctx.rotate(fk * Math.PI * 1.6);
+      drawSpark(ctx, 0, 0, cw * TALLY_FLASH.spark * (1 - fk), ts, { col: "#ffffff", alpha: 1 - fk, seed: 0.77 });
+      ctx.restore();
+    }
     hudCoin(x0, y, cw);
     ctx.font = numF;
     ctx.fillStyle = COIN_FACE;
     ctx.fillText(num, x0 + cw + gap, y + inkNudge(numF));
+    if (fk >= 0 && fk < 1) {
+      ctx.save();
+      ctx.globalAlpha = pAlpha * Math.pow(1 - fk, 1.5);
+      ctx.fillStyle = "#ffffff";
+      rrect(x0, y - cw/2, cw, cw, tileR(cw)); ctx.fill();
+      ctx.fillText(num, x0 + cw + gap, y + inkNudge(numF));
+      ctx.restore();
+    }
     ctx.restore();
     }
     // ---- ...and what is on its way into it ------------------------------------------------
