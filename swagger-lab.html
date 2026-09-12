@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta http-equiv="Cache-Control" content="no-store"/>
+<title>Tile Runner — Swagger Lab</title>
+<style>
+  :root{ --bg:#12102a; --panel:#1b1838; --line:#2b2850; --ink:#cfe9ff; --accent:#8dff78; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:10px 14px;border-bottom:1px solid var(--line);
+         display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;}
+  header h1{font-size:15px;margin:0 12px 0 0;font-weight:700;letter-spacing:.5px;}
+  #status{font-size:12px;opacity:.8;}
+  .app{display:grid;grid-template-columns:330px minmax(0,1fr);gap:14px;padding:14px;align-items:start;}
+  .rail{display:flex;flex-direction:column;gap:12px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;}
+  .card h2{font-size:11px;letter-spacing:1px;opacity:.55;margin:0 0 8px;
+           font-weight:700;text-transform:uppercase;}
+  .row{display:flex;align-items:center;gap:6px;margin:6px 0;font-size:12px;}
+  .row label{flex:0 0 76px;opacity:.85;}
+  .row input[type=checkbox]{flex:0 0 auto;accent-color:var(--accent);margin:0;}
+  .row input[type=range]{flex:1;min-width:0;accent-color:var(--accent);}
+  .row select{flex:1;background:#0d0b22;color:var(--ink);border:1px solid var(--line);border-radius:6px;
+              padding:4px;font:inherit;font-size:12px;}
+  .row output{flex:0 0 54px;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent);}
+  .row.off label, .row.off output{opacity:.35;}
+  .row.off input[type=range]{opacity:.3;}
+  button{background:#233;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+         padding:8px 12px;cursor:pointer;font:inherit;font-size:12px;width:100%;}
+  button:hover{border-color:var(--accent);}
+  button.prim{background:#1c6;color:#04120a;font-weight:700;border:none;}
+  button.on{border-color:var(--accent);color:var(--accent);}
+  .list{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+  .list button{padding:7px 4px;font-size:11px;text-align:left;}
+  .list button small{display:block;opacity:.55;font-size:10px;}
+  .opts{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+  .hint{font-size:11px;line-height:1.5;opacity:.65;margin:8px 0 0;}
+  .stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,360px);gap:12px;align-items:start;
+         position:sticky;top:14px;min-width:0;}
+  .figure{background:#07061a;border:1px solid var(--line);border-radius:12px;padding:8px;min-width:0;}
+  #fig{width:100%;height:auto;aspect-ratio:1/1;display:block;border-radius:8px;}
+  iframe{width:100%;height:78vh;border:1px solid var(--line);border-radius:12px;background:#000;display:block;}
+  .legend{font-size:11px;opacity:.7;line-height:1.6;}
+  code{color:var(--accent);}
+  .warn{color:#ffd24a;}
+  @media (max-width:980px){
+    .app{grid-template-columns:minmax(0,1fr);}
+    .stage{position:static;grid-template-columns:minmax(0,1fr);}
+    iframe{height:70vh;}
+  }
+  textarea{width:100%;height:220px;background:#0d0b22;color:var(--ink);border:1px solid var(--line);
+           border-radius:8px;padding:8px;font:inherit;font-size:11px;line-height:1.5;resize:vertical;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Swagger Lab</h1>
+  <span id="status">booting the game…</span>
+</header>
+
+<div class="app">
+  <div class="rail">
+    <div class="card">
+      <h2>The swaggers</h2>
+      <div class="list" id="list"></div>
+      <div class="hint">Pick one to put it on him — in the close-up and on the title screen beside it.
+        It is a fitting: nothing is bought, worn or saved in the game.</div>
+    </div>
+
+    <div class="card">
+      <h2 id="edTitle">This swagger</h2>
+      <div class="row"><label>pose</label>
+        <select id="pose"><option value="">— the stride —</option><option value="lotus">lotus</option>
+          <option value="fetal">fetal</option><option value="onefoot">onefoot</option></select></div>
+      <div class="row"><label>leapAlt</label><input id="leapAlt" type="checkbox"><span class="hint" style="margin:0">lands on each foot in turn</span></div>
+      <div id="fields"></div>
+      <div class="hint">Tick a field to give this swagger its own value; untick it to leave it to the stock
+        stride. Every value is a multiplier or an addition on top of <code>RUNNER</code>.</div>
+      <div style="height:8px"></div>
+      <button id="revertOne">Revert this swagger to shipped</button>
+    </div>
+
+    <div class="card">
+      <h2>The folded poses</h2>
+      <div id="poseFields"></div>
+      <div class="hint">The shape a pose holds its legs in, in bones of his leg. <b>lotus</b> is Floating
+        (and the Millstone's sit); <b>fetal</b> is Rolling; <b>splay</b> is the opening's burst, when the
+        talismans come out of him — out from the middle, down from the hip.</div>
+    </div>
+
+    <div class="card">
+      <h2>Close-up</h2>
+      <div class="row"><label>speed</label><input id="speed" type="range" min="0" max="2" step="0.05"><output id="speedOut"></output></div>
+      <div class="row"><label>size</label><input id="size" type="range" min="0.2" max="0.7" step="0.01"><output id="sizeOut"></output></div>
+      <div class="opts">
+        <button id="moveToggle" class="on">Running</button>
+        <button id="reload">Reload game</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Keep</h2>
+      <div class="opts">
+        <button id="restore">Restore</button>
+        <button id="reset">Reset all to shipped</button>
+      </div>
+      <div style="height:6px"></div>
+      <button class="prim" id="copyS">Copy SWAGGERS block</button>
+      <div style="height:6px"></div>
+      <div class="opts">
+        <button id="copyOne">Copy this line</button>
+        <button id="copyP">Copy POSES block</button>
+      </div>
+      <div style="height:8px"></div>
+      <textarea id="out" spellcheck="false" readonly></textarea>
+      <div class="hint">Paste over <code>const SWAGGERS = [ … ];</code> or <code>const POSES = { … };</code> in
+        <code>index.html</code>. The SWAGGERS block is written one swagger to a line, so the comments
+        between its entries do not come with it — <b>Copy this line</b> replaces just the one entry.
+        Everything autosaves as you move it; <b>Restore</b> brings it back after a reset.</div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="figure">
+      <canvas id="fig" width="920" height="920"></canvas>
+      <div class="legend">Drawn by the running game — <code>__TR.runnerFigure()</code> — in whatever
+        he is wearing, on a tile in his track. This page must be <b>served</b>.</div>
+    </div>
+    <iframe id="frame" title="Tile Runner"></iframe>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const frame = $("frame");
+let W = null;
+const GAME_SRC = () => "index.html?lab=swagger&t=" + Date.now();
+
+// Every field a swagger may carry, with the range its slider runs over and what it means.
+const FIELDS = [
+  { k:"lean",      min:-0.6, max:0.6,  step:0.01,   dp:2, note:"extra body tilt, radians — negative leans back" },
+  { k:"bob",       min:0,    max:3,    step:0.05,   dp:2, note:"scales the stock rise and fall" },
+  { k:"swing",     min:-2,   max:2,    step:0.05,   dp:2, note:"scales the stride's reach — negative runs it backwards" },
+  { k:"lift",      min:0,    max:3,    step:0.05,   dp:2, note:"scales how high a foot comes up" },
+  { k:"hop",       min:0,    max:0.2,  step:0.005,  dp:3, note:"one bounce a stride, in tiles" },
+  { k:"hover",     min:-0.15,max:0.2,  step:0.005,  dp:3, note:"a steady height off the track, in tiles" },
+  { k:"spin",      min:0,    max:0.02, step:0.0005, dp:4, note:"radians per ms of roll" },
+  { k:"leap",      min:0,    max:4,    step:1,      dp:0, note:"leaps per tile" },
+  { k:"leapH",     min:0,    max:0.6,  step:0.01,   dp:2, note:"how high a leap goes, in tiles" },
+  { k:"leapHold",  min:0,    max:0.8,  step:0.01,   dp:2, note:"share of each leap spent on the ground" },
+  { k:"leapSplit", min:0,    max:0.3,  step:0.005,  dp:3, note:"how far the feet part at the top" },
+  { k:"leapSpin",  min:-2,   max:2,    step:1,      dp:0, note:"whole turns per leap — positive forward" },
+  { k:"liftLead",  min:0,    max:1.5,  step:0.01,   dp:2, note:"turns a foot's lift earlier in the stride" },
+  { k:"toe",       min:0,    max:0.12, step:0.002,  dp:3, note:"a toe bone off the foot, in tiles" },
+  { k:"toeDrop",   min:0,    max:2.5,  step:0.05,   dp:2, note:"how far the toe points down as the foot lifts" },
+];
+const POSE_FIELDS = {
+  lotus: [ { k:"knee", min:0, max:1.5, step:0.01, dp:2 }, { k:"kneeDrop", min:-0.5, max:1.2, step:0.005, dp:3 },
+           { k:"foot", min:0, max:1.5, step:0.01, dp:2 }, { k:"footDrop", min:-0.5, max:1.2, step:0.01, dp:2 },
+           { k:"breathe", min:0, max:0.2, step:0.005, dp:3 }, { k:"breatheMs", min:100, max:1500, step:10, dp:0 } ],
+  fetal: [ { k:"backReach", min:0, max:1.5, step:0.01, dp:2 }, { k:"frontReach", min:0, max:1.5, step:0.01, dp:2 },
+           { k:"kneeUp", min:-0.5, max:1.2, step:0.01, dp:2 }, { k:"footBack", min:-0.5, max:1.2, step:0.01, dp:2 },
+           { k:"footDrop", min:-0.5, max:1.5, step:0.01, dp:2 } ],
+  splay: [ { k:"kneeOut", min:-0.5, max:1.5, step:0.01, dp:2 }, { k:"kneeDrop", min:-0.5, max:1.5, step:0.01, dp:2 },
+           { k:"footOut", min:-0.5, max:2.0, step:0.01, dp:2 }, { k:"footDrop", min:-0.5, max:2.0, step:0.01, dp:2 },
+           { k:"toeUp", min:-1.5, max:1.5, step:0.01, dp:2 } ],
+};
+
+// NO COPY OF EITHER BLOCK LIVES HERE: the shipped values are asked of the running game before anything
+// is pushed into it, and CUR is what you have made of them.
+let SHIPPED = null, CUR = null, sel = "float", moving = true;
+
+const SAVE_KEY = "tilerunner:swagger-lab";
+function save(){ try { localStorage.setItem(SAVE_KEY, JSON.stringify({ CUR, sel })); } catch (e) {} }
+function saved(){
+  try {
+    const v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null")
+           || JSON.parse(localStorage.getItem(SAVE_KEY + ":kept") || "null");
+    return v && v.CUR ? v : null;
+  } catch (e) { return null; }
+}
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const curSw = () => CUR && CUR.swaggers.find(w => w.id === sel);
+
+// ---- into the game -----------------------------------------------------------------------------
+function patchFor(w){
+  const p = { pose: w.pose || null, leapAlt: w.leapAlt ? 1 : null };
+  for (const f of FIELDS) p[f.k] = (typeof w[f.k] === "number") ? w[f.k] : null;
+  return p;
+}
+function pushAll(){
+  if (!W || !W.__TR || !W.__TR.swagger || !CUR) return;
+  for (const w of CUR.swaggers) W.__TR.swagger(w.id, patchFor(w));
+  W.__TR.poses(CUR.poses);
+  W.__TR.fitSwagger(sel);
+}
+function pushOne(){
+  if (!W || !W.__TR || !W.__TR.swagger) return;
+  const w = curSw(); if (!w) return;
+  W.__TR.swagger(w.id, patchFor(w));
+  W.__TR.fitSwagger(sel);
+  save(); refreshOut();
+}
+function pushPoses(){
+  if (!W || !W.__TR || !W.__TR.poses) return;
+  W.__TR.poses(CUR.poses); save(); refreshOut();
+}
+
+// ---- the editor ----------------------------------------------------------------------------------
+function buildList(){
+  $("list").innerHTML = "";
+  for (const w of CUR.swaggers) {
+    const b = document.createElement("button");
+    b.innerHTML = w.name + "<small>" + w.id + (w.pose ? " · " + w.pose : "") + "</small>";
+    b.classList.toggle("on", w.id === sel);
+    b.onclick = () => { sel = w.id; buildList(); buildFields(); if (W && W.__TR) W.__TR.fitSwagger(sel);
+                        save(); refreshOut(); $("status").textContent = "fitted: " + w.name; };
+    $("list").appendChild(b);
+  }
+}
+function fieldRow(parent, id, f, value, has, onChange){
+  const row = document.createElement("div"); row.className = "row" + (has ? "" : " off");
+  const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = has;
+  const lb = document.createElement("label"); lb.textContent = f.k; if (f.note) lb.title = f.note;
+  const rg = document.createElement("input"); rg.type = "range";
+  rg.min = f.min; rg.max = f.max; rg.step = f.step; rg.value = has ? value : Math.max(f.min, Math.min(f.max, 0));
+  const out = document.createElement("output");
+  const show = () => out.textContent = has ? (+rg.value).toFixed(f.dp) : "—";
+  cb.onchange = () => { has = cb.checked; row.classList.toggle("off", !has); show(); onChange(has ? +rg.value : null); };
+  rg.oninput = () => { if (!has) { has = true; cb.checked = true; row.classList.remove("off"); } show(); onChange(+rg.value); };
+  if (!onChange.optional) { cb.style.display = "none"; }
+  show();
+  row.append(cb, lb, rg, out); parent.appendChild(row);
+}
+function buildFields(){
+  const w = curSw(); if (!w) return;
+  $("edTitle").textContent = "This swagger · " + w.name;
+  $("pose").value = w.pose || "";
+  $("leapAlt").checked = !!w.leapAlt;
+  const box = $("fields"); box.innerHTML = "";
+  for (const f of FIELDS) {
+    const on = (v) => { if (v === null) delete w[f.k]; else w[f.k] = v; pushOne(); };
+    on.optional = true;
+    fieldRow(box, "f_" + f.k, f, w[f.k], typeof w[f.k] === "number", on);
+  }
+}
+function buildPoseFields(){
+  const box = $("poseFields"); box.innerHTML = "";
+  for (const name of Object.keys(POSE_FIELDS)) {
+    const h = document.createElement("div"); h.className = "hint"; h.style.margin = "6px 0 2px";
+    h.innerHTML = "<b>" + name + "</b>"; box.appendChild(h);
+    for (const f of POSE_FIELDS[name]) {
+      const P = CUR.poses[name] || (CUR.poses[name] = {});
+      fieldRow(box, "p_" + name + "_" + f.k, f, P[f.k], true, (v) => { P[f.k] = v; pushPoses(); });
+    }
+  }
+}
+$("pose").onchange = () => { const w = curSw(); if (!w) return;
+  if ($("pose").value) w.pose = $("pose").value; else delete w.pose; buildList(); pushOne(); };
+$("leapAlt").onchange = () => { const w = curSw(); if (!w) return;
+  if ($("leapAlt").checked) w.leapAlt = 1; else delete w.leapAlt; pushOne(); };
+
+// ---- the blocks ----------------------------------------------------------------------------------
+function num(v, dp){ let t = (+v).toFixed(dp); if (dp > 0) t = t.replace(/0+$/, "").replace(/\.$/, ".0"); return t; }
+function swLine(w){
+  const parts = ['id:"' + w.id + '"', 'name:"' + w.name + '"', "cost:" + w.cost];
+  if (w.pose) parts.push('pose:"' + w.pose + '"');
+  for (const f of FIELDS) if (typeof w[f.k] === "number") parts.push(f.k + ":" + num(w[f.k], f.dp));
+  if (w.leapAlt) parts.push("leapAlt:1");
+  return "    { " + parts.join(", ") + " },";
+}
+function swBlock(){ return "  const SWAGGERS = [\n" + CUR.swaggers.map(swLine).join("\n") + "\n  ];"; }
+function posesBlock(){
+  const lines = Object.keys(CUR.poses).filter(name => POSE_FIELDS[name]).map(name => {
+    const defs = POSE_FIELDS[name] || [];
+    const P = CUR.poses[name];
+    const keys = defs.length ? defs.map(d => d.k) : Object.keys(P);
+    return "    " + name + ": { " + keys.filter(k => typeof P[k] === "number")
+      .map(k => { const d = defs.find(x => x.k === k); return k + ": " + num(P[k], d ? d.dp : 3); }).join(", ") + " },";
+  });
+  return "  const POSES = {\n" + lines.join("\n") + "\n  };";
+}
+function refreshOut(){ if (CUR) $("out").value = swBlock() + "\n\n" + posesBlock(); }
+function copy(text, what){
+  navigator.clipboard.writeText(text).then(
+    () => $("status").textContent = what + " copied — paste it into index.html",
+    () => $("status").innerHTML = '<span class="warn">clipboard refused — copy it out of the box below</span>');
+}
+
+// ---- the close-up ------------------------------------------------------------------------------
+function drawFig(){
+  const cv = $("fig"), g = cv.getContext("2d");
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const cssW = cv.clientWidth || 460, cssH = cv.clientHeight || 460;
+  if (cv.width !== Math.round(cssW*dpr) || cv.height !== Math.round(cssH*dpr)) {
+    cv.width = Math.round(cssW*dpr); cv.height = Math.round(cssH*dpr);
+  }
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (W && W.__TR && W.__TR.runnerFigure) {
+    try {
+      W.__TR.runnerFigure(g, cssW, cssH, performance.now(),
+        { cell: Math.min(cssW, cssH) * (+$("size").value), speed: +$("speed").value, moving });
+    } catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+  }
+  requestAnimationFrame(drawFig);
+}
+
+// ---- the game ----------------------------------------------------------------------------------
+function attach(){
+  W = frame.contentWindow;
+  let tries = 0;
+  (function wait(){
+    if (W.__TR && W.__TR.swaggers && W.__TR.poses) {
+      if (!SHIPPED) {
+        SHIPPED = { swaggers: W.__TR.swaggers(), poses: W.__TR.poses() };   // asked BEFORE anything is pushed
+        if (!CUR) CUR = clone(SHIPPED);
+        // a swagger or a pose added to the game since the autosave was written joins it as shipped
+        for (const w of SHIPPED.swaggers) if (!CUR.swaggers.find(x => x.id === w.id)) CUR.swaggers.push(clone(w));
+        for (const k of Object.keys(SHIPPED.poses)) if (!CUR.poses[k]) CUR.poses[k] = clone(SHIPPED.poses[k]);
+        for (const k of Object.keys(CUR.poses)) if (!SHIPPED.poses[k]) delete CUR.poses[k];   // one the game has dropped
+        if (!CUR.swaggers.find(w => w.id === sel)) sel = CUR.swaggers[0].id;
+        buildList(); buildFields(); buildPoseFields(); refreshOut();
+      }
+      pushAll();
+      $("status").textContent = "live · fitted: " + (curSw() || {}).name;
+      return;
+    }
+    if (++tries > 200) {
+      $("status").innerHTML = '<span class="warn">the game never came up — is this being SERVED? ' +
+        'file:// blocks the frame from being read.</span>';
+      return;
+    }
+    setTimeout(wait, 50);
+  })();
+}
+frame.addEventListener("load", attach);
+
+$("speed").value = 1; $("size").value = 0.40;
+for (const k of ["speed", "size"]) {
+  const sync = () => $(k + "Out").textContent = (+$(k).value).toFixed(2);
+  $(k).addEventListener("input", sync); sync();
+}
+$("moveToggle").onclick = () => { moving = !moving; $("moveToggle").classList.toggle("on", moving);
+  $("moveToggle").textContent = moving ? "Running" : "Standing"; };
+$("reload").onclick = () => { frame.src = GAME_SRC(); };
+$("revertOne").onclick = () => {
+  if (!SHIPPED) return;
+  const i = CUR.swaggers.findIndex(w => w.id === sel), s0 = SHIPPED.swaggers.find(w => w.id === sel);
+  if (i < 0 || !s0) return;
+  CUR.swaggers[i] = clone(s0); buildFields(); buildList(); pushOne();
+  $("status").textContent = s0.name + " back to what index.html ships";
+};
+$("restore").onclick = () => {
+  const v = saved();
+  if (!v) { $("status").innerHTML = '<span class="warn">nothing saved yet</span>'; return; }
+  CUR = clone(v.CUR); sel = v.sel || sel;
+  buildList(); buildFields(); buildPoseFields(); pushAll(); save(); refreshOut();
+  $("status").textContent = "your saved settings, put back";
+};
+$("reset").onclick = () => {
+  if (!SHIPPED) return;
+  try { const cur = localStorage.getItem(SAVE_KEY); if (cur) localStorage.setItem(SAVE_KEY + ":kept", cur); } catch (e) {}
+  CUR = clone(SHIPPED);
+  buildList(); buildFields(); buildPoseFields(); pushAll(); refreshOut();
+  $("status").textContent = "everything back to what index.html ships";
+};
+$("copyS").onclick = () => copy(swBlock(), "SWAGGERS block");
+$("copyP").onclick = () => copy(posesBlock(), "POSES block");
+$("copyOne").onclick = () => { const w = curSw(); if (w) copy(swLine(w), w.name + "'s line"); };
+
+const v0 = saved();
+if (v0) { CUR = clone(v0.CUR); sel = v0.sel || sel; $("status").textContent = "your last settings, put back — booting the game…"; }
+frame.src = GAME_SRC();
+requestAnimationFrame(drawFig);
+</script>
+</body>
+</html>

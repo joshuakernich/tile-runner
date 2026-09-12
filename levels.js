@@ -3,7 +3,7 @@
 // and anything else that reasons about the campaign) and a plain <script src> from the
 // game and the editor, which is why this is a global and not an ES module.
 var LEVELS_DATA = [
-  {"n":1,"start":[1,7],"init":[[1,6],[1,5]],"cols":3,"rows":8,"intro":["recycle","flag"],"cps":0.8,"name":"UP","poem":"A journey of a thousand miles\nbegins with a single step.","by":"Tao Te Ching","goal":[1,0],"tv":[2,0],"walls":[],"coins":[[1,2],[1,3],[1,1]]},
+  {"n":1,"start":[3,6],"init":[[3,5],[3,4]],"cols":7,"rows":7,"intro":["recycle","flag"],"cps":0.8,"name":"UP","poem":"A journey of a thousand miles\nbegins with a single step.","by":"Tao Te Ching","goal":[3,0],"tv":[2,0],"walls":[],"coins":[[3,2],[3,1],[3,3]]},
   {"n":2,"start":[0,4],"init":[[0,3],[0,2]],"cols":5,"rows":5,"intro":["turn"],"cps":0.8,"name":"TURN","poem":"I'm not an ambiturner.\nI can't turn left.","by":"Derek Zoolander","goal":[4,0],"walls":[],"coins":[[1,0],[2,0],[3,0]],"tv":[3,0]},
   {"n":3,"start":[0,0],"init":[[0,1],[0,2]],"cols":6,"rows":8,"intro":[],"cps":0.8,"name":"SEARCH","poem":"Your heart knows the way.\nRun that direction.","by":"Rumi","goal":[5,7],"walls":[],"coins":[[2,4],[3,5],[4,6]],"tv":[4,0]},
   {"n":4,"start":[1,7],"init":[[1,6],[1,5]],"cols":5,"rows":8,"intro":["wall"],"cps":0.8,"name":"WALL 1","poem":"We can't go over it.\nWe can't go under it.\nWe have to go through it.","by":"Ancient Bear Hunt Wisdom","goal":[2,0],"walls":[[0,3],[1,3],[2,3],[4,3]],"coins":[[3,3],[3,2],[3,4]],"tv":[5,0]},
