@@ -3863,6 +3863,36 @@
         k = Math.min(steps.length - 1, k + 1 + Math.floor(Math.random() * 2));
       }
     }
+    // THE SPEED PLATE GIVING UP — ∞. A great glass bell struck: a root, its fifth and its octave, each with a real bell's
+    // inharmonic partials on three voices a few cents apart so the whole chord beats slowly as it rings, over a low sine
+    // swelling up under it — held for seconds, and most of it in the room.
+    function infinityRing() {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime, dry = ac.createGain(), wet = ac.createGain();
+      dry.gain.value = 0.6; wet.gain.value = 2.0;
+      dry.connect(master); wet.connect(sendBus);
+      for (const [semi, lvl] of [[19, 1], [26, 0.7], [31, 0.5]]) {
+        const hz = BASE * Math.pow(2, semi/12);
+        [[1, 0.050, 6.0], [2.76, 0.022, 4.2], [5.40, 0.011, 2.8], [8.93, 0.005, 1.8]].forEach(([mul, peak, life]) => {
+          for (const cents of [-9, 0, 9]) {
+            const o = ac.createOscillator(), g = ac.createGain();
+            o.type = "sine"; o.frequency.setValueAtTime(hz*mul, t0); o.detune.setValueAtTime(cents, t0);
+            g.gain.setValueAtTime(0.0001, t0);
+            g.gain.exponentialRampToValueAtTime(peak*lvl, t0 + 0.004);
+            g.gain.exponentialRampToValueAtTime(0.0002, t0 + life);
+            o.connect(g); g.connect(dry); g.connect(wet);
+            o.start(t0); o.stop(t0 + life + 0.05);
+          }
+        });
+      }
+      const o = ac.createOscillator(), g = ac.createGain();       // ...and the swell under it
+      o.type = "sine"; o.frequency.setValueAtTime(BASE * Math.pow(2, 7/12), t0);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.12, t0 + 0.6);
+      g.gain.exponentialRampToValueAtTime(0.0003, t0 + 5.5);
+      o.connect(g); g.connect(dry); g.connect(wet);
+      o.start(t0); o.stop(t0 + 5.6);
+    }
     // A CHARM GOING INTO THE HOLE: a rich, resonant glass tone, rung a step higher up the scale for every one that goes.
     // A struck glass bell — the inharmonic partials a real bell rings with, three voices a few cents apart on each so it
     // beats slowly as it rings — over a soft sine an octave under it for body, held long and most of it into the room.
@@ -4897,7 +4927,7 @@
              slide, clack, tap, tapBig, swish, airSwish, flyWhoosh, tabClick, power, warp, vortex, thrum, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck, choir,
              ambient,
-             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, charmReveal, tallyRing, boom, twinkle, holeChime, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
+             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, charmReveal, tallyRing, boom, twinkle, holeChime, infinityRing, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
              levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, talismanTheme, choirLift, setMusicGate,
              musicNow: () => ({ ...MU }) };
   })();
@@ -4933,7 +4963,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.59";                    // shown on the title & pause screens
+  const VERSION = "v10.60";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -9692,6 +9722,10 @@
     const s = state, R = s.restore; if (!R) return;
     R.t += dt;
     R.clock = (R.clock || 0) + dt;                                  // the whole ending's own clock (the speed plate runs off it)
+    if (!R.infRang && (R.cps0 || 1) * Math.pow(10, HOLE.runaway * R.clock/1000) >= FIN.infinity) {
+      R.infRang = true;                                               // ...and the moment it reads ∞, the bell
+      try { Sound.infinityRing && Sound.infinityRing(); } catch (_) {}
+    }
     // THE BEAT GOES ON. The music in this game is struck by the RUNNER — every tile he clears
     // plays a bar of it, see Sound.clearTile — and he stopped the moment the camera began to
     // pull back, which left the map being eaten in silence. It is struck here instead, at the
@@ -13656,6 +13690,7 @@
     }
     return _footLbl;
   }
+  const SKIP_LABEL = "\u2612 SKIPPED";            // a skipped chapter's label in its bottom row — the box with the cross, and the word
   const SKIP_LBL_UP = 0.10;                        // how far SKIPPED sits above its row's middle, in rows
   const DONE_GREEN = "#49d47c";                   // that chapter's ring and sparks: the rainbow's green...
   const SKIP_RED = "#f1645f";                     // ...or, for a chapter walked away from, the rainbow's red
@@ -14040,7 +14075,7 @@
         const lf = (!isDone(i) && (bestSkipped(best, i) || i < furthest)) ? footerLabelFont() : null;
         let lblW = 0;
         if (lf) { ctx.save(); ctx.font = lf.weight + " " + lf.px + "px " + UI_FONT; ctx.letterSpacing = lf.ls;
-                  lblW = ctx.measureText("SKIPPED").width; ctx.restore(); }
+                  lblW = ctx.measureText(SKIP_LABEL).width; ctx.restore(); }
         ctx.fillText(String(i + 1), x + w/2, y + w/2);       // the number stays in the middle of its square
         // ...and SKIPPED sits dead in the middle of the square's BOTTOM ROW of pieces (it is a LEVEL_SWATCH grid), in
         // white: centred on the row's middle by its ink rather than its line box, and nudged back by half its tracking,
@@ -14048,7 +14083,7 @@
         const rowH = w / LEVEL_SWATCH;
         if (lf && lblW <= w*0.9 && lf.px <= rowH*0.95) {
           ctx.font = lf.weight + " " + lf.px + "px " + UI_FONT; ctx.letterSpacing = lf.ls;
-          ctx.fillText("SKIPPED", x + w/2 + (parseFloat(lf.ls) || 0)/2,
+          ctx.fillText(SKIP_LABEL, x + w/2 + (parseFloat(lf.ls) || 0)/2,
                        y + w - rowH/2 - rowH*SKIP_LBL_UP + inkNudge(ctx.font));   // ...up a smidge from dead centre
         }
         ctx.restore();
@@ -16150,6 +16185,8 @@
     if (s.hole && s.hole.top > 0) cps *= Math.pow(10, HOLE.runaway*s.hole.top/1000);
     return cps;
   }
+  // ∞'s spark: how big, against the plate's height, and one slow turn of it, in ms.
+  const SPEED_INF = { spark: 1.35, spinMs: 9000 };
   // The plate itself, reading `cps` — or ∞, for a number past counting.
   function drawSpeedPlate(cps) {
     const P = hudPlate(), m = P.left, fs = P.fs;
@@ -16163,7 +16200,10 @@
     // decimals are noise on a number nobody is reading for its precision and the grouping is
     // the only thing making it legible at all.
     const inf = !isFinite(cps);
-    const val = inf ? "\u221E" : cps < 1000 ? cps.toFixed(3) : Math.round(cps).toLocaleString("en-US");
+    // ...and the DECIMALS GIVE WAY as it climbs: three below a hundred, two to a thousand, one to ten thousand, then none
+    const dp = cps < 100 ? 3 : cps < 1000 ? 2 : cps < 10000 ? 1 : 0;
+    const val = inf ? "\u221E" : cps < 1000 ? cps.toFixed(dp)
+                      : cps.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
     const unit = " tiles/s";
     // Same size as the unit beside it. The number keeps its weight and its colour — it is
     // still the one bright thing on the plate — and gives up its height.
@@ -16217,6 +16257,13 @@
       const uC = vy + ((um.actualBoundingBoxDescent || 0) - (um.actualBoundingBoxAscent || 0))/2;
       ctx.font = infF;   const im = ctx.measureText(val);
       vy = uC - ((im.actualBoundingBoxDescent || 0) - (im.actualBoundingBoxAscent || 0))/2;
+      // ...with a BRIGHT WHITE SPARK behind it, turning slowly
+      const now = performance.now(), sxC = m + padX + im.width/2;
+      ctx.save();
+      ctx.translate(sxC, uC); ctx.rotate((now / SPEED_INF.spinMs) * Math.PI*2);
+      drawSpark(ctx, 0, 0, P.h * SPEED_INF.spark, now, { alpha: 1, col: "#ffffff", seed: 0.5 });
+      ctx.restore();
+      ctx.font = infF; ctx.fillStyle = "#4baff1";
     }
     if (tab) speedTab(ctx, val, m + padX, vy); else ctx.fillText(val, m + padX, vy);
     ctx.font = smallF;                                                // ...and the unit as a dim suffix
@@ -18839,6 +18886,7 @@
     const f = state.flyTile;
     return f ? { c: f.c, r: f.r } : state.queued;
   };
+  const HOTSPOT_SPARK = 0.5;                       // a hotspot's sparks, against the chosen chapter's (and never past its square)
   function drawJunctionMarks(ts) {
     // THE CHARM HAS TAKEN THE JUNCTION OVER, and keeps it for the whole of its turn — not just
     // for the asking. Tested on the charm rather than on its beat, because the moment you touch
@@ -18896,7 +18944,6 @@
                  : fly ? Math.min(1, a*1.7)
                        : Math.min(1, a*(1.5 + 0.5*Math.sin(ts/300)));
       const lit = mine ? a + (want - a)*markPick : want;
-      ctx.fillStyle = "rgba(255,255,255," + lit.toFixed(3) + ")";
       // The SQUARE shrinks as the pool empties — half a tile with something to send, a quarter
       // with nothing — while the band stays an eighth of a tile throughout. At a quarter the two
       // outlines meet and there is no middle left, so the hint closes up into a small solid mark
@@ -18906,12 +18953,26 @@
       // about how much you have to put there; this one is about the tile that is coming.
       const base = cell*(0.125 + 0.125*markLive + 0.25*markGrow);
       const os = mine ? base + (cell*0.5 - base)*markPick : base;
-      const hs = Math.max(0, os - cell/8);
       if (os <= 0) continue;
-      ctx.beginPath();
-      ctx.rect(mx - os, my - os, os*2, os*2);                        // the half-tile square...
-      if (hs > 0) ctx.rect(mx - hs, my - hs, hs*2, hs*2);            // ...less its middle, if it has one
-      ctx.fill("evenodd");
+      // THE CHOSEN CHAPTER'S LOOK: a line in the rainbow's blue ON the square's edge (a pixel heavier than the tab bar's,
+      // as the chapter's ring is), and two sparks going round it half a lap apart — rolling, and smaller the lower they
+      // go (rimPointCCW, PICK_TRACE_SHRINK), exactly as on a chosen square of the map, only never bigger than the square.
+      const sq = os*2, x0 = mx - os, y0 = my - os, lw = FOOTER.rim + 1, blue = tvBlueHex();
+      ctx.save();
+      ctx.strokeStyle = blue; ctx.lineWidth = lw;                    // the line at full strength, always
+      rrect(x0 + lw/2, y0 + lw/2, sq - lw, sq - lw, Math.max(0, tileR(sq) - lw/2)); ctx.stroke();
+      ctx.globalAlpha = Math.max(0, Math.min(1, lit));               // ...and the sparks at the hint's own brightness
+      const sz = Math.min(uiGrid() * TAB_SPARK, sq) * HOTSPOT_SPARK, u = ts / PICK_TRACE_MS;
+      const lap = 4*(sq - 2*tileR(sq)) + 2*Math.PI*tileR(sq);
+      for (const [off, seed] of [[0, 0.61], [0.5, 0.19]]) {
+        const q = rimPointCCW(x0, y0, sq, tileR(sq), u + off);
+        const dn = Math.max(0, Math.min(1, (q.y - y0) / sq)), kz = 1 - PICK_TRACE_SHRINK * dn*dn*(3 - 2*dn);
+        ctx.save();
+        ctx.translate(q.x, q.y); ctx.rotate(-(u + off) * lap / (sz * TAB_SPARK_ROLL));
+        drawSpark(ctx, 0, 0, sz * kz, ts, { alpha: 1, col: blue, seed: seed + (e.c*7 + e.r*3) % 5 * 0.07 });
+        ctx.restore();
+      }
+      ctx.restore();
     }
   }
 
