@@ -3863,6 +3863,30 @@
         k = Math.min(steps.length - 1, k + 1 + Math.floor(Math.random() * 2));
       }
     }
+    // A CHARM GOING INTO THE HOLE: a rich, resonant glass tone, rung a step higher up the scale for every one that goes.
+    // A struck glass bell — the inharmonic partials a real bell rings with, three voices a few cents apart on each so it
+    // beats slowly as it rings — over a soft sine an octave under it for body, held long and most of it into the room.
+    function holeChime(n) {
+      if (muted || !ac || ac.state !== "running") return;
+      const STEPS = [0, 2, 4, 7, 9, 12, 14, 16], k = Math.max(0, n | 0);
+      const semi = 26 + STEPS[k % STEPS.length] + 12*Math.floor(k / STEPS.length);
+      const t0 = ac.currentTime, hz = BASE * Math.pow(2, semi/12);
+      const dry = ac.createGain(), wet = ac.createGain();
+      dry.gain.value = 0.55; wet.gain.value = 1.7;
+      dry.connect(master); wet.connect(sendBus);
+      [[0.5, 0.030, 2.4], [1, 0.060, 3.8], [2.0, 0.018, 2.6], [2.76, 0.026, 2.8], [5.40, 0.012, 1.7], [8.93, 0.006, 1.1]]
+        .forEach(([mul, peak, life]) => {
+          for (const cents of [-8, 0, 8]) {
+            const o = ac.createOscillator(), g = ac.createGain();
+            o.type = "sine"; o.frequency.setValueAtTime(hz*mul, t0); o.detune.setValueAtTime(cents, t0);
+            g.gain.setValueAtTime(0.0001, t0);
+            g.gain.exponentialRampToValueAtTime(peak, t0 + 0.004);
+            g.gain.exponentialRampToValueAtTime(0.0002, t0 + life);
+            o.connect(g); g.connect(dry); g.connect(wet);
+            o.start(t0); o.stop(t0 + life + 0.05);
+          }
+        });
+    }
     // BOOM: the opening's cube bursting open and him going up. A sine dropped from 110 Hz to 30 like a kick drum the size
     // of a room, a second an octave under it for the weight, and a burst of noise through a low filter falling shut —
     // the air being shoved out of the way — with a long tail into the room.
@@ -4873,7 +4897,7 @@
              slide, clack, tap, tapBig, swish, airSwish, flyWhoosh, tabClick, power, warp, vortex, thrum, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck, choir,
              ambient,
-             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, charmReveal, tallyRing, boom, twinkle, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
+             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, charmReveal, tallyRing, boom, twinkle, holeChime, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
              levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, talismanTheme, choirLift, setMusicGate,
              musicNow: () => ({ ...MU }) };
   })();
@@ -4909,7 +4933,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.58";                    // shown on the title & pause screens
+  const VERSION = "v10.59";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -9152,6 +9176,10 @@
     talR:   0.42,   // how big, in tiles
     talOrb:  2.1,   // the orbit it settles onto, in hole radii
     talTurns:1.25,  // ...and how many turns it makes on the way down it
+    talGrow: 0.10,  // ...and as each one goes in the hole FLASHES its colour and grows by this, in tiles
+    talFlash: 900,  // ...the flash's fade, ms — and the chapter does not go until the last of them is in
+    keepGrow: 0.35, // once it has opened out it GOES ON GROWING — at this share of the speed it was opening at — while
+                    // the last charms go in and through the throw back to the Tileverse: it never stops to wait
     // ---- and the readout, which stops meaning anything ----
     runaway: 1.0,   // decades a second the SPEED PLATE gains once the pace has topped out. The
                     // runner cannot go faster than ten — the animation stops reading long before
@@ -9216,6 +9244,7 @@
     // been at the ceiling. The second is what the speed plate runs away on — see drawSpeedHud.
     H.age += dt;
     if (s.cpsNow >= LOOP_MAX_CPS - 1e-6) H.top += dt;
+    H.growNow = (H.growNow || 0) + ((H.growTo || 0) - (H.growNow || 0)) * Math.min(1, dt/140);   // eased out to what it has eaten
     tickHoleTals(dt);
     const u = holeU();
     // THE SWALLOW. Once it has picked half the board off a square at a time it stops picking
@@ -9231,6 +9260,10 @@
       const cap = Math.max(H.R0, Math.hypot(viewW, viewH)/2*HOLE.swallowR);
       const reach = H.R0 + (H.cover - H.R0)*kk;
       H.R = H.R0 + (cap - H.R0)*kk;
+      // ...and once it has opened out it does not stop: on at a share of the speed it arrived at (HOLE.keepGrow),
+      // for as long as the last charms take to go in, and on into the throw (startRestore carries the speed over)
+      H.keepRate = 2*(cap - H.R0)/HOLE.swallow * HOLE.keepGrow;
+      if (H.t > HOLE.swallow) H.R = cap + (H.t - HOLE.swallow) * H.keepRate;
       // ...and anything the reach has passed is simply gone. No flight: it is inside it.
       while (H.at < H.order.length) {
         const q = H.order[H.at];
@@ -9239,7 +9272,7 @@
       }
       for (const f of H.fly) f.t += dt;
       H.fly = H.fly.filter(f => f.t < f.dur);
-      if (k >= 1) startRestore();
+      if (k >= 1 && H.tal && !H.tal.length) startRestore();   // ...and not before every charm has gone in
       return;
     }
     // Torn off on an accumulator rather than one a frame, because by the end it is taking a
@@ -9323,8 +9356,21 @@
     // in the rack while its own self is orbiting the hole is the same object in two places. It
     // goes on the frame its flight starts, which is the frame it is visibly somewhere else.
     // updatePowerBtn reads `eaten` when it works out what the rack holds.
-    for (const q of H.tal) { const was = q.t; q.t += dt; if (was <= 0 && q.t > 0) H.eaten.add(q.def.id); }
+    for (const q of H.tal) {
+      const was = q.t; q.t += dt;
+      if (was <= 0 && q.t > 0) H.eaten.add(q.def.id);
+      if (was < q.dur && q.t >= q.dur) holeTalIn(H, q.def);   // ...and it is IN
+    }
     H.tal = H.tal.filter(q => q.t < q.dur);
+  }
+  // A CHARM GOING IN: the hole flashes its colour (drawHole), grows by HOLE.talGrow (eased — tickHole), and a glass chime
+  // rings, a step higher with each one that goes (Sound.holeChime).
+  function holeTalIn(H, def) {
+    (H.flashes || (H.flashes = [])).push({ col: talFace(def), at: H.age });
+    H.growTo = (H.growTo || 0) + cell*HOLE.talGrow;
+    try { Sound.holeChime && Sound.holeChime(H.talIn || 0); } catch (_) {}
+    H.talIn = (H.talIn || 0) + 1;
+    haptic([12, 24, 12]);
   }
   function drawHoleTals(ts) {
     const H = state.hole; if (!H || !H.tal || !H.tal.length) return;
@@ -9356,7 +9402,13 @@
   // is driven by the swallow's own clock once that takes over.
   function holeR() {
     const H = state.hole; if (!H) return 0;
-    return H.beat === "swallow" ? H.R : cell*HOLE.r*(0.22 + 0.78*holeU());
+    // ...grown by every charm gone into it. The swallow's own radius starts from whatever it was when the swallow began
+    // (which already carried the growth up to then), so only what grows after that is added to it.
+    if (H.beat === "swallow") {
+      if (H.growSw == null) H.growSw = H.growNow || 0;
+      return H.R + Math.max(0, (H.growNow || 0) - H.growSw);
+    }
+    return cell*HOLE.r*(0.22 + 0.78*holeU()) + (H.growNow || 0);
   }
   function drawHole(ts) {
     const H = state.hole; if (!H) return;
@@ -9383,6 +9435,34 @@
     }
     ctx.globalAlpha = 1;
     paintHole(H.hx, H.hy, R, u, ts, (state.loop && state.loop.spin) || 1);
+    // ...a flash of each charm's colour as it goes in, blooming off the hole and gone
+    if (H.flashes && H.flashes.length) {
+      H.flashes = H.flashes.filter(fl => H.age - fl.at < HOLE.talFlash);
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      for (const fl of H.flashes) {
+        const k = (H.age - fl.at) / HOLE.talFlash, a = (1 - k)*(1 - k), col = hexRGB(fl.col).join(",");
+        // the bloom: the charm's colour flooding the hole and well out past its rim
+        const rr = R*(1.15 + 1.25*k);
+        const g = ctx.createRadialGradient(H.hx, H.hy, 0, H.hx, H.hy, rr);
+        g.addColorStop(0,    "rgba(" + col + "," + a.toFixed(3) + ")");
+        g.addColorStop(0.6,  "rgba(" + col + "," + (0.85*a).toFixed(3) + ")");
+        g.addColorStop(1,    "rgba(" + col + ",0)");
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(H.hx, H.hy, rr, 0, Math.PI*2); ctx.fill();
+        // ...a white heart to it, gone first
+        const w = Math.max(0, 1 - k*2.2);
+        if (w > 0) {
+          const gw = ctx.createRadialGradient(H.hx, H.hy, 0, H.hx, H.hy, R*0.9);
+          gw.addColorStop(0, "rgba(255,255,255," + (0.9*w*w).toFixed(3) + ")"); gw.addColorStop(1, "rgba(255,255,255,0)");
+          ctx.fillStyle = gw; ctx.beginPath(); ctx.arc(H.hx, H.hy, R*0.9, 0, Math.PI*2); ctx.fill();
+        }
+        // ...and a ring of it thrown off the rim
+        ctx.strokeStyle = "rgba(" + col + "," + (0.9*a).toFixed(3) + ")";
+        ctx.lineWidth = Math.max(1, R*0.14*(1 - k));
+        ctx.beginPath(); ctx.arc(H.hx, H.hy, R*(1 + 0.9*k), 0, Math.PI*2); ctx.stroke();
+      }
+      ctx.restore();
+    }
     drawHoleTals(ts);          // ...OVER the disc: they are objects in front of a hole, and
     ctx.restore();             // behind it they simply disappeared instead of falling in
   }
@@ -9475,8 +9555,11 @@
     // out, and every way out in this game waits on you. It holds — eyes open, ring turning —
     // until you answer it. See finTap.
     wordGap:1500,   // ...how long before the second line
-    born:  "And thus the malevolent circle entity was born",
+    born:  "",      // (the line about the circle entity is gone; TO BE CONTINUED comes up on its own, without the wait)
     next:  "TO BE CONTINUED...",
+    // THE SPEED PLATE stays up to the very end, its number still climbing at HOLE.runaway decades a second, until at
+    // this it stops being a number at all and reads ∞.
+    infinity: 1e12,
     dark:   1900,   // ...and everything going
     eyeW:  0.230,   // an eye, as a fraction of the hole's own RADIUS
     eyeH:  0.520,   // ...its height against its own width, once open. A SQUINT: at parity they
@@ -9560,7 +9643,9 @@
     const R0 = (s.hole && holeR()) || Math.hypot(viewW, viewH)/2;
     s.restore = { phase: "whip", t: 0, shot: null, S, cx0: F.cx, cy0: F.cy, R0,
                   order, at: 0, acc: 0, fly: [], gone: new Set(),
-                  R: R0, Rin: R0, calm: 0, eye: 0 };
+                  R: R0, Rin: R0, calm: 0, eye: 0,
+                  clock: 0, cps0: speedHudValue(),                        // the plate's number, carried on from here
+                  vL: (s.hole && s.hole.keepRate) || 0, gwL: 0 };         // ...and the hole's growth, carried on too
     s.status = "vortex";                            // ...nothing else gets a turn from here
     document.body.classList.add("vortex");          // the DOM buttons go down with it
     // The music and the roar KEEP GOING. What is happening has not changed — the same hole is
@@ -9606,6 +9691,7 @@
   function tickRestore(dt) {
     const s = state, R = s.restore; if (!R) return;
     R.t += dt;
+    R.clock = (R.clock || 0) + dt;                                  // the whole ending's own clock (the speed plate runs off it)
     // THE BEAT GOES ON. The music in this game is struck by the RUNNER — every tile he clears
     // plays a bar of it, see Sound.clearTile — and he stopped the moment the camera began to
     // pull back, which left the map being eaten in silence. It is struck here instead, at the
@@ -9621,7 +9707,10 @@
     }
     // Thrown back with the picture: the same scale on the same clock, so what shrinks is the
     // distance rather than the thing.
-    if (R.phase === "whip") R.R = R.R0 * finShot(R);
+    // ...and it goes on GROWING through the throw and the look: by the speed it had when the chapter went, in the chapter's
+    // own pixels, scaled with the picture — so it is still the same hole seen from further off, only never standing still.
+    if (R.phase === "whip" || R.phase === "look") R.gwL = (R.gwL || 0) + dt * (R.vL || 0);
+    if (R.phase === "whip" || R.phase === "look") R.R = (R.R0 + (R.gwL || 0)) * finShot(R);
     if (R.phase === "eat") {
       // Chapters torn off on an accumulator, the same way the ground was: by the end it is
       // taking twenty a second and a frame is not a small enough unit to spread that over.
@@ -9643,7 +9732,10 @@
       // Carrying on from where the throw left it, mid-growth: the same growth continued rather
       // than a second one begun. Never backwards, whatever the two ends work out to.
       const want = Math.max(R.Rin, Math.min(viewW, viewH)*FIN.calmR);
-      R.R = R.Rin + (want - R.Rin)*u*u;
+      // ...carrying straight on at the speed it had, rather than starting again from standing, and on top of that the
+      // swell out to its full size — never backwards, and never still
+      const E0 = R.E0 != null ? R.E0 : R.Rin, vMap = (R.vL || 0) * R.S/viewW;
+      R.R = E0 + vMap*R.t + Math.max(0, want - E0 - vMap*FIN.ramp)*u*u;
       // A growl every so often under the roar, more often as it goes: one is an animal, six of
       // them piling up is the floor going.
       const every = 620 - 380*u;
@@ -9668,12 +9760,15 @@
     const i = RESTORE_ORDER.indexOf(R.phase);
     if (i < 0 || i === RESTORE_ORDER.length - 1) { endRestore(); return; }
     R.phase = RESTORE_ORDER[i + 1]; R.t = 0;
+    if (R.phase === "eat") R.E0 = R.R;                  // where the eating's growth carries on from
     if (R.phase === "look") {
       R.shot = null;                                  // the picture has gone...
       R.Rin = R.R;                                    // ...and this is how wide it was when it did
       R.gone.add(levelIdx);                           // ...and the square under it goes with it
     }
   }
+  // The wait before TO BE CONTINUED: only when there is a first line for it to wait on.
+  const finWordGap = () => FIN.born ? FIN.wordGap : 0;
   // How long the credits take to say themselves, and therefore when the prompt may appear.
   const finCreditsMs = () => FIN_BEATS*FIN.line + FIN.fade + FIN.hold;
   function endRestore() {
@@ -9690,7 +9785,7 @@
   function finTap() {
     const R = state && state.restore;
     if (!R) return false;
-    if (R.phase === "words" && R.t >= FIN.wordGap + FIN.fade) {
+    if (R.phase === "words" && R.t >= finWordGap() + FIN.fade) {
       Sound.tap(); R.phase = "dark"; R.t = 0; return true;
     }
     if (R.phase === "credits" && R.t >= finCreditsMs()) { Sound.tap(); endRestore(); return true; }
@@ -9771,6 +9866,10 @@
     if (R.phase === "words" || R.phase === "dark") drawFinWords(R.phase === "words" ? R.t : 1e6);
     if (dark > 0) { ctx.fillStyle = "rgba(5,4,13," + dark.toFixed(3) + ")"; ctx.fillRect(0, 0, W, H); }
     if (R.phase === "credits") drawFinCredits(R.t);
+    // THE SPEED PLATE, on top of all of it to the very end: its number still climbing from where the level left it, at
+    // the hole's own runaway, until it is past counting and reads ∞.
+    const runaway = (R.cps0 || 1) * Math.pow(10, HOLE.runaway * (R.clock || 0)/1000);
+    drawSpeedPlate(runaway >= FIN.infinity ? Infinity : runaway);
     return true;
   }
   // EVIL. Two of them, and they are the runner'\''s own eyes turned inside out: the game draws
@@ -9821,10 +9920,10 @@
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.font = "900 " + UI_PX + "px " + UI_FONT;
     ctx.letterSpacing = UI_TRACK;
-    const rows = finWrap(FIN.born, maxW);
+    const rows = FIN.born ? finWrap(FIN.born, maxW) : [];
     const y2 = footTextY(), y1 = y2 - lh*(rows.length + 1.3);
     const a1 = Math.min(1, Math.max(0, t/FIN.fade));
-    const a2 = Math.min(1, Math.max(0, (t - FIN.wordGap)/FIN.fade));
+    const a2 = Math.min(1, Math.max(0, (t - finWordGap())/FIN.fade));
     if (a1 > 0.004) {
       ctx.globalAlpha = a1; ctx.fillStyle = "#e8e6ff";
       rows.forEach((r, i) => ctx.fillText(r, W/2, y1 + i*lh + (1 - a1)*lh*0.3));
@@ -16035,8 +16134,12 @@
   }
   // live runner speed, top-left (screen space). Shown as cells/second on a dark pill.
   function drawSpeedHud() {
+    if (!hudLive() || (state && state.restore)) return;   // (the ending draws its own, over everything — see drawRestore)
+    drawSpeedPlate(speedHudValue());
+  }
+  // What the plate reads right now: the live pace, and once the hole has opened, the runaway on top of it.
+  function speedHudValue() {
     const s = state;
-    if (!hudLive()) return;
     const factor = s.liveFactor != null ? s.liveFactor : 1;
     let cps = 1000 * factor / (s.msPerCell || 1000);        // cells per second
     // ...until the hole opens, and then the plate stops being a measurement. He cannot run
@@ -16045,6 +16148,10 @@
     // ceiling, into the tens of millions by the time the chapter goes. The one instrument still
     // trying to describe what is happening, and failing.
     if (s.hole && s.hole.top > 0) cps *= Math.pow(10, HOLE.runaway*s.hole.top/1000);
+    return cps;
+  }
+  // The plate itself, reading `cps` — or ∞, for a number past counting.
+  function drawSpeedPlate(cps) {
     const P = hudPlate(), m = P.left, fs = P.fs;
     ctx.save();
     ctx.textBaseline = "middle";
@@ -16055,7 +16162,8 @@
     // Three decimals — the per-tile ramp is small — until it is thousands, at which point the
     // decimals are noise on a number nobody is reading for its precision and the grouping is
     // the only thing making it legible at all.
-    const val = cps < 1000 ? cps.toFixed(3) : Math.round(cps).toLocaleString("en-US");
+    const inf = !isFinite(cps);
+    const val = inf ? "\u221E" : cps < 1000 ? cps.toFixed(3) : Math.round(cps).toLocaleString("en-US");
     const unit = " tiles/s";
     // Same size as the unit beside it. The number keeps its weight and its colour — it is
     // still the one bright thing on the plate — and gives up its height.
@@ -16070,10 +16178,20 @@
     // and half a digit of slack in front of the unit so it has somewhere to breathe. Nothing on
     // the plate moves any more except the glyphs themselves, and the box only when the number
     // gains a place.
-    const tab = cps > 10;
+    const tab = !inf && cps > 10;
     ctx.font = bigF;
+    // ∞ is not in the game's face, so it comes from a fallback font at that font's own proportions. It is set to
+    // STAND AS TALL AS THE FIGURES: sized so its ink matches a nought's ink height (and never wider than its measure).
+    let infF = bigF;
+    if (inf) {
+      const z = ctx.measureText("0"), zH = (z.actualBoundingBoxAscent + z.actualBoundingBoxDescent) || P.fs2*0.7;
+      const q = ctx.measureText(val), qH = (q.actualBoundingBoxAscent + q.actualBoundingBoxDescent) || zH;
+      infF = "900 " + (P.fs2 * zH / Math.max(1, qH)).toFixed(2) + "px " + UI_FONT;
+      ctx.font = infF;
+    }
     const vw = tab ? speedTabW(ctx, val) + ctx.measureText("0").width*0.6
                    : ctx.measureText(val).width;
+    ctx.font = bigF;
     ctx.font = smallF; const uw = ctx.measureText(unit).width;
     const padX = Math.round(fs*0.55);
     const boxW = padX*2 + vw + uw, boxH = P.h;
@@ -16090,8 +16208,17 @@
     // the design's own bright line — the colour of the track he is running on, in the readable
     // sense. The earth colour is the dark ground under it: on Midnight or Blood that is nearly
     // black, which put a black number on a near-black plate.
-    ctx.fillStyle = (typeof curRail === "function") ? curRail() : "#ffd24a";
-    if (tab) speedTab(ctx, val, m + padX, midY + 1); else ctx.fillText(val, m + padX, midY + 1);
+    ctx.fillStyle = "#4baff1";                                        // the rainbow's blue, everywhere it reads
+    // ...and ∞, from its fallback font, is set by its INK: centred on the middle of the "tiles/s" beside it rather than on
+    // the line box, which a different font puts somewhere else
+    let vy = midY + 1;
+    if (inf) {
+      ctx.font = smallF; const um = ctx.measureText(unit);
+      const uC = vy + ((um.actualBoundingBoxDescent || 0) - (um.actualBoundingBoxAscent || 0))/2;
+      ctx.font = infF;   const im = ctx.measureText(val);
+      vy = uC - ((im.actualBoundingBoxDescent || 0) - (im.actualBoundingBoxAscent || 0))/2;
+    }
+    if (tab) speedTab(ctx, val, m + padX, vy); else ctx.fillText(val, m + padX, vy);
     ctx.font = smallF;                                                // ...and the unit as a dim suffix
     ctx.fillStyle = "rgba(214,218,240,0.66)";
     ctx.fillText(unit, m + padX + vw, midY + 1);
