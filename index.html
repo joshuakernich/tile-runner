@@ -4909,7 +4909,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.57";                    // shown on the title & pause screens
+  const VERSION = "v10.58";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -26138,10 +26138,11 @@
     oneGap:    0.90,         // how far over chapter one's top edge his feet float at the end, in its squares...
     oneSize:   0.50,         // ...and how big he has shrunk to by then, against his size the rest of the way
     wireOutMs:  700,         // the wireframe fading off the finished, coloured Tileverse after the last landing
-    domino:    { pop: 360, lead: 0.80, slow: 0.22, after: 0.40 },   // the unfolding's wave (openDomino): one square's
+    domino:    { pop: 360, lead: 0.80, slow: 0.22, after: 0.40, floatAfter: 0.25 },   // the unfolding's wave (openDomino): one square's
                              //   swing near the start (ms, before it is fitted to `grow`), how far down the square it hangs off
                              //   is before it starts, how much slower each ring further out swings, and the earliest it may
-                             //   start, as a share of the cube's unfold
+                             //   start, as a share of the cube's unfold — and how long after the nearest joined square
+                             //   lands a floating piece sets off, in its own swings
     sparks:    { n: 7, size: 0.42, msPerSquare: 400, gapMs: 500, edgeMs: 1500 },   // along the wireframe: how
                              //   many at once, how big (in its squares), how fast they chart a line, the rest
                              //   between — and, while it is still unfolding, how long one takes over an edge
@@ -26211,6 +26212,8 @@
   // the edge. Each square hangs off its neighbour one ring nearer the start that lies most nearly between it and the
   // start, so it swings out AWAY from where it all began. The whole thing is fitted to land its last square on
   // OPENING.grow[1], so the beats after it keep their places whatever shape the cloud is.
+  // Any FLOATING piece — a chapter or a few the domino cannot walk to — opens just after the nearest joined square lands,
+  // the first square of each swinging open on its edge that faces the start, as if it hung off the squares further in.
   function openDomino(C, N) {
     const n = C.n, D = OPENING.domino, U = OPENING.unfold, span = U[1] - U[0];
     const depth = new Array(n).fill(-1), start = new Array(n).fill(0), pop = new Array(n).fill(0), land = new Array(n).fill(0);
@@ -26223,44 +26226,71 @@
     let sx = 0, sy = 0;
     for (const i of seeds) { sx += C.cells[i].c + 0.5; sy += C.cells[i].r + 0.5; }
     sx /= seeds.length; sy /= seeds.length;
+    const nbrs = (i) => { const p = C.cells[i], out = [];
+      for (const [dc, dr] of DIRS) { const j = C.at.get((p.c + dc) + "," + (p.r + dr)); if (j != null) out.push(j); }
+      return out; };
     const q = seeds.slice();
-    for (let h = 0; h < q.length; h++) {
-      const p = C.cells[q[h]];
-      for (const [dc, dr] of DIRS) {
-        const j = C.at.get((p.c + dc) + "," + (p.r + dr));
-        if (j != null && depth[j] < 0) { depth[j] = depth[q[h]] + 1; q.push(j); }
-      }
-    }
-    for (let i = 0; i < n; i++) if (depth[i] < 0) { depth[i] = 1; q.push(i); C.parent[i] = -1; }   // (an island)
+    for (let h = 0; h < q.length; h++) for (const j of nbrs(q[h])) if (depth[j] < 0) { depth[j] = depth[q[h]] + 1; q.push(j); }
     for (const j of q) {
       if (depth[j] <= 0) continue;
       const p = C.cells[j], tx = sx - (p.c + 0.5), ty = sy - (p.r + 0.5), tl = Math.hypot(tx, ty) || 1;
       let best = -1, bestDot = -2;
-      for (const [dc, dr] of DIRS) {
-        const k = C.at.get((p.c + dc) + "," + (p.r + dr));
-        if (k == null || depth[k] !== depth[j] - 1) continue;
-        const dot = (dc*tx + dr*ty) / tl;
+      for (const k of nbrs(j)) {
+        if (depth[k] !== depth[j] - 1) continue;
+        const pk = C.cells[k], dot = ((pk.c - p.c)*tx + (pk.r - p.r)*ty) / tl;
         if (dot > bestDot) { bestDot = dot; best = k; }
       }
-      if (best >= 0) C.parent[j] = best;
+      C.parent[j] = best;
+    }
+    // ...and the FLOATING pieces — chapters the domino cannot walk to: each little group a domino of its own, from its
+    // square nearest the start, which swings open JUST AFTER the nearest square joined up to the cube is in place. They
+    // swing at the pace of the ring beyond the outermost, carrying on the slowing toward the edge.
+    const joinedDepth = Math.max(1, ...q.map(j => depth[j]));
+    const qi = [], hinge = new Array(n).fill(null), anchor = new Array(n).fill(-1);
+    for (let i = 0; i < n; i++) {
+      if (depth[i] !== -1) continue;
+      const comp = [i]; depth[i] = -2;
+      for (let h = 0; h < comp.length; h++) for (const j of nbrs(comp[h])) if (depth[j] === -1) { depth[j] = -2; comp.push(j); }
+      let root = comp[0], bd = Infinity;
+      for (const j of comp) { const p = C.cells[j], dd = Math.hypot(p.c + 0.5 - sx, p.r + 0.5 - sy); if (dd < bd) { bd = dd; root = j; } }
+      const inComp = new Set(comp), local = [root];
+      depth[root] = joinedDepth + 1; C.parent[root] = -1;
+      for (let h = 0; h < local.length; h++) for (const j of nbrs(local[h]))
+        if (inComp.has(j) && depth[j] === -2) { depth[j] = depth[local[h]] + 1; C.parent[j] = local[h]; local.push(j); }
+      qi.push(...local);
+      // ...its first square swinging open on its edge that faces the start, as if it hung off the squares further in
+      const pr = C.cells[root], vx = sx - (pr.c + 0.5), vy = sy - (pr.r + 0.5);
+      hinge[root] = Math.abs(vx) >= Math.abs(vy) ? { c: pr.c + (vx >= 0 ? 1 : -1), r: pr.r }
+                                                 : { c: pr.c, r: pr.r + (vy >= 0 ? 1 : -1) };
+      // ...set off by the square joined up to the cube that lies nearest it
+      let near = -1, nd = Infinity;
+      for (const j of q) { const cj = C.cells[j], dd = Math.hypot(cj.c - pr.c, cj.r - pr.r); if (dd < nd) { nd = dd; near = j; } }
+      anchor[root] = near;
     }
     const sched = (f) => {
       let last = 0;
-      for (const j of q) {
-        if (depth[j] === 0) continue;
-        const par = C.parent[j], pd = f * D.pop * Math.pow(1 + D.slow, depth[j] - 1);
-        const from = par >= 0 ? land[par] : U[1];
-        const lead = par >= 0 && depth[par] === 0 ? 1 : D.lead;       // off a side of the cube: once it is down
+      const lay = (j, from, lead) => {
+        const pd = f * D.pop * Math.pow(1 + D.slow, depth[j] - 1);
         start[j] = Math.max(U[0] + span*D.after, from - pd*(1 - lead));
         pop[j] = pd; land[j] = start[j] + pd;
         last = Math.max(last, land[j]);
+      };
+      for (const j of q) {
+        if (depth[j] === 0) continue;
+        const par = C.parent[j];
+        lay(j, par >= 0 ? land[par] : U[1], par >= 0 && depth[par] === 0 ? 1 : D.lead);   // off a side of the cube: once it is down
+      }
+      for (const j of qi) {                                     // the floating pieces: each group off the square nearest it
+        const par = C.parent[j];
+        if (par >= 0) lay(j, land[par], D.lead);
+        else lay(j, anchor[j] >= 0 ? land[anchor[j]] : last, 1 + D.floatAfter);   // just after that square lands
       }
       return last;
     };
     let lo = 0.05, hi = 20;
     for (let it = 0; it < 40; it++) { const mid = (lo + hi)/2; if (sched(mid) > OPENING.grow[1]) hi = mid; else lo = mid; }
     sched(lo);
-    C.oStart = start; C.oPop = pop; C.oLand = land; C.oDepth = depth;
+    C.oStart = start; C.oPop = pop; C.oLand = land; C.oDepth = depth; C.oHinge = hinge;
   }
   function startOpening(next){
     openActive = true; openNext = next || "level"; openT = 0; openFired = 0; openHold = false;
@@ -26452,7 +26482,7 @@
             continue;
           }
           // ...still swinging out of the square that made it, on the shared edge (see drawCine)
-          const pa = C.parent[i] >= 0 ? C.cells[C.parent[i]] : p;
+          const pa = C.parent[i] >= 0 ? C.cells[C.parent[i]] : (C.oHinge && C.oHinge[i]) || p;   // (a floating piece: its inward edge)
           const d = [p.c - pa.c, p.r - pa.r]; if (!d[0] && !d[1]) d[0] = 1;
           const hp = [pa.c + 0.5 + d[0]*0.5, pa.r + 0.5 + d[1]*0.5, 0], ha = [-d[1], d[0], 0];
           const th = Math.PI * (1 - cineSmooth(k));
@@ -26536,7 +26566,7 @@
           for (let i = 0; i < C.n; i++) {
             if (C.isSeed[i]) continue;
             const k = cineC01((t - C.oStart[i]) / C.oPop[i]); if (k <= 0) continue;
-            const p = C.cells[i], pa = C.parent[i] >= 0 ? C.cells[C.parent[i]] : p;
+            const p = C.cells[i], pa = C.parent[i] >= 0 ? C.cells[C.parent[i]] : (C.oHinge && C.oHinge[i]) || p;
             const d = [p.c - pa.c, p.r - pa.r]; if (!d[0] && !d[1]) d[0] = 1;
             const hp = [pa.c + 0.5 + d[0]*0.5, pa.r + 0.5 + d[1]*0.5, 0], ha = [-d[1], d[0], 0];
             const th = Math.PI * (1 - cineSmooth(k));
