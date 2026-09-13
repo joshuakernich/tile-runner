@@ -4963,7 +4963,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.61";                    // shown on the title & pause screens
+  const VERSION = "v10.62";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -8170,7 +8170,7 @@
     const L = (state.loop && state.loop.closed) ? state.loop.len : 0;
     const q = (L > 1 && i - (L - 1) >= 0) ? p[i - (L - 1)] : null;
     if (!q) return undefined;
-    return (Math.abs(q.c - p[i].c) + Math.abs(q.r - p[i].r)) === 1 ? q : undefined;
+    return trackConnects(p[i], q) ? q : undefined;          // joined as circuitLength joins it, drawn ends and all
   }
   // ...and BOTH the drawing and his own movement read it, because they are the same polyline:
   // the curve he is carried round is the curve you can see him standing on.
@@ -8864,8 +8864,9 @@
                : state.tiles.find(t => t.status === "free" || t.status === "parked");
     const occ = occupiedFor(hand || null);
     let boxed = true;
-    for (const [dc, dr] of [[1,0],[-1,0],[0,1],[0,-1]]) {
-      const c = h.c + dc, r = h.r + dr;
+    // ...asked only of the cells the front can actually go to: a platform's one way out, not all four of its neighbours
+    for (const d of frontDirs(h, p[p.length - 2])) {
+      const c = h.c + d.x, r = h.r + d.y;
       if (!inBounds(c, r) || occ.has(key(c, r))) continue;
       if (!foldsBackAt(c, r, true)) { boxed = false; break; }
     }
@@ -9111,7 +9112,11 @@
       const j = i - (L - 1);
       if (j < 0) continue;
       const q = p[j];
-      if (Math.abs(q.c - h.c) + Math.abs(q.r - h.r) !== 1) continue;   // does the front join it...
+      // ...does the front JOIN it: not merely touch it, but connect to it. A fixed platform only takes track in through
+      // its drawn ends, so a tile against its closed side is floor beside it, not a lap closing — and counting it closed
+      // a "circuit" that did not exist: the junction went, the front tile bent round into the platform's wall, and the
+      // hole opened in the middle of four cells nobody could run round.
+      if (!trackConnects(h, q)) continue;
       let ok = true;
       for (let a = j; a <= i && ok; a++) ok = ringNodeLive(p[a]);      // ...is all of it still there
       for (let a = j; a < i && ok; a++)                                // ...and is the ring simple
@@ -18673,12 +18678,23 @@
   // are off-grid, already occupied, or would double the runner back. The junction draws a
   // marker in each of them and a TAP on one sends a tile there, so the two have to agree
   // exactly — one list, computed once, rather than the same filter written twice.
-  function junctionExits(n, prev) {
+  // WHERE THE FRONT CAN GO. A tile at the front is a three-way junction; a fixed platform is not. It has exactly one way
+  // out — the drawn end it was not entered by (platformExit) — and asking it for "left, ahead, right" as if it were a
+  // tile offered squares it does not open onto. On a straight that was only the two sides; on a CURL it was "ahead" as
+  // well, straight through its closed wall. A tile sent to one of those parked where it could never link, and then sat
+  // there until the track came back past it and it latched on from the side, taking the runner round a loop nobody laid.
+  function frontDirs(n, prev) {
+    if (n && n.kind === "platform") {
+      const d = platformExit(n, prev ? axisDir(n, prev) : null);
+      return d ? [d] : [];
+    }
     const din = prev ? axisDir(prev, n) : { x:0, y:-1 };
-    const dirs = [{ x:-din.y, y:din.x }, din, { x:din.y, y:-din.x }];   // left, ahead, right
+    return [{ x:-din.y, y:din.x }, din, { x:din.y, y:-din.x }];   // left, ahead, right
+  }
+  function junctionExits(n, prev) {
     const occ = occupiedFor(null);
     const out = [];
-    for (const d of dirs) {
+    for (const d of frontDirs(n, prev)) {
       const c = n.c + d.x, r = n.r + d.y;
       if (inBounds(c, r) && !occ.has(key(c, r)) && !foldsBack(c, r)) out.push({ c, r, d });
     }
@@ -18859,6 +18875,7 @@
     const os = cell*0.25, R = os*MUSH_MARK.icon;
     for (const e of junctionExits(lead.n, lead.prev)) {
       const mx = C.x + e.d.x*cell, my = C.y + e.d.y*cell;
+      hotspotLead(C, e.d, mx, my, os, col);
       drawHotspot(mx - os, my - os, os*2, col, 1, ts, (e.c*7 + e.r*3) % 5 * 0.07);
       ctx.save();
       ctx.fillStyle = ctx.strokeStyle = col; ctx.lineJoin = "round";
@@ -19010,6 +19027,7 @@
       const os = mine ? base + (cell*0.5 - base)*markPick : base;
       if (os <= 0) continue;
       // THE CHOSEN CHAPTER'S LOOK, in the rainbow's blue (a pixel heavier than the tab bar's line, as the chapter's ring is).
+      hotspotLead(C, e.d, mx, my, os, tvBlueHex());
       drawHotspot(mx - os, my - os, os*2, tvBlueHex(), lit, ts, (e.c*7 + e.r*3) % 5 * 0.07);
     }
   }
@@ -19017,6 +19035,18 @@
   // a lap apart at `lit` — rolling, and smaller the lower they go (rimPointCCW, PICK_TRACE_SHRINK), exactly as on a chosen
   // square of the map, only never bigger than the square. `seedK` sets one square's sparks out of step with the next.
   const hotspotSpark = sq => Math.min(uiGrid() * TAB_SPARK, sq) * HOTSPOT_SPARK;
+  // ...and the LEAD out to it: a line at the hotspot's weight and in its colour, from the end of the front tile's option
+  // — the middle of that edge of the tile, where the option's track runs out — straight to the near edge of the hotspot
+  // square, so the square is plainly where that way goes. Nothing once the square has opened to the whole cell and the
+  // two edges meet.
+  function hotspotLead(C, d, mx, my, os, col) {
+    const x0 = C.x + d.x*cell/2, y0 = C.y + d.y*cell/2, x1 = mx - d.x*os, y1 = my - d.y*os;
+    if (Math.hypot(x1 - x0, y1 - y0) < 0.5) return;
+    ctx.save();
+    ctx.strokeStyle = col; ctx.lineWidth = FOOTER.rim + 1; ctx.lineCap = "butt";
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    ctx.restore();
+  }
   function drawHotspot(x0, y0, sq, col, lit, ts, seedK) {
     const lw = FOOTER.rim + 1;
     ctx.save();
@@ -20234,9 +20264,12 @@
   }
 
   // ---- fixed platform: a metal plinth with track cast into it ------------
-  // Same plate as a wall (so it reads as immovable), with a real platform surface
-  // laid across it along the shape's two connectors. Dim while idle; it warms to the
-  // full track colour and throws a glow the moment the runner's path latches onto it.
+  // Same plate as a wall (so it reads as immovable), with the rail laid across it along the shape's two connectors: a
+  // bed of the plate's own frame, and on it a sharp line in the rainbow's blue with a spark rolling along it.
+  const RAIL_BED = {
+    w:       0.16,   // the bed's width — the frame carried along the rail — in tiles
+    sparkMs: 3750,   // one trip of the spark from end to end (a full hotspot's pace: a tile's width in a quarter of its lap)
+  };
   function drawPlatform(pf, ts) {
     const x = cx(pf.c), y = cy(pf.r), s = cell, rad = tileR(s);
     const n = { c: pf.c, r: pf.r };
@@ -20255,43 +20288,43 @@
       ctx.fillStyle = g; ctx.fillRect((x+bx) - br, (y+by) - br, br*2, br*2);
     }
 
-    const lit = pf.lit || 0;
-    // NO platform body and no colour wash — a fixed rail is JUST THE LINE, drawn exactly as the
-    // runner's own laid rail is: the same hairline under the same white lip. It used to be a
-    // fatter line of its own over a dark recessed groove, which made a bolted rail a different
-    // kind of thing from the rail he lays — and the two meet end to end, so the join showed.
+    // THE BED: the plate's frame — the steel the dark panel is inset from, its gradient and its grain — carried along
+    // the rail, so the line runs in a band of frame across the panel and meets the frame at the cell's edge. Clipped to
+    // the band's outline, the rail's own polyline offset to either side, and cut flush where the cell ends.
+    const w2 = s*RAIL_BED.w/2, Lf = [], Rt = [];
+    for (let k = 0; k < S.length; k++) {
+      const a = S[Math.max(0, k - 1)], b = S[Math.min(S.length - 1, k + 1)];
+      const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1;
+      const nx = -dy/d*w2, ny = dx/d*w2;
+      Lf.push([S[k].x + nx, S[k].y + ny]); Rt.push([S[k].x - nx, S[k].y - ny]);
+    }
     ctx.save();
     rrect(x, y, s, s, rad); ctx.clip();
-    ctx.lineJoin = "round"; ctx.lineCap = "round";
-    // live state lives entirely on the line: it brightens and blooms, the plate stays steel
-    if (lit > 0.01) {
-      ctx.save();
-      ctx.globalCompositeOperation = "lighter";
-      // Halved and narrowed when the rail became a hairline: at the old weight the bloom was
-      // wider than everything it was lighting and the live cell read as a glowing tube rather
-      // than a lit line. It is the warmth around the line now, not the line.
-      ctx.strokeStyle = hexA(curTrack(), 0.26*lit);
-      ctx.lineWidth = Math.max(4, s*0.10);
-      ctx.filter = "blur(" + Math.max(1, s*0.05) + "px)";
-      ctx.beginPath(); railPath(S); ctx.stroke();
-      ctx.restore();
+    ctx.beginPath();
+    Lf.forEach(([px, py], k) => k ? ctx.lineTo(px, py) : ctx.moveTo(px, py));
+    for (let k = Rt.length - 1; k >= 0; k--) ctx.lineTo(Rt[k][0], Rt[k][1]);
+    ctx.closePath(); ctx.clip();
+    ctx.fillStyle = g; ctx.fillRect(x, y, s, s);
+    grainFill(x, y, s, s, 0.9);
+    ctx.restore();
+    // THE LINE, sharp and in the rainbow's blue at the hotspot's weight — no lip either side, no bloom, no hairline —
+    // and a spark rolling along it the way a hotspot's go round their square: the same size, the same roll, in the
+    // line's colour. It swells in off one end and out at the other rather than popping back, and each rail is set
+    // off its neighbours by its cell.
+    const blue = tvBlueHex();
+    ctx.save();
+    rrect(x, y, s, s, rad); ctx.clip();
+    ctx.strokeStyle = blue; ctx.lineWidth = FOOTER.rim + 1; ctx.lineCap = "butt"; ctx.lineJoin = "round";
+    ctx.beginPath(); railPath(S); ctx.stroke();
+    let len = 0;
+    for (let k = 1; k < S.length; k++) len += Math.hypot(S[k].x - S[k-1].x, S[k].y - S[k-1].y);
+    const u = (((ts / RAIL_BED.sparkMs + pf.c*0.37 + pf.r*0.61 + 0.5) % 1) + 1) % 1;
+    const kz = Math.sin(Math.PI * u), sz = hotspotSpark(s);
+    if (kz > 0.02) {
+      const q = samplePolyline(S, u);
+      ctx.translate(q.x, q.y); ctx.rotate(u * len / (sz * TAB_SPARK_ROLL));
+      drawSpark(ctx, 0, 0, sz * kz, ts, { alpha: 1, col: blue, seed: 0.23 + ((pf.c*7 + pf.r*3) % 5) * 0.07 });
     }
-    // The surface itself, built the way a LAID tile's is rather than as a rail of its own: the
-    // white lip stack (TILE.edge*) hanging off the line, then the hairline that says exactly
-    // where the line is. The one difference is that a laid tile has a body under it and so takes
-    // the lip on one side only; a fixed rail is a line in mid-air, so it takes the same lip on
-    // BOTH sides and comes out symmetrical — a bright cord rather than a lit edge.
-    //
-    // This replaced a fat coloured stroke over a bar of the plinth's own steel. That bar was
-    // doing the job of saying "cast in", but it made the fixed rail a visibly different WIDTH
-    // from the rail he lays, and the two meet end to end.
-    ctx.globalAlpha = 0.6 + 0.4*lit;                 // dim while idle, full once live
-    const C = nodeCenter(n);
-    surfaceEdge(x, y, S,  C,  1);
-    surfaceEdge(x, y, S,  C, -1);
-    ctx.strokeStyle = RAIL_COL; ctx.lineWidth = RAIL_PX;
-    ctx.beginPath(); railPath(S); if (SHOW_RAIL) ctx.stroke();
-    ctx.globalAlpha = 1;
     ctx.restore();
   }
   function drawPlatforms(ts) {
