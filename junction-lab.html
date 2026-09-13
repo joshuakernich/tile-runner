@@ -107,6 +107,7 @@ const TILE = {
   radius:     0.000,
   glassA:     0.50,
   glassGrain: 1.00,
+  glassDark:  0.45,
   bodyGrain:  1.00,
   railW:      0.075,
   pathW:      0.000,
@@ -118,11 +119,11 @@ const TILE = {
   shadowW:    0.015,
   shadowShade: -16,
   edgeDepth:  0.150,
-  edgeA:      0.300,
+  edgeA:      0.450,
   edgeInk:    1.000,
   edgeGrain:  1.000,
   edgeTip:    0.200,
-  edgeTipA:   0.450,
+  edgeTipA:   0.700,
 };
 const tileR = s => s * TILE.radius;
 const J = Object.assign({}, SHIPPED);
@@ -134,7 +135,8 @@ const cv = document.getElementById("cv");
 let ctx = cv.getContext("2d");
 const dpr = 1;                                   // the labs draw 1:1
 const jScratch = document.createElement("canvas");   // the junction composites here
-const jMask    = document.createElement("canvas");   // ...and the three routes stack here
+const jMask    = document.createElement("canvas");   // ...and the earth is built here
+const jEdge    = document.createElement("canvas");   // ...and each route's edges, faded along their contour, laid on from
 // The running surface is off in the game (SHOW_RAIL there), so it is off here — a lab that
 // shows a rail the board does not is a lab that lies. Every measurement of it stays and the
 // path is still built: turning it back on is this one line in both places.
@@ -308,10 +310,15 @@ function railPath(S){
   ctx.moveTo(S[0].x, S[0].y);
   for (let k=1;k<S.length;k++) ctx.lineTo(S[k].x, S[k].y);
 }
+// THE GLASS: the pane's colour, darkened by TILE.glassDark.
+function glassFill() {
+  const k = 1 - Math.max(0, Math.min(1, TILE.glassDark || 0));
+  return "rgba(" + Math.round(180*k) + "," + Math.round(174*k) + "," + Math.round(235*k) + "," + TILE.glassA + ")";
+}
 function drawGlass(x,y,s){
   ctx.save();
   rrect(x,y,s,s,tileR(s)); ctx.clip();
-  ctx.fillStyle = "rgba(180,174,235,"+TILE.glassA+")"; ctx.fillRect(x,y,s,s);
+  ctx.fillStyle = glassFill(); ctx.fillRect(x,y,s,s);
   grainFill(x,y,s,s,TILE.glassGrain);
   ctx.restore();
 }
@@ -401,6 +408,24 @@ function surfaceBand(S, C, d) {
   for (let k = 1; k < loop.length; k++) ctx.lineTo(loop[k].x, loop[k].y);
   ctx.closePath();
 }
+// A route's FADE ALONG ITS OWN CONTOUR, as a fill to cut it with (destination-in): full at the join, where it leaves
+// the tile it is coming off (S[0]), and nothing at its end (S[last]) — along the line for a straight route, and round
+// the arc for a turn (a conic gradient about the corner it bends round; a straight fade across it where a browser has
+// no conic gradients).
+function contourFade(S, C) {
+  const last = S.length - 1, a = S[0], b = S[last];
+  const lin = () => { const g = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+                      g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(1, "rgba(255,255,255,0)"); return g; };
+  if (last === 2 || !ctx.createConicGradient) return lin();
+  const O = { x: a.x + b.x - C.x, y: a.y + b.y - C.y };
+  const a0 = Math.atan2(a.y - O.y, a.x - O.x), a1 = Math.atan2(b.y - O.y, b.x - O.x);
+  let d = a1 - a0; while (d > Math.PI) d -= 2*Math.PI; while (d < -Math.PI) d += 2*Math.PI;
+  const q = Math.abs(d) / (Math.PI*2);
+  const g = ctx.createConicGradient(d >= 0 ? a0 : a1, O.x, O.y);   // it sweeps clockwise from its start
+  if (d >= 0) { g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(q, "rgba(255,255,255,0)"); g.addColorStop(1, "rgba(255,255,255,1)"); }
+  else        { g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(q, "rgba(255,255,255,1)"); g.addColorStop(1, "rgba(255,255,255,0)"); }
+  return g;
+}
 function drawJunction(n, prev){
   const din = prev ? axisDir(prev, n) : { x:0, y:-1 };
   const left  = { x:-din.y, y:din.x };
@@ -429,32 +454,51 @@ function drawJunction(n, prev){
   try {
     ctx.save();
     rrect(X, Y, cell, cell, tileR(cell)); ctx.clip();
+    // EACH ROUTE A LAYER OF ITS OWN — its earth and its contour together — laid down in the order RIGHT, STRAIGHT, LEFT,
+    // each over the one before, so where two run together the later one's earth and contour lie over the earlier's. The
+    // earth fades along the way he is travelling: full where the tile meets the one he is coming off, nothing at its leading
+    // edge. The contour — shading and lip, at a laid tile's strength — fades to nothing along its own route (contourFade).
+    // All of it is cut to the route's own shape before it is laid on. (The routes' weights only say which routes are there.)
+    if (jEdge.width !== px) { jEdge.width = jEdge.height = px; }
+    const eg = jEdge.getContext("2d");
     for (const i of [2, 1, 0]) {
-      const w = Math.max(0, Math.min(1, mix[i]));
-      if (w <= 0) continue;
+      if (!(mix[i] > 0)) continue;
       const S = surfaces[i];
+      // the contour, next door, faded along its route
+      eg.setTransform(1, 0, 0, 1, 0, 0); eg.clearRect(0, 0, px, px);
+      eg.setTransform(dpr, 0, 0, dpr, -DX, -DY);
+      { const was = ctx; ctx = eg;
+        if (TILE.pathW > 0 && TILE.shadowW > 0) {
+          ctx.fillStyle = tintHex(track, TILE.underHue, TILE.underSat, TILE.underShade + TILE.shadowShade);
+          ctx.beginPath(); surfaceBand(S, C, cell*(TILE.pathW + TILE.shadowW)); ctx.fill();
+        }
+        if (TILE.pathW > 0) {
+          ctx.fillStyle = track;
+          ctx.beginPath(); surfaceBand(S, C, cell*TILE.pathW); ctx.fill();
+        }
+        surfaceEdge(X, Y, S, C);
+        ctx.globalCompositeOperation = "destination-in";
+        ctx.fillStyle = contourFade(S, C); ctx.fillRect(X, Y, cell, cell);
+        ctx.globalCompositeOperation = "source-over";
+        ctx = was; }
+      // the layer: its earth faded to the leading edge, the contour over it, all of it cut to this route
       mg.setTransform(1, 0, 0, 1, 0, 0); mg.clearRect(0, 0, px, px);
       mg.setTransform(dpr, 0, 0, dpr, -DX, -DY);
-      const was = ctx; ctx = mg;
-      ctx.fillStyle = groundColour(track);
-      ctx.fillRect(X, Y, cell, cell);                             // the ground
-      if (TILE.pathW > 0 && TILE.shadowW > 0) {
-        ctx.fillStyle = tintHex(track, TILE.underHue, TILE.underSat, TILE.underShade + TILE.shadowShade);
-        ctx.beginPath(); surfaceBand(S, C, cell*(TILE.pathW + TILE.shadowW)); ctx.fill();
-      }
-      if (TILE.pathW > 0) {
-        ctx.fillStyle = track;
-        ctx.beginPath(); surfaceBand(S, C, cell*TILE.pathW); ctx.fill();
-      }
-      grainFill(X, Y, cell, cell, J.grain);
-      surfaceEdge(X, Y, S, C);                                    // this route's lip, this route only
-      ctx.globalCompositeOperation = "destination-in";
-      ctx.fillStyle = "#ffffff"; ctx.beginPath(); bodyPath(S, C); ctx.fill();
-      ctx.globalCompositeOperation = "source-over";
-      ctx = was;
-      ctx.globalAlpha = w;
-      ctx.drawImage(jMask, DX/dpr, DY/dpr, px/dpr, px/dpr);
-      ctx.globalAlpha = 1;
+      { const was = ctx; ctx = mg;
+        ctx.fillStyle = groundColour(track);
+        ctx.fillRect(X, Y, cell, cell);                               // the ground...
+        grainFill(X, Y, cell, cell, J.grain);
+        ctx.globalCompositeOperation = "destination-in";
+        const gd = ctx.createLinearGradient(C.x - din.x*cell/2, C.y - din.y*cell/2, C.x + din.x*cell/2, C.y + din.y*cell/2);
+        gd.addColorStop(0, "rgba(255,255,255,1)"); gd.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = gd; ctx.fillRect(X, Y, cell, cell);           // ...faded to its leading edge
+        ctx.globalCompositeOperation = "source-over";
+        ctx.drawImage(jEdge, DX/dpr, DY/dpr, px/dpr, px/dpr);         // ...with its contour on it
+        ctx.globalCompositeOperation = "destination-in";
+        ctx.fillStyle = "#ffffff"; ctx.beginPath(); bodyPath(S, C); ctx.fill();   // ...cut to this route
+        ctx.globalCompositeOperation = "source-over";
+        ctx = was; }
+      ctx.drawImage(jMask, DX/dpr, DY/dpr, px/dpr, px/dpr);           // ...and laid over the ones before it
     }
     ctx.restore();                                                // out of the tile clip
     // The rail is HIDDEN in the game (SHOW_RAIL), so it is hidden here. The path is still

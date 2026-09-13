@@ -33,6 +33,12 @@ var COPY_DATA = {
                  desc: "A little monster flitting to and fro. Time your run so the runner never touches it!" },
     "hunter": { name: "The Hunter",
                 desc: "A malevolent entity. It is coming for you. Keep moving." },
+    "square": { name: "The Circler",
+                desc: "Round and round its ring, forever. Slip past between laps." },
+    "stealth": { name: "The Stalker",
+                 desc: "It hunts you too, but you only see it when it lunges. Remember where it was." },
+    "trap": { name: "The Snapper",
+              desc: "It sits and waits. Cross while its jaws are wide open." },
     "slider": { name: "Sliding Platform",
                 desc: "The wall only opens where this platform sits. Drag it along its rail to line up the crossing, then build across it." },
     "block": { name: "Movable Block",
@@ -156,5 +162,27 @@ var COPY_DATA = {
     "Every failure taught you something. Allegedly.",
     "Worth the wait. For you, anyway.",
   ],
+  // A SKIP. Its heading is CHAPTER N / SKIPPED; the line typed out under it is one of these.
+  skipQuips: [
+    "Bold strategy. Let's see if it pays off.",
+    "It'll still be here. Judging you.",
+    "We'll call it a strategic retreat.",
+    "The tiles will remember this.",
+    "Skipping is technically a kind of running.",
+    "Nobody saw that. Except everyone.",
+    "You can always come back. You won't, but you can.",
+    "That chapter didn't want you either.",
+    "Onwards! Away from the problem.",
+    "Some puzzles are best left to other people.",
+    "The flag waited. Oh well.",
+    "Moving on is healthy, they say.",
+    "A tactical sidestep. Very brave.",
+    "Out of sight, out of mind. Mostly.",
+  ],
+  // THE GUIDES on the board: the words on a tile to carry, the tip over a square to tap (set on three lines), and
+  // the words in the square after it.
+  guideDrag: "Drag me",
+  guideTap: "PRO TIP DON'T DRAG JUST TAP",
+  guideTapMe: "Tap me",
 };
 if (typeof module !== "undefined") module.exports = COPY_DATA;

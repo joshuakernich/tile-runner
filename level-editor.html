@@ -232,7 +232,7 @@
       <label class="opt">rows <input type="number" id="rowsIn" min="3" max="40" value="8"></label>
       <label class="opt">speed <input type="number" id="cpsIn" value="0.8" step="0.01" min="0.3" max="3"></label>
       <label class="opt">intro <input type="text" id="introBox" placeholder="wall,block …"></label>
-      <label class="opt">guides <input type="text" id="guidesBox" placeholder="front,flag"></label>
+      <label class="opt">guides <input type="text" id="guidesBox" placeholder="front,flag,tap"></label>
       <label class="opt opt-poem">poem
         <textarea id="poemBox" rows="3" placeholder="shown on its own before the level opens — optional"></textarea></label>
       <label class="opt">by <input type="text" id="byBox" placeholder="who said it" maxlength="60"></label>
@@ -489,6 +489,14 @@
       <label class="fld"><span>lines — after more than one attempt</span>
         <textarea id="cWinQuipsRetry" rows="9"></textarea></label>
     </div>
+    <label class="fld"><span>a SKIP — lines typed out under CHAPTER N SKIPPED</span>
+      <textarea id="cSkipQuips" rows="9"></textarea></label>
+    <label class="fld"><span>level guides — the words on a tile to carry</span>
+      <input type="text" id="cGuideDrag" maxlength="40"></label>
+    <label class="fld"><span>level guides — the tip over a square to tap</span>
+      <input type="text" id="cGuideTap" maxlength="80"></label>
+    <label class="fld"><span>level guides — the words in the square to tap after that</span>
+      <input type="text" id="cGuideTapMe" maxlength="40"></label>
   </div>
 
   <div class="card">
@@ -622,8 +630,8 @@ function toWorking(o){
 // The monster family, mirrored from index.html's MONSTER_KINDS — the editor has to draw and
 // place all six, and the colours are how you tell them apart on the board.
 const MON_KINDS = ["hrail","vrail","patrol","square","hunter","trap","stealth"];
-const MON_COL = { hrail:"#b24dff", vrail:"#4dc9ff", patrol:"#b24dff",
-                  square:"#ff9b3d", hunter:"#6b7192", trap:"#ff5c5c", stealth:"#cfd8ff" };
+const MON_COL = { hrail:"#c37ef1", vrail:"#4baff1", patrol:"#c37ef1",      // the rainbow's colours, as the game's
+                  square:"#f7933b", hunter:"#6b7192", trap:"#f1645f", stealth:"#cfd8ff" };
 const monVariant = h => h.variant || (h.path ? "patrol" : (h.axis||"h")==="v" ? "vrail" : "hrail");
 const TAL_IDS = ["clock","magnet","star","finger","mush","rewind","pulse","spur","brake","ankh","lode"];
 const TAL_COL = {clock:"#8fd8ff", magnet:"#ff6d6d", star:"#ffd24a", finger:"#ffe9a8", mush:"#ff8fc8",
@@ -1180,7 +1188,7 @@ function draw(){
   // monsters — the patrol drawn as a polyline with a numbered dot at every waypoint,
   // and the creature itself sitting on the one it starts from
   L.hazards.filter(isMon).forEach(h=>{
-    const v = monVariant(h), col = MON_COL[v] || "#b24dff";
+    const v = monVariant(h), col = MON_COL[v] || "#c37ef1";
     if (v==="hrail" || v==="vrail"){
       const hz=(h.axis||"h")==="h";
       const [x1,y1]=centerOf(hz?h.lo:h.c, hz?h.r:h.lo), [x2,y2]=centerOf(hz?h.hi:h.c, hz?h.r:h.hi);
@@ -2067,7 +2075,7 @@ function toolIcon(g, t, S){
                      for(let k=0;k<16;k++){ const a=k/16*Math.PI*2, R=(k%2?S*.42:S*.26);
                        const X=S/2+Math.cos(a)*R, Y=S/2+Math.sin(a)*R; k?g.lineTo(X,Y):g.moveTo(X,Y); }
                      g.closePath(); g.fillStyle="#ff4d6d"; g.fill(); pip(S/2,S/2,S*.11,"#12102a"); break;
-    case "monster":  box(S*.16,S*.20,S*.68,S*.60,S*.12,"#b24dff");
+    case "monster":  box(S*.16,S*.20,S*.68,S*.60,S*.12,"#c37ef1");
                      pip(S*.37,S*.44,S*.07,"#12102a"); pip(S*.63,S*.44,S*.07,"#12102a");
                      g.strokeStyle="#12102a"; g.lineWidth=S*.07; g.lineJoin="round"; g.beginPath();
                      for(let k=0;k<=4;k++){ const X=S*.24+k*(S*.52/4); k?g.lineTo(X,k%2?S*.74:S*.64):g.moveTo(X,S*.64); }
@@ -2379,9 +2387,10 @@ idbGet("levelsHandle").then(h=>{ if(h){ fsHandle=h; $("saveFs").title="writes ov
 const COPY_SHIPPED = (typeof COPY_DATA !== "undefined") ? COPY_DATA : {};
 const COPY_KEY = "tilerunner:editor:copy";
 const LIST_FIELDS = { cLoseTitles:"loseTitles", cLoseQuips:"loseQuips", cPauseQuips:"pauseQuips",
-                      cWinQuips:"winQuips", cWinQuipsRetry:"winQuipsRetry" };
+                      cWinQuips:"winQuips", cWinQuipsRetry:"winQuipsRetry", cSkipQuips:"skipQuips" };
 const TEXT_FIELDS = { cPauseTitle:"pauseTitle", cWinTitle:"winTitle",
-                      cWinTitleLast:"winTitleLast", cWinBylineLast:"winBylineLast" };
+                      cWinTitleLast:"winTitleLast", cWinBylineLast:"winBylineLast",
+                      cGuideDrag:"guideDrag", cGuideTap:"guideTap", cGuideTapMe:"guideTapMe" };
 let copyDraft = null;
 
 const linesOf = t => String(t == null ? "" : t).split("\n").map(x => x.trim()).filter(Boolean);
@@ -2513,6 +2522,13 @@ function copyFile(){
   out += list("winQuips", copyDraft.winQuips);
   out += "  // ...and after more than one attempt.\n";
   out += list("winQuipsRetry", copyDraft.winQuipsRetry);
+  out += "  // A SKIP. Its heading is CHAPTER N / SKIPPED; the line typed out under it is one of these.\n";
+  out += list("skipQuips", copyDraft.skipQuips || []);
+  out += "  // THE GUIDES on the board: the words on a tile to carry, the tip over a square to tap (set on three lines), and\n";
+  out += "  // the words in the square after it.\n";
+  out += "  guideDrag: " + q(copyDraft.guideDrag || "") + ",\n";
+  out += "  guideTap: " + q(copyDraft.guideTap || "") + ",\n";
+  out += "  guideTapMe: " + q(copyDraft.guideTapMe || "") + ",\n";
   out += "};\n";
   out += 'if (typeof module !== "undefined") module.exports = COPY_DATA;\n';
   return out;
@@ -2595,6 +2611,12 @@ function copyFillGaps(){
   const si = copyDraft.shopIntro;
   if (!si || (!si.name && !si.desc))
     copyDraft.shopIntro = clone(COPY_TRUTH.shopIntro || { name:"", desc:"" });
+  // ...and the skip's lines, which a draft saved before a skip had any has no opinion on — repaired when missing or
+  // empty for the same reason, or a Save from that draft would write the file's lines away.
+  if (!Array.isArray(copyDraft.skipQuips) || !copyDraft.skipQuips.length)
+    copyDraft.skipQuips = clone(COPY_TRUTH.skipQuips || []);
+  // ...and the guides' words, which a draft saved before there were any has no opinion on
+  for (const k of ["guideDrag", "guideTap", "guideTapMe"]) if (!copyDraft[k]) copyDraft[k] = COPY_TRUTH[k] || "";
 }
 async function copyInit(){
   let draft = null;

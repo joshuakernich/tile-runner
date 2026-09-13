@@ -68,7 +68,7 @@ bump and installed home-screen copies keep serving the old icons and manifest.
 | `glow-lab.html` | The **edge glow** round the Tileverse's cloud and a level's quilt — a wide black, a vibrant colour taken off the nearest tile or patch (a bright core and a fainter tail), and a thin black hugging the edge. Iframe pattern: it pushes `EDGE_GLOW` into the running game through `__TR.edgeGlow()` and keeps no copy of the block (Reset asks the game for it). Sliders for each layer's width and strength and the colour's saturation, lift, core and tail; eight presets; and a view each of the Tileverse and two throwaway boards, tall and wide, with sky all round them. **Copy EDGE_GLOW block**. Must be *served*. |
 | `tile-lab.html` / `junction-lab.html` | The laid tile's cross-section and the leading tile's 3-way junction. **Copy TILE / JUNCTION block**. |
 | `stone-generator.html` | Design reference for the stone crack art. |
-| `tools/` | The two check scripts. |
+| `tools/` | The two check scripts, and `serve.py` — the preview's static server, `http.server` with `Cache-Control: no-cache` so a reload never keeps a stale `levels.js` or `copy.js`. |
 
 ## Every lab saves your settings
 

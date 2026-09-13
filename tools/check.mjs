@@ -267,7 +267,7 @@ function levelsFrom(file, marker) {
       if (!src.includes('<script src="copy.js">'))
         bad("index.html no longer loads copy.js — the cards and end screens would be blank");
       else if (/\n\s*const MECHS = \{\s*\n/.test(src) ||
-               /\n\s*const (LOSE|PAUSE|WIN)_QUIPS[A-Z_]* = \[\s*\n/.test(src))
+               /\n\s*const (LOSE|PAUSE|WIN|SKIP)_QUIPS[A-Z_]* = \[\s*\n/.test(src))
         bad("index.html has grown its own inline copy of the writing again");
       else ok("index.html reads copy.js directly");
       if (!read("sw.js").includes('"./copy.js"'))

@@ -1701,7 +1701,7 @@
                 2.55px 3px 0 color-mix(in srgb, var(--ink) 64%, #000),
                 3.4px 4px 0 color-mix(in srgb, var(--ink) 57%, #000),
                 4.25px 5px 0 color-mix(in srgb, var(--ink) 51%, #000); }
-  #menu-title.dead, .big-word.dead { color:#f1645f;
+  #menu-title.dead, .big-word.dead { color:#f1645f; --spark:#f1645f;
     text-shadow:0.85px 1px 0 #b8453f,
                 1.7px 2px 0 #a73e39,
                 2.55px 3px 0 #963733,
@@ -3842,6 +3842,52 @@
         });
       }
     }
+    // A BUTTERFLY TAKING OFF: something small and bright leaving. Five quick notes climbing the pentatonic a step or two at
+    // a time from high up, each a soft sine with a quieter octave over it and a short ring, most of it into the room —
+    // a twinkle, not a tune, and pitched a little differently each time so a row of them is never the same twice.
+    function twinkle() {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime, steps = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
+      let k = Math.floor(Math.random() * 3);
+      for (let n = 0; n < 5; n++) {
+        const t = t0 + n*0.055 + Math.random()*0.012, hz = BASE * Math.pow(2, (36 + steps[k])/12), lvl = 0.030 * (1 - n*0.12);
+        for (const [mul, amp] of [[1, 1], [2, 0.35]]) {
+          const o = ac.createOscillator(), g = ac.createGain();
+          o.type = "sine"; o.frequency.setValueAtTime(hz*mul, t);
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(lvl*amp, t + 0.004);
+          g.gain.exponentialRampToValueAtTime(0.0002, t + 0.28);
+          o.connect(g); g.connect(master); g.connect(sendBus);
+          o.start(t); o.stop(t + 0.32);
+        }
+        k = Math.min(steps.length - 1, k + 1 + Math.floor(Math.random() * 2));
+      }
+    }
+    // BOOM: the opening's cube bursting open and him going up. A sine dropped from 110 Hz to 30 like a kick drum the size
+    // of a room, a second an octave under it for the weight, and a burst of noise through a low filter falling shut —
+    // the air being shoved out of the way — with a long tail into the room.
+    function boom() {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime;
+      for (const [f0, f1, amp, dur] of [[110, 30, 0.45, 1.6], [55, 22, 0.28, 2.2]]) {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "sine"; o.frequency.setValueAtTime(f0, t0); o.frequency.exponentialRampToValueAtTime(f1, t0 + dur*0.6);
+        g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(amp, t0 + 0.008);
+        g.gain.exponentialRampToValueAtTime(0.0005, t0 + dur);
+        o.connect(g); g.connect(master); g.connect(sendBus);
+        o.start(t0); o.stop(t0 + dur + 0.05);
+      }
+      if (noiseBuf) {
+        const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+        const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.Q.value = 0.7;
+        lp.frequency.setValueAtTime(2400, t0); lp.frequency.exponentialRampToValueAtTime(90, t0 + 1.2);
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.35, t0 + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0004, t0 + 1.4);
+        src.connect(lp); lp.connect(g); g.connect(master); g.connect(sendBus);
+        src.start(t0); src.stop(t0 + 1.5);
+      }
+    }
     // THE TAKINGS GOING INTO THE PURSE, rung: over coinSlam's thud, a small glass bell struck high — G6 and the D over
     // it, a real bell's inharmonic partials, three voices a few cents apart so it beats as it rings — held long, and
     // mostly in the room. The slam says it landed; this says it counted.
@@ -4827,7 +4873,7 @@
              slide, clack, tap, tapBig, swish, airSwish, flyWhoosh, tabClick, power, warp, vortex, thrum, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck, choir,
              ambient,
-             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, charmReveal, tallyRing, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
+             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, charmReveal, tallyRing, boom, twinkle, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
              levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, talismanTheme, choirLift, setMusicGate,
              musicNow: () => ({ ...MU }) };
   })();
@@ -4863,7 +4909,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.56";                    // shown on the title & pause screens
+  const VERSION = "v10.57";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -4899,6 +4945,11 @@
   // and a stepper that compares its stored value against the list has to find it there.
   const START_CPS = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
   const startCps = () => START_CPS.indexOf(settings.startCps) >= 0 ? settings.startCps : DEFAULT_CPS;
+  // ...except a new player's FIRST chapters, which open at the slowest pace until each has been cleared once — the pace a
+  // first go wants — unless the player has picked a pace of their own in Settings, which still wins.
+  const FIRST_PLAY_CPS = 0.5, FIRST_PLAY_LEVELS = 2;       // tiles/s, and how many chapters from the start it covers
+  const levelStartCps = (i) => (START_CPS.indexOf(settings.startCps) < 0 && i >= 0 && i < FIRST_PLAY_LEVELS
+                                && !bestDone(loadBest(), i)) ? FIRST_PLAY_CPS : startCps();
   const GATE_COLORS = ["#7dff6b", "#ff9e4d", "#c77dff"];   // per switch/door group (button, wire, door seam)
   // collected boost / slow pickups apply a time-limited speed effect
   const BOOST_MULT = 1.8, SLOW_MULT = 0.5, BOOST_MS = 3000, SLOW_MS = 2600;
@@ -6867,7 +6918,7 @@
     // The player's setting wins over the level's own. Since v9.6 every monster crosses a tile
     // in the time the RUNNER takes one, so slowing the game down slows the whole board with it
     // — the old warning about a slow runner making a saw level unsolvable no longer applies.
-    const cps = startCps();
+    const cps = levelStartCps(levelIdx);     // (a first go at chapter one or two starts slower — see levelStartCps)
     const speedTier = 0, startSpeedMult = 1;
     const effSpeed = Math.max(90, Math.round(1000 / cps));
     state = {
@@ -6879,6 +6930,7 @@
       stones: new Map((L.stone || []).map((w, i) => [key(w[0], w[1]),
         { hp: w[2] || 1, max: w[2] || 1, hit: 0, vi: (i + stoneRot) % _STONE_VARS.length }])),
       shards: [],
+      butterflies: [],                      // what the Bell of Unmaking turns monsters into (BUTTERFLY)
       // A level may have NO exit at all, in which case there is nothing to reach and the
       // run only ends when he falls. Everything downstream checks for null rather than
       // assuming a cell, so an endless level needs no other special case.
@@ -7534,11 +7586,16 @@
     const mons = (L.hazards || []).filter(h => h.kind === "monster");
     const allHunt = mons.length > 0 && mons.every(h => h.variant === "hunter" || h.variant === "wander");
     const swap = k => (k === "monster" && allHunt) ? "hunter" : k;
+    // EVERY KIND OF MONSTER gets its card the first time it turns up, whatever the level's own list says — the seen set
+    // is what keeps it to once. The rail pair (and the walker) share the flying menace's card.
+    const MON_CARD = { hrail: "monster", vrail: "monster", patrol: "monster", square: "square",
+                       hunter: "hunter", wander: "hunter", stealth: "stealth", trap: "trap" };
+    const monCards = [...new Set(mons.map(h => MON_CARD[h.variant] || "monster"))];
     // A prompt for something MECHS no longer explains is DROPPED here rather than handed to
     // showNextMech, which would read .name off undefined. Level 17's data still asks for a
     // "door" card; the padlock rides along on the key's now, so the door never gets one.
     const known = k => !!MECHS[k];
-    if (L.intro) return L.intro.map(swap).filter(known);   // manual levels declare exactly which prompts to show
+    if (L.intro) return [...new Set([...L.intro.map(swap), ...monCards])].filter(known);   // manual levels declare their prompts (+ their monsters')
     const m = ["tile","flag"];                          // the basics, taught on the first level
     if (L.keys || L.key) m.push("key");                 // coloured keys only appear on door levels now
     if (L.walls && L.walls.length) m.push("wall");
@@ -7550,7 +7607,7 @@
     if (L.blocks && L.blocks.length) m.push("block");
     if (L.platforms && L.platforms.length) m.push("platform");
     if (L.mdoors && L.mdoors.length) m.push("mdoor");
-    if (L.hazards && L.hazards.some(h=>h.kind==="monster")) m.push("monster");
+    m.push(...monCards);
     return m.filter(known);
   }
   const SEEN_KEY = "tilerunner:seen";
@@ -7682,6 +7739,9 @@
         drawSpark(g, 0, 0, sz * kz, ts, { col, seed });
         g.restore();
       }
+      // ...and the card's picture, redrawn every frame for the animals (MECH_ANIMATED): the monster shown doing it
+      const type = mechQueue[0], ic = MECH_ANIMATED.has(type) && document.getElementById("mech-icon");
+      if (ic) drawMechIcon(ic.getContext("2d"), type, ic.width, ts - S.t0);
       S.raf = requestAnimationFrame(step);
     };
     S.raf = requestAnimationFrame(step);
@@ -7719,7 +7779,8 @@
   // dozen hand-drawn likenesses, and the likenesses had already drifted — the monster card
   // showed a purple blob with two dots, which is not what a monster has looked like since it
   // learned to split in half. Nothing is drawn twice here now, so an icon cannot go stale.
-  function drawMechIcon(g, type, S) {
+  const MECH_ANIMATED = new Set(["monster", "hunter", "square", "stealth", "trap"]);   // cards whose picture moves
+  function drawMechIcon(g, type, S, ts) {
     g.clearRect(0, 0, S, S);
     // One cell, centred, with a little air around it. `real` swaps the module-wide ctx/cell
     // for the card's, and swallows a throw: a broken icon must never take the pop-up with it.
@@ -7756,10 +7817,34 @@
     if (type==="singularity") { real(() => drawSingularity(0, 0, false, 0)); return; }
     // The pickup token itself, boost or slow, exactly as it floats on the board.
     if (type==="boost" || type==="slow") { real(() => drawFxPickup(0, 0, 0, type)); return; }
-    // Both animals, drawn by the animal's own routine, caught mid-stroke and facing down out
-    // of the card — which is the angle you meet them at.
-    if (type==="monster")  { real(() => drawMonster(cell/2, cell/2, 0, 1, 0.35, { ...MONSTER_KINDS.patrol, split:"v" })); return; }
-    if (type==="hunter")   { real(() => drawMonster(cell/2, cell/2, 0, 1, 0.35, { ...MONSTER_KINDS.hunter, split:"v" })); return; }
+    // THE ANIMALS, each drawn by its own routine and DOING what it does — rowing, lunging into sight and fading out of
+    // it, yawning, trembling and snapping — but standing still in the middle of the card, facing down out of it, which is
+    // the angle you meet them at. `ts` is the card's own clock: mechSparksRun redraws these every frame (MECH_ANIMATED).
+    // "monster" is the rail rower, the one that brings that card up on the board.
+    const tt = ts || 0, rowP = (tt % MONSTER.railStrokeMs) / MONSTER.railStrokeMs;
+    const demo = (K, phase, alpha, jig, cp) => real(() => {
+      if (alpha != null && alpha < 1) ctx.globalAlpha = alpha;
+      const j = jig ? jig() : [0, 0];
+      drawMonster(cell/2 + j[0], cell/2 + j[1], tt, 1, phase, { ...K, split:"v", ghost:false });
+    }, cp);
+    if (type==="monster")  { demo(MONSTER_KINDS.hrail, rowP); return; }
+    if (type==="hunter")   { demo(MONSTER_KINDS.hunter, rowP); return; }
+    if (type==="square")   { demo(MONSTER_KINDS.square, rowP); return; }
+    if (type==="stealth")  {                  // seen on the thrust and gone by the recovery, as on the board (never quite gone here)
+      const dv = MONSTER.railDrive;
+      const a = rowP < dv ? 0.60 - 0.22*(rowP/dv) : 0.02 + 0.36*Math.pow(1 - (rowP - dv)/(1 - dv), 3);
+      demo(MONSTER_KINDS.stealth, rowP, Math.max(0.10, a)); return;
+    }
+    if (type==="trap")     {                  // its own slow cycle, with the tremble before the snap
+      // ...drawn at about half the scale, because its jaws yawn a whole tile apart (MONSTER_KINDS.trap.gap): at the size
+      // the others are drawn, both halves swing clean off the card and all that is left is their teeth at its edges
+      const T = trapPhase(tt);
+      demo(MONSTER_KINDS.trap, 0.5*T.open, 1, () => {
+        const amp = cell*0.035*T.shake*T.shake;
+        return [Math.sin(tt/23)*amp, Math.sin(tt/17 + 1.7)*amp];
+      }, Math.round(S*0.40));
+      return;
+    }
     // The draggable platform, grip dots and all, standing on a ghost of the rail it runs along.
     if (type==="slider")   {
       real(() => {
@@ -8270,6 +8355,88 @@
         vy: -Math.abs(Math.sin(a)) * cell * SPILL.up * sp - cell*SPILL.up*0.35,
         spin: ((i & 1) ? 1 : -1) * SPILL.spin * (0.6 + ((i*5) % 7)/7),
         life: 0, max: SPILL.life, sz: cell * SPILL.size });
+    }
+  }
+  // THE BELL'S BUTTERFLIES: what a monster the Bell of Unmaking catches becomes. It APPEARS as the monster's own tile, at
+  // exactly its size, under a quick white flash of the figure that hides the change; SHRINKS fast to a small thing a
+  // quarter of a tile across, beginning to flap as it does; HOLDS there a moment, flapping; and then FLITS away from him
+  // in a wobbling climb that starts slow and gathers (eased in), fading out at the end. Its body is one tile cut down
+  // the middle into two half-tiles hinged edge to edge — no gap — each squeezed toward the hinge as it swings up.
+  const BUTTERFLY = {
+    flashMs:  200,    // the white flash over the figure as it appears, fading
+    shrinkMs: 260,    // ...then down to its small size, quickly
+    pauseMs:  520,    // ...a moment there, flapping
+    flyMs:   1300,    // ...and away
+    small:   0.25,    // its size once shrunk, in tiles across both wings
+    flapMs:   200,    // one beat of the wings
+    travel:   3.2,    // how far away from him it gets, in tiles...
+    climb:    2.2,    // ...and how far up
+    wobble:   0.35,   // the flit's side to side, radians
+    fade:     0.35,   // the last share of the flight it fades over
+    trail:    0.50,   // its glitter trail, as a share of the talismans' length
+    trailR:   0.90,   // ...and how wide the glitter scatters, in its own widths
+  };
+  const butterflyLife = () => { const B = BUTTERFLY; return B.flashMs + B.shrinkMs + B.pauseMs + B.flyMs; };
+  // Where one is and how it looks at time t of its own life — a pure function of t, so its glitter can ask where it was.
+  function butterflyAt(f, t) {
+    const B = BUTTERFLY, t1 = B.flashMs, t2 = t1 + B.shrinkMs, t3 = t2 + B.pauseMs, big = f.size || MONSTER.size;
+    const ks = t < t1 ? 0 : Math.min(1, (t - t1) / B.shrinkMs), es = 1 - Math.pow(1 - ks, 3);   // the shrink, fast off
+    const kf = t < t3 ? 0 : Math.min(1, (t - t3) / B.flyMs), ef = kf*kf;                      // the flight, eased in
+    const wob = Math.sin(t/140 + (f.seed || 0)) * B.wobble * kf;
+    return { x: f.x + Math.cos(f.ang + wob) * cell * B.travel * ef,
+             y: f.y + Math.sin(f.ang + wob) * cell * B.travel * ef - cell * B.climb * ef,
+             W: cell * (big + (B.small - big) * es), ks, kf,
+             A: kf < 1 - B.fade ? 1 : Math.max(0, (1 - kf) / B.fade) };
+  }
+  let _butterflySang = -1e9;
+  function updateButterflies(dt) {
+    const s = state; if (!s || !s.butterflies || !s.butterflies.length) return;
+    const B = BUTTERFLY, takeOff = B.flashMs + B.shrinkMs + B.pauseMs;
+    for (const f of s.butterflies) {
+      f.t += dt;
+      // ...and a twinkle as it takes off: once for any that go together (a Bell catching several at once is one sound)
+      if (!f.sang && f.t >= takeOff) {
+        f.sang = true;
+        const now = performance.now();
+        if (now - _butterflySang > 150) { _butterflySang = now; try { Sound.twinkle && Sound.twinkle(); } catch (_) {} }
+      }
+    }
+    s.butterflies = s.butterflies.filter(f => f.t < butterflyLife());
+  }
+  function drawButterflies(ts) {
+    const s = state; if (!s || !s.butterflies || !s.butterflies.length) return;
+    const B = BUTTERFLY;
+    for (const f of s.butterflies) {
+      const t = f.t, q = butterflyAt(f, t), W = q.W;
+      // A LITTLE SPARKLY TRAIL once it is away: the talismans' glitter (shedGlitter), in its colour, a short one, each
+      // grain dropped where it was and left to wink out — coming up over the start of the flight rather than all at once.
+      if (q.kf > 0 && ts != null) {
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        shedGlitter(ctx, (tx) => { const p = butterflyAt(f, Math.max(0, t - (ts - tx))); return { x: p.x, y: p.y, r: p.W * B.trailR }; },
+                    ts, f.col, q.A * Math.min(1, q.kf * 4), f.seed || 0, B.trail);
+        ctx.restore();
+      }
+      // flat as the monster's tile to begin with, beating once it starts to shrink
+      const beat = 0.25 + 0.75 * Math.abs(Math.cos((t / B.flapMs) * Math.PI + (f.seed || 0)));
+      const open = 1 + (beat - 1) * q.ks;
+      const wing = (fill, panel) => {
+        for (const side of [-1, 1]) {
+          ctx.save();
+          ctx.scale(side * open, 1);                                // this half, squeezed toward the hinge at x = 0
+          ctx.beginPath(); ctx.rect(0, -W/2 - 1, W/2 + 1, W + 2); ctx.clip();
+          ctx.fillStyle = fill; rrect(-W/2, -W/2, W, W, tileR(W)); ctx.fill();
+          if (panel) { const ip = W*0.26; ctx.fillStyle = panel; rrect(-W/2 + ip, -W/2 + ip, W - 2*ip, W - 2*ip, tileR(W - 2*ip)); ctx.fill(); }
+          ctx.restore();
+        }
+      };
+      ctx.save();
+      ctx.globalAlpha = q.A;
+      ctx.translate(q.x, q.y);
+      ctx.rotate(Math.sin(t/260 + (f.seed || 0)) * 0.25 * q.kf);
+      wing(f.col, "rgba(0,0,0,0.22)");
+      if (t < B.flashMs) { ctx.globalAlpha = q.A * (1 - t / B.flashMs); wing("#ffffff", null); }   // the flash, hiding the change
+      ctx.restore();
     }
   }
   function updateShards(dt) {
@@ -10700,17 +10867,18 @@
     });
     if (!doomed.length) return 0;           // the shout already rang; nothing to add
     for (const h of doomed) {
-      const body = (monKind(h).body) || col;
-      for (let i = 0; i < 14; i++) {                   // it comes apart the way a stone does
-        const a = (i / 14) * Math.PI * 2 + (i % 5) * 0.31, sp = cell * 0.0016;
-        s.shards.push({ x:h.wx, y:h.wy, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - cell*0.0007,
-                        life:0, max:420, sz: cell*0.06*(0.6 + (i % 3)*0.25), color: body });
-      }
+      // ...into a BUTTERFLY: a tile in the monster's own colour, split down the middle into two half-tiles that flap,
+      // flitting up and away from him (BUTTERFLY). A body too dark to read as one flies in its eyes' colour instead.
+      const K = monKind(h), rgb = hexRGB(K.body || col);
+      const dark = (0.2126*rgb[0] + 0.7152*rgb[1] + 0.0722*rgb[2]) / 255 < 0.12;
+      s.butterflies.push({ x: h.wx, y: h.wy, t: 0, col: dark ? (K.eye || col) : (K.body || col),
+                           size: (K.move === "rail" || K.look === "rail") ? MONSTER.railSize : MONSTER.size,   // his own size
+                           ang: Math.atan2(h.wy - rp.y, h.wx - rp.x), seed: Math.random() * 1000 });
     }
     s.hazards = s.hazards.filter(h => !doomed.includes(h));
     markOccDirty();                     // a blocking monster gone means the cell opens up
-    s.shake = Math.max(s.shake, cell * 0.20);
-    Sound.smash();
+    s.shake = Math.max(s.shake, cell * 0.10);
+    Sound.shimmer();                    // a thing made lighter, not a thing smashed
     return doomed.length;
   }
   // Step him back up to `n` tiles and put the board back the way it was when he was there.
@@ -10946,6 +11114,9 @@
   // A level asks for them by key in its `guides` list, the way `intro` names cards:
   //   front — a tile he clears: carry it to the front of the track
   //   flag  — a tile clears while the front of the track is beside the flag: carry it onto the flag
+  //   tap   — the FIRST tile he clears: a tip over the square to the right of the front of the track, to tap rather
+  //           than carry a tile to (only while that square is a way on) — and on the SECOND tile he clears, `tap2`: the
+  //           square to the right of the front of the track again, with just TAP ME in it. An order for it counts.
   // Every tile, every time the level is played — nothing is remembered. One at a time: a tile that clears while one
   // is still waiting on you is let go.
   const GUIDE = {
@@ -10956,14 +11127,22 @@
     lapMs:  1400,   // one pass of the ghost tile along the arrow
     line:   0.022,  // the arrow's line, as a share of a tile
     head:   0.15,   // ...and its head's length
-    word:   "DRAG ME",   // written across the tile the arrow starts from
-    wordPx: 0.20,   // ...its type, as a share of a tile, and never wider than `wordW` of one
-    wordW:  0.84,
+    // (the words are copy — COPY.guideDrag on the tile to carry, COPY.guideTap over the square to tap — set in the body
+    //  type (bylineType) and the guide's green, no shadow)
+    wordRow: 0.875, // ...centred on the middle of the tile's bottom quarter, as a share of the tile down from its top
+    wordW:  0.90,   // ...and never wider than this share of it: its tracking tightens first, then the type if it must
+    tipGap: 0.04,   // how far over the square to tap the tip sits, in tiles — close down on it
+    tapRow: 0.125,  // ...and TAP ME in the square after it: centred on the middle of its top quarter, down from its top
+    ink:    "#49d47c",  // the arrow, the ghost tile and the words: the rainbow's green (DONE_GREEN)
     bow:    0.28,   // how far the arrow bows off the straight line, as a share of its length
   };
   // Where the tile has to go: the flag, or the cell straight on from the front of the track (a turn if that is shut).
   function guideTarget(g) {
     const s = state;
+    if (g.key === "tap" || g.key === "tap2") {     // the square it picked, for as long as that is still a way on
+      const lead = leadNode();
+      return g.at && lead && junctionExits(lead.n, lead.prev).some(e => e.c === g.at.c && e.r === g.at.r) ? g.at : null;
+    }
     if (g.key === "flag") return s.goal ? { c: s.goal.c, r: s.goal.r } : null;
     const lead = leadNode(); if (!lead) return null;
     const din = lead.prev ? axisDir(lead.prev, lead.n) : { x:0, y:-1 };
@@ -10978,18 +11157,23 @@
     s.guideClears++;
     if ((s.guide && !s.guide.done) || !s.guides.length || !tile) return;
     const lead = leadNode();
-    let key = null;
-    if (s.guides.includes("flag") && s.goal && lead &&
+    let key = null, at = null;
+    const right = lead && junctionExits(lead.n, lead.prev).find(e => e.c === lead.n.c + 1 && e.r === lead.n.r);
+    if (s.guides.includes("tap") && s.guideClears <= 2 && right) {           // the tip on the first clear, TAP ME on the second
+      key = s.guideClears === 1 ? "tap" : "tap2"; at = { c: right.c, r: right.r };
+    }
+    else if (s.guides.includes("flag") && s.goal && lead &&
         junctionExits(lead.n, lead.prev).some(e => e.c === s.goal.c && e.r === s.goal.r)) key = "flag";
     else if (s.guides.includes("front") && lead) key = "front";
     if (!key) return;
-    s.guide = { key, tile, t: 0, k: s.guide ? s.guide.k : 0, done: false, doneT: 0 };
+    s.guide = { key, tile, at, t: 0, k: s.guide ? s.guide.k : 0, done: false, doneT: 0 };
   }
   // ...and every time a tile is put down. Done when a tile JOINS the track — onto the flag, for that one.
   // Any loose tile will do, not only the one the arrow started from.
   function guideOnDrop(tile, pos) {
     const g = state.guide; if (!g || g.done || tile.status !== "active") return;
     if (g.key === "flag" && !(state.goal && pos.c === state.goal.c && pos.r === state.goal.r)) return;
+    if ((g.key === "tap" || g.key === "tap2") && !(g.at && pos.c === g.at.c && pos.r === g.at.r)) return;
     g.done = true;
   }
   // His pace, and the guide's own clocks. Called from update(), so it all holds still under a pause.
@@ -10997,21 +11181,91 @@
     const g = state.guide; if (!g) return 1;
     g.t += dt;
     if (!g.done && !guideTarget(g)) g.done = true;          // nowhere left to go (the track closed, say): let it go
+    if (!g.done && g.key === "tap2" && g.at && state.queued &&  // ...and a tap on the second square with no tile free yet
+        state.queued.c === g.at.c && state.queued.r === g.at.r) g.done = true;   //    is the answer: the tile comes when one frees
     if (g.done) g.doneT += dt;
     g.k += ((g.done ? 0 : 1) - g.k) * Math.min(1, dt / (GUIDE.easeMs/3));
     const f = 1 - (1 - GUIDE.slow) * g.k;
     if (g.done && g.doneT > Math.max(GUIDE.outMs, GUIDE.easeMs)) state.guide = null;
     return f;
   }
-  // THE INSTRUCTION ITSELF, over everything on the board: a thin white arrow, bowed off to one side so it never lies
-  // straight down the track it is about, from the loose tile to where it goes — and a ghost of that tile, at the tile's
-  // own size, carried the whole way along it from the one square onto the other. On the headings' black glow. It goes
-  // while the tile is in your hand.
+  // THE INSTRUCTION ITSELF, over everything on the board, in green: a box round the loose tile and a box round where it
+  // goes, and a thin arrow bowed off to one side (so it never lies straight down the track it is about) from a CORNER of
+  // the one to a corner of the other — and a ghost of the tile, at its own size, carried the whole way
+  // from the one square onto the other. On the headings' black glow. It goes while the tile is in your hand.
+  // THE GUIDE'S SPARKS, in its green. Round a hint SQUARE: one rolling anticlockwise round its edge, full size along the
+  // top and shrinking to a glint along the bottom — the chosen chapter's own trace (rimPointCCW, PICK_TRACE_SHRINK) at a
+  // tile's scale; `phase` staggers two squares on one screen. Along a hint ARROW: one rolling from its tail to its tip,
+  // small to big to small, and round again. Drawn under whatever fade the caller has set.
+  const GUIDE_SPARK = { lapMs: 6400, runMs: 2800, size: 0.15 };   // a lap of a square, a run of an arrow; size in tiles
+  function guideSquareSpark(x0, y0, ts, phase) {
+    const G = GUIDE_SPARK, sz = cell*G.size, u = ts / G.lapMs + (phase || 0);
+    const q = rimPointCCW(x0, y0, cell, tileR(cell), u);
+    const dn = Math.max(0, Math.min(1, (q.y - y0) / cell)), kz = 1 - PICK_TRACE_SHRINK * dn*dn*(3 - 2*dn);
+    ctx.save();
+    ctx.translate(q.x, q.y); ctx.rotate(-u * 4*cell / (sz * TAB_SPARK_ROLL));   // rolling, turned by the ground it covers
+    drawSpark(ctx, 0, 0, sz * kz, ts, { alpha: 1, col: GUIDE.ink, seed: 0.37 + (phase || 0) });
+    ctx.restore();
+  }
+  function guideArrowSpark(arc, len, ts) {
+    const G = GUIDE_SPARK, sz = cell*G.size, p = (ts % G.runMs) / G.runMs, [x, y] = arc(p);
+    ctx.save();
+    ctx.translate(x, y); ctx.rotate(p * len / (sz * TAB_SPARK_ROLL));
+    drawSpark(ctx, 0, 0, sz * Math.sin(Math.PI * p), ts, { alpha: 1, col: GUIDE.ink, seed: 0.83 });
+    ctx.restore();
+  }
+  // ...and THE TIP, for `tap`: a green box round the square to tap, on the black glow, and the words over it in the body
+  // type and the same green, no shadow, on three lines as even as its words allow (PRO TIP / DON'T DRAG / JUST TAP) —
+  // each line centred exactly over the square. And for `tap2`, the square after
+  // it: the box, with just COPY.guideTapMe centred in its top quarter.
+  function drawGuideTap(to, A, key, ts) {
+    const X = cx(to.c), Y = cy(to.r), lw = Math.max(1, cell*GUIDE.line);
+    ctx.save();
+    ctx.globalAlpha = A; ctx.lineJoin = "round";
+    const box = () => { ctx.beginPath(); rrect(X, Y, cell, cell, tileR(cell)); ctx.stroke(); };
+    headGlowUnder(() => { ctx.lineWidth = lw; ctx.strokeStyle = "#000"; box(); });
+    ctx.strokeStyle = GUIDE.ink; ctx.lineWidth = lw; box();
+    guideSquareSpark(X, Y, ts, 0);                                   // ...with its spark going round it
+    const bt = bylineType();
+    let fp = bt.px, ls = parseFloat(bt.ls) || 0;
+    const setType = () => { ctx.font = bt.weight + " " + fp + "px " + UI_FONT; ctx.letterSpacing = ls + "px"; };
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = GUIDE.ink;
+    setType();
+    if (key === "tap2") {
+      const word = String(COPY.guideTapMe || ""), maxW = cell*GUIDE.wordW;
+      if (word) {
+        if (ctx.measureText(word).width > maxW) { ls = Math.min(ls, 1); setType(); }
+        const ww = ctx.measureText(word).width;
+        if (ww > maxW) { fp = Math.max(7, Math.floor(fp * maxW / ww)); setType(); }
+        ctx.fillText(word, X + cell/2 + ls/2, Y + cell*GUIDE.tapRow + inkNudge(ctx.font));   // in its top quarter
+      }
+    } else {
+      // on THREE lines, as even as its words allow: every way of breaking them in three, and the one whose longest line
+      // is shortest
+      const words = String(COPY.guideTap || "").trim().split(/\s+/).filter(Boolean);
+      let lines = words.length ? [words.join(" ")] : [];
+      if (words.length >= 3) {
+        let bestW = Infinity;
+        for (let i = 1; i < words.length - 1; i++) for (let j = i + 1; j < words.length; j++) {
+          const cand = [words.slice(0, i), words.slice(i, j), words.slice(j)].map(w => w.join(" "));
+          const w = Math.max(...cand.map(l => ctx.measureText(l).width));
+          if (w < bestW) { bestW = w; lines = cand; }
+        }
+      }
+      if (lines.length) {
+        const lh = bt.lh || bt.px*1.5, x = X + cell/2;             // dead over the square's middle
+        const yLast = Y - cell*GUIDE.tipGap - lh/2;
+        lines.forEach((ln, i) => ctx.fillText(ln, x + ls/2, yLast - (lines.length - 1 - i)*lh + inkNudge(ctx.font)));
+      }
+    }
+    ctx.restore();
+  }
   function drawGuide(ts) {
     const g = state.guide; if (!g || win) return;
-    const to = guideTarget(g); if (!to) return;
+    const to = (g.key === "tap" || g.key === "tap2") ? g.at : guideTarget(g); if (!to) return;
     const A = Math.min(1, g.t / GUIDE.inMs) * (g.done ? Math.max(0, 1 - g.doneT / GUIDE.outMs) : 1);
     if (A <= 0.01) return;
+    if (g.key === "tap" || g.key === "tap2") { drawGuideTap(to, A, g.key, ts); return; }
     const t = g.tile;
     if (!(t.status === "free" || t.status === "parked") || (state.drag && state.drag.tile.id === t.id)) return;
     const X0 = cx(t.c) + cell/2, Y0 = cy(t.r) + cell/2, X1 = cx(to.c) + cell/2, Y1 = cy(to.r) + cell/2;
@@ -11023,33 +11277,54 @@
     const sg = Math.abs(lean) < cell*0.25 ? 1 : Math.sign(lean);
     const PX = mx + nx*sg*D*GUIDE.bow, PY = my + ny*sg*D*GUIDE.bow;
     const at = u => [(1-u)*(1-u)*X0 + 2*(1-u)*u*PX + u*u*X1, (1-u)*(1-u)*Y0 + 2*(1-u)*u*PY + u*u*Y1];
-    const u0 = Math.min(0.4, cell*0.44/D), u1 = 1 - Math.min(0.4, cell*0.50/D);
-    const tx = 2*(1-u1)*(PX - X0) + 2*u1*(X1 - PX), ty = 2*(1-u1)*(PY - Y0) + 2*u1*(Y1 - PY), tl = Math.hypot(tx, ty) || 1;
-    const [ex, ey] = at(u1), ax = tx/tl, ay = ty/tl;
-    const shaft = () => { ctx.beginPath(); for (let i = 0; i <= 24; i++) { const [x, y] = at(u0 + (u1 - u0 - hl*0.6/D)*i/24); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } };
-    const head = () => { ctx.beginPath(); ctx.moveTo(ex + ax*hl*0.35, ey + ay*hl*0.35);
-                         ctx.lineTo(ex - ax*hl*0.65 - ay*hw, ey - ay*hl*0.65 + ax*hw);
-                         ctx.lineTo(ex - ax*hl*0.65 + ay*hw, ey - ay*hl*0.65 - ax*hw); ctx.closePath(); };
+    // the arc runs CORNER TO CORNER: on each square, the corner that is furthest towards the other square and out on the
+    // side the arc bows to — for a tile carried straight up with the arc bowing right, from the tile's top right corner to
+    // the drop spot's bottom right. (A tie, on a diagonal, goes to the way the tile is travelling.)
+    const sgn = (v, alt) => Math.abs(v) > 1e-6 ? Math.sign(v) : (Math.sign(alt) || 1);
+    const corner = (X, Y, fx, fy) => [X + sgn(fx + nx*sg, fx)*cell/2, Y + sgn(fy + ny*sg, fy)*cell/2];
+    const [SX, SY] = corner(X0, Y0, dx/D, dy/D), [EX, EY] = corner(X1, Y1, -dx/D, -dy/D);
+    const aD = Math.hypot(EX - SX, EY - SY);
+    const QX = (SX + EX)/2 + nx*sg*aD*GUIDE.bow, QY = (SY + EY)/2 + ny*sg*aD*GUIDE.bow;
+    const arc = u => [(1-u)*(1-u)*SX + 2*(1-u)*u*QX + u*u*EX, (1-u)*(1-u)*SY + 2*(1-u)*u*QY + u*u*EY];
+    const tx = 2*(EX - QX), ty = 2*(EY - QY), tl = Math.hypot(tx, ty) || 1;
+    const ex = EX, ey = EY, ax = tx/tl, ay = ty/tl;               // the head's tip, on the drop spot's corner
+    const uS = 1 - Math.min(1, hl*0.85/tl);                       // ...and the shaft stopping under the head
+    const arrow = aD > hl*1.6;                                    // two squares side by side leave no room for one
+    const shaft = () => { ctx.beginPath(); for (let i = 0; i <= 24; i++) { const [x, y] = arc(uS*i/24); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } };
+    const head = () => { ctx.beginPath(); ctx.moveTo(ex, ey);
+                         ctx.lineTo(ex - ax*hl - ay*hw, ey - ay*hl + ax*hw);
+                         ctx.lineTo(ex - ax*hl + ay*hw, ey - ay*hl - ax*hw); ctx.closePath(); };
+    const boxes = () => { for (const [bx, by] of [[X0, Y0], [X1, Y1]]) {
+                            ctx.beginPath(); rrect(bx - cell/2, by - cell/2, cell, cell, tileR(cell)); ctx.stroke(); } };
     ctx.save();
-    ctx.globalAlpha = A; ctx.lineCap = "round"; ctx.lineJoin = "round";
-    headGlowUnder(() => { ctx.lineWidth = lw; ctx.strokeStyle = "#000"; shaft(); ctx.stroke(); head(); ctx.fill(); });
-    ctx.strokeStyle = "#ffffff"; ctx.fillStyle = "#ffffff"; ctx.lineWidth = lw;
-    shaft(); ctx.stroke(); head(); ctx.fill();
+    ctx.globalAlpha = A; ctx.lineCap = "butt"; ctx.lineJoin = "round";   // butt: the shaft starts ON the edge, not past it
+    headGlowUnder(() => { ctx.lineWidth = lw; ctx.strokeStyle = "#000"; boxes();
+                          if (arrow) { shaft(); ctx.stroke(); head(); ctx.fill(); } });
+    ctx.strokeStyle = GUIDE.ink; ctx.fillStyle = GUIDE.ink; ctx.lineWidth = lw;
+    boxes();
+    if (arrow) { shaft(); ctx.stroke(); head(); ctx.fill(); }
+    // ...a spark round each box, half a lap apart, and one running the arrow's length
+    guideSquareSpark(X0 - cell/2, Y0 - cell/2, ts, 0);
+    guideSquareSpark(X1 - cell/2, Y1 - cell/2, ts, 0.5);
+    if (arrow) guideArrowSpark(arc, aD, ts);
     // the ghost of the tile, the tile's own size, carried from its square onto the one it goes to
     const p = (g.t % GUIDE.lapMs) / GUIDE.lapMs, [gx, gy] = at(easeBoth(p));
     ctx.globalAlpha = A * 0.65 * Math.sin(Math.PI * p);
-    ctx.fillStyle = "rgba(255,255,255,0.30)";
+    ctx.fillStyle = hexA(GUIDE.ink, 0.30);
     rrect(gx - cell/2, gy - cell/2, cell, cell, tileR(cell)); ctx.fill(); ctx.stroke();
-    // ...and what to do with it, across the tile itself
+    // ...and what to do with it, on the tile itself: the body type, in green, centred in the tile's bottom quarter
     ctx.globalAlpha = A;
-    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.letterSpacing = "1px";
-    let fp = Math.round(cell*GUIDE.wordPx);
-    ctx.font = "900 " + fp + "px " + UI_FONT;
-    const ww = ctx.measureText(GUIDE.word).width;
-    if (ww > cell*GUIDE.wordW) { fp = Math.max(6, Math.floor(fp * cell*GUIDE.wordW / ww)); ctx.font = "900 " + fp + "px " + UI_FONT; }
-    const wy = Y0 + inkNudge(ctx.font);
-    headGlowUnder(() => ctx.fillText(GUIDE.word, X0, wy));
-    ctx.fillStyle = "#ffffff"; ctx.fillText(GUIDE.word, X0, wy);
+    const bt = bylineType(), maxW = cell*GUIDE.wordW, dragWord = String(COPY.guideDrag || "");
+    let fp = bt.px, ls = parseFloat(bt.ls) || 0;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const setType = () => { ctx.font = bt.weight + " " + fp + "px " + UI_FONT; ctx.letterSpacing = ls + "px"; };
+    setType();
+    if (ctx.measureText(dragWord).width > maxW) { ls = Math.min(ls, 1); setType(); }
+    const ww = ctx.measureText(dragWord).width;
+    if (ww > maxW) { fp = Math.max(7, Math.floor(fp * maxW / ww)); setType(); }
+    const wy = Y0 - cell/2 + cell*GUIDE.wordRow + inkNudge(ctx.font);
+    ctx.fillStyle = GUIDE.ink;
+    ctx.fillText(dragWord, X0 + ls/2, wy);                  // (half its tracking back: canvas lays it after the last letter too)
     ctx.restore();
   }
   function freeClearedTiles() {
@@ -11680,6 +11955,15 @@
   // ...and a PAUSE gets one too. A clear and a fall both say something; the screen in between
   // said one word and nothing else, which made it the only place in the game with no voice.
   const PAUSE_QUIPS = COPY.pauseQuips || [""];
+  // ...and a SKIP gets one, typed out under CHAPTER N / SKIPPED (see SKIP_BY). Never the same one twice running.
+  const SKIP_QUIPS = COPY.skipQuips || [""];
+  let _lastSkipQuip = -1;
+  function pickSkipQuip() {
+    let i = (Math.random() * SKIP_QUIPS.length) | 0;
+    if (i === _lastSkipQuip && SKIP_QUIPS.length > 1) i = (i + 1) % SKIP_QUIPS.length;
+    _lastSkipQuip = i;
+    return SKIP_QUIPS[i] || "";
+  }
 
   function endWin(relic) {
     state.status = "win";
@@ -12063,9 +12347,10 @@
   // Tileverse, holds a beat, and pans to the next chapter.
   //
   // Everything a clear does to make something of itself, this does not do: no pull-back, no
-  // route cast back across the board, no heading, no tally, no fanfare, and no tap to continue
+  // route cast back across the board, no tally, no fanfare, and no tap to continue
   // — a screen that asks you to acknowledge having given up is a screen making a ceremony of
-  // it. It moves itself on.
+  // it. It moves itself on. It IS named, though: CHAPTER N / SKIPPED in the rainbow's red, with
+  // a line typed out under it (SKIP_QUIPS), and it waits for the line before it goes.
   function winSkip() {
     const nx = Math.min(LEVELS.length - 1, levelIdx + 1);
     const nextWasOpen = winOpen(nx);           // ...asked before the skip below is written down
@@ -12079,7 +12364,7 @@
             route: [], laid: 0, cell0: cell, black: 0, shine: 0,
             picks: [], coins: 0, coinsTotal: 0, clock: 0, pickSnd: -1e9,
             cellFit: Math.max(4, Math.min(viewW/(COLS + 2), viewH/(ROWS + 2))), stepMs: 40,
-            nextWasOpen };
+            nextWasOpen, quip: pickSkipQuip() };
     hideWinUI();
     Sound.warp(true);
   }
@@ -13101,6 +13386,8 @@
         && /\bsec-(set|tal|shop)\b/.test(mt.className)) out.push(mt);
     const wt = document.getElementById("wintop"), wtt = document.getElementById("wintop-title");
     if (wt && wt.classList.contains("show") && wtt && !wtt.classList.contains("head-off")) out.push(wtt);
+    // ...and a FALL's heading, a line at a time as it has wrapped: its sparks are the section headings' own
+    if (menuEl && menuEl.classList.contains("show")) out.push(...menuBody.querySelectorAll(".glint-dead"));
     return out;
   }
   // Where each room's two glints sit. `ch` is the letter and `n` which one of it (1 is the first,
@@ -13113,7 +13400,8 @@
   };
   // ...and all of them nudged a hair off those spots, in font sizes: negative is left, and up.
   const HEAD_GLINT_NUDGE = { x: -0.05, y: -0.05 };
-  const headRoom = el => el.id === "wintop-title" ? "tv"
+  const headRoom = el => el.classList.contains("glint-dead") ? "dead"
+                       : el.id === "wintop-title" ? "tv"
                        : ((/\bsec-(set|tal|shop)\b/.exec(el.className) || [])[1] || null);
   let _headSpark = null;
   // Every letter of a heading, as [text node, index] — spaces and the line break left out.
@@ -13126,6 +13414,14 @@
   // The heading's letters, and which of them each glint is on — worked out when its words change.
   function placeGlints(el) {
     const letters = headLetters(el), room = headRoom(el), out = [];
+    // A FALL's heading is different words every time, so its glints are not on set letters: the top middle of the
+    // second letter of its first line, and the bottom right of the last letter of its last (glintFirst/glintLast).
+    if (room === "dead") {
+      if (letters.length && el.dataset.glintFirst) { const [nd, i] = letters[Math.min(1, letters.length - 1)]; out.push({ node: nd, i, y: "top", x: "mid" }); }
+      if (letters.length && el.dataset.glintLast)  { const [nd, i] = letters[letters.length - 1];              out.push({ node: nd, i, y: "bottom", x: "right" }); }
+      el._glint = { text: el.textContent, room, spots: out };
+      return;
+    }
     for (const spec of (HEAD_GLINTS[room] || [])) {
       const hits = letters.filter(([nd, i]) => nd.textContent[i].toUpperCase() === spec.ch);
       const hit = spec.n < 0 ? hits[hits.length + spec.n] : hits[spec.n - 1];
@@ -13248,6 +13544,20 @@
   const PICK_TRACE_SHRINK = 0.75;                 // ...and how much smaller they are along its bottom (0.75 = a quarter size)
   let _pickTrace = null;                          // which square they are circling, and since when
   let _glowTrace = null;                          // ...and the same for the chapter just cleared
+  // The footer tabs' label type — what TILE SHOP is set in — read off the sheet (and again every second, so the footer
+  // lab moves it too). The map's SKIPPED is set in it.
+  let _footLbl = null, _footLblAt = -1e9;
+  function footerLabelFont() {
+    const now = performance.now();
+    if (!_footLbl || now - _footLblAt > 1000) {
+      _footLblAt = now;
+      const el = document.querySelector("#wintabs .wt-lbl"), cs = el && getComputedStyle(el);
+      _footLbl = { px: (cs && parseFloat(cs.fontSize)) || 10, weight: (cs && cs.fontWeight) || "400",
+                   ls: (cs && cs.letterSpacing && cs.letterSpacing !== "normal") ? cs.letterSpacing : "0.2px" };
+    }
+    return _footLbl;
+  }
+  const SKIP_LBL_UP = 0.10;                        // how far SKIPPED sits above its row's middle, in rows
   const DONE_GREEN = "#49d47c";                   // that chapter's ring and sparks: the rainbow's green...
   const SKIP_RED = "#f1645f";                     // ...or, for a chapter walked away from, the rainbow's red
   // A point on the edge of a rounded square (corner x0,y0, side s, corner radius r), `u` laps round
@@ -13622,21 +13932,25 @@
         ctx.save();
         ctx.globalAlpha = A * numK;
         ctx.fillStyle = "#ffffff";
-        // A chapter you went PAST rather than finished wears a cross instead of its number. It
-        // is still open and still playable — the number is not information you need about a
-        // place you have already been let into, and "unfinished" is.
-        if (!isDone(i) && (bestSkipped(best, i) || i < furthest)) {
-          const m = S*0.075, mx = x + w/2, my = y + w/2;
-          ctx.strokeStyle = "#ffffff"; ctx.lineWidth = Math.max(2, S*0.042); ctx.lineCap = "round";
-          ctx.beginPath();
-          ctx.moveTo(mx - m, my - m); ctx.lineTo(mx + m, my + m);
-          ctx.moveTo(mx + m, my - m); ctx.lineTo(mx - m, my + m);
-          ctx.stroke();
-        } else {
-          ctx.font = "900 " + Math.round(S*0.289) + "px " + UI_FONT;
-          ctx.textAlign = "center"; ctx.textBaseline = "middle";
-          ctx.letterSpacing = "0px";                    // a number is not a word
-          ctx.fillText(String(i + 1), x + w/2, y + w/2);
+        // A chapter you went PAST rather than finished keeps its number, in the middle as on every square, with SKIPPED
+        // set in its bottom row, in white, in the footer tabs' label type (footerLabelFont) — left off where it will not fit.
+        const numPx = Math.round(S*0.289);
+        ctx.font = "900 " + numPx + "px " + UI_FONT;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.letterSpacing = "0px";                      // a number is not a word
+        const lf = (!isDone(i) && (bestSkipped(best, i) || i < furthest)) ? footerLabelFont() : null;
+        let lblW = 0;
+        if (lf) { ctx.save(); ctx.font = lf.weight + " " + lf.px + "px " + UI_FONT; ctx.letterSpacing = lf.ls;
+                  lblW = ctx.measureText("SKIPPED").width; ctx.restore(); }
+        ctx.fillText(String(i + 1), x + w/2, y + w/2);       // the number stays in the middle of its square
+        // ...and SKIPPED sits dead in the middle of the square's BOTTOM ROW of pieces (it is a LEVEL_SWATCH grid), in
+        // white: centred on the row's middle by its ink rather than its line box, and nudged back by half its tracking,
+        // which canvas lays after the last letter as well
+        const rowH = w / LEVEL_SWATCH;
+        if (lf && lblW <= w*0.9 && lf.px <= rowH*0.95) {
+          ctx.font = lf.weight + " " + lf.px + "px " + UI_FONT; ctx.letterSpacing = lf.ls;
+          ctx.fillText("SKIPPED", x + w/2 + (parseFloat(lf.ls) || 0)/2,
+                       y + w - rowH/2 - rowH*SKIP_LBL_UP + inkNudge(ctx.font));   // ...up a smidge from dead centre
         }
         ctx.restore();
       }
@@ -13772,7 +14086,7 @@
   }
   // The heading, in the same extruded gold the title screen and the menus use.
   // CHAPTER N / COMPLETE, DRESSED AS THE TILEVERSE'S OWN HEADING — it is the Tileverse's screen it is
-  // written on. Everything #wintop-title wears in CSS, drawn here the same way: the Tileverse's blue;
+  // written on. Everything #wintop-title wears in CSS, drawn here the same way — except in green (WIN_HEAD_INK);
   // the five-step extrusion shaded from it (the same offsets and the same mixes to black as the
   // sheet's text-shadow); the soft black glow under it; the four-degree lean; the white shimmer
   // crossing it on the headings' 2.6s clock; and a spark in its blue locked to a set letter (see
@@ -13780,6 +14094,79 @@
   // upright, the tab bar's spark's size. `span` is the width the shimmer is laid across, so the two
   // lines share one band the way the two lines of a DOM heading do.
   const WIN_HEAD_MIX = [0.78, 0.71, 0.64, 0.57, 0.51];
+  // ...but in GREEN, not the Tileverse's blue: a chapter finished is the one thing the map marks in green (its ring,
+  // its halo and its sparks), so the words that say so wear it too — and a chapter SKIPPED is marked in the rainbow's
+  // red, so CHAPTER N / SKIPPED is red. The extrusion and the spark are shaded from it.
+  const WIN_HEAD_INK = (skip) => skip ? SKIP_RED : DONE_GREEN;
+  // ...and it SLIDES AWAY as the pan begins: up and off the top of the screen on the rising purse's own clock and ease
+  // (WIN.pan * WIN_HEAD_SLIDE, easeBoth), where it used to fade — while the TILEVERSE heading comes down to take its place.
+  const WIN_HEAD_SLIDE = 0.6;
+  // A SKIP'S LINE, under CHAPTER N / SKIPPED: the SKIP_QUIPS line winSkip picked, typed out on the canvas on TYPE's own
+  // clock — the gaps typeOut gives a chapter's card, and its blips — starting `at` ms into the beat (once SKIPPED has
+  // landed), `drop` heading-sizes under the second line. Set in the bylines' own type, read off the sheet (.menu-byline),
+  // wrapped on the whole line so nothing moves as it types, on the one black glow; it slides away with the heading.
+  // The beat then holds `read` ms more before it moves itself on.
+  const SKIP_BY = { at: 900, read: 1700, drop: 1.25, wrap: 0.84, maxW: 520 };
+  function skipTyping(P) {
+    if (!P.ty) {
+      const chars = [...String(P.quip || "")], at = [];
+      let t = 0;
+      chars.forEach((c, i) => {
+        at.push(t);
+        const next = chars[i + 1];
+        let gap = /\s/.test(c) ? TYPE.space : TYPE.letter;
+        if (/[,;:]/.test(c)) gap += TYPE.comma;
+        if (/[.!?]/.test(c) && (next == null || /\s/.test(next))) gap += TYPE.stop;
+        t += gap;
+      });
+      P.ty = { chars, at, total: t };
+      P.typed = 0;
+    }
+    return P.ty;
+  }
+  const skipHoldMs = (P) => { const ty = skipTyping(P);
+                              return ty.chars.length ? Math.max(WIN.beat, SKIP_BY.at + ty.total + SKIP_BY.read) : WIN.beat; };
+  let _bylineType = null;
+  function bylineType() {                         // .menu-byline's size, tracking, weight and ink, off a hidden probe
+    if (!_bylineType) {
+      const pr = document.createElement("p"); pr.className = "menu-byline";
+      pr.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;margin:0;";
+      pr.textContent = "x"; document.body.appendChild(pr);
+      const cs = getComputedStyle(pr);
+      _bylineType = { px: parseFloat(cs.fontSize) || 15, weight: cs.fontWeight || "400",
+                      ls: cs.letterSpacing && cs.letterSpacing !== "normal" ? cs.letterSpacing : "3px",
+                      ink: cs.color || "#fff1ea", lh: parseFloat(cs.lineHeight) || 0 };
+      pr.remove();
+    }
+    return _bylineType;
+  }
+  function drawSkipLine(P, y, k) {
+    const ty = skipTyping(P), n = P.typed || 0;
+    if (!(k > 0) || !n) return;
+    const bt = bylineType();
+    ctx.save();
+    ctx.globalAlpha = k;
+    ctx.font = bt.weight + " " + bt.px + "px " + UI_FONT; ctx.letterSpacing = bt.ls;
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    const maxW = Math.min(viewW*SKIP_BY.wrap, SKIP_BY.maxW), lines = [];
+    let cur = "";
+    for (const wd of ty.chars.join("").split(" ")) {
+      const next = cur ? cur + " " + wd : wd;
+      if (cur && ctx.measureText(next).width > maxW) { lines.push(cur); cur = wd; } else cur = next;
+    }
+    if (cur) lines.push(cur);
+    const lh = bt.lh || bt.px*1.5, y0 = y - (lines.length - 1)*lh/2;
+    let start = 0;
+    lines.forEach((ln, li) => {
+      const shown = Math.max(0, Math.min(ln.length, n - start));
+      start += ln.length + 1;                                  // ...and the space the wrap took
+      if (!shown) return;
+      const x = viewW/2 - ctx.measureText(ln).width/2, ly = y0 + li*lh + inkNudge(ctx.font), part = ln.slice(0, shown);
+      headGlowUnder(() => ctx.fillText(part, x, ly));
+      ctx.fillStyle = bt.ink; ctx.fillText(part, x, ly);
+    });
+    ctx.restore();
+  }
   // THE ONE BLACK GLOW, as layers of blur px and black: the section headings (the sheet's --head-glow carries the same
   // list), CHAPTER COMPLETE, and everything under it — the tally and its coin, the "+n" coming into it, the charm — all
   // with exactly the same settings and nothing extra on any of them. Change it in both places.
@@ -13810,7 +14197,7 @@
   }
   function winHeading(text, y, size, k, span, glint) {
     if (k <= 0) return;
-    const ink = tvBlueHex(), rgb = hexRGB(ink), A = Math.min(1, k);
+    const ink = WIN_HEAD_INK(!!(win && win.skip)), rgb = hexRGB(ink), A = Math.min(1, k);
     ctx.save();
     ctx.globalAlpha = A;
     ctx.font = "900 " + Math.round(size) + "px " + UI_FONT;
@@ -13919,7 +14306,16 @@
       // this point, and a beat you can sit in is what turns a cutscene into a moment.
       // A SKIP is not that. There is nothing here to sit with and nothing to acknowledge, so it
       // rests just long enough for the cross to land and takes itself on.
-      if (P.skip && done(WIN.beat)) { P.ph = "pan"; P.t = 0; slideWinHead(); }
+      if (P.skip) {
+        // ...typing its line a letter at a time on TYPE's clock, each letter the card's blip, and moving itself on
+        // once the line has had its time to be read (skipHoldMs)
+        const ty = skipTyping(P);
+        while (P.typed < ty.chars.length && P.t >= SKIP_BY.at + ty.at[P.typed]) {
+          if (/\S/.test(ty.chars[P.typed])) { try { Sound.typeBlip(!P.blipped); } catch (_) {} P.blipped = true; }
+          P.typed++;
+        }
+        if (done(skipHoldMs(P))) { P.ph = "pan"; P.t = 0; slideWinHead(); }
+      }
       // The payout's two moments. Fired HERE and not in the drawing, so each lands exactly once
       // however the frame rate wanders — and latched on the sequence itself, so they cannot
       // come round again.
@@ -14115,23 +14511,26 @@
     // One line at a time, the way the opening card does it. Both lines landing together is a
     // sign appearing; the number arriving and then the word for what happened to it is the
     // sequence telling you, which is what it has been doing all the way through.
-    // ...and none of it on a skip. The cross on the square says what happened; a gold heading
-    // over the top of it saying so again is the screen congratulating you on quitting.
-    const outK = P.skip ? 0
-               : P.ph === "pan" ? Math.max(0, 1 - P.t/(WIN.pan*0.45)) : (P.ph === "name" ? 1 : 0);
+    // ...and a SKIP gets it too: CHAPTER N / SKIPPED, in red, with a line typed out under it (drawSkipLine).
+    const slideMs = WIN.pan * WIN_HEAD_SLIDE;
+    const outK = P.ph === "pan" ? (P.t < slideMs ? 1 : 0) : (P.ph === "name" ? 1 : 0);
+    const gone = P.ph === "pan" ? easeBoth(Math.min(1, P.t / slideMs)) : 0;   // how far it has slid away
     if (outK > 0) {
       const size = Math.min(46, viewW*0.11);
       const inK = (at) => P.ph === "name" ? Math.min(1, Math.max(0, (P.t - at)/260)) : 1;
       // The ground they stand on, first — under the heading and under the tally, and carried
       // in and out on the same k, so it is never a dark bar over a map with nothing on it.
-      drawHeadFade(outK);
+      drawHeadFade(P.ph === "pan" ? Math.max(0, 1 - P.t/(WIN.pan*0.45)) : outK);   // the ground still fades
       // Level with every other header in the game — the Tileverse's, the shop's, the shelf's —
       // rather than a sixth of the way down a screen of its own. See headTextY.
       const hy = headTextY(size);
       const l1 = "Chapter " + (P.idx + 1), l2 = P.skip ? "Skipped" : "Complete";
       const span = winHeadingSpan([l1, l2], size);
-      winHeading(l1, hy, size, inK(0)*outK, span, { ch:"A", n: 1, y:"top", x:"mid" });
-      winHeading(l2, hy + size*1.15, size, inK(340)*outK, span, { ch:"E", n:-1, y:"bottom", x:"right" });
+      // up by as far as it takes to clear the top with the second line, its extrusion, spark and glow
+      const lift = gone * (hy + size*1.15 + size*1.2 + 60);
+      winHeading(l1, hy - lift, size, inK(0)*outK, span, { ch:"A", n: 1, y:"top", x:"mid" });
+      winHeading(l2, hy + size*1.15 - lift, size, inK(340)*outK, span, { ch:"E", n:-1, y:"bottom", x:"right" });
+      if (P.skip) drawSkipLine(P, hy + size*1.15 + size*SKIP_BY.drop - lift, outK);
       // ...and what you came away with, arriving after the words that name it. The WHOLE
       // game's purse, with this chapter's takings falling into it — see drawPurseTally. A skip
       // came away with nothing, and a tally under the word is the screen rubbing it in.
@@ -15134,24 +15533,26 @@
   // and stops when none is left in the document.
   const SHINE = { lapMs: 5200, size: 0.45, band: 0.10, fade: 0.40, edge: 0.05 };
   let _shineRaf = 0;
-  function shineLine(el) {
+  function shineLine(el, opts) {
     if (!el || el._shine) return;
     el.dataset.t = el.textContent;
     el.style.setProperty("--shine-ms", SHINE.lapMs + "ms");
     el.classList.add("shine-line");
+    if (opts && opts.spark === false) { el._shine = { cv: null }; return; }   // the shimmer alone, no rolling spark
     const cv = document.createElement("canvas"); cv.className = "shine-spark"; cv.setAttribute("aria-hidden", "true");
     el.appendChild(cv);
     el._shine = { cv, key: "", peaks: null, a: 0, t0: performance.now() };
     if (!_shineRaf) _shineRaf = requestAnimationFrame(shineTick);
   }
   function shineTick(ts) {
-    const els = [...document.querySelectorAll(".shine-line")].filter(e => e._shine);
+    const els = [...document.querySelectorAll(".shine-line")].filter(e => e._shine && e._shine.cv);
     if (!els.length) { _shineRaf = 0; return; }
     for (const el of els) shineDraw(el, ts);
     _shineRaf = requestAnimationFrame(shineTick);
   }
   function shineDraw(el, ts) {
-    const S = el._shine, cs = getComputedStyle(el);
+    const S = el._shine; if (!S || !S.cv) return;
+    const cs = getComputedStyle(el);
     const W = el.offsetWidth, H = el.offsetHeight;
     if (!(W > 0 && H > 0)) return;
     const fs = parseFloat(cs.fontSize) || 46, px = Math.max(1, window.devicePixelRatio || 1);
@@ -15385,6 +15786,7 @@
     drawJunctionMarks(ts);                        // over the coins: it is the thing you aim at
     drawMushGrow(ts);                             // ...and the tile the charm is making, over both
     drawShards();
+    drawButterflies(ts);
     drawPops();
     drawLights();
     drawTrail();                                  // worn light trail, under the runner
@@ -15739,9 +16141,13 @@
     const font = "900 " + P.fs2 + "px " + UI_FONT, restFont = "700 " + P.fs2 + "px " + UI_FONT;
     ctx.save();
     ctx.font = font;     const nw = ctx.measureText(num).width;
+    // THE COIN IS THE FIGURES' SIZE: exactly as tall as the digits' own ink (not the type's box, which stands well
+    // proud of it), so the icon and the number read as one size. A coin flying in lands at this size too.
+    ctx.textBaseline = "alphabetic";
+    const dm = ctx.measureText("0123456789"), inkH = dm.actualBoundingBoxAscent + dm.actualBoundingBoxDescent;
     ctx.font = restFont; const rw = ctx.measureText(rest).width;
     ctx.restore();
-    const cw = Math.round(P.fs2 * 1.15), gap = Math.round(P.fs2*0.55), padX = Math.round(P.fs*0.55);
+    const cw = Math.round(inkH > 0 ? inkH : P.fs2*0.72), gap = Math.round(P.fs2*0.55), padX = Math.round(P.fs*0.55);
     const w = padX*2 + cw + gap + nw + rw;
     const x = Math.round((viewW - w)/2);
     const textX = x + padX + cw + gap;
@@ -16528,14 +16934,15 @@
   //          travels along, so it always bites in the direction it is going.
   // No monster blocks placement, so there is no flag for it: you may lay track through any of
   // their cells and time the run instead.
+  // Every monster that HAS a colour wears one of the rainbow's six — the Rainbow trail's, the talismans' own.
   const MONSTER_KINDS = {
-    hrail:  { move:"rail",   split:"h", body:"#b24dff" },                 // was a horizontal saw
-    vrail:  { move:"rail",   split:"v", body:"#4dc9ff" },                 // was a vertical saw
-    patrol: { move:"path",   split:"h", body:"#b24dff" },                 // the waypoint walker
+    hrail:  { move:"rail",   split:"h", body:"#c37ef1" },                 // was a horizontal saw
+    vrail:  { move:"rail",   split:"v", body:"#4baff1" },                 // was a vertical saw
+    patrol: { move:"path",   split:"h", body:"#c37ef1" },                 // the waypoint walker
     // Round and round a ring — and it turns corners, so oars on two faces would be the wrong
     // two half the time. `banks:"all"` puts spikes on every face: the pair perpendicular to
     // travel row, the other pair simply bristle in and out with the stroke.
-    square: { move:"path", look:"rail", banks:"all", split:"h", body:"#ff9b3d" },
+    square: { move:"path", look:"rail", banks:"all", split:"h", body:"#f7933b" },
     // Hunts him down, but SWIMS like the rail pair: `look:"rail"` draws it with
     // banks of oars instead of jaws, and its banks turn with it — whichever way it is heading,
     // they sit on the two sides perpendicular to that.
@@ -16543,14 +16950,14 @@
     // only colour on it in its eyes. `eye` overrides the family rule that a face is drawn in
     // its owner's own colour — which on this one would be black eyes on a black panel.
     hunter: { move:"hunt", look:"rail", banks:"all", split:"h",
-              body:"#100f18", eye:"#ff2d2d" },
+              body:"#100f18", eye:"#f1645f" },
     // Hunts him exactly as the Hunter does — same chase, same claim on a square — but you only
     // see it on the DRIVE. Between thrusts it is not there, and it is just as lethal while it
     // is gone: you cannot watch it, so you have to hold where it was in your head. `ghost` is
     // read at draw time only; nothing about how it moves or what it touches changes.
     stealth: { move:"hunt", look:"rail", banks:"all", split:"h",
                body:"#cfd8ff", eye:"#6f7bd6", ghost:true },
-    trap:   { move:"trap",   split:"h", body:"#ff5c5c",                   // sits still and waits
+    trap:   { move:"trap",   split:"h", body:"#f1645f",                   // sits still and waits
               gap: 1.30 },                                               // ...yawning a tile wide
   };
   // It was the "wanderer" until it learned to hunt. Old level data still says so.
@@ -16564,9 +16971,9 @@
   // Read live, not latched: `msPerCell` moves by RAMP_PER_TILE (half a percent) per cleared
   // tile, which is far too small a step to see mid-stroke.
   const monPace = () => Math.max(90, (state && state.msPerCell) || 1000);
-  // How far off a thrust carries. Deliberately short: on a board with four rowers, one you can
-  // hear from three tiles away is a wall of noise carrying no information about any of them.
-  const SWISH_HEAR = 1.5;
+  // How far off a thrust carries: three tiles — the same as a trap's bite (MONSTER.hear) and a hunter's pulse
+  // (HEART_TILES) — so every monster on the board is heard from the same distance.
+  const SWISH_HEAR = 3;
   // One swish per thrust, wherever the thrust came from — a rail leg, a hunter's hop, a walker
   // crossing a leg of its route. It used to be the rail monsters alone, so the animals that
   // swim in exactly the same strokes made no sound at all.
@@ -16656,7 +17063,7 @@
     // His eyes are his own colour, not the family's ink — they read against the inscribed
     // panel they sit on, which is the only thing darker than he is. Unless the kind names one:
     // a body dark enough to BE the panel has to borrow a colour from somewhere.
-    const body = K.body || "#b24dff", eye = K.eye || body;
+    const body = K.body || "#c37ef1", eye = K.eye || body;
     // ---- the stroke -------------------------------------------------------------------
     // P runs 0..1 through one row. During the DRIVE the teeth are fully out and sweep
     // backwards along the rim; during the RECOVERY they pull in and slide forward again.
@@ -16783,7 +17190,7 @@
     // monsters wear it. The teeth read because they stand out into the gap against the board
     // behind, and the eyes read because they sit on the inscribed panel, which is the only
     // thing on him darker than he is.
-    const body = K.body || "#b24dff";
+    const body = K.body || "#c37ef1";
 
     ctx.save();
     ctx.translate(x, y);
@@ -17967,6 +18374,24 @@
     }
     ctx.restore();
   }
+  // A route's FADE ALONG ITS OWN CONTOUR, as a fill to cut it with (destination-in): full at the join, where it leaves
+  // the tile it is coming off (S[0]), and nothing at its end (S[last]) — along the line for a straight route, and round
+  // the arc for a turn (a conic gradient about the corner it bends round; a straight fade across it where a browser has
+  // no conic gradients).
+  function contourFade(S, C) {
+    const last = S.length - 1, a = S[0], b = S[last];
+    const lin = () => { const g = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+                        g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(1, "rgba(255,255,255,0)"); return g; };
+    if (last === 2 || !ctx.createConicGradient) return lin();
+    const O = { x: a.x + b.x - C.x, y: a.y + b.y - C.y };
+    const a0 = Math.atan2(a.y - O.y, a.x - O.x), a1 = Math.atan2(b.y - O.y, b.x - O.x);
+    let d = a1 - a0; while (d > Math.PI) d -= 2*Math.PI; while (d < -Math.PI) d += 2*Math.PI;
+    const q = Math.abs(d) / (Math.PI*2);
+    const g = ctx.createConicGradient(d >= 0 ? a0 : a1, O.x, O.y);   // it sweeps clockwise from its start
+    if (d >= 0) { g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(q, "rgba(255,255,255,0)"); g.addColorStop(1, "rgba(255,255,255,1)"); }
+    else        { g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(q, "rgba(255,255,255,1)"); g.addColorStop(1, "rgba(255,255,255,0)"); }
+    return g;
+  }
   function railPath(S) {                                // adds a subpath (caller does beginPath/stroke)
     ctx.moveTo(S[0].x, S[0].y);
     for (let k = 1; k < S.length; k++) ctx.lineTo(S[k].x, S[k].y);
@@ -18003,6 +18428,13 @@
   // ...and a second, for the junction's three-way mask. The options are stacked into it rather
   // than unioned, so the shared trunk builds up and the arms only one route reaches stay faint.
   const jMask = document.createElement("canvas");
+  const jEdge = document.createElement("canvas");      // ...and each route's edges, faded along their contour, laid on from
+  // The SPARK RACE as a junction is laid: one spark from the join to the end of each option, rolling, and HELD there.
+  const JUNCTION_RACE = { ms: 420, size: 0.25, small: 0.20, spin: 0.002, hold: 1.00 };   // how long the race takes; the
+                                                     // spark's size leaving the join, in tiles; the share of it left where
+                                                     // it stops; how fast it keeps turning there, radians a ms; and how far
+                                                     // along its route it stops, as a share of the way to the edge
+  let _juncRace = { key: null, t0: 0 };
   // the leading tile renders as a 3-way junction: three real platform pieces
   // oriented to the travel direction — a flat run forward, plus a curve each way
   // (up / down relative to travel) — signalling the path isn't set yet.
@@ -18081,35 +18513,52 @@
       if (jMask.width !== px) { jMask.width = jMask.height = px; }
       const mg = jMask.getContext("2d");
       const mix = [JUNCTION.left, JUNCTION.ahead, JUNCTION.right];   // same order as `exits`
+      // EACH ROUTE A LAYER OF ITS OWN — its earth and its contour together — laid down in the order RIGHT, STRAIGHT, LEFT,
+      // each over the one before, so where two run together the later one's earth and contour lie over the earlier's. The
+      // earth fades along the way he is travelling: full where the tile meets the one he is coming off, nothing at its leading
+      // edge. The contour — shading and lip, at a laid tile's strength — fades to nothing along its own route (contourFade).
+      // All of it is cut to the route's own shape before it is laid on. (The routes' weights only say which routes are there.)
+      if (jEdge.width !== px) { jEdge.width = jEdge.height = px; }
+      const eg = jEdge.getContext("2d");
       for (const i of [2, 1, 0]) {
-        const w = Math.max(0, Math.min(1, mix[i]));
-        if (w <= 0) continue;
+        if (!(mix[i] > 0)) continue;
         const S = surfaces[i];
+        // the contour, next door, faded along its route
+        eg.setTransform(1, 0, 0, 1, 0, 0); eg.clearRect(0, 0, px, px);
+        eg.setTransform(dpr, 0, 0, dpr, -DX, -DY);
+        { const was = ctx; ctx = eg;
+          if (TILE.pathW > 0 && TILE.shadowW > 0) {
+            ctx.fillStyle = tintHex(track, TILE.underHue, TILE.underSat, TILE.underShade + TILE.shadowShade);
+            ctx.beginPath(); surfaceBand(S, C, cell*(TILE.pathW + TILE.shadowW)); ctx.fill();
+          }
+          if (TILE.pathW > 0) {
+            ctx.fillStyle = track;
+            ctx.beginPath(); surfaceBand(S, C, cell*TILE.pathW); ctx.fill();
+          }
+          surfaceEdge(X, Y, S, C);
+          ctx.globalCompositeOperation = "destination-in";
+          ctx.fillStyle = contourFade(S, C); ctx.fillRect(X, Y, cell, cell);
+          ctx.globalCompositeOperation = "source-over";
+          ctx = was; }
+        // the layer: its earth faded to the leading edge, the contour over it, all of it cut to this route
         mg.setTransform(1, 0, 0, 1, 0, 0); mg.clearRect(0, 0, px, px);
-        mg.setTransform(dpr, 0, 0, dpr, -DX, -DY);       // the board's own world coordinates, so
-        const was = ctx; ctx = mg;                       // a skin keyed off world x/y lines up
-        ctx.fillStyle = groundColour(track);
-        ctx.fillRect(X, Y, cell, cell);                               // the ground...
-        drawGround(X, Y, cell, n.c, n.r);                             // ...and the worn skin on it
-        if (TILE.pathW > 0 && TILE.shadowW > 0) {
-          ctx.fillStyle = tintHex(track, TILE.underHue, TILE.underSat, TILE.underShade + TILE.shadowShade);
-          ctx.beginPath(); surfaceBand(S, C, cell*(TILE.pathW + TILE.shadowW)); ctx.fill();
-        }
-        if (TILE.pathW > 0) {
-          ctx.fillStyle = track;
-          ctx.beginPath(); surfaceBand(S, C, cell*TILE.pathW); ctx.fill();
-        }
-        grainFill(X, Y, cell, cell, JUNCTION.grain);
-        surfaceEdge(X, Y, S, C);
-        // cut the whole thing to this one route. A clip would do it, but the ground carries an
-        // alpha of its own (TILE.strata) and this keeps every pixel of that intact.
-        ctx.globalCompositeOperation = "destination-in";
-        ctx.fillStyle = "#ffffff"; ctx.beginPath(); bodyPath(S, C); ctx.fill();
-        ctx.globalCompositeOperation = "source-over";
-        ctx = was;
-        ctx.globalAlpha = w;
-        ctx.drawImage(jMask, DX/dpr, DY/dpr, px/dpr, px/dpr);
-        ctx.globalAlpha = 1;
+        mg.setTransform(dpr, 0, 0, dpr, -DX, -DY);
+        { const was = ctx; ctx = mg;
+          ctx.fillStyle = groundColour(track);
+          ctx.fillRect(X, Y, cell, cell);                               // the ground...
+            drawGround(X, Y, cell, n.c, n.r);                             // ...and the worn skin on it
+          grainFill(X, Y, cell, cell, JUNCTION.grain);
+          ctx.globalCompositeOperation = "destination-in";
+          const gd = ctx.createLinearGradient(C.x - din.x*cell/2, C.y - din.y*cell/2, C.x + din.x*cell/2, C.y + din.y*cell/2);
+          gd.addColorStop(0, "rgba(255,255,255,1)"); gd.addColorStop(1, "rgba(255,255,255,0)");
+          ctx.fillStyle = gd; ctx.fillRect(X, Y, cell, cell);           // ...faded to its leading edge
+          ctx.globalCompositeOperation = "source-over";
+          ctx.drawImage(jEdge, DX/dpr, DY/dpr, px/dpr, px/dpr);         // ...with its contour on it
+          ctx.globalCompositeOperation = "destination-in";
+          ctx.fillStyle = "#ffffff"; ctx.beginPath(); bodyPath(S, C); ctx.fill();   // ...cut to this route
+          ctx.globalCompositeOperation = "source-over";
+          ctx = was; }
+        ctx.drawImage(jMask, DX/dpr, DY/dpr, px/dpr, px/dpr);           // ...and laid over the ones before it
       }
       // No back-to-front fade any more. It was doing the same job the weighted stack does —
       // saying "this ground has not settled" — and doing it along a different axis, so the two
@@ -18129,6 +18578,27 @@
       ctx.restore();
     } finally { ctx = main; }
     ctx.drawImage(jScratch, DX/dpr, DY/dpr, px/dpr, px/dpr);
+    // ...and as it is laid: a spark RACING from the join to the end of each option, rolling and shrinking as it goes, and
+    // then HELD on the tile's edge (JUNCTION_RACE.hold), small and still turning, while this is the front of the track
+    // (JUNCTION_RACE). A new junction races anew.
+    const raceKey = n.c + "," + n.r + "," + (prev ? prev.c + "," + prev.r : "");
+    if (_juncRace.key !== raceKey) _juncRace = { key: raceKey, t0: ts };
+    const ru = (ts - _juncRace.t0) / JUNCTION_RACE.ms;
+    if (ru >= 0) {
+      const rk = Math.min(1, ru), re = 1 - (1 - rk)*(1 - rk), rsz = cell * JUNCTION_RACE.size;   // off fast, easing into the edge
+      const weights = [JUNCTION.left, JUNCTION.ahead, JUNCTION.right];
+      surfaces.forEach((S, i) => {
+        if (!(weights[i] > 0)) return;
+        const go = re * JUNCTION_RACE.hold;                            // how far along its route it has got
+        const p = samplePolyline(S, go), run = (S.length === 3 ? cell : Math.PI*cell/4) * go;
+        ctx.save();
+        const held = Math.max(0, ts - _juncRace.t0 - JUNCTION_RACE.ms);
+        ctx.translate(p.x, p.y);
+        ctx.rotate(run / (rsz * TAB_SPARK_ROLL) + held * JUNCTION_RACE.spin);   // rolling by the ground covered, then turning on the spot
+        drawSpark(ctx, 0, 0, rsz * (1 - (1 - JUNCTION_RACE.small) * re), ts, { alpha: 1, col: "#ffffff", seed: 0.21 + i*0.3 });
+        ctx.restore();
+      });
+    }
   }
 
   // A marker in each cell you can actually build into: a square ring — a half-tile square with
@@ -20364,6 +20834,7 @@
     radius:     0.000,   // corner radius, fraction of a cell
     glassA:     0.50,    // the pane's flat fill alpha
     glassGrain: 1.00,    // paper grain over the pane
+    glassDark:  0.45,   // how much darker the pane is than its old lilac, 0 = as it was
     bodyGrain:  1.00,    // paper grain over a laid platform body
     railW:      0.075,   // running-surface rail thickness, fraction of a cell
     pathW:      0.000,   // the beam directly under the rail, in the track colour
@@ -20379,11 +20850,11 @@
     // bands hanging off the surface, each shallower than the last, so the falloff contours
     // whichever way the surface bends.
     edgeDepth:  0.150,   // how far down from the surface it reaches, fraction of a cell
-    edgeA:      0.300,   // ...and how strong it is where it meets the surface
+    edgeA:      0.450,   // ...and how strong it is where it meets the surface
     edgeInk:    1.000,   // 1 white, 0 black, and every grey between
     edgeGrain:  1.000,
     edgeTip:    0.200,   // the bright rim: how deep it runs, as a fraction of the lip's depth
-    edgeTipA:   0.450,   // ...and how much white it adds on top of the lip, at the surface   // paper texture over it, so it reads as a worn edge and not an airbrush
+    edgeTipA:   0.700,   // ...and how much white it adds on top of the lip, at the surface   // paper texture over it, so it reads as a worn edge and not an airbrush
   };  const tileR = s => s * TILE.radius;
   // The running surface, off. Every measurement of it stays — TILE.railW, railPath, the round
   // caps, the way the junction lays three of them across one tile — and so does every routine
@@ -20443,7 +20914,7 @@
       x1 = Math.max(x1, x + cell); y1 = Math.max(y1, y + cell);
     }
     ctx.clip();
-    ctx.fillStyle = "rgba(180,174,235," + TILE.glassA + ")";
+    ctx.fillStyle = glassFill();                      // the same darkened pane as a loose tile
     ctx.fillRect(x0, y0, x1-x0, y1-y0);
     grainFill(x0, y0, x1-x0, y1-y0, TILE.glassGrain);
     ctx.restore();
@@ -20464,10 +20935,15 @@
   const SPARE_SHEEN = "255,255,255";
   // The eight outer cells of the 3x3 grip, clockwise from the top: the order they light in.
   const SPARE_WHEEL = [[0,-1], [1,-1], [1,0], [1,1], [0,1], [-1,1], [-1,0], [-1,-1]];
+  // THE GLASS: the pane's colour, darkened by TILE.glassDark.
+  function glassFill() {
+    const k = 1 - Math.max(0, Math.min(1, TILE.glassDark || 0));
+    return "rgba(" + Math.round(180*k) + "," + Math.round(174*k) + "," + Math.round(235*k) + "," + TILE.glassA + ")";
+  }
   function drawGlass(x, y, s) {
     ctx.save();
     rrect(x, y, s, s, tileR(s)); ctx.clip();
-    ctx.fillStyle = "rgba(180,174,235," + TILE.glassA + ")";   // flat matte paper fill (no gloss/sheen)
+    ctx.fillStyle = glassFill();                      // flat matte paper fill (no gloss/sheen), darkened
     ctx.fillRect(x, y, s, s);
     grainFill(x, y, s, s, TILE.glassGrain);           // paper grain on the tile
     ctx.restore();
@@ -20791,6 +21267,7 @@
         tickFallCam(dt);
       }
       updateShards(dt);
+      updateButterflies(dt);
       tickStarDust(dt);
       tickFx(dt);
       tickHeartbeat(dt);
@@ -23508,7 +23985,14 @@
         // way a chapter's card does (typeOut), a line break's pause between its halves. Only once the last letter is
         // down do the two answers and the way out arrive, in their order.
         const heads = splitLines(head);
-        heads.forEach(shineLine);                          // ...each line shining, and a spark along its tops
+        // ...each line shining (the white shimmer alone), with the section headings' two sparks on it in its red: on the
+        // top of the second letter of its first line, and the bottom right of the last letter of its last (drawHeadSparks)
+        heads.forEach((ln, i) => {
+          if (i === 0) ln.dataset.glintFirst = "1";
+          if (i === heads.length - 1) ln.dataset.glintLast = "1";
+          ln.classList.add("glint-dead");
+          shineLine(ln, { spark: false });
+        });
         heads.forEach((ln, i) => {
           ln.style.setProperty("--fly-from", (i % 2 ? 1 : -1) * FELL_FLY.reach + "vw");
           ln.style.animation = "fell-fly " + FELL_FLY.ms + "ms cubic-bezier(.2,.8,.25,1) both";
@@ -23599,7 +24083,7 @@
     drop: (id, c, r) => dropTileOn(state.tiles[id], c, r),
     cam: () => ({ camX, camY, cell, viewW, viewH, worldW, worldH }),
     mechs: () => Object.keys(MECHS),
-    mech: (type, g, S) => drawMechIcon(g, type, S),
+    mech: (type, g, S, ts) => drawMechIcon(g, type, S, ts),   // (ts: the moment of an animal's demo)
     // scrub the opening cinematic: cine() reads the clock, cine(ms) jumps to a beat.
     // Handy for retiming CINE without sitting through the whole thing.
     cine: (ms) => { if (ms == null) return cineT; startCine(cineNext); cineT = ms; return cineT; },
@@ -24504,8 +24988,9 @@
   }
   // Which net, and where it lies in the cloud. Every rolling order gives a different net, and
   // every net can be seated at a lot of places; the one that wins covers the earliest levels,
-  // because the sides of the Tiloid ought to be the front of the campaign.
-  function cineBuildNet(C){
+  // because the sides of the Tiloid ought to be the front of the campaign. Given `near` (a cell), the one
+  // that wins sits nearest it instead: the opening seats it in the MIDDLE of the cloud.
+  function cineBuildNet(C, near){
     const perms = [];
     (function perm(a, rest){ if (!rest.length) { perms.push(a); return; }
       for (let i = 0; i < rest.length; i++) perm(a.concat(rest[i]), rest.slice(0,i).concat(rest.slice(i+1))); })([], [0,1,2,3]);
@@ -24547,7 +25032,7 @@
         for (const i of ids) {
           const j = C.at.get((faces[i].c - mc + dc) + "," + (faces[i].r - mr + dr));
           if (j == null) { ok = false; break; }
-          score += j;
+          score += near ? (C.cells[j].c - near.c)**2 + (C.cells[j].r - near.r)**2 : j;
         }
         if (ok && (!best || score < best.score)) best = { score, order, M, dc: dc - mc, dr: dr - mr };
       }
@@ -25430,7 +25915,7 @@
     size:   1.00,    // how big he is, in the tiles he runs on (playCell) — 1 is his size in a level
     spark:  0.55,    // the spark behind him, in his size...
     sparkA: 0.70,    // ...and how bright it is — enough to be a halo, not so much he is lost in it
-    cube:   0.42,    // the cube's edge, as a share of the screen's short side — it gives way to the room
+    cube:   0.30,    // the cube's edge, as a share of the screen's short side — it gives way to the room
                      //   between the words and the prompt, and never to him
     tilt:  -0.42,    // the cube's tip toward us, radians
     spinMs: 21000,   // one turn of the cube
@@ -25528,11 +26013,42 @@
   // that one mirrored through the cube's middle (every bit of its corner flipped), which is also always
   // on an edge. Each is drawn in the pass it is on the side of — behind him or in front — and `sparkA`
   // fades them (the opening lets them go as the cube begins to open).
+  // THE CUBE'S GLASS: every side a pane of rainbow glass. The six core colours are laid across each pane corner to
+  // corner and slide slowly through it — each side a sixth of the way round from the last, so no two neighbours match —
+  // and a white shimmer sweeps across every pane in turn. See-through, so he shows through the near side; the far side
+  // is fainter still (`back`). `quads` are screen corners, `ids` which side each is, `A` the fade.
+  const CUBE_GLASS = { a: 0.26, back: 0.55, slideMs: 7000, shineMs: 2800, shineA: 0.60, band: 0.16,
+                       cols: ["#f1645f", "#f7933b", "#f6cd28", "#49d47c", "#4baff1", "#c37ef1"] };
+  function drawCubeGlass(quads, ids, A, ts) {
+    if (!(A > 0.004) || !quads.length) return;
+    const G = CUBE_GLASS, n = G.cols.length;
+    quads.forEach((q, j) => {
+      const id = ids[j] || 0, [x0, y0] = q[0], [x2, y2] = q[2], dx = x2 - x0, dy = y2 - y0;
+      const path = () => { ctx.beginPath(); ctx.moveTo(q[0][0], q[0][1]);
+                           for (let k = 1; k < q.length; k++) ctx.lineTo(q[k][0], q[k][1]); ctx.closePath(); };
+      ctx.save();
+      // the colours: two rounds of them laid over twice the pane's diagonal and slid back by one, so it loops seamlessly
+      const slide = ((ts / G.slideMs) + id/6) % 1;
+      const gd = ctx.createLinearGradient(x0 - dx*slide, y0 - dy*slide, x0 + dx*(2 - slide), y0 + dy*(2 - slide));
+      for (let k = 0; k <= 2*n; k++) gd.addColorStop(k/(2*n), G.cols[(k + id) % n]);
+      ctx.globalAlpha = A * G.a; ctx.fillStyle = gd; path(); ctx.fill();
+      // ...and the shimmer, a white band crossing the pane on its own staggered clock
+      const p = ((ts / G.shineMs) + id*0.17) % 1 * (1 + 4*G.band) - 2*G.band, at = v => (v + 1)/3;
+      const sh = ctx.createLinearGradient(x0 - dx, y0 - dy, x0 + dx*2, y0 + dy*2);
+      sh.addColorStop(at(p - G.band), "rgba(255,255,255,0)");
+      sh.addColorStop(at(p), "rgba(255,255,255," + G.shineA + ")");
+      sh.addColorStop(at(p + G.band), "rgba(255,255,255,0)");
+      ctx.globalAlpha = A; ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = sh; path(); ctx.fill();
+      ctx.restore();
+    });
+  }
   const CUBE_WALK = [0, 1, 3, 2, 6, 7, 5, 4];
   const CUBE_SPARK = { edgeMs: 1800, size: 0.16 };  // one edge takes this long; the size is in cube edges
-  function drawCubeWire(V, A, back, sparkA) {
+  function drawCubeWire(V, A, back, sparkA, glassA) {
     const C = []; for (let i = 0; i < 8; i++) C.push(cineProj([i & 1, (i >> 1) & 1, (i >> 2) & 1], V));
-    const quads = CUBE_FACES.filter(f => (f.reduce((z, i) => z + C[i][2], 0) > 0) === back).map(f => f.map(i => C[i]));
+    const ids = CUBE_FACES.map((f, j) => j).filter(j => (CUBE_FACES[j].reduce((z, i) => z + C[i][2], 0) > 0) === back);
+    const quads = ids.map(j => CUBE_FACES[j].map(i => C[i]));
+    drawCubeGlass(quads, ids, A * (glassA == null ? 1 : glassA) * (back ? CUBE_GLASS.back : 1), performance.now());
     wireQuads(quads, V.S, A * (back ? 0.55 : 1), CUBE_WIRE_K, back ? null : "#ffffff");   // far side blue, near side white
     const sa = A * (sparkA == null ? 1 : sparkA) * (back ? 0.55 : 1);
     if (!(sa > 0.004)) return;
@@ -25578,8 +26094,9 @@
     drawCubeWire(V, A, false);                                     // ...and the near ones, in front
   }
   // ---- THE OPENING ---------------------------------------------------------------------------------
-  // The angel in the cube wakes, straightens into flight and rises; the cube unfolds into the Tileverse
-  // under him, grey; the six talismans spiral in from off the screen and ring him; one by one they fly
+  // The glass cube, the angel asleep in it, floats to the middle of the room; he trembles as something builds, and
+  // on a BOOM wakes and goes up like a rocket as the cube bursts open — the Tileverse unfolding out of it square after
+  // square from the middle of its cloud, grey; the six talismans spiral in from off the screen and ring him; one by one they fly
   // down and slam into the chapters they hide in, and each landing colours the pieces of the map that
   // talisman's paint most colours; he flies to chapter one, the angel dissolves into what he wears, and
   // he drops into it as the camera whips in to black — and chapter one comes up out of it.
@@ -25588,25 +26105,31 @@
   // (drawMap, lit a piece at a time), the talismans as the Holy Talismans page dresses them
   // (drawFeaturedCharm, shedGlitter), the square pulse, and the map's own fade out of black.
   const OPENING = {
-    wake:    [   0,  900],   // eyes open, and out of the lotus into flight
-    rise:    [ 500, 1700],   // he rises up out of the cube, to float above it...
-    unfold:  [1900, 4800],   // ...and only then does the cube open flat
-    grow:    [4800, 7400],   // ...and the rest of the Tileverse unfolds out of it, in wireframe
-    settle:  [3000, 6000],   // he drifts to float just over the top of it, where he stays until chapter one
-    curl:    [7700, 8300],   // the Tileverse lies there unfolded, and he curls up into a ball...
-    build:   [8300, 10800],  // ...and something builds in him: a thrum, a tremble, the screen shaking harder
-    burst:   10800,          // ...until he flies open, his colour drained and his spark out...
+    drift:   [   0, 2600],   // the glass cube, him asleep in it, floats slowly from the title's spot to the middle of the room
+    tense:   [2600, 5600],   // ...where he begins to tremble, a thrum building under him and the screen starting to shake
+    boom:    5600,           // BOOM: he wakes and goes up like a rocket, and the cube bursts open under him
+    wake:    [5600, 5900],   // eyes open, and out of the lotus into flight
+    rise:    [5600, 6250],   // the rocket, up to float over the top of the Tileverse, where he stays until chapter one
+    unfold:  [5600, 7600],   // the cube opening flat...
+    grow:    [7600, 10800],  // ...and the Tileverse unfolding out of it, square after square from the middle outward —
+                             //   begun as the cube's sides land, and its last square down at the end of this (openDomino)
+    curl:    [11100, 11700], // the Tileverse lies there unfolded, and he curls up into a ball...
+    build:   [11700, 14200], // ...and something builds in him: a thrum, a tremble, the screen shaking harder
+    burst:   14200,          // ...until he flies open, his colour drained and his spark out...
     splayMs:   160,          //    (how long the flinging open takes)
-    gather:  [10800, 11700], // ...and the six talismans burst out of him and ring him
-    slam0:   15000,          // the ring turns, slowing all the while to a crawl, and then the first flies down
+    gather:  [14200, 15100], // ...and the six talismans burst out of him and ring him
+    slam0:   18400,          // the ring turns, slowing all the while to a crawl, and then the first flies down
     slamEach:  760,          // ...and each after it this much later
     slamFly:   430,          // the flight down, of that
-    toOne:   [19800, 21000], // he flies to float over chapter one, gathering his legs back under him
-    fall:    [21300, 22100], // he drops in, and the camera whips in after him to black
-    end:      22150,
+    toOne:   [23200, 24400], // he flies to float over chapter one, gathering his legs back under him
+    fall:    [24700, 25500], // he drops in, and the camera whips in after him to black
+    end:      25550,
     spinMs:    2600,         // one turn of the ring, at the speed they come out of him at...
     crawl:     0.04,         // ...and the share of that they have slowed to by the time the first flies
-    above:     1.15,         // how far over the cube's middle he rises, in the cube's edge
+    tenseShake:   0.05,      // how hard the screen is shaking by the end of the tension, in tiles
+    boomShake:    0.45,      // ...and the throw of the boom
+    tenseTremble: 0.07,      // how hard HE shakes by then, in his size
+    tenseSpark:   0.50,      // ...and how much bigger his spark has grown
     shake:     0.18,         // how hard each landing throws the screen, in tiles (the game's own shake)
     buildShake: 0.10,        // how hard the screen is shaking at the top of the build, in tiles
     burstShake: 0.40,        // ...and the throw of the burst itself
@@ -25615,6 +26138,10 @@
     oneGap:    0.90,         // how far over chapter one's top edge his feet float at the end, in its squares...
     oneSize:   0.50,         // ...and how big he has shrunk to by then, against his size the rest of the way
     wireOutMs:  700,         // the wireframe fading off the finished, coloured Tileverse after the last landing
+    domino:    { pop: 360, lead: 0.80, slow: 0.22, after: 0.40 },   // the unfolding's wave (openDomino): one square's
+                             //   swing near the start (ms, before it is fitted to `grow`), how far down the square it hangs off
+                             //   is before it starts, how much slower each ring further out swings, and the earliest it may
+                             //   start, as a share of the cube's unfold
     sparks:    { n: 7, size: 0.42, msPerSquare: 400, gapMs: 500, edgeMs: 1500 },   // along the wireframe: how
                              //   many at once, how big (in its squares), how fast they chart a line, the rest
                              //   between — and, while it is still unfolding, how long one takes over an edge
@@ -25677,20 +26204,78 @@
       ctx.restore();
     }
   }
+  // THE DOMINO: when each square of the Tileverse swings out, on the opening's own clock. It flows straight on from the
+  // cube — the squares hanging off each of its sides start swinging the moment that side lands, while the rest of the
+  // cube is still opening — and after that a square starts once the one it hangs off is `lead` of the way down. Every
+  // ring further out from where it began swings `slow` slower than the one before, so the wave eases off as it reaches
+  // the edge. Each square hangs off its neighbour one ring nearer the start that lies most nearly between it and the
+  // start, so it swings out AWAY from where it all began. The whole thing is fitted to land its last square on
+  // OPENING.grow[1], so the beats after it keep their places whatever shape the cloud is.
+  function openDomino(C, N) {
+    const n = C.n, D = OPENING.domino, U = OPENING.unfold, span = U[1] - U[0];
+    const depth = new Array(n).fill(-1), start = new Array(n).fill(0), pop = new Array(n).fill(0), land = new Array(n).fill(0);
+    // the cube's sides land on the unfold's own schedule (cineFoldFaces, on this clock)
+    const each = span / (0.85*N.maxDepth + 0.15);
+    for (const id of N.order) { const F = N.faces[id], i = F.cloud;
+      depth[i] = 0; land[i] = F.parent < 0 ? U[0] : U[0] + (F.depth - 1)*each*0.85 + each; }
+    // ...then the rings, outward from them
+    const seeds = N.order.map(id => N.faces[id].cloud);
+    let sx = 0, sy = 0;
+    for (const i of seeds) { sx += C.cells[i].c + 0.5; sy += C.cells[i].r + 0.5; }
+    sx /= seeds.length; sy /= seeds.length;
+    const q = seeds.slice();
+    for (let h = 0; h < q.length; h++) {
+      const p = C.cells[q[h]];
+      for (const [dc, dr] of DIRS) {
+        const j = C.at.get((p.c + dc) + "," + (p.r + dr));
+        if (j != null && depth[j] < 0) { depth[j] = depth[q[h]] + 1; q.push(j); }
+      }
+    }
+    for (let i = 0; i < n; i++) if (depth[i] < 0) { depth[i] = 1; q.push(i); C.parent[i] = -1; }   // (an island)
+    for (const j of q) {
+      if (depth[j] <= 0) continue;
+      const p = C.cells[j], tx = sx - (p.c + 0.5), ty = sy - (p.r + 0.5), tl = Math.hypot(tx, ty) || 1;
+      let best = -1, bestDot = -2;
+      for (const [dc, dr] of DIRS) {
+        const k = C.at.get((p.c + dc) + "," + (p.r + dr));
+        if (k == null || depth[k] !== depth[j] - 1) continue;
+        const dot = (dc*tx + dr*ty) / tl;
+        if (dot > bestDot) { bestDot = dot; best = k; }
+      }
+      if (best >= 0) C.parent[j] = best;
+    }
+    const sched = (f) => {
+      let last = 0;
+      for (const j of q) {
+        if (depth[j] === 0) continue;
+        const par = C.parent[j], pd = f * D.pop * Math.pow(1 + D.slow, depth[j] - 1);
+        const from = par >= 0 ? land[par] : U[1];
+        const lead = par >= 0 && depth[par] === 0 ? 1 : D.lead;       // off a side of the cube: once it is down
+        start[j] = Math.max(U[0] + span*D.after, from - pd*(1 - lead));
+        pop[j] = pd; land[j] = start[j] + pd;
+        last = Math.max(last, land[j]);
+      }
+      return last;
+    };
+    let lo = 0.05, hi = 20;
+    for (let it = 0; it < 40; it++) { const mid = (lo + hi)/2; if (sched(mid) > OPENING.grow[1]) hi = mid; else lo = mid; }
+    sched(lo);
+    C.oStart = start; C.oPop = pop; C.oLand = land; C.oDepth = depth;
+  }
   function startOpening(next){
     openActive = true; openNext = next || "level"; openT = 0; openFired = 0; openHold = false;
     cineCloud = cineBuildCloud(mapCells());           // the old film's cloud and net, as they are — on the
                                                       // map's own squares, so the wireframe lands on its chapters
-    cineNet = cineCloud ? cineBuildNet(cineCloud) : null;
+    // ...but seated in the MIDDLE of the cloud, so the Tileverse begins in the middle of itself and unfolds outward
+    cineNet = cineCloud ? cineBuildNet(cineCloud, { c: (cineCloud.cols - 1)/2, r: (cineCloud.rows - 1)/2 }) : null;
     if (cineNet) cineSeedGrowth(cineCloud, cineNet.seeds); else cineCloud = null;
     openCloud = cineCloud; openNet = cineNet;
+    if (openCloud && openNet) openDomino(openCloud, openNet);
     openRuns = openCloud ? openLineRuns(openCloud.cells) : [];
     openRunsMax = Math.max(1, ...openRuns.map(u => Math.abs(u[2] - u[0]) + Math.abs(u[3] - u[1])));
-    // ...and the old film's unfolding sound, as it is: a flap for every square that comes down flat,
-    // the cube's six faces and every tile after them (cineBuildFlaps), moved off its clock onto this one.
-    const onto = (x, from, to) => to[0] + (x - from[0]) / Math.max(1, from[1] - from[0]) * (to[1] - to[0]);
-    openFlaps = cineBuildFlaps().map(x => x <= CINE.unfold[1] ? onto(x, CINE.unfold, OPENING.unfold)
-                                                              : onto(x, CINE.grow, OPENING.grow));
+    // ...and the old film's unfolding sound: a flap for every square that comes down flat, the cube's six sides and
+    // every square after them — on the domino's own schedule (openDomino).
+    openFlaps = openCloud && openCloud.oLand ? openCloud.oLand.slice().sort((a, b) => a - b) : [];
     openFlapI = 0;
     openRot0 = titleCubeRot(performance.now());       // where the title's cube was when you tapped
     openOwner = new Map();
@@ -25721,8 +26306,11 @@
       go: OPENING.slam0 + n*OPENING.slamEach, hit: OPENING.slam0 + n*OPENING.slamEach + OPENING.slamFly }));
   const OPEN_LIFT = 700;                             // cents: the shelf's own lift (see its tap handler)
   const OPEN_EVENTS = () => [
-    { at: OPENING.wake[0] + 60, fn: () => Sound.introFlash && Sound.introFlash() },
-    { at: OPENING.unfold[0],    fn: () => Sound.airSwish && Sound.airSwish() },
+    { at: OPENING.tense[0],     fn: () => { const ms = OPENING.boom - OPENING.tense[0];
+                                            Sound.rumble && Sound.rumble(ms); Sound.charmGrow && Sound.charmGrow(ms); } },
+    { at: OPENING.boom,         fn: () => { Sound.boom && Sound.boom(); Sound.introFlash && Sound.introFlash();
+                                            Sound.flyWhoosh && Sound.flyWhoosh(OPENING.rise[1] - OPENING.rise[0]);
+                                            haptic([30, 30, 50]); } },
     { at: OPENING.curl[0],      fn: () => Sound.airSwish && Sound.airSwish() },
     { at: OPENING.build[0],     fn: () => { const ms = OPENING.build[1] - OPENING.build[0];
                                             Sound.rumble && Sound.rumble(ms); Sound.charmGrow && Sound.charmGrow(ms); } },
@@ -25780,17 +26368,19 @@
     const r = mapRect(0, M.S, M.cx0, M.cy0);
     return { x: r.x + r.w/2, y: r.y - M.S*OPENING.oneGap, s: titleSceneAt(performance.now()).s * OPENING.oneSize };
   }
-  // ...and just over the top of the title's cube, which is where he rises to before it opens.
-  function openAbove(){ const T0 = titleSceneAt(performance.now());
-    const mid = T0.y - T0.s*(RUNNER.legLen + RUNNER.bodyH*0.5);
-    return { x: T0.x, y: mid - T0.cube*OPENING.above, s: T0.s }; }
-  // His place at time t: the title's spot, up out of the cube, down to the hover over the map, over
-  // to chapter one, and down into it.
+  // ...and the glass cube with him in it, floating from the title's spot to the middle of the room (OPENING.drift):
+  // the cube's middle, which is his, ends on the middle of the screen.
+  function openCubeAt(t){ const T0 = titleSceneAt(performance.now()), k = cineSmooth(openK(OPENING.drift, t));
+    const y1 = viewH/2 + T0.s*(RUNNER.legLen + RUNNER.bodyH*0.5);
+    return { x: cineMix(T0.x, viewW/2, k), y: cineMix(T0.y, y1, k), s: T0.s, cube: T0.cube }; }
+  // His place at time t: in the cube as it floats to the middle, up like a rocket to the hover over the map on the
+  // boom, over to chapter one, and down into it.
   function openRunnerAt(t, M){
-    const T0 = titleSceneAt(performance.now()), U = openAbove(), H = openHover(M), O = openOverOne(M);
+    const H = openHover(M), O = openOverOne(M);
     const mix = (a, b, k) => ({ x: cineMix(a.x, b.x, k), y: cineMix(a.y, b.y, k), s: cineMix(a.s, b.s, k) });
-    let P = mix(T0, U, cineSmooth(openK(OPENING.rise, t)));
-    if (t >= OPENING.settle[0]) P = mix(P, H, cineSmooth(openK(OPENING.settle, t)));
+    let P = openCubeAt(t);
+    const rk = openK(OPENING.rise, t);
+    if (rk > 0) P = mix(P, H, 1 - Math.pow(1 - rk, 3));        // all its speed at once, braking into the hover
     if (t >= OPENING.toOne[0]) P = mix(P, O, cineSmooth(openK(OPENING.toOne, t)));
     const bob = Math.sin(t / TITLE_SCENE.bobMs * Math.PI*2) * P.s * TITLE_SCENE.bob * (1 - openK(OPENING.fall, t));
     return { x: P.x, y: P.y + bob, s: P.s };
@@ -25826,6 +26416,10 @@
     // each talisman that has hit, and the sky left still behind it.
     let shk = 0;
     for (const o of openSlams()) if (t >= o.hit) shk = Math.max(shk, playCell()*OPENING.shake * Math.pow(0.86, (t - o.hit)/16));
+    const tK = t < OPENING.boom ? openK(OPENING.tense, t) : 0;
+    shk = Math.max(shk, playCell()*OPENING.tenseShake * tK*tK);                        // the tension, creeping up...
+    if (t >= OPENING.boom)                                                              // ...and the boom
+      shk = Math.max(shk, playCell()*OPENING.boomShake * Math.pow(0.86, (t - OPENING.boom)/16));
     const bK = t < OPENING.burst ? openK(OPENING.build, t) : 0;
     shk = Math.max(shk, playCell()*OPENING.buildShake * bK*bK*bK);                  // the build, rising...
     if (t >= OPENING.burst)                                                           // ...and the burst
@@ -25842,8 +26436,7 @@
     const unfoldK = openK(OPENING.unfold, t), growK = openK(OPENING.grow, t);
     const lastHit = slams.length ? slams[slams.length - 1].hit : OPENING.slam0;
     if (unfoldK >= 1) {
-      const tGrow = CINE.grow[0] + (CINE.grow[1] - CINE.grow[0]) * growK;        // the old film's clock
-      const grownK = (i) => C.isSeed[i] ? 1 : cineC01((tGrow - cineGrowAt(i)) / CINE_POP);
+      const grownK = (i) => C.isSeed[i] ? 1 : cineC01((t - C.oStart[i]) / C.oPop[i]);   // on the domino's schedule
       // The wireframe goes down FIRST, under the map: a talisman's colour, as it comes in, is laid solid
       // over a chapter's lines and hides them, rather than the lines being taken away.
       const wireA = 1 - cineC01((t - lastHit) / OPENING.wireOutMs);
@@ -25909,7 +26502,7 @@
         const Vt = cineView(tOld0, M.cam), ry1 = Math.atan2(Vt.sry, Vt.cry), rx1 = Math.atan2(Vt.srx, Vt.crx);
         let dy = ry1 - openRot0.ry; dy = ((dy % (Math.PI*2)) + Math.PI*3) % (Math.PI*2) - Math.PI;
         const k = cineSmooth(cineC01(t / OPENING.unfold[0]));
-        const V = titleCubeView(Tt, { ry: openRot0.ry + dy*k, rx: cineMix(openRot0.rx, rx1, k) });
+        const V = titleCubeView(openCubeAt(t), { ry: openRot0.ry + dy*k, rx: cineMix(openRot0.rx, rx1, k) });   // floating to the middle
         const cubeSparks = 1 - cineC01((t - (OPENING.unfold[0] - 150)) / 150);   // ...handed to the faces as it opens
         drawCubeWire(V, 1, true, cubeSparks); drawCubeWire(V, 1, false, cubeSparks);
       } else {
@@ -25917,7 +26510,7 @@
         // cube's size and place out to the map's
         const tOld = CINE.unfold[0] + (CINE.unfold[1] - CINE.unfold[0]) * unfoldK;
         const V = cineView(tOld, M.cam);
-        const T0 = titleSceneAt(performance.now());
+        const T0 = openCubeAt(t);                              // where it floated to
         const t0y = T0.y - T0.s*(RUNNER.legLen + RUNNER.bodyH*0.5);
         const u = cineSmooth(unfoldK);
         const fin = { S: M.cam.tile, ox: M.cam.ox + V.px*M.cam.tile, oy: M.cam.oy + V.py*M.cam.tile };
@@ -25929,12 +26522,31 @@
         // cube's, and let go of as it lies down onto the map.
         let mx = 0, my = 0, nC = 0;
         for (const f of faces) for (const q of [f.pts[0], f.pts[Pn-1], f.pts[Pn*Pn-1], f.pts[Pn*(Pn-1)]]) { mx += q[0]; my += q[1]; nC++; }
-        const pull = 1 - u, dxC = (Tt.x - mx/nC)*pull, dyC = (Tt.y - Tt.s*(RUNNER.legLen + RUNNER.bodyH*0.5) - my/nC)*pull;
+        const pull = 1 - u, dxC = (T0.x - mx/nC)*pull, dyC = (T0.y - T0.s*(RUNNER.legLen + RUNNER.bodyH*0.5) - my/nC)*pull;
         const faceQuads = faces.map(f => [f.pts[0], f.pts[Pn-1], f.pts[Pn*Pn-1], f.pts[Pn*(Pn-1)]]
                                        .map(q => [q[0] + dxC, q[1] + dyC]));
+        drawCubeGlass(faceQuads, faces.map(f => f.face), 1 - u, ts);   // the glass going as the sides lie down
         wireQuads(faceQuads, cubePx, 1, cineMix(CUBE_WIRE_K, 1, u));   // thinning as it lies down
         // ...the near faces still white over that, going over to the Tileverse's blue as they lie down
         wireQuads(faceQuads.filter((q, j) => faces[j].z <= 0), cubePx, 1 - u, cineMix(CUBE_WIRE_K, 1, u), "#ffffff");
+        // ...and the Tileverse already swinging out of the sides that have landed (openDomino), in the same moving frame
+        // as the cube's sides, so the one flows on into the other
+        if (C.oStart) {
+          const ringQuads = [];
+          for (let i = 0; i < C.n; i++) {
+            if (C.isSeed[i]) continue;
+            const k = cineC01((t - C.oStart[i]) / C.oPop[i]); if (k <= 0) continue;
+            const p = C.cells[i], pa = C.parent[i] >= 0 ? C.cells[C.parent[i]] : p;
+            const d = [p.c - pa.c, p.r - pa.r]; if (!d[0] && !d[1]) d[0] = 1;
+            const hp = [pa.c + 0.5 + d[0]*0.5, pa.r + 0.5 + d[1]*0.5, 0], ha = [-d[1], d[0], 0];
+            const th = Math.PI * (1 - cineSmooth(k));
+            ringQuads.push([[0,0],[1,0],[1,1],[0,1]].map(([uu, vv]) => {
+              const sp = cineProj(cineRot([p.c + uu, p.r + vv, 0], hp, ha, th), V);
+              return [sp[0] + dxC, sp[1] + dyC];
+            }));
+          }
+          wireQuads(ringQuads, cubePx, 1);
+        }
         // ...and the cube's two sparks carry on along the opening faces (keyed by face, not by depth order)
         const byFace = faces.map((f, j) => ({ key: f.idx, q: faceQuads[j] })).sort((a, b) => a.key - b.key).map(o => o.q);
         openEdgeSparks(byFace.length, j => byFace[j], t, ts, 2, OPENING.sparks.edgeMs, V.S*CUBE_SPARK.size,
@@ -26012,13 +26624,17 @@
     const curlK = t < burst ? cineSmooth(openK(OPENING.curl, t)) : 0;
     const splayK = t < burst ? 0 : (1 - Math.pow(1 - burstK, 3)) * (1 - cineSmooth(openK(OPENING.toOne, t)));
     const buildK = t < burst ? openK(OPENING.build, t) : 0;
+    if (tK > 0) {                                                      // ...trembling in the cube as the tension creeps up
+      const j = P.s * OPENING.tenseTremble * tK*tK;
+      P = { x: P.x + (Math.random()*2 - 1)*j, y: P.y + (Math.random()*2 - 1)*j, s: P.s };
+    }
     if (buildK > 0) {                                                  // ...trembling harder as it builds
       const j = P.s * OPENING.tremble * buildK*buildK;
       P = { x: P.x + (Math.random()*2 - 1)*j, y: P.y + (Math.random()*2 - 1)*j, s: P.s };
     }
     drawAngel(P, ts, A, {
       pose: "onefoot", fromLotus: 1 - wakeK, shut: wakeK < 0.5, where, curl: curlK, splay: splayK,
-      drained: t >= burst, sparkA: t < burst ? 1 : 0, sparkK: 1 + OPENING.buildSpark*buildK*buildK,
+      drained: t >= burst, sparkA: t < burst ? 1 : 0, sparkK: 1 + OPENING.buildSpark*buildK*buildK + OPENING.tenseSpark*tK*tK,
       glitA: t < burst ? 1 : 0 });
     for (const paint of charmsFront) paint();                          // ...and the near talismans over him
     ctx.restore();                                                     // (the shake)
