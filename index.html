@@ -4963,7 +4963,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.63";                    // shown on the title & pause screens
+  const VERSION = "v10.64";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -9212,12 +9212,11 @@
     talAt:  0.20,   // when they come up, as a share of the ground eaten
     talN:      6,   // how many
     talMs:  2800,   // how long one takes to rise, go round and go in
-    talGap:  300,   // ...and how far apart they set off
+    talGap: 1000,   // ...and how far apart they set off — and so how far apart they go in: a second each
     talR:   0.42,   // how big, in tiles
     talOrb:  2.1,   // the orbit it settles onto, in hole radii
     talTurns:1.25,  // ...and how many turns it makes on the way down it
     talGrow: 0.10,  // ...and as each one goes in the hole FLASHES its colour and grows by this, in tiles
-    talFlash: 900,  // ...the flash's fade, ms — and the chapter does not go until the last of them is in
     keepGrow: 0.35, // once it has opened out it GOES ON GROWING — at this share of the speed it was opening at — while
                     // the last charms go in and through the throw back to the Tileverse: it never stops to wait
     // ---- and the readout, which stops meaning anything ----
@@ -9246,6 +9245,8 @@
     fadeMs: 3200,   // how long the disc takes to go from the Mushroom's purple back to black
     lapMs:  7000,   // one lap of the outline by its two sparks
     spark:  0.75,   // their size, against the tab bar's spark (and never wider than the hole)
+    glowA:  1.00,   // the golden glow under it: how hard it burns at the rim...
+    glowReach: 1.4, // ...and how far it reaches, against the old light's reach (HOLE.ring)
   };
   let holeInk = null;
   function holeInkReset() { holeInk = { rings: [], fill: null, fadeAt: 0 }; }
@@ -9431,11 +9432,11 @@
     }
     H.tal = H.tal.filter(q => q.t < q.dur);
   }
-  // A CHARM GOING IN: the hole flashes its colour (drawHole), grows by HOLE.talGrow (eased — tickHole), and a glass chime
-  // rings, a step higher with each one that goes (Sound.holeChime).
+  // A CHARM GOING IN: the hole turns flat in its colour and takes a new ring of it (holeInkTal) — and nothing else on
+  // screen, no bloom and no flash — grows by HOLE.talGrow (eased — tickHole), and a glass chime rings, a step higher with
+  // each one that goes (Sound.holeChime).
   function holeTalIn(H, def) {
-    (H.flashes || (H.flashes = [])).push({ col: talFace(def), at: H.age });
-    holeInkTal(def);                                                   // ...and the hole takes the charm's colour
+    holeInkTal(def);
     H.growTo = (H.growTo || 0) + cell*HOLE.talGrow;
     try { Sound.holeChime && Sound.holeChime(H.talIn || 0); } catch (_) {}
     H.talIn = (H.talIn || 0) + 1;
@@ -9504,34 +9505,6 @@
     }
     ctx.globalAlpha = 1;
     paintHole(H.hx, H.hy, R, u, ts, (state.loop && state.loop.spin) || 1);
-    // ...a flash of each charm's colour as it goes in, blooming off the hole and gone
-    if (H.flashes && H.flashes.length) {
-      H.flashes = H.flashes.filter(fl => H.age - fl.at < HOLE.talFlash);
-      ctx.save();
-      ctx.globalCompositeOperation = "lighter";
-      for (const fl of H.flashes) {
-        const k = (H.age - fl.at) / HOLE.talFlash, a = (1 - k)*(1 - k), col = hexRGB(fl.col).join(",");
-        // the bloom: the charm's colour flooding the hole and well out past its rim
-        const rr = R*(1.15 + 1.25*k);
-        const g = ctx.createRadialGradient(H.hx, H.hy, 0, H.hx, H.hy, rr);
-        g.addColorStop(0,    "rgba(" + col + "," + a.toFixed(3) + ")");
-        g.addColorStop(0.6,  "rgba(" + col + "," + (0.85*a).toFixed(3) + ")");
-        g.addColorStop(1,    "rgba(" + col + ",0)");
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(H.hx, H.hy, rr, 0, Math.PI*2); ctx.fill();
-        // ...a white heart to it, gone first
-        const w = Math.max(0, 1 - k*2.2);
-        if (w > 0) {
-          const gw = ctx.createRadialGradient(H.hx, H.hy, 0, H.hx, H.hy, R*0.9);
-          gw.addColorStop(0, "rgba(255,255,255," + (0.9*w*w).toFixed(3) + ")"); gw.addColorStop(1, "rgba(255,255,255,0)");
-          ctx.fillStyle = gw; ctx.beginPath(); ctx.arc(H.hx, H.hy, R*0.9, 0, Math.PI*2); ctx.fill();
-        }
-        // ...and a ring of it thrown off the rim
-        ctx.strokeStyle = "rgba(" + col + "," + (0.9*a).toFixed(3) + ")";
-        ctx.lineWidth = Math.max(1, R*0.14*(1 - k));
-        ctx.beginPath(); ctx.arc(H.hx, H.hy, R*(1 + 0.9*k), 0, Math.PI*2); ctx.stroke();
-      }
-      ctx.restore();
-    }
     drawHoleTals(ts);          // ...OVER the disc: they are objects in front of a hole, and
     ctx.restore();             // behind it they simply disappeared instead of falling in
   }
@@ -9542,14 +9515,18 @@
   // object over the map once the level it opened in has gone.
   function paintHole(hx, hy, R, u, ts, spin, calm) {
     if (!(R > 0)) return;
-    const q = calm || 0, ring = HOLE.ring*(1 + q*1.1);
+    const q = calm || 0, ring = HOLE.ring*(1 + q*1.1)*HOLE_INK.glowReach;
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
+    // AN INTENSE GOLDEN GLOW under it, at full strength from the moment it opens — not brought up with the pace, which
+    // left it a faint warmth for most of the time anyone was looking at it. White-gold at the rim, deep gold out through
+    // the reach, nothing at the end of it.
+    const G = HOLE_INK.glowA;
     const g = ctx.createRadialGradient(hx, hy, R*(0.72 + q*0.22), hx, hy, R*(1 + ring));
-    g.addColorStop(0,    "rgba(255,238,208," + (0.90*u*(1 + q*0.5)).toFixed(3) + ")");
-    g.addColorStop(0.30, "rgba(255,150,86,"  + (0.42*u*(1 + q*0.7)).toFixed(3) + ")");
-    g.addColorStop(0.70, "rgba(150,110,255," + (0.16*u*(1 + q*1.6)).toFixed(3) + ")");
-    g.addColorStop(1,    "rgba(120,90,255,0)");
+    g.addColorStop(0,    "rgba(255,246,196," + Math.min(1, G).toFixed(3) + ")");
+    g.addColorStop(0.25, "rgba(255,210,74,"  + Math.min(1, G*0.85).toFixed(3) + ")");
+    g.addColorStop(0.60, "rgba(247,160,40,"  + Math.min(1, G*0.40).toFixed(3) + ")");
+    g.addColorStop(1,    "rgba(247,147,59,0)");
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.arc(hx, hy, R*(1 + ring), 0, Math.PI*2); ctx.fill();
     // No arcs round it any more. The disc in its colour (black, a charm's flat colour, or fading back to black after the
@@ -9902,16 +9879,6 @@
       // the move lands in. Same reasoning, and the same curve, as the victory dive's WIN.mapIn.
       const mapA = R.phase === "whip" ? Math.pow(Math.min(1, R.t/FIN.whip), FIN.mapIn) : 1;
       drawMap(ts, R.S, R.cx0, R.cy0, { hide: R.gone, alpha: mapA*(1 - dark) });
-      // ...and the chapters on their way in. Drawn as their own square of the map, shrinking and
-      // carried round, exactly as the ground's patches were.
-      for (const f of R.fly) {
-        const k = f.t/f.dur, e = Math.pow(k, 1.6);
-        const a = Math.atan2(f.y - C.y, f.x - C.x) + f.sp*FIN.spin*e;
-        const d = Math.hypot(f.x - C.x, f.y - C.y)*(1 - e);
-        const sz = R.S*(1 - 0.86*Math.sqrt(k));
-        ctx.globalAlpha = (1 - dark)*(0.95 - 0.4*k);
-        drawMapSquare(f.i, C.x + Math.cos(a)*d - sz/2, C.y + Math.sin(a)*d - sz/2, sz);
-      }
       ctx.restore();
     }
     // THE HOLE, at whatever it has grown to. Through the rise it is walked from the size the
@@ -9922,6 +9889,19 @@
     ctx.save();
     if (dark > 0) ctx.globalAlpha = 1 - dark;
     paintHole(hx, hy, hr, 1, ts, 1, R.calm);
+    // ...and the chapters on their way in, IN FRONT of it and its rings: each its own square of the map, shrinking and
+    // carried round exactly as the ground's patches were, and going out over the last of the fall — drawn over the disc,
+    // a chapter that simply arrived would be left sitting on the black.
+    for (const f of R.fly) {
+      const k = f.t/f.dur, e = Math.pow(k, 1.6);
+      const a = Math.atan2(f.y - C.y, f.x - C.x) + f.sp*FIN.spin*e;
+      const d = Math.hypot(f.x - C.x, f.y - C.y)*(1 - e);
+      const sz = R.S*(1 - 0.86*Math.sqrt(k));
+      const out = 1 - Math.pow(Math.max(0, (k - 0.72)/0.28), 1.4);
+      ctx.globalAlpha = (1 - dark)*(0.95 - 0.4*k)*out;
+      if (ctx.globalAlpha > 0.004) drawMapSquare(f.i, C.x + Math.cos(a)*d - sz/2, C.y + Math.sin(a)*d - sz/2, sz);
+    }
+    ctx.globalAlpha = dark > 0 ? 1 - dark : 1;
     // ...and what opens in it. Two round eyes in the Mushroom's purple, cut into a scowl, opening from slits:
     // there is nothing in the black until there is, which is the whole of the moment.
     if (R.eye > 0) drawFinEyes(hx, hy, hr, R.eye, ts);
@@ -9957,8 +9937,9 @@
   }
   // EVIL. Two of them: ROUND, burning in the Mushroom's purple — the charm the hole kept — and each with the top cut off
   // it on a slant, high on the outside and dropping toward the middle of the face, which is the scowl (FIN.eyeCut*). They
-  // open from slits at the bottom rather than fading up — a fade would be a picture appearing, and this is a thing
-  // opening — so the cut, at the top, is the last of them to arrive.
+  // are FULL SIZE from the first frame and OPEN between lids, top and bottom, drawing back from a slit across the middle
+  // until the whole scowl is showing — rather than fading up: a fade would be a picture appearing, and this is a thing
+  // opening its eyes.
   function drawFinEyes(hx, hy, R, k, ts) {
     const o = k*k*(3 - 2*k);
     const r = R*FIN.eyeW/2, gap = R*FIN.eyeGap;
@@ -9986,8 +9967,10 @@
       ctx.moveTo(x - 2*r, at(x - 2*r)); ctx.lineTo(x + 2*r, at(x + 2*r));
       ctx.lineTo(x + 2*r, y + 2*r); ctx.lineTo(x - 2*r, y + 2*r);
       ctx.closePath(); ctx.clip();
-      // ...of a circle opening upward from a slit along its foot
-      ctx.beginPath(); ctx.ellipse(x, y + r*(1 - o), r, Math.max(0.2, r*o), 0, 0, Math.PI*2);
+      // ...and between the LIDS, top and bottom, drawing back from its middle...
+      ctx.beginPath(); ctx.rect(x - 2*r, y - r*o, 4*r, 2*r*o); ctx.clip();
+      // ...of the whole eye, full size all the way through
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2);
       ctx.fillStyle = "rgba(" + rgb + "," + (0.98*o).toFixed(3) + ")";
       ctx.fill();
       ctx.fillStyle = "rgba(255,255,255," + (0.35*o*o).toFixed(3) + ")";   // the heat in it
