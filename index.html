@@ -4963,7 +4963,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.64";                    // shown on the title & pause screens
+  const VERSION = "v10.65";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -9199,14 +9199,14 @@
     spin:   1.35,   // radians it is carried round on the way in — a fall, not a straight line
     half:   0.50,   // the share of the board that has to be gone before it stops picking...
     swallow:2000,   // ...and opens out to take the whole of the rest of the chapter at once
-    swallowR:0.50,  // ...how wide the DISC gets while it does, as a share of the screen's half
+    swallowR:0.35,  // ...how wide the DISC gets while it does, as a share of the screen's half
                     // diagonal. NOT as wide as its reach: a board is usually bigger than the
                     // view, so a disc grown to the far corner of the level is a disc grown well
                     // past every edge of the screen — the picture goes to black, sits there,
                     // and the rise that follows begins on nothing. It takes the whole chapter
                     // and stays a circle you can see the edge of.
                     //
-                    // Half the screen: big enough that the chapter is plainly gone into it, and
+                    // A third of the screen or so: big enough that the chapter is plainly gone into it, and
                     // it is thrown back down to a speck by the whip that follows anyway.
     // ---- the charms, which do not survive this either ----
     talAt:  0.20,   // when they come up, as a share of the ground eaten
@@ -9217,7 +9217,7 @@
     talOrb:  2.1,   // the orbit it settles onto, in hole radii
     talTurns:1.25,  // ...and how many turns it makes on the way down it
     talGrow: 0.10,  // ...and as each one goes in the hole FLASHES its colour and grows by this, in tiles
-    keepGrow: 0.35, // once it has opened out it GOES ON GROWING — at this share of the speed it was opening at — while
+    keepGrow: 0.10, // once it has opened out it GOES ON GROWING — at this share of the speed it was opening at — while
                     // the last charms go in and through the throw back to the Tileverse: it never stops to wait
     // ---- and the readout, which stops meaning anything ----
     runaway: 1.0,   // decades a second the SPEED PLATE gains once the pace has topped out. The
@@ -9710,7 +9710,7 @@
     // on the calm, which is where the thing actually stops.
     Sound.ambient(null); Sound.warp(false);
   }
-  const RESTORE_ORDER = ["whip", "look", "eat", "settle", "calm", "eyes", "stare", "words", "dark", "credits"];
+  const RESTORE_ORDER = ["whip", "look", "eat", "settle", "calm", "eyes", "stare", "words", "dark"];   // ...and out, to the title
   // Where the middle of everything is. The chapter he was on is centred by construction, so
   // this is the screen's own middle — written as the square's centre rather than as viewW/2 so
   // that a camera that ever does move takes the hole with it.
@@ -9813,8 +9813,8 @@
       if (!R.quiet) { R.quiet = 1; Sound.vortex(false); Sound.levelMusicStop(true); Sound.thrum(true); }
     }
     if (R.phase === "eyes") R.eye = Math.min(1, R.t/FIN.eyes);
-    // Both of these wait on you, and nothing else. The taps are answered in finTap.
-    if (R.phase === "words" || R.phase === "credits") return;
+    // This waits on you, and nothing else. The tap is answered in finTap.
+    if (R.phase === "words") return;
     const span = FIN[R.phase] || 0;
     if (R.t < span) return;
     const i = RESTORE_ORDER.indexOf(R.phase);
@@ -9839,16 +9839,14 @@
     document.body.classList.remove("vortex");
     startTitle();                                   // out the other side, back to the beginning
   }
-  // The two places the ending waits on you: TO BE CONTINUED, and the way out of the credits.
-  // Neither will take a tap before its own last line has finished arriving — a prompt you can
-  // answer before you can read it is a prompt that eats the thing it is offering.
+  // The one place the ending waits on you: TO BE CONTINUED. It will not take a tap before its line has finished
+  // arriving — a prompt you can answer before you can read it is a prompt that eats the thing it is offering.
   function finTap() {
     const R = state && state.restore;
     if (!R) return false;
     if (R.phase === "words" && R.t >= finWordGap() + FIN.fade) {
       Sound.tap(); R.phase = "dark"; R.t = 0; return true;
     }
-    if (R.phase === "credits" && R.t >= finCreditsMs()) { Sound.tap(); endRestore(); return true; }
     return false;
   }
   // The whole of it, drawn over everything. Returns true when it has taken the frame, which is
@@ -9866,7 +9864,7 @@
       R.shot.width = canvas.width; R.shot.height = canvas.height;
       R.shot.getContext("2d").drawImage(canvas, 0, 0);
     }
-    const dark = R.phase === "dark" ? Math.min(1, R.t/FIN.dark) : R.phase === "credits" ? 1 : 0;
+    const dark = R.phase === "dark" ? Math.min(1, R.t/FIN.dark) : 0;
     drawVoid(ts);
     const C = finHole(R);            // ...which is what everything falls into, wherever it is
     // THE MAP, less whatever has been eaten out of it. It goes on being the real Tileverse
@@ -9928,7 +9926,6 @@
     // the picture, not a card over it.
     if (R.phase === "words" || R.phase === "dark") drawFinWords(R.phase === "words" ? R.t : 1e6);
     if (dark > 0) { ctx.fillStyle = "rgba(5,4,13," + dark.toFixed(3) + ")"; ctx.fillRect(0, 0, W, H); }
-    if (R.phase === "credits") drawFinCredits(R.t);
     // THE SPEED PLATE, on top of all of it to the very end: its number still climbing from where the level left it, at
     // the hole's own runaway, until it is past counting and reads ∞.
     const runaway = (R.cps0 || 1) * Math.pow(10, HOLE.runaway * (R.clock || 0)/1000);
@@ -10035,6 +10032,8 @@
   // hats and trails is held to. Read from the sheet rather than copied into JS, so the letter
   // and the shop cannot drift apart.
   const finCol = () => parseFloat(getVar("--shop-w")) || 520;
+  // (NOT SHOWN any more: the ending goes from the dark straight back to the title. The card and its letter in FIN are kept
+  // here, unreached, in case they come back.)
   function drawFinCredits(t) {
     const W = viewW, H = viewH;
     const col = Math.min(W*0.86, finCol());              // the letter's measure
@@ -16196,6 +16195,34 @@
     if (s.hole && s.hole.top > 0) cps *= Math.pow(10, HOLE.runaway*s.hole.top/1000);
     return cps;
   }
+  // INK, MEASURED BY LOOKING. measureText's actualBoundingBox* is the glyph's ink on Chrome and Firefox, but WebKit — every
+  // browser on an iPhone — has answered with the FONT's ascent and descent instead, which for a glyph out of a fallback
+  // font (∞ is not in the game's face) has nothing to do with the mark: ∞ came out the wrong size on a phone. So a glyph
+  // that has to be sized or centred by its ink is drawn once off-screen, at four times its size, and its rows scanned.
+  // Returns the ink above and below the middle baseline and its height, in pixels at `px`. Cached per weight, size, face
+  // and string — once the game's face has loaded, so a measure taken against the fallback is not kept.
+  const _inkMemo = new Map();
+  let _inkPad = null;
+  function inkBox(weight, px, family, text) {
+    const key = weight + "|" + px + "|" + family + "|" + text, hit = _inkMemo.get(key);
+    if (hit) return hit;
+    if (!_inkPad) _inkPad = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+    const g = _inkPad, K = 4, S = px*K, font = weight + " " + S.toFixed(2) + "px " + family;
+    g.font = font;
+    const w = Math.max(4, Math.ceil(g.measureText(text).width + S)), h = Math.max(4, Math.ceil(S*3));
+    if (g.canvas.width !== w || g.canvas.height !== h) { g.canvas.width = w; g.canvas.height = h; }
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, w, h);
+    g.font = font; g.textBaseline = "middle"; g.textAlign = "left"; g.fillStyle = "#000";
+    g.fillText(text, S/2, h/2);
+    const d = g.getImageData(0, 0, w, h).data;
+    let top = -1, bot = -1;
+    for (let y = 0; y < h && top < 0; y++) for (let x = 0; x < w; x++) if (d[(y*w + x)*4 + 3] > 24) { top = y; break; }
+    for (let y = h - 1; y >= 0 && bot < 0; y--) for (let x = 0; x < w; x++) if (d[(y*w + x)*4 + 3] > 24) { bot = y; break; }
+    const out = top < 0 ? { asc: 0, desc: 0, h: 0 }
+                        : { asc: (h/2 - top)/K, desc: (bot + 1 - h/2)/K, h: (bot + 1 - top)/K };
+    if (!document.fonts || document.fonts.status === "loaded") _inkMemo.set(key, out);
+    return out;
+  }
   // ∞'s spark: how big, against the plate's height, and one slow turn of it, in ms; and the white glow the black symbol
   // stands in — its layers' blur, tight then wide, each against the figures' size.
   const SPEED_INF = { spark: 1.35, spinMs: 9000, glow: [0.25, 0.70] };
@@ -16234,11 +16261,11 @@
     ctx.font = bigF;
     // ∞ is not in the game's face, so it comes from a fallback font at that font's own proportions. It is set to
     // STAND AS TALL AS THE FIGURES: sized so its ink matches a nought's ink height (and never wider than its measure).
-    let infF = bigF;
+    let infF = bigF, infPx = P.fs2;
     if (inf) {
-      const z = ctx.measureText("0"), zH = (z.actualBoundingBoxAscent + z.actualBoundingBoxDescent) || P.fs2*0.7;
-      const q = ctx.measureText(val), qH = (q.actualBoundingBoxAscent + q.actualBoundingBoxDescent) || zH;
-      infF = "900 " + (P.fs2 * zH / Math.max(1, qH)).toFixed(2) + "px " + UI_FONT;
+      const zH = inkBox("900", P.fs2, UI_FONT, "0").h, qH = inkBox("900", P.fs2, UI_FONT, val).h;   // by their INK (inkBox)
+      infPx = +(zH > 0 && qH > 0 ? P.fs2 * zH / qH : P.fs2).toFixed(2);
+      infF = "900 " + infPx + "px " + UI_FONT;
       ctx.font = infF;
     }
     const vw = tab ? speedTabW(ctx, val) + ctx.measureText("0").width*0.6
@@ -16265,10 +16292,11 @@
     // the line box, which a different font puts somewhere else
     let vy = midY + 1;
     if (inf) {
-      ctx.font = smallF; const um = ctx.measureText(unit);
-      const uC = vy + ((um.actualBoundingBoxDescent || 0) - (um.actualBoundingBoxAscent || 0))/2;
-      ctx.font = infF;   const im = ctx.measureText(val);
-      vy = uC - ((im.actualBoundingBoxDescent || 0) - (im.actualBoundingBoxAscent || 0))/2;
+      const um = inkBox("700", P.fs2, UI_FONT, unit), im = inkBox("900", infPx, UI_FONT, val);
+      const uC = vy + (um.desc - um.asc)/2;
+      vy = uC - (im.desc - im.asc)/2;
+      ctx.font = infF;
+      im.width = ctx.measureText(val).width;
       // ...with a SPARK behind it in the Mushroom's purple — the charm the hole keeps — turning slowly
       const now = performance.now(), sxC = m + padX + im.width/2;
       ctx.save();
