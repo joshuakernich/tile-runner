@@ -59,6 +59,7 @@ Coordinates are `[col, row]`, origin **top-left**. One level object:
   intro: ["block"],           // which mechanic intro pop-ups to show on entry (see list below); [] = none
   cps: 0.88,                  // starting pace in tiles/sec — every shipped level declares one
   walls:  [[c,r], …],         // impassable metal plates (static)
+  holes:  [[c,r], …],         // cells cut out of the level's quilt: open sky with the board's edge glow round it, nothing built there; side-by-side holes join (optional)
   blocks: [{axis:'h'|'v', r|c, lo, hi, pos0}],     // movable "sliding wall" (optional)
   hazards:[{kind:'saw', axis:'h'|'v', c|r, lo, hi, speed, phase}],  // saws (optional)
   doors:  [[c,r,"#hex"], …],  // colored key-doors (optional)

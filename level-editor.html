@@ -266,6 +266,7 @@
 
     <div id="tips">
       <div class="tip" data-for="wall">Drag to paint <b>walls</b>. Right-drag erases.</div>
+      <div class="tip" data-for="hole">Drag to paint <b>holes</b>: cells cut out of the level's quilt, open to the sky, with the board's own edge glow round them. Nothing can be built in one. Holes side by side join into one big hole. Right-drag erases.</div>
       <div class="tip" data-for="erase">Drag over anything to take it off the board.</div>
       <div class="tip" data-for="start"><b>Start</b> is the one cell that begins as laid track —
         every level has exactly one.</div>
@@ -325,6 +326,8 @@
     <div class="toolbar">
       <button class="act" id="undo">Undo (Z)</button>
       <button class="act" id="clearBtn">Clear</button>
+      <button class="act" id="wallsToHoles" title="Turn every wall on this level into a hole">Walls → holes</button>
+      <button class="act" id="holesToWalls" title="Turn every hole on this level into a wall">Holes → walls</button>
     </div>
 
     <div class="side">
@@ -345,6 +348,7 @@
     <h2>Tile types</h2>
     <div class="tools" id="tools">
       <div class="tool sel" data-tool="wall">Wall</div>
+      <div class="tool" data-tool="hole">Hole</div>
       <div class="tool" data-tool="erase">Erase</div>
       <div class="tool" data-tool="start">Start</div>
       <div class="tool" data-tool="tile">Tile</div>
@@ -355,7 +359,7 @@
       <div class="tool" data-tool="platform">Rail</div>
       <div class="tool" data-tool="talisman">Talisman</div>
       <div class="tool" data-tool="coin">Coin</div>
-      <div class="tool" data-tool="singularity">Singularity</div>
+      <div class="tool" data-tool="singularity">Crumble</div>
       <div class="tool" data-tool="key">Key</div>
       <div class="tool" data-tool="door">Door</div>
     </div>
@@ -598,6 +602,7 @@ function cloneLvl(o){return JSON.parse(JSON.stringify(o));}
 function toWorking(o){
   const w = cloneLvl(o);
   w.walls = new Set((o.walls||[]).map(a=>keyOf(a[0],a[1])));
+  w.holes = new Set((o.holes||[]).map(a=>keyOf(a[0],a[1])));   // cells cut out of the quilt
   w.blocks = (o.blocks||[]).map(b=>({...b}));
   // starting phase, 0..1 of the ping-pong cycle. The hunter answered to "wander" before it had
   // a name, and a level saved back then still says so — take the old spelling on the way in, so
@@ -656,6 +661,8 @@ function toStored(w){
   // the Tileverse tab writes exactly the file it always did.
   if(Array.isArray(w.tv) && w.tv.length === 2) o.tv = [w.tv[0]|0, w.tv[1]|0];
   o.walls = [...w.walls].map(s=>s.split(",").map(Number)).sort((a,b)=>a[1]-b[1]||a[0]-b[0]);
+  if(w.holes && w.holes.size) o.holes = [...w.holes].map(s=>s.split(",").map(Number)).sort((a,b)=>a[1]-b[1]||a[0]-b[0]);
+  else delete o.holes;                                         // (a level with none writes exactly what it always did)
   if(w.blocks.length)  o.blocks  = w.blocks.map(b=>({...b}));
   // `phase` was stripped from every monster on the belief that it was a saw idea — but the game
   // reads it for RAILS (it is their whole start position, direction included) and for TRAPS (it
@@ -716,6 +723,7 @@ function shiftAll(dc, dr){
   const mv = p => { p[0]+=dc; p[1]+=dr; };
   mv(L.start); (L.init||[]).forEach(mv); if(L.goal) mv(L.goal);
   L.walls = new Set([...L.walls].map(s=>{ const [c,r]=s.split(",").map(Number); return keyOf(c+dc, r+dr); }));
+  L.holes = new Set([...(L.holes||[])].map(s=>{ const [c,r]=s.split(",").map(Number); return keyOf(c+dc, r+dr); }));
   [L.coins, L.stone, L.platforms, L.talismans, L.doors, L.keys].forEach(a=>(a||[]).forEach(mv));
   // a block or a rail names ONE fixed axis and a lo..hi span on the other, so which delta
   // applies to which field depends on the axis
@@ -734,6 +742,7 @@ function cropToBoard(){
   const inB=(c,r)=>c>=0&&r>=0&&c<L.cols&&r<L.rows;
   const keep=a=>(a||[]).filter(p=>inB(p[0],p[1]));
   L.walls = new Set([...L.walls].filter(s=>{ const [c,r]=s.split(",").map(Number); return inB(c,r); }));
+  L.holes = new Set([...(L.holes||[])].filter(s=>{ const [c,r]=s.split(",").map(Number); return inB(c,r); }));
   L.coins=keep(L.coins); L.stone=keep(L.stone); L.platforms=keep(L.platforms);
   L.talismans=keep(L.talismans); L.doors=keep(L.doors); L.keys=keep(L.keys);
   L.init = keep(L.init);
@@ -751,6 +760,7 @@ function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
 function eraseAt(c,r){
   const k = keyOf(c,r); let hit=false;
   if(L.walls.delete(k)) hit=true;
+  if(L.holes && L.holes.delete(k)) hit=true;
   // The flag comes off with everything else. It was the one thing the eraser walked past, so
   // the only way to be rid of it was to pick the Goal tool and click it — and the inspector's
   // own DELETE button, which routes through here, did nothing at all on a selected flag.
@@ -881,7 +891,7 @@ function placeMonster(c,r){
     } else {
       cand = {kind:"monster", variant:kind, c, r};
     }
-    pushUndo(); L.walls.delete(keyOf(c,r));
+    pushUndo(); L.walls.delete(keyOf(c,r)); if(L.holes) L.holes.delete(keyOf(c,r));
     L.hazards.push(cand);
     setStatus(kind === "hrail" || kind === "vrail"
       ? kind+" placed — drag its ends to reshape the rail"
@@ -902,7 +912,7 @@ function placeMonster(c,r){
     setStatus("monster updated — "+(hit.loop?"looping":"there and back"));
     return;
   }
-  L.walls.delete(keyOf(c,r));
+  L.walls.delete(keyOf(c,r)); if(L.holes) L.holes.delete(keyOf(c,r));
   monDraft = { path: [[c,r]] };
   setStatus("monster started — click each waypoint, Enter to finish, L to close the loop");
 }
@@ -912,9 +922,10 @@ function sawCells(h){ const hz=(h.axis||'h')==='h'; const out=[]; for(let i=h.lo
 function applyTool(c,r,isDrag){
   if(c<0||r<0||c>=L.cols||r>=L.rows) return;
   switch(tool){
-    case "wall": if(!L.walls.has(keyOf(c,r))){ if(!isDrag)pushUndo(); L.walls.add(keyOf(c,r)); eraseNonWallAt(c,r);} break;
+    case "wall": if(!L.walls.has(keyOf(c,r))){ if(!isDrag)pushUndo(); L.walls.add(keyOf(c,r)); if(L.holes) L.holes.delete(keyOf(c,r)); eraseNonWallAt(c,r);} break;
+    case "hole": if(!(L.holes||(L.holes=new Set())).has(keyOf(c,r))){ if(!isDrag)pushUndo(); L.holes.add(keyOf(c,r)); L.walls.delete(keyOf(c,r)); eraseNonWallAt(c,r);} break;
     case "erase": if(!isDrag)pushUndo(); eraseAt(c,r); break;
-    case "start": pushUndo(); L.start=[c,r]; L.walls.delete(keyOf(c,r)); break;
+    case "start": pushUndo(); L.start=[c,r]; L.walls.delete(keyOf(c,r)); if(L.holes) L.holes.delete(keyOf(c,r)); break;
     // init is the level's OTHER tiles — placements, not a route. Whether any of them counts
     // as laid track is decided when the level loads, by the same chaining the game uses mid-run
     // (see chainFrom). Clicking an empty cell drops another tile there; clicking one that is
@@ -925,7 +936,7 @@ function applyTool(c,r,isDrag){
                       if(L.init.length <= 1){ setStatus("a level needs at least one pre-laid tile"); break; }
                       L.init.splice(at,1); setStatus("tile removed — "+(L.init.length+1)+" left, start included");
                     } else {
-                      L.init.push([c,r]); L.walls.delete(keyOf(c,r));
+                      L.init.push([c,r]); L.walls.delete(keyOf(c,r)); if(L.holes) L.holes.delete(keyOf(c,r));
                       setStatus("tile "+(L.init.length+1)+" placed (start included)");
                     }
                     break; }
@@ -934,10 +945,10 @@ function applyTool(c,r,isDrag){
     // run only stops when he falls — which is what the finale wants.
     case "goal":  pushUndo();
                   if(L.goal && L.goal[0]===c && L.goal[1]===r){ L.goal=null; setStatus("flag removed — this level has no exit"); }
-                  else { L.goal=[c,r]; L.walls.delete(keyOf(c,r)); }
+                  else { L.goal=[c,r]; L.walls.delete(keyOf(c,r)); if(L.holes) L.holes.delete(keyOf(c,r)); }
                   break;
     case "key":   pushUndo(); L.keys=L.keys.filter(k=>!(k[0]===c&&k[1]===r)); L.keys.push([c,r,color]); break;
-    case "door":  pushUndo(); L.doors=L.doors.filter(d=>!(d[0]===c&&d[1]===r)); L.doors.push([c,r,color]); L.walls.delete(keyOf(c,r)); break;
+    case "door":  pushUndo(); L.doors=L.doors.filter(d=>!(d[0]===c&&d[1]===r)); L.doors.push([c,r,color]); L.walls.delete(keyOf(c,r)); if(L.holes) L.holes.delete(keyOf(c,r)); break;
     case "platform": pushUndo(); paintPlatform(c,r); break;
     case "talisman": pushUndo(); paintTalisman(c,r); break;
     case "coin":     pushUndo(); paintCoin(c,r); break;
@@ -954,14 +965,15 @@ function paintCoin(c,r){
   if(i>=0){ L.coins.splice(i,1); setStatus("coin removed"); return; }
   L.coins.push([c,r]); setStatus("coin placed");
 }
-// A hole in the floor. It is not something standing ON the cell, it IS the cell — so placing
-// one clears whatever was there, and clicking it again takes it away.
+// CRUMBLING GROUND (still `singularity` in the data). It is not something standing ON the cell, it IS the cell — so
+// placing one clears whatever was there, and clicking it again takes it away. In the game a tile laid on it is lost once
+// the runner has crossed, and the cell becomes a hole.
 function paintSingularity(c,r){
   L.singularity = L.singularity || [];
   const i = L.singularity.findIndex(t=>t[0]===c&&t[1]===r);
-  if(i>=0){ L.singularity.splice(i,1); setStatus("singularity removed"); return; }
-  L.walls.delete(keyOf(c,r)); eraseNonWallAt(c,r);
-  L.singularity.push([c,r]); setStatus("singularity placed");
+  if(i>=0){ L.singularity.splice(i,1); setStatus("crumble removed"); return; }
+  L.walls.delete(keyOf(c,r)); if(L.holes) L.holes.delete(keyOf(c,r)); eraseNonWallAt(c,r);
+  L.singularity.push([c,r]); setStatus("crumble placed");
 }
 // a talisman is a floor pickup: it does NOT block track, so it can share a cell with nothing else
 function paintTalisman(c,r){
@@ -969,7 +981,7 @@ function paintTalisman(c,r){
   const i = L.talismans.findIndex(t=>t[0]===c&&t[1]===r);
   if(i>=0){ const next = TAL_IDS[(TAL_IDS.indexOf(L.talismans[i][2]) + 1) % TAL_IDS.length];
     L.talismans[i][2] = next; $("talPick").value = next; setStatus("talisman -> "+next); return; }
-  L.walls.delete(keyOf(c,r)); eraseNonWallAt(c,r);
+  L.walls.delete(keyOf(c,r)); if(L.holes) L.holes.delete(keyOf(c,r)); eraseNonWallAt(c,r);
   L.talismans.push([c, r, $("talPick").value || TAL_IDS[0]]);
 }
 // place a platform in the selected shape; clicking one that's already there cycles the shape
@@ -981,7 +993,7 @@ function paintPlatform(c,r){
     L.platforms[i][2] = next; $("pfShape").value = next; setStatus("rail → "+next);
     return;
   }
-  L.walls.delete(keyOf(c,r));
+  L.walls.delete(keyOf(c,r)); if(L.holes) L.holes.delete(keyOf(c,r));
   eraseNonWallAt(c,r);
   L.platforms.push([c,r,$("pfShape").value||"ns"]);
 }
@@ -998,7 +1010,7 @@ function hasStone(c,r){ return (L.stone||[]).some(s=>s[0]===c&&s[1]===r); }
 function paintStone(c,r){
   const i=(L.stone||[]).findIndex(s=>s[0]===c&&s[1]===r);
   if(paintMode==="erase"){ if(i>=0) L.stone.splice(i,1); }
-  else if(i<0){ L.walls.delete(keyOf(c,r)); (L.stone||(L.stone=[])).push([c,r, clamp(+$("stoneHp").value||2,1,5)]); }
+  else if(i<0){ L.walls.delete(keyOf(c,r)); if(L.holes) L.holes.delete(keyOf(c,r)); (L.stone||(L.stone=[])).push([c,r, clamp(+$("stoneHp").value||2,1,5)]); }
 }
 // RAIL_LEN is the default rail dropped by a single click, for both blocks and saws:
 // three cells, centred on the clicked cell and nudged inboard if it won't fit.
@@ -1020,7 +1032,7 @@ function defaultRail(c, r){
 // reshaped by dragging its end handles — see blockEnds / applyDrag.
 function placeBlock(c,r){
   if(L.blocks.some(b=>blockCells(b).some(p=>p[0]===c&&p[1]===r))) return;   // don't stack
-  L.walls.delete(keyOf(c,r)); eraseNonWallAt(c,r);
+  L.walls.delete(keyOf(c,r)); if(L.holes) L.holes.delete(keyOf(c,r)); eraseNonWallAt(c,r);
   L.blocks.push(defaultRail(c,r));
   setStatus("block placed — drag its ends to reshape the rail");
 }
@@ -1133,6 +1145,17 @@ function draw(){
   for(let r=0;r<L.rows;r++)for(let c=0;c<L.cols;c++){ const [x,y]=cellXY(c,r);
     ctx.fillStyle="#211d44"; ctx.fillRect(x,y,CELL,CELL);
     ctx.strokeStyle="#2f2b58"; ctx.strokeRect(x+.5,y+.5,CELL,CELL); }
+  // holes — open sky through the quilt: black, with the board's blue edge only where a hole meets board, so holes side by
+  // side read as the one big hole they are in the game
+  const HO = L.holes || new Set();
+  HO.forEach(s=>{ const [c,r]=s.split(",").map(Number); const [x,y]=cellXY(c,r); ctx.fillStyle="#05040d"; ctx.fillRect(x,y,CELL,CELL); });
+  ctx.strokeStyle="#4baff1"; ctx.lineWidth=2; ctx.beginPath();
+  HO.forEach(s=>{ const [c,r]=s.split(",").map(Number); const [x,y]=cellXY(c,r);
+    if(!HO.has(keyOf(c,r-1))){ ctx.moveTo(x,y); ctx.lineTo(x+CELL,y); }
+    if(!HO.has(keyOf(c+1,r))){ ctx.moveTo(x+CELL,y); ctx.lineTo(x+CELL,y+CELL); }
+    if(!HO.has(keyOf(c,r+1))){ ctx.moveTo(x,y+CELL); ctx.lineTo(x+CELL,y+CELL); }
+    if(!HO.has(keyOf(c-1,r))){ ctx.moveTo(x,y); ctx.lineTo(x,y+CELL); } });
+  ctx.stroke();
   // walls
   L.walls.forEach(s=>{ const [c,r]=s.split(",").map(Number); const [x,y]=cellXY(c,r);
     rr(x+2,y+2,CELL-4,CELL-4,6,"#6b7185");
@@ -1235,21 +1258,20 @@ function draw(){
   L.doors.forEach(d=>{ const [x,y]=cellXY(d[0],d[1]); const co=d[2]||"#ffd24a";
     rr(x+2,y+2,CELL-4,CELL-4,6,co); padlock(x,y); });
   L.keys.forEach(k=>{ const [x,y]=cellXY(k[0],k[1]); keyIcon(x,y,k[2]||"#ffd24a"); });
-  // A singularity is the cell, not a marker on it: the whole square goes dark, with squares
-  // caught falling toward the eye at its centre — the same read as the game's own rift.
+  // CRUMBLING GROUND is the cell, not a marker on it: blue glass, every quarter-tile square with a very thin line on its inner
+  // edge — blue along its top and left, dark blue along its bottom and right, both at half strength — the read of the game's.
   (L.singularity||[]).forEach(([c,r])=>{
-    const [x,y]=cellXY(c,r);
+    const [x,y]=cellXY(c,r), n=4, cs=CELL/n;
     ctx.save();
-    ctx.fillStyle="#07060f"; ctx.fillRect(x+1,y+1,CELL-2,CELL-2);
-    ctx.strokeStyle="#6a5cff"; ctx.lineWidth=1.5; ctx.globalAlpha=0.55;
-    for(const f of [0.92,0.68,0.46]){
-      const h=CELL*f/2;
-      ctx.strokeRect(x+CELL/2-h, y+CELL/2-h, h*2, h*2);
-    }
-    ctx.globalAlpha=1; ctx.fillStyle="#000";
-    const e=CELL*0.30/2; ctx.fillRect(x+CELL/2-e, y+CELL/2-e, e*2, e*2);
-    ctx.strokeStyle="#b9b0ff"; ctx.lineWidth=1;
-    ctx.strokeRect(x+CELL/2-e, y+CELL/2-e, e*2, e*2);
+    ctx.fillStyle="#05040d"; ctx.fillRect(x, y, CELL, CELL);                 // the hole...
+    for(let j=0;j<n;j++) for(let i=0;i<n;i++){                               // ...and blue glass, each square its own thickness
+      const u = (Math.sin((c*131 + i*17 + 7)*12.9898 + (r*97 + j*29 + 3)*78.233)*43758.5453) % 1;
+      ctx.globalAlpha = 0.35 + 0.45*Math.abs(u); ctx.fillStyle="#4baff1"; ctx.fillRect(x+i*cs, y+j*cs, cs, cs); }
+    ctx.globalAlpha = 1;
+    for(let j=0;j<n;j++) for(let i=0;i<n;i++){ const X=x+i*cs, Y=y+j*cs;   // a thin line on each square's inner edge:
+      ctx.globalAlpha=0.25; ctx.fillStyle="#4baff1"; ctx.fillRect(X, Y, cs, 1); ctx.fillRect(X, Y+1, 1, cs-1);        // blue top & left
+      ctx.globalAlpha=1; ctx.fillStyle="#1b4a6e"; ctx.fillRect(X+1, Y+cs-2, cs-1, 2); ctx.fillRect(X+cs-2, Y+1, 2, cs-3); }     // dark blue bottom & right, 2px
+    ctx.globalAlpha=1;
     ctx.restore();
   });
   (L.coins||[]).forEach(([c,r])=>{ const [x,y]=cellXY(c,r); const s2=CELL*0.34;
@@ -1361,6 +1383,7 @@ function goalFlag(p){ const [x,y]=cellXY(p[0],p[1]); rr(x+4,y+4,CELL-8,CELL-8,6,
 // edge-constrained rather than cell-constrained.
 function solvable(o){
   const blocked=new Set((o.walls||[]).map(w=>w[0]+","+w[1]));
+  for(const h of (o.holes||[])) blocked.add(h[0]+","+h[1]);   // a hole: nothing is built over open sky
   // The run starts at the front of whatever CHAINS off the start cell — not at the last
   // entry of init, which is now just a placement like any other and may be nowhere near the
   // track. Everything already laid behind that front is spent and cannot be re-entered;
@@ -1444,6 +1467,7 @@ function refreshOut(){
 function cellTaken(c, r, ignore){
   if(c<0||r<0||c>=L.cols||r>=L.rows) return "the edge";
   if(L.walls.has(keyOf(c,r))) return "a wall";
+  if(L.holes && L.holes.has(keyOf(c,r))) return "a hole";
   const at=p=>p[0]===c&&p[1]===r;
   if(L.start && L.start!==ignore && at(L.start)) return "the start";
   if(L.goal  && L.goal !==ignore && at(L.goal))  return "the flag";
@@ -1454,7 +1478,7 @@ function cellTaken(c, r, ignore){
   for(const p of (L.platforms||[])) if(p!==ignore && at(p)) return "a rail";
   for(const p of (L.talismans||[])) if(p!==ignore && at(p)) return "a talisman";
   for(const p of (L.coins||[]))     if(p!==ignore && at(p)) return "a coin";
-  for(const p of (L.singularity||[])) if(p!==ignore && at(p)) return "a singularity";
+  for(const p of (L.singularity||[])) if(p!==ignore && at(p)) return "crumbling ground";
   for(const b of L.blocks)          if(b!==ignore && blockCells(b).some(at)) return "a block";
   for(const h of L.hazards)         if(h!==ignore && (isMon(h)?monCells(h):sawCells(h)).some(at))
                                       return isMon(h) ? "a monster" : "a saw";
@@ -1532,11 +1556,11 @@ function monFits(nb, self){
 }
 function applyDrag(c,r){
   const d=dragEl;
-  if(d.type==='start'){ L.start=[c,r]; L.walls.delete(keyOf(c,r)); }
-  else if(d.type==='init'){ L.init[d.i]=[c,r]; L.walls.delete(keyOf(c,r)); }
-  else if(d.type==='goal'){ L.goal=[c,r]; L.walls.delete(keyOf(c,r)); }
+  if(d.type==='start'){ L.start=[c,r]; L.walls.delete(keyOf(c,r)); if(L.holes) L.holes.delete(keyOf(c,r)); }
+  else if(d.type==='init'){ L.init[d.i]=[c,r]; L.walls.delete(keyOf(c,r)); if(L.holes) L.holes.delete(keyOf(c,r)); }
+  else if(d.type==='goal'){ L.goal=[c,r]; L.walls.delete(keyOf(c,r)); if(L.holes) L.holes.delete(keyOf(c,r)); }
   else if(d.type==='key'){ d.ref[0]=c; d.ref[1]=r; }
-  else if(d.type==='door'){ d.ref[0]=c; d.ref[1]=r; L.walls.delete(keyOf(c,r)); }
+  else if(d.type==='door'){ d.ref[0]=c; d.ref[1]=r; L.walls.delete(keyOf(c,r)); if(L.holes) L.holes.delete(keyOf(c,r)); }
   // A stone, platform, coin or talisman: two numbers to rewrite, onto open ground only.
   else if(d.type==='cellItem'){
     if(c===d.ref[0] && r===d.ref[1]) return;
@@ -1799,7 +1823,7 @@ const INSP_NAME = { wall:"Wall", start:"Start", goal:"Flag", init:"Tile", key:"K
                     // name. "platform" is the reason: the board calls it a rail now, and the
                     // data key is the only place the old word should still show up.
                     stone:"Stone", platform:"Rail", talisman:"Talisman", coin:"Coin",
-                    singularity:"Singularity" };
+                    singularity:"Crumble" };
 function inspRow(label, el){
   const w = document.createElement("label"); w.className = "opt";
   w.appendChild(document.createTextNode(label)); w.appendChild(el); return w;
@@ -1926,7 +1950,9 @@ function retypeMonster(h, kind){
 
 // ---------- events ----------
 let paintMode=null;                              // 'paint' | 'erase' during a wall drag
-function paintWall(c,r){ const k=keyOf(c,r); if(paintMode==="erase"){ L.walls.delete(k); } else if(!L.walls.has(k)){ L.walls.add(k); eraseNonWallAt(c,r); } }
+function paintWall(c,r){ const k=keyOf(c,r); if(paintMode==="erase"){ L.walls.delete(k); } else if(!L.walls.has(k)){ L.walls.add(k); if(L.holes) L.holes.delete(k); eraseNonWallAt(c,r); } }
+// A HOLE takes the cell over the way a wall does: whatever stood there goes, a wall included.
+function paintHole(c,r){ const k=keyOf(c,r); L.holes=L.holes||new Set(); if(paintMode==="erase"){ L.holes.delete(k); } else if(!L.holes.has(k)){ L.holes.add(k); L.walls.delete(k); eraseNonWallAt(c,r); } }
 function cellsBetween(a,b){                       // DDA so fast drags don't skip cells
   const out=[]; let x0=a.c,y0=a.r,x1=b.c,y1=b.r; const dx=Math.abs(x1-x0),dy=Math.abs(y1-y0), n=Math.max(dx,dy);
   for(let i=0;i<=n;i++){ const t=n?i/n:0; out.push({c:Math.round(x0+(x1-x0)*t), r:Math.round(y0+(y1-y0)*t)}); } return out;
@@ -1994,6 +2020,7 @@ cv.addEventListener("mousedown", e=>{
   // ...and a press on bare board puts the inspector away
   if(e.button!==2) clearSel();
   if(tool==="wall"){ paintMode = (e.button===2 || L.walls.has(keyOf(c.c,c.r))) ? "erase" : "paint"; pushUndo(); paintWall(c.c,c.r); lastCell=c; commit(); draw(); refreshOut(); return; }
+  if(tool==="hole"){ paintMode = (e.button===2 || (L.holes && L.holes.has(keyOf(c.c,c.r)))) ? "erase" : "paint"; pushUndo(); paintHole(c.c,c.r); lastCell=c; commit(); draw(); refreshOut(); return; }
   if(tool==="stone"){ paintMode = (e.button===2 || hasStone(c.c,c.r)) ? "erase" : "paint"; pushUndo(); paintStone(c.c,c.r); lastCell=c; commit(); draw(); refreshOut(); return; }
   if(tool==="erase"){ paintMode="erase"; pushUndo(); eraseAt(c.c,c.r); lastCell=c; commit(); draw(); refreshOut(); return; }
   // platform: left-click places / cycles the shape, right-click removes
@@ -2015,10 +2042,10 @@ cv.addEventListener("mousemove", e=>{
                      : (c && tool!=="erase" && draggableAt(c.c,c.r)) ? "grab" : "crosshair"; return; }
   if(!c) return;
   if(dragEl){ dragMoved=true; applyDrag(c.c,c.r); lastCell=c; commit(); draw(); refreshOut(); return; }
-  if(tool!=="wall" && tool!=="erase" && tool!=="stone") return;
+  if(tool!=="wall" && tool!=="hole" && tool!=="erase" && tool!=="stone") return;
   if(lastCell && c.c===lastCell.c && c.r===lastCell.r) return;
   const path = lastCell ? cellsBetween(lastCell,c) : [c];
-  path.forEach(p=>{ if(p.c<0||p.r<0||p.c>=L.cols||p.r>=L.rows) return; if(tool==="wall") paintWall(p.c,p.r); else if(tool==="stone") paintStone(p.c,p.r); else eraseAt(p.c,p.r); });
+  path.forEach(p=>{ if(p.c<0||p.r<0||p.c>=L.cols||p.r>=L.rows) return; if(tool==="wall") paintWall(p.c,p.r); else if(tool==="hole") paintHole(p.c,p.r); else if(tool==="stone") paintStone(p.c,p.r); else eraseAt(p.c,p.r); });
   lastCell=c; commit(); draw(); refreshOut();
 });
 // An edge drag is followed on the WINDOW, not on the canvas. Growing the map means dragging
@@ -2093,14 +2120,17 @@ function toolIcon(g, t, S){
                      g.beginPath(); g.arc(S/2,S*.22,S*.10,Math.PI*0.15,Math.PI*0.85,true); g.stroke(); break;
     case "coin":     box(S*.18,S*.18,S*.64,S*.64,S*.12,"#c78b16");
                      box(S*.25,S*.25,S*.50,S*.50,S*.09,"#ffd24a"); break;
-    case "singularity":
-                     box(M,M,F,F,S*.06,"#07060f");
-                     g.strokeStyle="#6a5cff"; g.lineWidth=Math.max(1,S*.045); g.globalAlpha=.6;
-                     for(const f of [0.74,0.52]){ const h=S*f/2;
-                       g.strokeRect(S/2-h,S/2-h,h*2,h*2); }
-                     g.globalAlpha=1; box(S*.35,S*.35,S*.30,S*.30,0,"#000");
-                     g.strokeStyle="#b9b0ff"; g.lineWidth=Math.max(1,S*.035);
-                     g.strokeRect(S*.35,S*.35,S*.30,S*.30); break;
+    case "singularity": {                                          // crumbling ground: solid, cracked in single blue lines
+                     const n=4, cs=F/n;
+                     g.fillStyle="#05040d"; g.fillRect(M, M, F, F);                 // the hole, and blue glass of different thicknesses
+                     for(let j=0;j<n;j++) for(let i=0;i<n;i++){ g.globalAlpha = 0.35 + 0.45*Math.abs(Math.sin((i*17+7)*12.9898 + (j*29+3)*78.233)*43758.5453 % 1);
+                       g.fillStyle="#4baff1"; g.fillRect(M+i*cs, M+j*cs, cs, cs); }
+                     g.globalAlpha = 1;
+                     for(let j=0;j<n;j++) for(let i=0;i<n;i++){ const X=M+i*cs, Y=M+j*cs;   // inner edges: blue top-left, dark blue bottom-right
+                       g.globalAlpha=.25; g.fillStyle="#4baff1"; g.fillRect(X, Y, cs, 1); g.fillRect(X, Y+1, 1, cs-1);
+                       g.globalAlpha=1; g.fillStyle="#1b4a6e"; g.fillRect(X+1, Y+cs-2, cs-1, 2); g.fillRect(X+cs-2, Y+1, 2, cs-3); }
+                     g.globalAlpha=1;
+                     break; }
     case "key":      g.strokeStyle=color; g.lineWidth=S*.10;
                      g.beginPath(); g.arc(S*.36,S*.40,S*.16,0,7); g.stroke();
                      g.lineCap="round"; g.beginPath(); g.moveTo(S*.47,S*.51); g.lineTo(S*.80,S*.84);
@@ -2152,7 +2182,21 @@ $("inspDel").onclick=()=>{
   else { const [c,r] = selCells()[0] || []; if(c!=null) eraseAt(c,r); }
   clearSel(); commit(); draw(); refreshOut();
 };
-$("undo").onclick=doUndo; $("clearBtn").onclick=()=>{ pushUndo(); L.walls.clear(); L.blocks=[]; L.hazards=[]; L.doors=[]; L.keys=[]; L.stone=[]; L.platforms=[]; commit(); draw(); refreshOut(); };
+// EVERY WALL A HOLE, or every hole a wall, on the level in hand — one undo step either way. The two take the same cells and
+// nothing else, so nothing else on the board has to move out of the way.
+function convertCells(fromKey, toKey, fromName, toName){
+  const from = L[fromKey] || new Set(), to = (L[toKey] = L[toKey] || new Set());
+  if(!from.size){ setStatus("no " + fromName + " on this level"); return; }
+  pushUndo();
+  const n = from.size;
+  from.forEach(k => to.add(k));
+  from.clear();
+  commit(); draw(); refreshOut();
+  setStatus(n + " " + fromName + " → " + toName);
+}
+$("wallsToHoles").onclick = () => convertCells("walls", "holes", "walls", "holes");
+$("holesToWalls").onclick = () => convertCells("holes", "walls", "holes", "walls");
+$("undo").onclick=doUndo; $("clearBtn").onclick=()=>{ pushUndo(); L.walls.clear(); if(L.holes) L.holes.clear(); L.blocks=[]; L.hazards=[]; L.doors=[]; L.keys=[]; L.stone=[]; L.platforms=[]; commit(); draw(); refreshOut(); };
 function doUndo(){ if(!undoStack.length)return; const prev=undoStack.pop(); L=toWorking(prev); syncSize(); commit(); draw(); refreshOut(); setStatus("undo"); }
 window.addEventListener("keydown",e=>{ if(e.key==="z"&&(e.ctrlKey||e.metaKey||true)&&document.activeElement.tagName!=="INPUT"&&document.activeElement.tagName!=="TEXTAREA"){ doUndo(); }
   if(document.activeElement.tagName!=="INPUT" && monDraft){       // finishing a patrol

@@ -4963,7 +4963,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.65";                    // shown on the title & pause screens
+  const VERSION = "v10.66";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -6667,6 +6667,12 @@
     // and the rail is the palest of them, so the line he runs on is the shine on it.
     { id:"gold",   name:"Gold",      cost:30, earthMode:"scatter",
       earth:["#b8860b","#d4a017","#f0c33c","#a8760a"] },
+    // PRISM: the rainbow as GLASS. Not pieced at all: a smooth field of rainbow NOISE (earthMode "noise" — see
+    // earthNoisePattern), the six pure hues running into one another across the track rather than sitting in squares.
+    // SEE-THROUGH: `glass` is how strong it is, and a glass design has no ground under it, so whatever the level is shows
+    // through. The cube's white shimmer sweeps along the whole of it (TRACK_GLASS).
+    { id:"prism", name:"Prism", cost:40, earthMode:"noise", glass:0.65,
+      earth:["#ff0900","#ff7700","#ffcc00","#00ff5e","#009aff","#9900ff"] },
   ];
   // The rail takes its colour FROM the earth it runs over: the brightest of that design's
   // squares, drained a little and lifted toward white. A hand-picked rail per design drifts the
@@ -6710,9 +6716,28 @@
       const w = S*0.88, q = w/n;
       const h = ROWS*q, x = (S-w)/2, y = (S-h)/2;
       g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip();
-      for (let j = 0; j < ROWS; j++) for (let i = 0; i < n; i++) {
+      if (t.glass) { g.globalAlpha = Math.min(1, t.glass); g.globalCompositeOperation = "screen"; }   // glass: screened, as on the board
+      // (a glass square's edges on whole pixels of the card, so see-through neighbours meet rather than overlap — see
+      // drawGroundQuilt)
+      const snap = v => Math.round(v*ICON_SCALE)/ICON_SCALE;
+      if (t.earthMode === "noise") {
+        fillEarthNoise(g, cols, x, y, w, h, w, x, y);        // the smooth field, a card's width to a tile, as on the board
+      } else for (let j = 0; j < ROWS; j++) for (let i = 0; i < n; i++) {
         g.fillStyle = lay(cols, i, j);
-        g.fillRect(x + i*q, y + j*q, q + 1, q + 1);
+        if (t.glass) {
+          const x0 = snap(x + i*q), x1 = snap(x + (i + 1)*q), y0 = snap(y + j*q), y1 = snap(y + (j + 1)*q);
+          g.fillRect(x0, y0, x1 - x0, y1 - y0);
+        } else g.fillRect(x + i*q, y + j*q, q + 1, q + 1);
+      }
+      if (t.glass) {
+        const G = TRACK_GLASS;
+        g.globalCompositeOperation = "source-over";
+        // the shimmer held still, a third of the way across: a card cannot move, so it is caught mid-sweep
+        const sh = g.createLinearGradient(x, y, x + w, y + h);
+        sh.addColorStop(0.18, "rgba(255,255,255,0)"); sh.addColorStop(0.34, "rgba(255,255,255," + G.shineA + ")");
+        sh.addColorStop(0.50, "rgba(255,255,255,0)");
+        g.globalAlpha = 1; g.globalCompositeOperation = "lighter"; g.fillStyle = sh; g.fillRect(x, y, w, h);
+        g.globalCompositeOperation = "source-over";
       }
       g.restore();
     };
@@ -6862,7 +6887,11 @@
   // never saved — every runner that asks what swagger he has on (the board, the title, the shop, the
   // leap and the trail) gets this instead while it is set.
   let _labSwagger = null;
-  const lookItem = k => { if (k === "swagger" && _labSwagger) return _labSwagger;
+  // ...and a whole LOOK put on him for the length of one drawing, never worn and never saved: the opening's cube dresses
+  // its runner, its track and his trail in set items from the shop (cubeOutfit), whatever is worn.
+  let _lookOver = null;
+  const lookItem = k => { if (_lookOver && _lookOver[k]) return _lookOver[k];
+                          if (k === "swagger" && _labSwagger) return _labSwagger;
                           const cat = LOOK.find(l=>l.key===k);
                           return cat.items.find(i => i.id === lookWorn(k)) || lookDefault(cat); };
   // Prices are live. The six zero-cost items are the kit you start in — they have to stay
@@ -6948,6 +6977,13 @@
     // a change of cell size does, and resize() marks it for that.
     COLS = L.cols || FULL_COLS; ROWS = L.rows || FULL_ROWS;   // this level's board size
     const walls = new Set(L.walls.map(w => key(w[0], w[1])));
+    // HOLES: cells cut out of the level's quilt, open to the sky round the board. Nothing can be built over one (see
+    // buildStaticOcc), and their outline — traced once here, adjacent holes as one shape — is where the quilt stops and
+    // the board's own edge treatment comes round them (holeLoopsOf, drawBoardBackdrop, boardEdgeGlow, boardInnerGlow).
+    const holes = new Set((L.holes || []).map(h => key(h[0], h[1])));
+    // ...their outline, and a key for the glow cache — traced round every CRUMBLE too: a crumble is a hole in the quilt with
+    // glass laid in it (drawBoardBackdrop), so it takes the hole's edge light; only the holes are closed to building
+    const voids = voidLoops(new Set([...holes, ...(L.singularity || []).map(g => key(g[0], g[1]))]));
     // where this level starts dealing crack variations, so levels don't all open with Var 1
     const stoneRot = (L.stone && L.stone.length)
       ? _sHash(L.stone[0][0] + 1, L.stone[0][1] + 1) % _STONE_VARS.length : 0;
@@ -6976,7 +7012,10 @@
     const speedTier = 0, startSpeedMult = 1;
     const effSpeed = Math.max(90, Math.round(1000 / cps));
     state = {
-      L, walls, tiles, path,
+      L, walls, holes, holeLoops: voids.loops, holeKey: voids.key, tiles, path,
+      // A fresh dice-roll for the CRUMBLES every time the level is loaded: how thick each square of their glass is (and which
+      // way it turns when it falls) comes out different on every attempt, and still holds still for the length of one.
+      crumbleSeed: (Math.random() * 1e9) | 0,
       speedTier, startSpeedMult, baseSpeed: L.speed,
       // Crack variation is dealt round-robin (rotated per level) rather than picked from a
       // position hash, so ANY level with 3+ stones is guaranteed to show all three sets
@@ -7868,7 +7907,7 @@
       return;
     }
     if (type==="flag")     { real(() => drawFlag(0, 0, 0, false)); return; }
-    if (type==="singularity") { real(() => drawSingularity(0, 0, false, 0)); return; }
+    if (type==="singularity") { real(() => drawSingularity(0, 0, false, 0, true)); return; }   // (the card has no quilt: draw its squares too)
     // The pickup token itself, boost or slow, exactly as it floats on the board.
     if (type==="boost" || type==="slow") { real(() => drawFxPickup(0, 0, 0, type)); return; }
     // THE ANIMALS, each drawn by its own routine and DOING what it does — rowing, lunging into sight and fading out of
@@ -8288,6 +8327,7 @@
   function markOccDirty() { occDirty = true; occGen++; }
   function buildStaticOcc(dragId) {
     const occ = new Set(state.walls);
+    for (const hk of (state.holes || [])) occ.add(hk);        // a hole: open sky, nothing is built over it
     for (const sk of state.stones.keys()) occ.add(sk);        // intact stone blocks placement
     for (const pf of (state.platforms||[])) occ.add(key(pf.c, pf.r));   // platforms are wall — you ride them, you don't build on them
     for (const ck of state.collapsed) occ.add(ck);             // cells that have collapsed away
@@ -8636,6 +8676,21 @@
   // A tile sent to a hotspot flies in this, and a junction's race and its hotspots growing take this between them, so
   // both keep step with him: the faster he runs, the quicker they go.
   const quarterTile = () => (state.msPerCell || 1000) / 4;
+  // HOW LONG UNTIL HE FREES A TILE, in ms at the pace he is actually running (liveFactor: boosts, the guide, the stops). A
+  // laid tile comes back to the pool as he passes its middle (freeClearedTiles) — the first one ahead of him that will,
+  // that is: one on a crumble goes down with the ground instead. Infinity when none is coming. Stopped dead (the Hands of
+  // Time, the Ankh) it is reckoned at his own pace, and the race holds at its end for the rest (drawJunctionMarks).
+  function msToNextFree() {
+    const s = state, param = s.runIdx + s.runT;
+    for (let i = 0; i < s.path.length; i++) {
+      const n = s.path[i];
+      if (n.kind !== "tile" || n.exited || n.tileId == null) continue;
+      if (s.singularity && s.singularity.has(key(n.c, n.r))) continue;
+      const f = s.liveFactor > 0 ? s.liveFactor : 1;
+      return Math.max(0, (i + 0.5 - param) * (s.msPerCell || 1000) / f);
+    }
+    return Infinity;
+  }
   // The tile a tap would fetch: the oldest one not currently part of the track — parked counts,
   // it is still yours. Null when you have none, which is also what dims the hints, so what they
   // show and what a tap would do can never disagree.
@@ -11523,13 +11578,14 @@
         if (node.tileId != null) {
           const t = s.tiles[node.tileId];
           if (t) {
-            if (s.singularity.has(key(node.c, node.r))) {       // fragile floor: tile is consumed
-              // It does not just stop existing. The rift takes it: a ghost of the tile is left
-              // behind to spiral into the eye the way everything else on this square does, so
-              // the one time the player LOSES a tile is the one time they get to watch it go.
+            if (s.singularity.has(key(node.c, node.r))) {       // crumbling ground: the tile is lost with it
+              // It does not just stop existing. The ground GIVES under it: a ghost of the tile goes down with the
+              // cell's own pieces (drawEaten), so the one time the player LOSES a tile is the one time they get to
+              // watch it go — and the cell is a hole from here on (collapseCrumble).
               s.eaten.push({ c: node.c, r: node.r, t: 0 });
               t.status = "spent"; t.c = -1; t.r = -1;
               s.collapsed.add(key(node.c, node.r));
+              collapseCrumble(node.c, node.r);
               s.shake = Math.max(s.shake, cell * 0.12);
               Sound.swallow();
             } else {
@@ -13825,17 +13881,36 @@
   const glowVivid = col => tintHex(cssHex(col), 0, EDGE_GLOW.midSat, EDGE_GLOW.midLift);
   // `shape` is the silhouette (rects in the canvas's own pixels), `mids` the pieces of edge that
   // throw colour ({x,y,w,h,col}), `u` one tile in the same pixels.
-  function paintEdgeGlow(g, W, H, shape, mids, u) {
+  // `holes`: loops (in this canvas's pixels) cut OUT of the shape — the level's holes — so the glow falls into them as it
+  // falls round the outside. With them, the place is first painted into a MASK (the shape less its holes), the glow cast
+  // off the mask and wiped from it afterwards.
+  const _glowMask = document.createElement("canvas");
+  function paintEdgeGlow(g, W, H, shape, mids, u, holes) {
     const E = EDGE_GLOW, OFF = W + 10000;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, W, H);
+    let mask = null;
+    if (holes) {
+      mask = _glowMask;
+      if (mask.width !== W || mask.height !== H) { mask.width = W; mask.height = H; }
+      const m = mask.getContext("2d");
+      m.setTransform(1, 0, 0, 1, 0, 0); m.globalCompositeOperation = "source-over"; m.clearRect(0, 0, W, H);
+      m.fillStyle = "#000";
+      m.beginPath(); for (const R of shape) m.rect(R.x, R.y, R.w, R.h); m.fill();
+      m.globalCompositeOperation = "destination-out";
+      m.beginPath(); holePath(m, 0, 0, 1, holes); m.fill("nonzero");     // (an island inside a ring of hole winds back to none)
+      m.globalCompositeOperation = "source-over";
+    }
     g.save();
-    g.beginPath(); g.rect(0, 0, W, H);
-    for (const R of shape) g.rect(R.x, R.y, R.w, R.h);
-    g.clip("evenodd");                            // everywhere EXCEPT the place itself
-    const cast = (list, blur, colour) => {
+    if (!mask) {
+      g.beginPath(); g.rect(0, 0, W, H);
+      for (const R of shape) g.rect(R.x, R.y, R.w, R.h);
+      g.clip("evenodd");                          // everywhere EXCEPT the place itself
+    }
+    const cast = (list, blur, colour, whole) => {
       g.shadowOffsetX = OFF; g.shadowOffsetY = 0;
       g.shadowBlur = Math.max(0.5, blur); g.shadowColor = colour;
+      if (whole && mask) { g.drawImage(mask, -OFF, 0); return; }
       g.fillStyle = "#000"; g.beginPath();
       for (const R of list) g.rect(R.x - OFF, R.y, R.w, R.h);
       g.fill();
@@ -13844,13 +13919,16 @@
     // cast at twice the asked-for strength — as many times over as that needs.
     const at = (a, fn) => { const want = Math.max(0, a * 2), n = Math.max(1, Math.ceil(want - 1e-6));
                             for (let k = 0; k < n; k++) fn(Math.min(1, want / n)); };
-    if (E.backA > 0)  at(E.backA,  q => cast(shape, E.backW * u, "rgba(0,0,0," + q.toFixed(3) + ")"));
+    if (E.backA > 0)  at(E.backA,  q => cast(shape, E.backW * u, "rgba(0,0,0," + q.toFixed(3) + ")", true));
     if (E.midA > 0)   for (const R of mids) {
       at(E.midA * E.midTail, q => cast([R], E.midW * u, hexA(R.col, q)));               // the reach
       at(E.midA,             q => cast([R], E.midW * E.midCore * u, hexA(R.col, q)));   // the bright edge
     }
-    if (E.frontA > 0) at(E.frontA, q => cast(shape, E.frontW * u, "rgba(0,0,0," + q.toFixed(3) + ")"));
+    if (E.frontA > 0) at(E.frontA, q => cast(shape, E.frontW * u, "rgba(0,0,0," + q.toFixed(3) + ")", true));
     g.restore();
+    if (mask) {                                   // ...and none of it on the place itself
+      g.save(); g.globalCompositeOperation = "destination-out"; g.drawImage(mask, 0, 0); g.restore();
+    }
   }
   // THE MAP'S. The silhouette is every chapter on it (and the film's square), and the colour
   // comes off each chapter that has open sky beside it — its own quilt, mixed to one colour and
@@ -13909,7 +13987,7 @@
   function boardEdgeGlow(bx, by) {
     const T = state && state.bgTheme; if (!T || !(cell > 2) || !(COLS > 0) || !(ROWS > 0)) return;
     const E = EDGE_GLOW, reach = Math.max(E.backW, E.midW, E.frontW) * 1.25;
-    const key = [_glowGen, T.colors.join("|"), T.dir, T.stripeW, COLS, ROWS].join("/");
+    const key = [_glowGen, T.colors.join("|"), T.dir, T.stripeW, COLS, ROWS, state.holeKey || ""].join("/");
     let G = _boardGlow;
     if (!G || G.key !== key) {
       const spanC = COLS + reach*2, spanR = ROWS + reach*2;
@@ -13933,7 +14011,8 @@
           mids.push({ x: pad + bw - ws, y: pad + j*ws, w: ws, h: ws, col: col(nx - 1, j) });
         }
       }
-      paintEdgeGlow(c.getContext("2d"), c.width, c.height, [{ x: pad, y: pad, w: bw, h: bh }], mids, u);
+      const holes = (state.holeLoops || []).map(L => L.map(([hx, hy]) => [pad + hx*u, pad + hy*u]));
+      paintEdgeGlow(c.getContext("2d"), c.width, c.height, [{ x: pad, y: pad, w: bw, h: bh }], mids, u, holes.length ? holes : null);
       G = _boardGlow = { key, c, u, reach };
     }
     const k = cell / G.u, padS = G.reach * cell;
@@ -15868,12 +15947,29 @@
     if (state.status === "ceremony") { drawCeremony(ts); return; }
     ctx.save();
     ctx.translate(-Math.round(camX - shx), -Math.round(camY - shy));
+    // THE LEVEL'S EDGE LIGHT — the sharp band just inside the board's edge and round every hole, and the sparks rolling along
+    // them — FIRST, under everything that stands on the level: walls, stones, tiles, the runner and the rest are all drawn
+    // over it. Its colour half went down with the quilt.
+    if (_innerWhite) { boardInnerGlow(0, 0, ts, "white"); _innerWhite = false; }   // once per backdrop, never stale
 
     // The board's own boundary. Off now: the level's backdrop stops at the level and the cosmos
     // shows around it, so the edge is a thing you can SEE rather than something that had to be
     // hinted at with hazard stripes when a tile strayed near it. Flip this to bring them back —
     // the machinery below is intact and costs nothing while nothing calls it, including the two
     // full-viewport canvases it would otherwise allocate for its mask.
+    // The walls' shadows, on the ground and the edge light, under everything that stands there — see WALL_SHADOW.
+    // Only the tiles on screen (and one more all round, for the shake), smoothed the cheap way, as the edge glow is.
+    const wallShade = wallShadowLayer();
+    if (wallShade) {
+      const R = WALL_SHADOW.res;
+      const c0 = Math.max(0, Math.floor(camX/cell) - 1), c1 = Math.min(COLS, Math.ceil((camX + viewW)/cell) + 1);
+      const r0 = Math.max(0, Math.floor(camY/cell) - 1), r1 = Math.min(ROWS, Math.ceil((camY + viewH)/cell) + 1);
+      if (c1 > c0 && r1 > r0) {
+        const sm = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(wallShade, c0*R, r0*R, (c1 - c0)*R, (r1 - r0)*R, c0*cell, r0*cell, (c1 - c0)*cell, (r1 - r0)*cell);
+        ctx.imageSmoothingEnabled = sm;
+      }
+    }
     if (EDGE_STRIPES) drawEdgeWalls();
     if (wallLayerDirty) buildWallLayer();
     if (wallLayer && state.walls && state.walls.size) {
@@ -15908,16 +16004,8 @@
     // without a mark showing.
     for (const t of (win ? [] : state.tiles))
       if ((t.status === "free" || t.status === "parked") && (!state.drag || state.drag.tile.id !== t.id)) {
-        // A tile parked over a rift shivers: the floor under it is already trying to take it,
-        // and it is the only warning the player gets that this one is not coming back. Same
-        // two-sine shake the eye uses, at a third the throw, so the pair read as one thing
-        // pulling and the other resisting rather than as two separate animations.
-        const doomed = state.singularity && state.singularity.has(key(t.c, t.r)) &&
-                       !state.collapsed.has(key(t.c, t.r));
-        let jx = 0, jy = 0;
-        if (doomed) { const tr = cell * RIFT.tremble * 0.34;
-          jx = (Math.sin(ts/47) + Math.sin(ts/31.3)*0.6) * tr;
-          jy = (Math.cos(ts/41) + Math.cos(ts/27.7)*0.6) * tr; }
+        // (A tile parked over crumbling ground used to shiver. Nothing on a crumble jiggles now: the hole in it is the warning.)
+        const jx = 0, jy = 0;
         const fly = flyPos();
         if (fly && fly.id === t.id) drawFreeTile(fly.x, fly.y, ts, true, false);   // lifted, mid-throw
         else drawFreeTile(cx(t.c) + jx, cy(t.r) + jy, ts, false, !!t.spare);
@@ -15965,9 +16053,6 @@
     }
     drawCharmFx(ts);                              // ...and the shouting charms over the lot
     if (state.hole) drawHole(ts);                 // ...and the end of the world over even those
-    // ...and the WHITE of the level's edge over absolutely everything on it: the sharp band just
-    // inside the edge and the sparks rolling along it. Its colour half went down with the quilt.
-    if (_innerWhite) { boardInnerGlow(0, 0, ts, "white"); _innerWhite = false; }   // once per backdrop, never stale
     // ...except the hotspots, which go over even that. They are the thing you aim at, so nothing on the board —
     // the runner, a saw, a coin, the tile in your hand, the edge's own white — is allowed to sit on one.
     drawJunctionMarks(ts);
@@ -16759,14 +16844,15 @@
     const s = cell*0.85, bob = Math.sin(ts/300)*s*0.05;   // a little smaller
     y += bob;
     ctx.save();
+    // SQUARE, every corner of it — no circles: the glow, the bow and its hole are squares like everything else here.
     ctx.globalAlpha = 0.28; ctx.fillStyle = color;                                   // soft glow
-    ctx.beginPath(); ctx.arc(x, y, s*0.4, 0, Math.PI*2); ctx.fill();
+    ctx.fillRect(x - s*0.4, y - s*0.4, s*0.8, s*0.8);
     ctx.globalAlpha = 1;
-    const R = s*0.12, bx = x - s*0.10;
+    const R = s*0.12, bx = x - s*0.10, hr = R*0.46;
     ctx.fillStyle = color;                                                           // bow drawn as a true ring:
     ctx.beginPath();
-    ctx.arc(bx, y, R, 0, Math.PI*2);                                                 // outer edge
-    ctx.arc(bx, y, R*0.46, 0, Math.PI*2, true);                                       // inner edge -> hole
+    ctx.rect(bx - R, y - R, R*2, R*2);                                               // outer edge
+    ctx.rect(bx - hr, y - hr, hr*2, hr*2);                                           // inner edge -> hole
     ctx.fill("evenodd");                                                             // centre left transparent (shows the scene behind)
     const sx0 = bx + R*0.6, sl = s*0.30, tipX = sx0 + sl, tw = s*0.035, th = s*0.07;
     ctx.fillStyle = color;
@@ -16925,6 +17011,10 @@
   // closed loop has no such spot and gets none.
   function drawHazardPaths(ts) {
     const capR = cell*0.075;
+    // No route is painted across a hole: routes are markings on the ground, and there is none there — nor does anything
+    // use that stretch, since a monster turns round on the last tile before it.
+    const gaps = holeOnlyLoops();
+    if (gaps.length) { ctx.save(); ctx.beginPath(); ctx.rect(-1e5, -1e5, 2e5, 2e5); holePath(ctx, 0, 0, cell, gaps); ctx.clip("evenodd"); }
     const cap = (pts, col) => { ctx.fillStyle = col;
       for (const [ex,ey] of pts) { ctx.beginPath(); ctx.arc(ex,ey,capR,0,Math.PI*2); ctx.fill(); } };
     // A MONSTER'S turnaround is a perfect SQUARE rather than a dot — the same width the dot was, centred on the end of
@@ -16967,6 +17057,7 @@
         ctx.restore();
       }
     }
+    if (gaps.length) ctx.restore();
   }
   function drawHazards(ts) {
     for (const h of state.hazards) {
@@ -17297,12 +17388,35 @@
     }
     return driveMean*d + B*(P - d);
   }
+  // HOLES STOP A MONSTER. Nothing on the board flies: a route that runs into a hole in the quilt ends on the last tile of
+  // ground before it and turns round there, as it would at the end of its rail. Only a real hole counts — a crumble is still
+  // ground until the runner takes it away — and the moment one gives way, anything heading for it turns back.
+  const holeAt = (c, r) => !!(state && state.holes && state.holes.has(key(c, r)));
+  const railTile = (h, p) => h.axis === "h" ? [p, h.r] : [h.c, p];
+  // The t a rail monster can swim to from where it is, going the way it faces: the end of its rail, or short of a hole.
+  function railReach(h) {
+    const span = h.hi - h.lo; if (!span) return h.t;
+    const sg = Math.sign(span) * (h.dir > 0 ? 1 : -1), end = h.dir > 0 ? h.hi : h.lo;
+    let p = Math.round(h.lo + span * h.t);
+    while (p !== end && !holeAt(...railTile(h, p + sg))) p += sg;
+    return (p - h.lo) / span;
+  }
+  // A walker turning back at a hole, standing on tile k of its current leg (of n). Mid-leg it is the same leg walked the
+  // other way from the same tile; on a waypoint it is the leg behind it. It dwells there as it would at any turnaround.
+  function pathTurn(h, k, n, nextIdx) {
+    if (k > 0) { h.seg = nextIdx; h.segT = 1 - k/n; }
+    else h.segT = 0;
+    h.mdir = -h.mdir;
+    h.rowT = (k > 0 ? n - k : 0) * monPace(); h.rowP = 0;
+    h.pause = MON_DWELL;
+  }
   // Lay out the leg the monster is about to swim: how far it has to go, and how many whole
   // strokes to do it in. The stroke is then stretched to fit, never truncated.
   function railLegSetup(h) {
     for (let guard = 0; guard < 2; guard++) {
       h.legFrom = h.t;
-      h.legSpan = Math.abs((h.dir > 0 ? 1 : 0) - h.t);
+      h.legTo   = railReach(h);                // the end of its rail — or the last tile of ground before a hole
+      h.legSpan = Math.abs(h.legTo - h.t);
       if (h.legSpan > 1e-6) break;
       h.dir = -h.dir;                          // already at that end — turn and try the other way
     }
@@ -17311,14 +17425,16 @@
     // to fall out of that division — a long rail and a short one at the same speed swam in
     // strokes of different size, and neither lined up with the grid they were crossing.
     const span = Math.max(1, Math.abs((h.hi ?? 0) - (h.lo ?? 0)));   // tiles across the whole rail
-    h.legN  = Math.max(1, Math.round(span * h.legSpan));             // ...so this many thrusts
+    const legTiles = Math.round(span * h.legSpan);
+    h.legN  = Math.max(1, legTiles);                                 // ...so this many thrusts
     // And the leg is made to BE that many tiles, rather than that many thrusts stretched over
     // whatever was left. Rounding the count and keeping the old distance is what put a monster
     // between two tiles for a whole leg; this puts the two back in step by moving the distance
     // onto the thrust, which is the thing that is meant to be exactly one tile.
-    h.legSpan = h.legN / span;
+    h.legSpan = legTiles / span;                                     // (hemmed in by holes both ways: none, rowing on the spot)
     h.legSd = monPace();                                             // each taking one tile's time
     h.rowT  = 0;
+    h.legDone = 0;
   }
   function railRate(P) {
     const d = MONSTER.railDrive, B = MONSTER.railCoast;
@@ -18029,163 +18145,99 @@
   //
   // It is one function of time and index: no particles, no state, nothing to update. Twenty of
   // these on a board cost what one does, and none of them can drift out of step with itself.
-  const RIFT = {
-    // THE WELL — three black plates, each inset further into the tile space than the last, so
-    // the hole has a floor you can see down to rather than being one flat black square. There
-    // is no colour anywhere in this tile: what a Singularity is, is an absence.
-    p1:      0.75,  // the outermost, as a fraction of the CELL — and the edge of everything
-    p2:      0.60,  // the middle step
-    p3:      0.45,  // the floor, and where a sub-tile lands
-    a1:      0.34,  // how black each plate is
-    a2:      0.60,
-    a3:      1.00,
-    grain:   2.00,  // the paper the whole hole is printed on
-    tremble: 0.010, // how hard the floor shakes, fraction of a cell
-    // THE DRAW — sub-tiles the size of one square of a grid cut across the whole cell,
-    // appearing on the tile's own rim and pulled smoothly in to the middle.
-    grid:    8,     // sub-tiles to a side
-    n:       4,     // how many are being drawn in at once
-    ms:      720,   // one sub-tile's whole journey in
-    ease:    0.75,  // slow to leave the rim, then it lets go
-    peak:    0.22,  // its opacity where it appears; it lands at the floor's own
-    // THE GLOW behind the whole thing — the light the hole has not finished swallowing.
-    glowA:   1.00,  // how bright it is at the middle
-    glowR:   0.71,  // how far it reaches, fraction of a CELL — over 0.5 and it spills past the tile
+  // THE CRUMBLE — solid ground that is about to go. (The data still calls it `singularity`: it used to be a black well in the
+  // floor.) It is a HOLE in the quilt — with the board's edge light round it, joined to any hole beside it — and GLASS in the
+  // rainbow's blue laid in the hole: its quarter-tile squares at different strengths, a sheen of light across it, whole and
+  // still, a very thin line round the inner edge of every square — the Tileverse's blue along its top and left at a quarter
+  // strength, a dark blue along its bottom and right at full. Unlike a hole, a tile can still be laid over it. A tile laid over it is LOST once the runner has crossed
+  // it (freeClearedTiles), and the cell GIVES: its squares fall away into the sky and it is a hole from then on, with the
+  // board's edge light round it, closed to building (collapseCrumble).
+  const CRUMBLE = {
+    pieces: 4,       // squares to a side — the quilt's own quarter-tile squares, and where the cracks run
+    line:     1,     // the line round the inner edge of every square, px — very thin...
+    litA:     0.25,  // ...in the Tileverse's blue along its top and left, at this opacity...
+    dark:     "#1b4a6e",   // ...and in this dark blue along its bottom and right...
+    darkA:    1,     // ...at this...
+    darkW:    2,     // ...and this thick, px
+    fall:   760,     // ms the squares take to fall away once it gives
+    spin:   1.6,     // radians a square turns on its way out
+    // THE GLASS, each square at its own opacity somewhere in this range — some of it thinner than the rest. Which square is
+    // how thick is hashed off the cell, so it is the same every frame and every visit.
+    opacity: [0.20, 0.40],
+    sheen:  0.30,    // the light across it from the top-left corner (at a square's opacity against the thickest)
   };
-  const EATEN_MS = 520;                    // how long a swallowed tile takes to go
+  const EATEN_MS = 760;                    // how long a lost tile takes to go (with the cell's squares: CRUMBLE.fall)
   function tickEaten(dt) {
     const s = state; if (!s || !s.eaten || !s.eaten.length) return;
     for (const e of s.eaten) e.t += dt;
     s.eaten = s.eaten.filter(e => e.t < EATEN_MS);
   }
-  // The tile itself, on its way in. Same law as the rift's own squares — turn as it shrinks,
-  // centred on the eye — so it does not read as a different effect happening at the same place.
+  // One crumble cell's squares: where each sits, how opaque its glass is (CRUMBLE.opacity) and which way it turns when it falls —
+  // both hashed off the cell and this load's own roll (state.crumbleSeed), so every crumble is different, and different again
+  // on every attempt.
+  function crumblePieces(c, r) {
+    const N = Math.max(1, Math.round(CRUMBLE.pieces)), q = cell / N, x = cx(c), y = cy(r);
+    const sd = (state && state.crumbleSeed) | 0;                    // this load's own roll (beginLevel)
+    const h = (k) => (bgHash(c*131 + k*17 + 7 + sd, r*97 + k*29 + 3 + (sd >>> 3)) >>> 8) / 16777216;
+    const list = [];
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const k = j*N + i;
+      const [lo, hi] = CRUMBLE.opacity, a = lo + h(k + 311)*(hi - lo);
+      list.push({ k, x0: x + i*q, y0: y + j*q, q, a, turn: h(k + 13) < 0.5 ? -1 : 1 });
+    }
+    return list;
+  }
+  // ...when it GIVES: the tile that was lost on it, and the cell's squares, falling away into the sky — each one shrinking and
+  // turning out of its place on a schedule of its own, and the tile (the blank glass pane with its grip dots, the thing the
+  // player carries — losing a tile is what this costs, so a tile is what you see leave) after them.
   function drawEaten() {
     const s = state; if (!s.eaten) return;
+    const P = CRUMBLE;
     for (const e of s.eaten) {
-      const k = Math.min(1, e.t / EATEN_MS), q = 1 - Math.pow(1 - k, 3);
-      const x = cx(e.c) + cell*0.5, y = cy(e.r) + cell*0.5;
-      // What goes down the hole is the TILE — the blank glass pane with its grip dots, the thing
-      // the player carries — not the length of track that happened to be drawn on it. Losing a
-      // tile is what this costs you, so a tile is what you should see leave.
-      //
-      // The shrink is a transform because drawGlass always draws one CELL; scaling also keeps
-      // the pane's bevel and its dots in proportion the whole way down.
-      const k2 = 1 - q * (1 - RIFT.p3*0.6);
+      const qp = Math.pow(Math.min(1, e.t / P.fall), 2);          // slow to let go, then gone
+      for (const pc of crumblePieces(e.c, e.r)) {
+        const d = Math.min(1, qp*(1.15 + 0.7*((pc.k*0.618) % 1)));
+        if (d >= 1) continue;
+        const sz = pc.q*(1 - d);
+        ctx.save();
+        ctx.translate(pc.x0 + pc.q/2, pc.y0 + pc.q/2);
+        ctx.rotate(P.spin*d*pc.turn);
+        ctx.globalAlpha = pc.a*(1 - d);
+        ctx.fillStyle = tvBlueHex(); ctx.fillRect(-sz/2, -sz/2, sz, sz);
+        ctx.restore();
+      }
+      const k = Math.min(1, e.t / EATEN_MS), qq = 1 - Math.pow(1 - k, 3), k2 = 1 - qq*0.73;
       ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(q * Math.PI * 0.8);                       // a tile goes down turning; the well itself no longer does
+      ctx.translate(cx(e.c) + cell*0.5, cy(e.r) + cell*0.5);
+      ctx.rotate(qq * Math.PI * 0.8);
       ctx.scale(k2, k2);
-      ctx.globalAlpha = 1 - k*k;                            // and out as it gets there
+      ctx.globalAlpha = 1 - k*k;
       drawGlass(-cell/2, -cell/2, cell);
       drawDragDots(0, 0, cell);
       ctx.restore();
     }
   }
-  // Which square on the rim a sub-tile comes in on. Deterministic from its index and which
-  // pass it is on, so there is no state to keep and no two boards can drift apart — but not so
-  // regular that you can see the pattern come round.
-  function riftHash(v) { const f = Math.sin(v * 127.1) * 43758.5453; return f - Math.floor(f); }
-  // ...and the ring of grid squares on that rim, worked out once per grid size and kept.
-  let _rimG = 0, _rim = [];
-  function riftRim(G) {
-    if (G !== _rimG) {
-      _rim = [];
-      for (let gy = 0; gy < G; gy++) for (let gx = 0; gx < G; gx++)
-        if (gx === 0 || gy === 0 || gx === G-1 || gy === G-1) _rim.push([gx, gy]);
-      _rimG = G;
-    }
-    return _rim;
-  }
-  function drawSingularity(c, r, gone, ts) {
-    const x = cx(c), y = cy(r), t = ts || 0;
-    const P = RIFT, a = gone ? 0.35 : 1;
-    const R = tileR(cell);
-    // A plate of the well: a square of the cell, centred, cut to the one corner radius.
-    const plate = (f) => rrect(x + (cell - cell*f)*0.5, y + (cell - cell*f)*0.5,
-                               cell*f, cell*f, R);
-    // NOTHING HERE IS STILL, and the smaller a thing is the harder it shakes. The outermost
-    // plate never moves at all; the floor gets the whole of `tremble`; a sub-tile, smaller than
-    // any plate, gets more than the floor does — so the shake is something the well does TO what
-    // it is swallowing rather than a wobble laid over the tile.
-    //
-    // Two sines at frequencies that do not divide into each other, so the shake never repeats
-    // and never falls into a rhythm you could tap along to — and deliberately NOT on the fall's
-    // clock, which is what makes it read as something straining rather than something animating.
-    // The phase offset is what keeps the three from moving as one piece.
-    const span = Math.max(1e-4, P.p1 - P.p3);
-    const jig = (f, ph) => {
-      const amp = cell * P.tremble * clamp((P.p1 - f) / span, 0, 1.5);
-      ctx.translate((Math.sin(t/47 + ph) + Math.sin(t/31.3 + ph)*0.6) * amp,
-                    (Math.cos(t/41 + ph) + Math.cos(t/27.7 + ph)*0.6) * amp);
-    };
-    // THE GLOW, behind everything and drawn BEFORE the clip so it can reach past the tile.
-    // What falls inside gets buried under the three plates; what falls outside is all of it that
-    // escapes. The hot middle is white going to yellow at the edge — the one warm thing on a
-    // tile that is otherwise pure absence, and the reason the hole reads as something being
-    // consumed rather than a square someone forgot to paint.
-    if (P.glowA > 0) {
-      const mx = x + cell*0.5, my = y + cell*0.5, gr = cell * P.glowR;
-      const gg = ctx.createRadialGradient(mx, my, 0, mx, my, gr);
-      gg.addColorStop(0,    "rgba(255,255,238," + (P.glowA * a).toFixed(3) + ")");
-      gg.addColorStop(0.34, "rgba(255,233,152," + (P.glowA * a * 0.70).toFixed(3) + ")");
-      gg.addColorStop(0.68, "rgba(255,196,74,"  + (P.glowA * a * 0.24).toFixed(3) + ")");
-      gg.addColorStop(1,    "rgba(255,180,40,0)");
-      ctx.save(); ctx.fillStyle = gg;
-      ctx.beginPath(); ctx.arc(mx, my, gr, 0, Math.PI*2); ctx.fill(); ctx.restore();
-    }
+  // The crumble standing: its hole and its glass are laid by the backdrop, so what is drawn here is each square's OUTLINE, on its
+  // INNER edge — the Tileverse's blue along its top and left, a dark blue along its bottom and right, both at half strength
+  // (CRUMBLE.litA, dark, darkA). Laid as four strips that meet at the corners without overlapping, so no corner is stronger
+  // than its sides; and each square keeps inside itself, so a crumble beside another needs nothing sorting out. `whole`
+  // draws the glass too, for somewhere with no backdrop under it (the mechanic's card). `gone`: already given — a hole now.
+  function drawSingularity(c, r, gone, ts, whole) {
+    if (gone) return;
+    const P = CRUMBLE, pieces = crumblePieces(c, r), blue = tvBlueHex(), w = P.line;
     ctx.save();
-    // THE EDGE OF EVERYTHING is the CELL — nothing this tile draws reaches past its own square,
-    // whatever the numbers say, so a Singularity can never touch the tile next door. It is cut
-    // to the same corner every other full-cell piece is cut to, because a round hole in a board
-    // made of squares read as a thing laid on top of the board rather than a thing missing
-    // from it.
-    plate(1); ctx.clip();
-    // The one ink everything on this tile is painted in, set OUT HERE rather than inside the
-    // plates' clip below. A restore() puts back the fill style as well as the transform, so an
-    // ink set inside that clip is gone by the time the sub-tiles are drawn and they come out in
-    // whatever colour the previous tile happened to leave on the canvas — which is exactly what
-    // they did: yellow, or grey, depending on what was drawn before them.
-    ctx.fillStyle = "#07060d";
-    // The plates get a second, tighter clip of their own so the outermost of them stays a hard
-    // square at `p1` while the sub-tiles above are free to use the whole cell.
-    ctx.save(); plate(P.p1); ctx.clip();
-    // THE THREE PLATES, outermost first, each one darkening what is already under it. Stacked
-    // rather than blended: three translucent blacks over the level's own floor give three steps
-    // of depth out of one fill each, and the step edges are what tell you the hole has a bottom.
-    ctx.globalAlpha = a * P.a1; plate(P.p1); ctx.fill();
-    ctx.globalAlpha = a * P.a2;
-    ctx.save(); jig(P.p2, 1.7); plate(P.p2); ctx.fill(); ctx.restore();
-    ctx.globalAlpha = a * P.a3;
-    ctx.save(); jig(P.p3, 3.4); plate(P.p3); ctx.fill(); ctx.restore();
-    ctx.restore();                                      // ...and out of the plates' own clip
-    // THE DRAW. Sub-tiles the size of one square of a grid cut across the WHOLE CELL, appearing
-    // on a square of its rim — the tile's own edge, not the well's — and pulled smoothly in to
-    // the middle. The grid sets where a sub-tile comes from and how big it is; it is not a track
-    // it steps along, so the pull is a slide rather than a march. It arrives at the floor's own
-    // black rather than winking out, so there is no instant at which it is swapped for anything.
-    const G = Math.max(2, Math.round(P.grid));
-    const cs = cell / G;                                // one sub-tile
-    const gx0 = x, gy0 = y;
-    const RIM = riftRim(G);
-    for (let i = 0; i < P.n; i++) {
-      const u = t / P.ms + i / P.n;
-      const pass = Math.floor(u);                       // which trip in; it picks a new rim square
-      const e = Math.pow(u - pass, P.ease);
-      const from = RIM[Math.floor(riftHash(i * 7.13 + pass * 3.77) * RIM.length) % RIM.length];
-      const fx = (from[0] + 0.5) + (G*0.5 - (from[0] + 0.5)) * e;   // in grid squares, unrounded
-      const fy = (from[1] + 0.5) + (G*0.5 - (from[1] + 0.5)) * e;
-      ctx.save();
-      ctx.globalAlpha = a * (P.peak + (P.a3 - P.peak) * e);
-      jig(cs / cell, i * 2.1);                          // the smallest things here, so the loosest
-      ctx.fillRect(gx0 + fx*cs - cs*0.5, gy0 + fy*cs - cs*0.5, cs, cs);
-      ctx.restore();
+    if (whole) { ctx.fillStyle = blue; for (const pc of pieces) { ctx.globalAlpha = pc.a; ctx.fillRect(pc.x0, pc.y0, pc.q, pc.q); } }
+    ctx.globalAlpha = P.litA; ctx.fillStyle = blue;                  // tops and lefts
+    for (const pc of pieces) {
+      ctx.fillRect(pc.x0, pc.y0, pc.q, w);
+      ctx.fillRect(pc.x0, pc.y0 + w, w, pc.q - w);
     }
-    // One paper over the whole hole, last — the same grain every laid tile is printed on. Under
-    // the plates instead of over them and each step would carry its own texture, which reads as
-    // three sheets rather than one thing with a bottom.
-    ctx.globalAlpha = 1;
-    if (P.grain > 0) grainFill(x, y, cell, cell, P.grain * a);
+    const d = P.darkW;
+    ctx.globalAlpha = P.darkA; ctx.fillStyle = P.dark;               // bottoms and rights, thicker, clear of the tops and lefts
+    for (const pc of pieces) {
+      ctx.fillRect(pc.x0 + w, pc.y0 + pc.q - d, pc.q - w, d);
+      ctx.fillRect(pc.x0 + pc.q - d, pc.y0 + w, d, pc.q - w - d);
+    }
     ctx.restore();
   }
   // a coloured key-door: two slim riveted panels (styled like the wall tiles) side by side
@@ -18276,14 +18328,14 @@
     ctx.save();
     ctx.globalAlpha = 0.4 + 0.35*pulse;
     ctx.strokeStyle = getVar("--accent"); ctx.lineWidth = Math.max(3, cell*0.05);
-    ctx.beginPath(); ctx.arc(x, y - s*0.06, s*0.17, Math.PI, 0); ctx.stroke();        // shackle (smaller arc)
+    ctx.lineJoin = "miter"; ctx.lineCap = "butt";
+    ctx.beginPath(); ctx.moveTo(x - s*0.17, y - s*0.02); ctx.lineTo(x - s*0.17, y - s*0.23);   // shackle: a square U
+    ctx.lineTo(x + s*0.17, y - s*0.23); ctx.lineTo(x + s*0.17, y - s*0.02); ctx.stroke();
     ctx.globalAlpha = 1;
-    rrect(x - s*0.3, y - s*0.02, s*0.6, s*0.42, s*0.08);
-    ctx.fillStyle = getVar("--shadow"); ctx.fill();
-    rrect(x - s*0.26, y + s*0.01, s*0.52, s*0.36, s*0.06);
-    ctx.fillStyle = "#d9d3ff"; ctx.fill();
+    ctx.fillStyle = getVar("--shadow"); ctx.fillRect(x - s*0.3, y - s*0.02, s*0.6, s*0.42);
+    ctx.fillStyle = "#d9d3ff";          ctx.fillRect(x - s*0.26, y + s*0.01, s*0.52, s*0.36);
     ctx.fillStyle = getVar("--shadow");
-    ctx.beginPath(); ctx.arc(x, y + s*0.16, s*0.075, 0, Math.PI*2); ctx.fill();      // keyhole
+    ctx.fillRect(x - s*0.075, y + s*0.16 - s*0.075, s*0.15, s*0.15);                // keyhole
     ctx.fillRect(x - s*0.03, y + s*0.16, s*0.06, s*0.13);
     ctx.restore();
   }
@@ -18336,7 +18388,7 @@
     const ox = x - S/2, oy = y - S/2;            // the layer is centred on the lock
     g.translate(-ox, -oy);
     g.strokeStyle = color; g.fillStyle = color;
-    g.lineWidth = Math.max(3, s*0.12); g.lineCap = "round";
+    g.lineWidth = Math.max(3, s*0.12); g.lineCap = "butt"; g.lineJoin = "miter";   // square corners throughout — no circles
     g.save();
     // Open: the shackle is MIRRORED about the leg that stays in the body, not tilted. Flipping
     // it keeps the arc upright — still plainly the same shackle — while carrying the far leg
@@ -18346,21 +18398,18 @@
                 g.translate(px, 0); g.scale(-1, 1); g.translate(-px, 0); }
     g.translate(x, shCy);
     g.beginPath();
-    g.arc(0, 0, shR, Math.PI, 0);
-    g.lineTo(shR, legY);                         // ...straight on down the right leg
-    g.moveTo(-shR, 0); g.lineTo(-shR, legY);     // ...and the left one
+    // A SQUARE shackle: up the left leg, straight across the top where the arc used to be (at the arc's own height),
+    // and down the right leg into the body — one path, so its two top corners are mitred square.
+    g.moveTo(-shR, legY); g.lineTo(-shR, -shR); g.lineTo(shR, -shR); g.lineTo(shR, legY);
     g.stroke();
     g.restore();
-    const bx = x - s*0.26, by = bodyTop, bw = s*0.52, bh = s*0.38, br = s*0.07;
-    g.beginPath();
-    g.moveTo(bx+br, by); g.arcTo(bx+bw, by, bx+bw, by+bh, br); g.arcTo(bx+bw, by+bh, bx, by+bh, br);
-    g.arcTo(bx, by+bh, bx, by, br); g.arcTo(bx, by, bx+bw, by, br); g.closePath();
-    g.fill();
+    const bx = x - s*0.26, by = bodyTop, bw = s*0.52, bh = s*0.38;
+    g.fillRect(bx, by, bw, bh);                  // the body, square-cornered
     // ...and the keyhole is a HOLE: cut out of the finished lock, so what shows through it is
     // the striped barrier behind rather than a dark shape painted on the front.
     g.globalCompositeOperation = "destination-out";
-    g.beginPath(); g.arc(x, y + s*0.14, s*0.065, 0, Math.PI*2); g.fill();
-    g.fillRect(x - s*0.028, y + s*0.14, s*0.056, s*0.12);
+    g.fillRect(x - s*0.065, y + s*0.14 - s*0.065, s*0.13, s*0.13);   // a square keyhole...
+    g.fillRect(x - s*0.028, y + s*0.14, s*0.056, s*0.12);             // ...and its slot
     // Once the key is in hand the lock is spent — still there, because the runner has yet to
     // reach it, but faded off the board as one piece. MULTIPLIED into whatever alpha the caller
     // is already fading at, not assigned over the top of it — the replay drops these in on a
@@ -18420,15 +18469,17 @@
   // tiny key glyph centred in a badge of radius ~r
   function drawMiniKey(x, y, r, color) {
     ctx.save();
+    // Square throughout, as the big one is: a square bow round a square hole, and the shaft and teeth FILLED as blocks —
+    // stroked, their butt ends left a notch at every corner where a tooth met the shaft.
     ctx.fillStyle = color;
+    const bx = x - r*0.42, bo = r*0.34, bi = r*0.15, lw = Math.max(1.5, r*0.20);
     ctx.beginPath();
-    ctx.arc(x - r*0.42, y, r*0.34, 0, Math.PI*2);          // bow ring...
-    ctx.arc(x - r*0.42, y, r*0.15, 0, Math.PI*2, true);    // ...with a hole
+    ctx.rect(bx - bo, y - bo, bo*2, bo*2);                 // bow ring...
+    ctx.rect(bx - bi, y - bi, bi*2, bi*2);                 // ...with a hole
     ctx.fill("evenodd");
-    ctx.lineWidth = Math.max(1.5, r*0.20); ctx.strokeStyle = color; ctx.lineCap = "butt";
-    ctx.beginPath(); ctx.moveTo(x - r*0.12, y); ctx.lineTo(x + r*0.6, y); ctx.stroke();        // shaft
-    ctx.beginPath(); ctx.moveTo(x + r*0.6, y); ctx.lineTo(x + r*0.6, y + r*0.34); ctx.stroke(); // tooth
-    ctx.beginPath(); ctx.moveTo(x + r*0.38, y); ctx.lineTo(x + r*0.38, y + r*0.26); ctx.stroke();
+    ctx.fillRect(x - r*0.12, y - lw/2, r*0.72 + lw/2, lw);                                    // shaft
+    ctx.fillRect(x + r*0.6 - lw/2, y - lw/2, lw, r*0.34 + lw/2);                               // tooth
+    ctx.fillRect(x + r*0.38 - lw/2, y - lw/2, lw, r*0.26 + lw/2);
     ctx.restore();
   }
 
@@ -18519,6 +18570,7 @@
   //   patch    a patchwork of SIX: random per square like a scatter, but the even squares of the
   //            check draw from the 1st/3rd/5th colours and the odd from the 2nd/4th/6th, so no
   //            square ever meets its own colour along an edge — only ever across a corner
+  // (and `noise`, which is not a layout of squares at all: one smooth field of colour — see earthNoisePattern)
   const EARTH_LAYOUT = {
     check:   (cols, gi, gj) => cols[(gi + gj) & 1],
     scatter: (cols, gi, gj) => cols[bgHash(gi, gj) % cols.length],
@@ -18534,16 +18586,123 @@
       return a && b ? cols[0] : (a || b) ? cols[1] : cols[2];
     },
   };
+  // A GLASS EARTH (a design carrying `glass`, which is how solid its squares are): no ground under it — see earthGlass,
+  // which the two painters of the ground ask before they lay one — the squares at that strength, and a white shimmer
+  // sweeping along the track. No edges on the squares: the colour and the shimmer are the whole of the glass.
+  // The shimmer is measured in WORLD space, corner to corner, so one band runs on across the joins between tiles.
+  // RAINBOW NOISE, for an earth that is not pieced (earthMode "noise"). ONE SEAMLESS SQUARE of it, EARTH_NOISE.tiles
+  // tiles across at EARTH_NOISE.px pixels a tile, built once per colour set and laid over the WORLD as a repeating pattern
+  // scaled to the tile — so it runs on across every join, at any cell size, with nothing to line up and no seams. The
+  // colour at a point is its place along the six-colour wheel (blended smoothly between neighbours): a sweep once round
+  // the wheel corner to corner, warped by a handful of waves. Every wave goes a WHOLE number of times round the square
+  // in both directions, and the sweep a whole turn of the wheel, which is what makes it tile.
+  const EARTH_NOISE = {
+    tiles:  6,     // how many tiles the square covers before it repeats
+    px:     48,    // its resolution, pixels a tile (laid smoothed, so it can be low)
+    warp:   1.40,  // how far the waves push the colour round the wheel, in turns
+  };
+  let _noiseTex = null, _noiseKey = "", _noisePat = null;
+  function earthNoisePattern(cols) {
+    const key = cols.join(",") + "|" + EARTH_NOISE.tiles + "|" + EARTH_NOISE.px + "|" + EARTH_NOISE.warp;
+    if (!_noiseTex || _noiseKey !== key) {
+      const E = EARTH_NOISE, W = Math.max(8, Math.round(E.tiles * E.px));
+      const cv = document.createElement("canvas"); cv.width = cv.height = W;
+      const g = cv.getContext("2d"), img = g.createImageData(W, W), d = img.data;
+      const rgb = cols.map(hexRGB), n = rgb.length;
+      // [times round across, times round down, phase, weight]
+      const waves = [[1,0,0.0,1.00],[0,1,1.3,1.00],[1,1,2.1,0.70],[2,-1,4.0,0.55],[1,2,0.7,0.45],[3,1,5.2,0.30],[-2,3,3.3,0.25]];
+      let wsum = 0; for (const w of waves) wsum += w[3];
+      for (let py = 0; py < W; py++) for (let px = 0; px < W; px++) {
+        const u = px / W, v = py / W;
+        let f = 0;
+        for (const [a, b, ph, amp] of waves) f += amp * Math.sin(2*Math.PI*(a*u + b*v) + ph);
+        const turn = (u + v) + (f / wsum) * E.warp;                  // a whole turn of the wheel across, warped
+        const h = (((turn % 1) + 1) % 1) * n;
+        const i0 = Math.floor(h) % n, i1 = (i0 + 1) % n, t = h - Math.floor(h);
+        const o = (py*W + px)*4;
+        d[o]   = Math.round(rgb[i0][0] + (rgb[i1][0] - rgb[i0][0])*t);
+        d[o+1] = Math.round(rgb[i0][1] + (rgb[i1][1] - rgb[i0][1])*t);
+        d[o+2] = Math.round(rgb[i0][2] + (rgb[i1][2] - rgb[i0][2])*t);
+        d[o+3] = 255;
+      }
+      g.putImageData(img, 0, 0);
+      _noiseTex = cv; _noiseKey = key; _noisePat = null;
+    }
+    if (!_noisePat) _noisePat = ctx.createPattern(_noiseTex, "repeat");
+    return _noisePat;
+  }
+  // ...laid on a tile `s` wide whose grid starts at (ox, oy) in the current transform: scaled so EARTH_NOISE.px pixels
+  // make one tile
+  function fillEarthNoise(g, cols, x, y, w, h, s, ox, oy) {
+    const pat = earthNoisePattern(cols), k = s / EARTH_NOISE.px;
+    if (pat.setTransform) pat.setTransform(new DOMMatrix([k, 0, 0, k, ox || 0, oy || 0]));
+    const was = g.imageSmoothingEnabled;
+    g.imageSmoothingEnabled = true;                                  // a smooth field, whatever the board asks for
+    g.fillStyle = pat; g.fillRect(x, y, w, h);
+    g.imageSmoothingEnabled = was;
+  }
+  const TRACK_GLASS = {
+    shineA:  0.55,   // the shimmer at its brightest
+    band:    0.40,   // ...its half-width, in tiles
+    period:  8,      // ...how far apart the bands run, in tiles along the diagonal
+    shineMs: 4200,   // ...and how long one takes to move on by that much
+  };
+  const earthGlass = () => { const g = lookItem("track").glass; return g > 0 ? Math.min(1, g) : 0; };
   function drawGroundQuilt(x, y, s, c, r) {
     const N = Math.max(1, Math.round(TILE.strataN)), it = lookItem("track");
     const cols = it.earth || TRACK_DEFAULT.earth;
-    const lay = shopQuiltOn && it.shopQuilt ? quiltLay(it.shopQuilt)
-              : EARTH_LAYOUT[it.earthMode || "check"] || EARTH_LAYOUT.check;
-    const q = s/N;
-    ctx.globalAlpha = Math.max(0, Math.min(1, TILE.strata));   // how far the piecing shows
-    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-      ctx.fillStyle = lay(cols, c*N + i, r*N + j);
-      ctx.fillRect(x + i*q, y + j*q, q + 1, q + 1);            // +1: no hairlines between them
+    const q = s/N, glass = earthGlass();
+    ctx.globalAlpha = Math.max(0, Math.min(1, TILE.strata)) * (glass || 1);   // how far the piecing shows
+    // GLASS LIGHTS what is under it rather than covering it. Laid over the level at partial strength in the ordinary way,
+    // the colour took on the dark of the ground and came out muddy; SCREENED, it can only brighten, so the colour glows
+    // and the level still shows through it.
+    if (glass) ctx.globalCompositeOperation = "screen";
+    if (it.earthMode === "noise") {
+      // NOT PIECED: the one smooth field (earthNoisePattern), in world space, so it runs on across every join. Its origin is
+      // the grid's — 0 on the board, the tile's own corner where a lone tile is painted somewhere else (the shop's figure).
+      fillEarthNoise(ctx, cols, x, y, s, s, s, x - c*s, y - r*s);
+    } else {
+      const lay = shopQuiltOn && it.shopQuilt ? quiltLay(it.shopQuilt)
+                : EARTH_LAYOUT[it.earthMode || "check"] || EARTH_LAYOUT.check;
+      // SEE-THROUGH squares have to MEET rather than overlap. A solid square is laid a pixel oversize so no hairline shows
+      // between it and the next, and the overlap is invisible because the later one covers it; a glass square laid that
+      // way doubles its strength along every shared edge, and the grid shows as seams. So a glass square's edges are put
+      // on whole device pixels, each worked out from its index in the WORLD grid of squares (the grid's origin plus
+      // index × square), never from the tile's corner plus an offset: `tile + 4 squares` and `next tile + 0` are the same
+      // place but not always the same floating-point number, and at a half pixel the two rounded opposite ways.
+      const dp = dpr || 1, snap = v => Math.round(v*dp)/dp;
+      // the grid's origin, rounded to a millionth so the few-ulp noise in `x - c*s` cannot differ between two tiles
+      const ox = Math.round((x - c*s)*1e6)/1e6, oy = Math.round((y - r*s)*1e6)/1e6;
+      for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+        const gi = c*N + i, gj = r*N + j;
+        ctx.fillStyle = lay(cols, gi, gj);
+        if (glass) {
+          const x0 = snap(ox + gi*q), x1 = snap(ox + (gi + 1)*q), y0 = snap(oy + gj*q), y1 = snap(oy + (gj + 1)*q);
+          ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+        } else ctx.fillRect(x + i*q, y + j*q, q + 1, q + 1);  // +1: no hairlines between them
+      }
+    }
+    ctx.globalCompositeOperation = "source-over";
+    if (glass) {
+      const G = TRACK_GLASS;
+      // the shimmer: bands along x + y, `period` tiles apart, moving on; this tile takes whichever cross it
+      const P = cell*G.period, bw = cell*G.band, d0 = x + y, span = 2*s;
+      const off = ((performance.now() / G.shineMs) % 1) * P;
+      const first = Math.floor((d0 - bw - off) / P) + 1;
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 1;
+      for (let k = first; k*P + off - bw < d0 + span; k++) {
+        const cen = k*P + off, t = u => (u - d0) / span;
+        const gd = ctx.createLinearGradient(x, y, x + s, y + s);
+        const stops = [[t(cen - bw), 0], [t(cen), G.shineA], [t(cen + bw), 0]];
+        let drew = false;
+        for (const [u, a] of stops) if (u >= 0 && u <= 1) { gd.addColorStop(u, "rgba(255,255,255," + a + ")"); drew = true; }
+        if (!drew) continue;
+        if (t(cen - bw) > 0) gd.addColorStop(0, "rgba(255,255,255,0)");
+        if (t(cen + bw) < 1) gd.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = gd; ctx.fillRect(x, y, s, s);
+      }
+      ctx.globalCompositeOperation = "source-over";
     }
     ctx.globalAlpha = 1;
   }
@@ -18551,8 +18710,10 @@
     ctx.save();
     rrect(cx(n.c), cy(n.r), cell, cell, tileR(cell)); ctx.clip();
     ctx.beginPath(); bodyPath(S, nodeCenter(n)); ctx.clip();   // everything below stays in the slab
-    ctx.fillStyle = groundColour(fill);                        // the ground, in its own colour
-    ctx.fillRect(cx(n.c), cy(n.r), cell, cell);
+    if (!earthGlass()) {                                       // (a glass earth has no ground under it)
+      ctx.fillStyle = groundColour(fill);                      // the ground, in its own colour
+      ctx.fillRect(cx(n.c), cy(n.r), cell, cell);
+    }
     drawGround(cx(n.c), cy(n.r), cell, n.c, n.r);              // ...and the design's own grid on it
     ctx.lineJoin = "round"; ctx.lineCap = "butt";
     // The beam's shadow first, as a WIDER stroke on the same line: the beam is then laid
@@ -18568,7 +18729,7 @@
       ctx.lineWidth = Math.max(1, cell*TILE.pathW*2);          // doubled: the top half is clipped away
       ctx.beginPath(); railPath(S); ctx.stroke();
     }
-    grainFill(cx(n.c), cy(n.r), cell, cell, TILE.bodyGrain);   // paper grain over both
+    if (!earthGlass()) grainFill(cx(n.c), cy(n.r), cell, cell, TILE.bodyGrain);   // paper grain over both (not over glass: it muddies it)
     ctx.restore();
   }
   // The beam and its shadow hang off the surface as BANDS here rather than fat strokes
@@ -18712,7 +18873,9 @@
   // it goes out and the hotspot grows into place. An option that runs into a wall, the board's edge or anything else that
   // is not a hotspot loses its spark at the tile's edge, with no line.
   // The WHOLE of it, trip and growth, takes a quarter of a tile's time at his pace (quarterTile), taken when the junction
-  // is laid — so the shares below are of that.
+  // is laid — so the shares below are of that. That is the SHORTEST it takes. With nothing in hand and no tile coming free
+  // before the trip would end, the trip is stretched to end exactly as he frees one (msToNextFree) — and held at its end
+  // if he is slower getting there than reckoned — so a hotspot only ever opens with a tile to send: never the small one.
   const JUNCTION_RACE = {
     travel: 0.756, // the share the trip takes, join to a hotspot's centre — eased out, quick off the join; the rest is the
                    // hotspot growing into place once its spark is in
@@ -18841,10 +19004,12 @@
         mg.setTransform(1, 0, 0, 1, 0, 0); mg.clearRect(0, 0, px, px);
         mg.setTransform(dpr, 0, 0, dpr, -DX, -DY);
         { const was = ctx; ctx = mg;
-          ctx.fillStyle = groundColour(track);
-          ctx.fillRect(X, Y, cell, cell);                               // the ground...
+          if (!earthGlass()) {                                          // (a glass earth has no ground under it)
+            ctx.fillStyle = groundColour(track);
+            ctx.fillRect(X, Y, cell, cell);                             // the ground...
+          }
             drawGround(X, Y, cell, n.c, n.r);                             // ...and the worn skin on it
-          grainFill(X, Y, cell, cell, JUNCTION.grain);
+          if (!earthGlass()) grainFill(X, Y, cell, cell, JUNCTION.grain);   // (no paper grain on glass)
           ctx.globalCompositeOperation = "destination-in";
           const gd = ctx.createLinearGradient(C.x - din.x*cell/2, C.y - din.y*cell/2, C.x + din.x*cell/2, C.y + din.y*cell/2);
           gd.addColorStop(0, "rgba(255,255,255,1)"); gd.addColorStop(1, "rgba(255,255,255,0)");
@@ -19033,10 +19198,17 @@
     const raceKey = lead.n.c + "," + lead.n.r + "," + (lead.prev ? lead.prev.c + "," + lead.prev.r : "");
     if (_juncRace.key !== raceKey) {
       const q = quarterTile(), R = JUNCTION_RACE;
-      _juncRace = { key: raceKey, t0: ts, ms: q*R.travel, grow: q*(1 - R.travel), die: q*R.die };
+      let ms = q*R.travel, wait = false;
+      if (!live) {                                                   // nothing to send: arrive with the tile that will be
+        const toFree = msToNextFree();
+        if (isFinite(toFree) && toFree > ms) { ms = toFree; wait = true; }
+      }
+      _juncRace = { key: raceKey, t0: ts, ms, grow: q*(1 - R.travel), die: q*R.die, wait };
     }
     const racing = lead.n.kind !== "platform";                      // a rail at the front has no join to race from
-    const rt = racing ? ts - _juncRace.t0 : Infinity;
+    let rt = racing ? ts - _juncRace.t0 : Infinity;
+    // ...and a stretched race that got there first — he slowed, or stopped — waits at the centres for the tile.
+    if (racing && _juncRace.wait && !live && rt > _juncRace.ms) { _juncRace.t0 = ts - _juncRace.ms; rt = _juncRace.ms; }
     const growK = Math.max(0, Math.min(1, (rt - _juncRace.ms) / Math.max(1, _juncRace.grow)));
     const growE = 1 - Math.pow(1 - growK, 3);                        // quick, easing into place
     const exits = junctionExits(lead.n, lead.prev);
@@ -20071,6 +20243,48 @@
   // pattern + four bolts, per wall) ran for every wall every frame. Bake the whole wall
   // layer into a world-sized offscreen once per level (or on resize) and blit it with a
   // single drawImage inside the camera transform.
+  // WALL SHADOWS. A wall stands on the quilt, so it casts a little shadow onto it: a soft dark on every side, and a heavier
+  // one falling below. Walls that touch are ONE structure — the shadow is cast by their outline as a whole, filled as a
+  // single shape before it is blurred, so it never doubles up or shows a seam where two meet. Walls never change during a
+  // level, so it is baked once per board, and at low resolution, since a shadow has no edges to keep sharp. It lands only
+  // on ground: the board's edge is the bitmap's edge, and the holes (crumbles too) are cut out of it.
+  const WALL_SHADOW = {
+    res:    32,                                        // px per tile in the bake
+    around: { blur: 0.10, drop: 0,    alpha: 0.20 },   // the soft dark all round — blur and drop in tiles
+    under:  { blur: 0.18, drop: 0.14, alpha: 0.42 },   // the heavier shadow thrown below
+  };
+  // One bake per board's set of walls, so two boards drawn by turns can never make each other rebake every frame.
+  const wallShadows = new WeakMap();
+  function wallShadowLayer() {
+    const s = state, W = s && s.walls;
+    if (!W || !W.size || !(COLS > 0) || !(ROWS > 0)) return null;
+    const key = COLS + "|" + ROWS + "|" + W.size + "|" + (s.holeKey || "");
+    const had = wallShadows.get(W);
+    if (had && had.key === key) return had.bmp || had.cv;
+    const R = WALL_SHADOW.res, cv = document.createElement("canvas");
+    cv.width = COLS * R; cv.height = ROWS * R;
+    const g = cv.getContext("2d"), far = 1e4;
+    for (const L of [WALL_SHADOW.around, WALL_SHADOW.under]) {
+      // The walls drawn far off to the left and only their shadow brought back over the board.
+      g.save();
+      g.shadowColor = "rgba(0,0,0," + L.alpha + ")"; g.shadowBlur = L.blur * R;
+      g.shadowOffsetX = far; g.shadowOffsetY = L.drop * R;
+      g.fillStyle = "#000"; g.beginPath();
+      for (const wk of W) { const i = wk.indexOf(","); g.rect(+wk.slice(0, i) * R - far, +wk.slice(i + 1) * R, R, R); }
+      g.fill("nonzero");
+      g.restore();
+    }
+    if (s.holeLoops && s.holeLoops.length) {
+      g.globalCompositeOperation = "destination-out";
+      g.beginPath(); holePath(g, 0, 0, R, s.holeLoops); g.fill("nonzero");
+      g.globalCompositeOperation = "source-over";
+    }
+    const entry = { cv, key, bmp: null };
+    wallShadows.set(W, entry);
+    // Handed to the GPU as an ImageBitmap once it is ready — a canvas as a drawImage source can be copied every frame.
+    if (typeof createImageBitmap === "function") createImageBitmap(cv).then(b => { entry.bmp = b; }, () => {});
+    return cv;
+  }
   let wallLayer = null, wallLayerDirty = true;
   function markWallLayerDirty() { wallLayerDirty = true; }
   // The walls are watching. They cannot go into the baked wall layer — that is drawn once per
@@ -21100,12 +21314,40 @@
     const bx = -Math.round(camX - (shx || 0)), by = -Math.round(camY - (shy || 0));
     if (!bgNoSky) boardEdgeGlow(bx, by);   // the quilt's edge glow, on the sky round the board
     ctx.save();
-    ctx.beginPath(); ctx.rect(bx, by, worldW, worldH); ctx.clip();
+    ctx.beginPath(); ctx.rect(bx, by, worldW, worldH);
+    holePath(ctx, bx, by, cell, (state && state.holeLoops) || []);   // ...less its HOLES, where the sky shows through
+    // (a CRUMBLE is a hole too — its outline is among the holes' — with its glass laid in it below)
+    const standing = [];
+    if (state && state.singularity) for (const ck of state.singularity) {
+      if (state.collapsed && state.collapsed.has(ck)) continue;
+      const i = ck.indexOf(",");
+      standing.push([+ck.slice(0, i), +ck.slice(i + 1)]);
+    }
+    ctx.clip("evenodd");
     drawBackground(ts, undefined, false, undefined, undefined, bgNoSky ? 1 : QUILT_A);
     ctx.restore();
-    // ...and the level's colour just inside its edge. The WHITE half of that light — the sharp band
-    // and the sparks — is drawn at the very end of the board instead, OVER every level item (see
-    // drawBoard's close), so it is the top thing on the level rather than something tiles cover.
+    // THE CRUMBLES, square by square, in their holes: GLASS in the rainbow's blue, each square at its own opacity (CRUMBLE.opacity) — some of
+    // the ground thinner than the rest — with a sheen of light across each cell from its top-left corner, at the square's
+    // strength too, so a thin square is thin all through.
+    if (standing.length) {
+      const blue = tvBlueHex(), G = CRUMBLE;
+      ctx.save();
+      for (const [c, r] of standing) {
+        const X = bx + c*cell, Y = by + r*cell;
+        const sheen = ctx.createLinearGradient(X, Y, X + cell, Y + cell);
+        sheen.addColorStop(0, "rgba(255,255,255," + G.sheen + ")");
+        sheen.addColorStop(0.45, "rgba(255,255,255,0)");
+        sheen.addColorStop(1, "rgba(255,255,255,0)");
+        for (const pc of crumblePieces(c, r)) {
+          if (!(pc.a > 0)) continue;
+          ctx.globalAlpha = pc.a;                    ctx.fillStyle = blue;  ctx.fillRect(bx + pc.x0, by + pc.y0, pc.q, pc.q);
+          ctx.globalAlpha = pc.a / G.opacity[1];     ctx.fillStyle = sheen; ctx.fillRect(bx + pc.x0, by + pc.y0, pc.q, pc.q);
+        }
+      }
+      ctx.restore();
+    }
+    // ...and the level's colour just inside its edge. The sharp half of that light — the band and the
+    // sparks — goes down at the start of the board itself (draw), so every level item stands on it too.
     _innerWhite = !bgNoSky;
     if (!bgNoSky) boardInnerGlow(bx, by, ts, "colour");
   }
@@ -21125,7 +21367,9 @@
   // `tps` is how fast a spark travels, in TILES PER SECOND — the same on every edge, so a spark on a
   // long side takes longer to cross it than one on a short side, rather than all four sprinting or
   // dawdling to finish in the same time.
-  const BOARD_INNER = { w: 0.14, a: 1.00, cw: 0.60, ca: 0.50, spark: 0.30, tps: 0.9 };
+  // `sparkMin`: an edge shorter than this many tiles gets no spark — the little sides of a crumble's openings would carry a
+  // spark bigger than themselves, flickering in and out as it crossed them.
+  const BOARD_INNER = { w: 0.14, a: 1.00, cw: 0.60, ca: 0.50, spark: 0.30, tps: 0.9, sparkMin: 1.0 };
   let _innerVivid = null;
   function innerVivid(T) {
     const key = T.colors.join("|");
@@ -21145,6 +21389,80 @@
     }
     _innerVivid = { key, col };
     return col;
+  }
+  // THE HOLES' OUTLINE. Every side of a hole cell that does not face another hole, as a unit edge running clockwise round
+  // its cell (y down), chained into closed loops: two holes side by side have no side between them, so they come out as
+  // ONE outline round the pair. Two that only touch at a corner stay two — at such a corner the walk takes the right-hand
+  // turn, which keeps it on the cell it came round. Each loop's straight runs are merged into single sides. In cells.
+  function holeLoopsOf(set) {
+    const has = (c, r) => set.has(key(c, r));
+    const out = new Map();
+    const add = (x0, y0, x1, y1) => { const k = x0 + "," + y0; if (!out.has(k)) out.set(k, []); out.get(k).push([x0, y0, x1, y1]); };
+    for (const k of set) {
+      const i = k.indexOf(","), c = +k.slice(0, i), r = +k.slice(i + 1);
+      if (!has(c, r - 1)) add(c, r, c + 1, r);             // top, left to right
+      if (!has(c + 1, r)) add(c + 1, r, c + 1, r + 1);     // right, downward
+      if (!has(c, r + 1)) add(c + 1, r + 1, c, r + 1);     // bottom, right to left
+      if (!has(c - 1, r)) add(c, r + 1, c, r);             // left, upward
+    }
+    const loops = [];
+    for (;;) {
+      let startK = null;
+      for (const [k, list] of out) if (list.length) { startK = k; break; }
+      if (startK == null) break;
+      let e = out.get(startK).pop();
+      const pts = [[e[0], e[1]]];
+      for (let guard = 0; guard < 1e6; guard++) {
+        if (e[2] === pts[0][0] && e[3] === pts[0][1]) break;       // round
+        const list = out.get(e[2] + "," + e[3]);
+        if (!list || !list.length) break;
+        let pick = 0;
+        if (list.length > 1) {                                       // a corner two holes only touch at: turn right
+          const dx = e[2] - e[0], dy = e[3] - e[1];
+          pick = Math.max(0, list.findIndex(n => (n[2] - n[0]) === -dy && (n[3] - n[1]) === dx));
+        }
+        e = list.splice(pick, 1)[0];
+        pts.push([e[0], e[1]]);
+      }
+      const m = [];
+      for (let i = 0; i < pts.length; i++) {                         // keep only the corners
+        const a = pts[(i - 1 + pts.length) % pts.length], b = pts[i], c2 = pts[(i + 1) % pts.length];
+        if ((b[0] - a[0])*(c2[1] - b[1]) - (b[1] - a[1])*(c2[0] - b[0]) !== 0) m.push(b);
+      }
+      if (m.length >= 4) loops.push(m);
+    }
+    return loops;
+  }
+  // ...added to the current path, `s` to a cell, from (ox, oy)
+  function holePath(g, ox, oy, s, loops) {
+    for (const L of loops) {
+      L.forEach(([x, y], i) => i ? g.lineTo(ox + x*s, oy + y*s) : g.moveTo(ox + x*s, oy + y*s));
+      g.closePath();
+    }
+  }
+  // WHERE THE QUILT IS OPEN: the holes' outline (holeLoopsOf) and a key for the glow cache.
+  function voidLoops(holes) {
+    return { loops: holeLoopsOf(holes), key: [...holes].sort().join(";") };
+  }
+  // The outline of the real holes alone, crumbles left out — traced again only when one gives way.
+  function holeOnlyLoops() {
+    const s = state; if (!s || !s.holes || !s.holes.size) return [];
+    if (s._holeOnlySet !== s.holes || s._holeOnlyN !== s.holes.size) {
+      s._holeOnlySet = s.holes; s._holeOnlyN = s.holes.size; s._holeOnly = holeLoopsOf(s.holes);
+    }
+    return s._holeOnly;
+  }
+  // A CRUMBLE GIVING WAY: its cell becomes one of the level's holes, and nothing can be built there again. It was already
+  // drawn as a hole — the outline runs round holes and crumbles alike — so the outline comes out the same; what goes is its
+  // glass, which falls away into the sky (drawEaten).
+  function collapseCrumble(c, r) {
+    const s = state; if (!s) return;
+    if (!s.holes) s.holes = new Set();
+    s.holes.add(key(c, r));
+    const v = voidLoops(new Set([...s.holes, ...(s.singularity || [])]));
+    s.holeLoops = v.loops;
+    s.holeKey = v.key;
+    markOccDirty();
   }
   let _innerWhite = false;        // set by the backdrop when the edge is up this frame; the white pass reads it
   function boardInnerGlow(bx, by, ts, part) {
@@ -21170,25 +21488,65 @@
         ctx.fillStyle = gd; ctx.fill();
       }
     };
+    // ...and the same band round the inside of every HOLE — on the quilt's side of its outline, which is the side the light
+    // is on at the board's edge. Built as strokes of the outline, widest first, each clipped to the quilt, so the fall-off
+    // follows the outline round every corner and a pair of joined holes is lit as the one shape it is. Each stroke's alpha
+    // is worked out so that the ones stacked over a point add up to the band's own strength at that depth.
+    const loops = (state && state.holeLoops) || [];
+    const clipQuilt = () => {                                 // the quilt, less its holes
+      if (!loops.length) return;
+      ctx.beginPath(); ctx.rect(0, 0, W, H); holePath(ctx, 0, 0, cell, loops); ctx.clip("evenodd");
+    };
+    // One band as strokes of a path (`addPath` puts it on), widest first; the caller's clip decides which side it lands on.
+    const strokeBand = (addPath, gw, rgb, stops) => {
+      const N = 10;
+      const alphaAt = x => {
+        for (let i = 1; i < stops.length; i++) {
+          const [p0, a0] = stops[i - 1], [p1, a1] = stops[i];
+          if (x <= p1) return a0 + (a1 - a0)*((x - p0) / Math.max(1e-6, p1 - p0));
+        }
+        return stops[stops.length - 1][1];
+      };
+      const want = []; for (let k = 1; k <= N; k++) want[k] = Math.min(0.999, Math.max(0, alphaAt((k - 0.5)/N)));
+      ctx.save();
+      ctx.lineJoin = "miter"; ctx.miterLimit = 4; ctx.lineCap = "butt";
+      ctx.beginPath(); addPath();
+      for (let k = N; k >= 1; k--) {
+        const a = k === N ? want[N] : 1 - (1 - want[k]) / Math.max(1e-6, 1 - want[k + 1]);
+        if (!(a > 0.002)) continue;
+        ctx.strokeStyle = "rgba(" + rgb.join(",") + "," + a.toFixed(4) + ")";
+        ctx.lineWidth = 2*gw*k/N;                            // reaching `gw` k/N of the way in, either side (the far side is clipped off)
+        ctx.stroke();
+      }
+      ctx.restore();
+    };
+    const holeBand = (gw, rgb, stops) => { if (loops.length) strokeBand(() => holePath(ctx, 0, 0, cell, loops), gw, rgb, stops); };
     ctx.save();
     ctx.translate(bx, by);
     const T = state && state.bgTheme, vivid = T && T.colors ? innerVivid(T) : null;
     if (part === "colour") {
       if (vivid) {                                           // the level's colour, at full saturation, under the level
-        const CA = BOARD_INNER.ca;
-        band(cell * BOARD_INNER.cw, vivid, [[0, CA], [0.30, CA*0.55], [0.70, CA*0.12], [1, 0]]);
+        const CA = BOARD_INNER.ca, stops = [[0, CA], [0.30, CA*0.55], [0.70, CA*0.12], [1, 0]];
+        ctx.save(); clipQuilt();
+        band(cell * BOARD_INNER.cw, vivid, stops);
+        holeBand(cell * BOARD_INNER.cw, vivid, stops);
+        ctx.restore();
       }
       ctx.restore();
       return;
     }
     // the sharp edge, right at the boundary, over the level — in the Tileverse's blue, as are its sparks
-    const A = BOARD_INNER.a, edgeCol = tvBlueHex();
-    band(cell * BOARD_INNER.w, hexRGB(edgeCol), [[0, A], [0.18, A*0.45], [0.55, A*0.08], [1, 0]]);
+    const A = BOARD_INNER.a, edgeCol = tvBlueHex(), edgeStops = [[0, A], [0.18, A*0.45], [0.55, A*0.08], [1, 0]];
+    ctx.save(); clipQuilt();
+    band(cell * BOARD_INNER.w, hexRGB(edgeCol), edgeStops);
+    holeBand(cell * BOARD_INNER.w, hexRGB(edgeCol), edgeStops);
+    ctx.restore();
     // the sparks — along the top, right, bottom and left edges in turn
     const sz = cell * BOARD_INNER.spark, rollR = sz * TAB_SPARK_ROLL;
     const runs = [[0,0, W,0], [W,0, W,H], [W,H, 0,H], [0,H, 0,0]];
     runs.forEach(([x0, y0, x1, y1], i) => {
       const len = Math.hypot(x1 - x0, y1 - y0);
+      if (len / cell < BOARD_INNER.sparkMin) return;                   // too short an edge to carry one
       const tiles = Math.max(0.5, len / cell);                          // this edge's length, in tiles
       const u = (((ts / 1000 * BOARD_INNER.tps / tiles + i * 0.25) % 1) + 1) % 1;   // 0 at its start corner, 1 at the next
       const k = Math.sin(Math.PI * u);                                  // ...and nothing at either corner
@@ -21199,6 +21557,23 @@
       drawSpark(ctx, 0, 0, sz * k, ts, { col: edgeCol, seed: 0.11 + i*0.23 });
       ctx.restore();
     });
+    // ...and along every straight side of every hole, the same spark rolling round it the way its outline runs — except a
+    // side lying on the board's own edge, where there is no quilt beside it to light
+    let hs = 0;
+    for (const L of loops) for (let j = 0; j < L.length; j++) {
+      const [ax, ay] = L[j], [ex, ey] = L[(j + 1) % L.length];
+      if ((ax === ex && (ax === 0 || ax === COLS)) || (ay === ey && (ay === 0 || ay === ROWS))) continue;
+      const x0 = ax*cell, y0 = ay*cell, x1 = ex*cell, y1 = ey*cell, len = Math.hypot(x1 - x0, y1 - y0);
+      if (len / cell < BOARD_INNER.sparkMin - 1e-9) continue;          // too short a side to carry one
+      const tiles = Math.max(0.5, len / cell), n = hs++;
+      const u = (((ts / 1000 * BOARD_INNER.tps / tiles + n*0.37) % 1) + 1) % 1, k = Math.sin(Math.PI * u);
+      if (k < 0.02) continue;
+      ctx.save();
+      ctx.translate(x0 + (x1 - x0)*u, y0 + (y1 - y0)*u);
+      ctx.rotate(u * len / rollR);
+      drawSpark(ctx, 0, 0, sz * k, ts, { col: edgeCol, seed: 0.71 + n*0.13 });
+      ctx.restore();
+    }
     ctx.restore();
   }
   // `mode` is how the quilt is anchored. "weld" pins it to the BOARD — it is the level's own
@@ -22074,13 +22449,22 @@
           h.rowT += dt;
           const k = h.rowT / h.legSd, done = Math.floor(k);
           h.rowP = k - done;
+          // A HOLE OPENED AHEAD. A crumble the runner has just taken away can land across a leg already under way. Each
+          // time the monster arrives on a tile it looks at the next one, and if the ground has gone the leg is cut short
+          // right here — which the lines below then finish exactly as they finish any leg.
+          if (done > h.legDone && done < h.legN) {
+            h.legDone = done;
+            const sp = h.hi - h.lo, sg = Math.sign(sp) * (h.dir > 0 ? 1 : -1);
+            const pc = Math.round(h.lo + sp * (h.legFrom + (h.dir > 0 ? 1 : -1) * h.legSpan * done / h.legN));
+            if (holeAt(...railTile(h, pc + sg))) { h.legN = done; h.legTo = (pc - h.lo) / sp; }
+          }
           const prog = (done + railProgress(h.rowP)) / h.legN;
           if (prog >= 1) {                          // that was the last stroke of the leg
             // Carry the overshoot into the new leg instead of dropping it. The old code reset
             // the stroke clock to zero at every turn, so each one quietly ate up to a frame —
             // the monster fell a little further behind its own beat on every length of the rail.
             const over = h.rowT - h.legN * h.legSd;
-            h.t = h.dir > 0 ? 1 : 0;
+            h.t = h.legTo;
             h.dir = -h.dir;
             railLegSetup(h);
             h.rowT = Math.max(0, Math.min(over, h.legSd*0.5));
@@ -22160,7 +22544,7 @@
               const opts = [], back = [];
               for (const [dc, dr] of DIRS) {
                 const c = h.from[0] + dc, r = h.from[1] + dr;
-                if (!inBounds(c, r) || s.walls.has(key(c, r)) || s.stones.has(key(c, r))) continue;
+                if (!inBounds(c, r) || s.walls.has(key(c, r)) || s.stones.has(key(c, r)) || holeAt(c, r)) continue;
                 if (platformCell(c, r)) continue;      // ...solid to it here too, or it swims
                                                        // through one the moment it loses him
                 if (taken.has(key(c, r))) continue;
@@ -22193,15 +22577,24 @@
         // for it.
         const PK = h.kind === "monster" ? monKind(h) : null;
         const at = h.seg;
-        const nextIdx = h.loop ? (at + 1) % h.path.length
+        const nextIdx = h.loop ? (at + h.mdir + h.path.length) % h.path.length   // a loop can be walked backwards now: see pathTurn
                                : Math.max(0, Math.min(h.path.length - 1, at + h.mdir));
         if (h.pause > 0) { h.pause -= dt; }
         else if (nextIdx !== at) {
           const A0 = h.path[at], B0 = h.path[nextIdx];
           const segCells = (Math.abs(B0[0]-A0[0]) + Math.abs(B0[1]-A0[1])) || 1;
+          // HOLES TURN IT ROUND. Whenever it stands on a tile — setting off, and each time it crosses into another — it
+          // looks at the next tile of the leg, and where the ground has gone it goes back the way it came (pathTurn).
+          const ux = Math.sign(B0[0]-A0[0]), uy = Math.sign(B0[1]-A0[1]);
+          const gone = (k) => !!PK && k < segCells && holeAt(A0[0] + ux*(k+1), A0[1] + uy*(k+1));
+          const k0 = h.segT * segCells, kr = Math.round(k0);
+          const turned = Math.abs(k0 - kr) < 1e-6 && gone(kr);
+          if (turned) pathTurn(h, kr, segCells, nextIdx);
           // A rower crosses a leg in a whole number of thrusts, positioned from its stroke
           // clock; anything else slides along at a constant rate as it always did.
-          if (PK && PK.look === "rail") {
+          if (turned) {
+            // it spends this tick turning
+          } else if (PK && PK.look === "rail") {
             const segN = Math.max(1, segCells);        // one thrust per tile of the leg
             const segSd = monPace();                     // each taking one tile's time
             h.rowT = (h.rowT || 0) + dt;
@@ -22212,6 +22605,8 @@
           } else {
             h.segT += dt / (monPace() * segCells);
           }
+          const k1 = Math.floor(h.segT * segCells + 1e-9);
+          if (!turned && h.segT < 1 && k1 > Math.floor(k0 + 1e-9) && gone(k1)) pathTurn(h, k1, segCells, nextIdx);
           if (h.segT >= 1) {
             h.segT = 0; h.rowT = 0; h.rowP = 0;
             h.seg = nextIdx; h.pause = MON_DWELL;               // pause at the waypoint
@@ -22223,7 +22618,7 @@
         }
         // interpolate the current world position + cell
         const A = h.path[h.seg];
-        const ni = h.loop ? (h.seg + 1) % h.path.length
+        const ni = h.loop ? (h.seg + h.mdir + h.path.length) % h.path.length
                           : Math.max(0, Math.min(h.path.length - 1, h.seg + h.mdir));
         const B = h.path[ni];
         const fx = A[0] + (B[0]-A[0]) * h.segT, fy = A[1] + (B[1]-A[1]) * h.segT;
@@ -22318,7 +22713,7 @@
     // in an otherwise cheap search.
     const pfs = new Set((s.platforms || []).map(p => key(p.c, p.r)));
     const open = (c, r) => inBounds(c, r) && !s.walls.has(key(c, r)) &&
-                           !s.stones.has(key(c, r)) && !pfs.has(key(c, r));
+                           !s.stones.has(key(c, r)) && !pfs.has(key(c, r)) && !holeAt(c, r);
     const dist = new Map([[goal, 0]]);
     const q = [[g.c, g.r]];
     for (let i = 0; i < q.length; i++) {
@@ -24620,7 +25015,8 @@
     // from shootT0, so moving it to this instant starts a fall on the next frame.
     shootNow: () => { COSMOS.shootT0 = performance.now(); },
     // crumble-lab.html drives this: the Singularity's mouth, its swirl and its eye.
-    rift: (patch) => { if (patch) Object.assign(RIFT, patch); return { ...RIFT }; },
+    crumble: (patch) => { if (patch) Object.assign(CRUMBLE, patch); return { ...CRUMBLE }; },
+    rift: () => ({ ...CRUMBLE }),       // (crumble-lab.html tuned the old black well, which is gone: nothing of it left to push)
     // pile-lab.html drives these: the heap block, and a fall on demand so there is a heap to
     // look at. `attempts` is what decides how many rows it has, so the lab can set it and see
     // the mound the tenth death builds without dying ten times.
@@ -25502,9 +25898,17 @@
   }
   function cineProj(p, V){
     const x = p[0] - V.px, y = p[1] - V.py, z = p[2] - V.pz;
-    const X = x*V.cry + z*V.sry;  let Z = -x*V.sry + z*V.cry;
-    const Y = y*V.crx - Z*V.srx;      Z =  y*V.srx + Z*V.crx;
-    const f = CINE_PERSP / (CINE_PERSP + Z);
+    let X, Y, Z;
+    if (V.m) {                                   // a whole ROTATION (the cube following its runner — see cubeCamQuat)
+      const m = V.m; X = m[0]*x + m[1]*y + m[2]*z; Y = m[3]*x + m[4]*y + m[5]*z; Z = m[6]*x + m[7]*y + m[8]*z;
+    } else {                                     // ...or the film's two turns
+      X = x*V.cry + z*V.sry;  Z = -x*V.sry + z*V.cry;
+      Y = y*V.crx - Z*V.srx;  Z =  y*V.srx + Z*V.crx;
+    }
+    // `V.ortho`: no perspective — the cube he runs round. Its tiles are laid onto its sides as flat pictures, which fit a
+    // side exactly only while the side is a parallelogram on the screen; in perspective the far edge shrinks and the tile's
+    // corners came off the cube's.
+    const f = V.ortho ? 1 : CINE_PERSP / (CINE_PERSP + Z);
     return [V.ox + X*f*V.S, V.oy + Y*f*V.S, Z];
   }
   // The six sides, wherever they are between solid and flat. A face waits for its parent to
@@ -26321,8 +26725,6 @@
     size:   1.00,    // how big he is, in the tiles he runs on (playCell) — 1 is his size in a level
     spark:  0.55,    // the spark behind him, in his size...
     sparkA: 0.70,    // ...and how bright it is — enough to be a halo, not so much he is lost in it
-    cube:   0.30,    // the cube's edge, as a share of the screen's short side — it gives way to the room
-                     //   between the words and the prompt, and never to him
     tilt:  -0.42,    // the cube's tip toward us, radians
     spinMs: 21000,   // one turn of the cube
     bob:    0.045,   // how far he floats up and down, in his size
@@ -26370,8 +26772,9 @@
     const bottom = footTextY() - UI_PX*1.6;                                 // the top of the prompt
     const room = Math.max(40, bottom - top);
     const s = playCell() * T.size;                                          // his in-game size
-    // ...and the cube round him. Turned and in perspective it stands about 1.9 of its edge tall.
-    const cube = Math.min(Math.min(viewW, viewH) * T.cube, room / 1.9);
+    // ...and the cube he runs round: ONE TILE A SIDE, at a tile's own size, so he is his size in a level on it (he is
+    // drawn at the size of the side he is on). Turned, it stands about 1.9 of its edge tall — held to the room if short.
+    const cube = Math.min(s, room / 1.9);
     const midY = (top + bottom) / 2;                                        // the cube's middle, centred in the room
     const y = midY + s*(RUNNER.legLen + RUNNER.bodyH*0.5)                   // ...and his feet, below his middle
             + Math.sin(ts / T.bobMs * Math.PI*2) * s * T.bob;
@@ -26493,11 +26896,217 @@
     finally { _shutEyes = wasShut; }
     ctx.restore();
   }
+  // ---- HIM, RUNNING ROUND THE CUBE -------------------------------------------------------------------------------
+  // One PLATFORM TILE on every side of the glass cube, and him running a loop over all six — front, top, back, right,
+  // bottom, left, and round again. He crosses from side to side at the middle of the edge they share, so the path is one
+  // unbroken line over the solid: straight across the top and the bottom (in and out by opposite edges), a quarter turn
+  // on each of the other four. Each tile is the title's own platform (introDrawPlatform) and he is the board's own runner
+  // (paintRunner, wearing the angel), drawn flat in that side's own frame and then laid onto the side as it stands on the
+  // screen. The CAMERA turns slowly after him (cubeCamQuat): square on to the side he is crossing, looking round toward
+  // the next as he nears its edge, so the side he is running onto is already in view when he gets there.
+  const CUBE_RUN = {
+    tileMs: 1600,               // how long he takes over one side
+    camMs:  600,                // how slowly the camera follows him: the time it takes to close most of the way
+                                //   (kept in step with tileMs — slower than about 3/8 of it and the side ahead turns in late)
+    ahead:  0,                  // ...how far ahead of him it aims, in ms of his running (the reveal below does this job now)
+    reveal: 0.5,                // how far it looks past the side he is on to the side AHEAD of him, against that side (1 =
+                                //   as much as his own). Enough to show the path in front; much more and his own side turns edge-on
+    lean:   { x: 0.30, y: -0.30 },   // ...and how far off square-on it holds, so the cube reads as a solid and not a square
+    roll:   90,                 // the whole cube turned this far clockwise on the screen, in degrees
+  };
+  const cubeRoll = () => quatAxis([0, 0, 1], CUBE_RUN.roll*Math.PI/180);
+  // The six sides of the unit cube, each as a corner and two edges laid so that, seen from OUTSIDE, the first edge runs
+  // right and the second down (U × V points into the cube) — so nothing drawn on any side comes out mirrored.
+  const CUBE_SIDES = {
+    front:  { n: [ 0, 0,-1], O: [0,0,0], U: [ 1,0, 0], V: [0,1, 0] },
+    back:   { n: [ 0, 0, 1], O: [1,0,1], U: [-1,0, 0], V: [0,1, 0] },
+    right:  { n: [ 1, 0, 0], O: [1,0,0], U: [ 0,0, 1], V: [0,1, 0] },
+    left:   { n: [-1, 0, 0], O: [0,0,1], U: [ 0,0,-1], V: [0,1, 0] },
+    top:    { n: [ 0,-1, 0], O: [0,0,1], U: [ 1,0, 0], V: [0,0,-1] },
+    bottom: { n: [ 0, 1, 0], O: [0,1,0], U: [ 1,0, 0], V: [0,0, 1] },
+  };
+  const CUBE_LOOP = ["front", "top", "back", "right", "bottom", "left"];   // every pair in a row shares an edge, and so do the ends
+  const CUBE_TILE = 100;                        // a side's tile, in the units it is drawn in before it is laid onto the side
+  const CUBE_LOC = { s: CUBE_TILE, x0: 0, row0Y: 0 };
+  const cubeSideAt = k => CUBE_LOOP[((k % 6) + 6) % 6];
+  // Which edge of side `from` leads to side `to`, as a step in `from`'s own frame: the neighbour's normal, read along U and V.
+  function cubeStep(from, to) {
+    const a = CUBE_SIDES[from], m = CUBE_SIDES[to].n;
+    return { c: m[0]*a.U[0] + m[1]*a.U[1] + m[2]*a.U[2], r: m[0]*a.V[0] + m[1]*a.V[1] + m[2]*a.V[2] };
+  }
+  // A side's four corners on the screen, in order round it, and whether it faces us.
+  function cubeSideQuad(name, V) {
+    const S = CUBE_SIDES[name];
+    const P = (a, b) => cineProj([0, 1, 2].map(i => S.O[i] + a*S.U[i] + b*S.V[i]), V);
+    const q = [P(0, 0), P(1, 0), P(1, 1), P(0, 1)];
+    return { q, front: q[0][2] + q[1][2] + q[2][2] + q[3][2] <= 0 };
+  }
+  // Draw in a side's own frame: CUBE_TILE units across, laid onto its quad as it stands on the screen.
+  function onCubeSide(q, fn) {
+    const [p0, p1, , p3] = q, k = 1/CUBE_TILE;
+    ctx.save();
+    ctx.transform((p1[0] - p0[0])*k, (p1[1] - p0[1])*k, (p3[0] - p0[0])*k, (p3[1] - p0[1])*k, p0[0], p0[1]);
+    try { fn(); } finally { ctx.restore(); }
+  }
+  // Where he is at `runMs`: which side, and his place and heading on its tile, in its own frame.
+  function cubeRunnerLocal(runMs) {
+    const u = runMs / CUBE_RUN.tileMs, i = Math.floor(u), f = u - i, name = cubeSideAt(i);
+    const prev = cubeStep(name, cubeSideAt(i - 1)), next = cubeStep(name, cubeSideAt(i + 1));
+    const surf = introSurface({ c: 0, r: 0 }, prev, next, CUBE_LOC);
+    const pos = samplePolyline(surf, f);
+    const pa = samplePolyline(surf, Math.max(0, f - 0.07)), pb = samplePolyline(surf, Math.min(1, f + 0.07));
+    return { u, i, f, name, prev, next, pos, angle: Math.atan2(pb.y - pa.y, pb.x - pa.x) };
+  }
+  // ...and on the screen: his feet, and his size (a side's edge — he is drawn at its tile's size).
+  function cubeRunnerAt(V, runMs) {
+    const L = cubeRunnerLocal(runMs), q = cubeSideQuad(L.name, V).q, k = 1/CUBE_TILE;
+    const [p0, p1, , p3] = q;
+    return { x: p0[0] + (p1[0] - p0[0])*L.pos.x*k + (p3[0] - p0[0])*L.pos.y*k,
+             y: p0[1] + (p1[1] - p0[1])*L.pos.x*k + (p3[1] - p0[1])*L.pos.y*k,
+             s: Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) };
+  }
+  // WHAT HE WEARS ON THE CUBE: three things off the shop's own racks rather than colours of the scene's — the Rainbow Steps
+  // coat (a new rainbow colour on every step), the Prism glass earth under his feet, and the Angelic white trail with its
+  // glitter and spark. Put on through _lookOver for as long as the cube is drawn, so every routine that asks what he is
+  // wearing — the tile's earth, the trail — gets these. No hat, bare feet, and the plain stride.
+  const cubeOutfit = () => ({
+    drip:  SKIN_COLOURS.find(x => x.id === "drip-steps"),
+    track: TRACKS.find(x => x.id === "prism"),
+    trail: TRAILS.find(x => x.id === "angelic"),
+  });
+  const cubeRunnerAs = (o) => ({ skin: o.drip || SKIN_COLOURS[0], hat: { draw: null }, kicks: KICKS.find(k => k.id === "none"), swagger: {} });
+  // ROTATIONS, as quaternions [w, x, y, z], for a camera that has to turn smoothly over the top of the cube and down the
+  // other side — two stacked turns cannot, they flip over at the top.
+  const quatMul = (a, b) => [a[0]*b[0] - a[1]*b[1] - a[2]*b[2] - a[3]*b[3], a[0]*b[1] + a[1]*b[0] + a[2]*b[3] - a[3]*b[2],
+                             a[0]*b[2] - a[1]*b[3] + a[2]*b[0] + a[3]*b[1], a[0]*b[3] + a[1]*b[2] - a[2]*b[1] + a[3]*b[0]];
+  const quatAxis = (ax, th) => { const h = Math.sin(th/2); return [Math.cos(th/2), ax[0]*h, ax[1]*h, ax[2]*h]; };
+  function quatMat(q) {
+    const [w, x, y, z] = q;
+    return [1 - 2*(y*y + z*z), 2*(x*y - w*z), 2*(x*z + w*y),
+            2*(x*y + w*z), 1 - 2*(x*x + z*z), 2*(y*z - w*x),
+            2*(x*z - w*y), 2*(y*z + w*x), 1 - 2*(x*x + y*y)];
+  }
+  function quatFromMat(m) {
+    const t = m[0] + m[4] + m[8];
+    let q;
+    if (t > 0) { const r = Math.sqrt(1 + t), s2 = 0.5/r; q = [0.5*r, (m[7] - m[5])*s2, (m[2] - m[6])*s2, (m[3] - m[1])*s2]; }
+    else if (m[0] >= m[4] && m[0] >= m[8]) { const r = Math.sqrt(1 + m[0] - m[4] - m[8]), s2 = 0.5/r; q = [(m[7] - m[5])*s2, 0.5*r, (m[3] + m[1])*s2, (m[2] + m[6])*s2]; }
+    else if (m[4] >= m[8]) { const r = Math.sqrt(1 + m[4] - m[0] - m[8]), s2 = 0.5/r; q = [(m[2] - m[6])*s2, (m[3] + m[1])*s2, 0.5*r, (m[7] + m[5])*s2]; }
+    else { const r = Math.sqrt(1 + m[8] - m[0] - m[4]), s2 = 0.5/r; q = [(m[3] - m[1])*s2, (m[2] + m[6])*s2, (m[7] + m[5])*s2, 0.5*r]; }
+    const L = Math.hypot(...q) || 1; return q.map(v => v/L);
+  }
+  function quatSlerp(a, b, k) {
+    let d = a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3];
+    if (d < 0) { b = b.map(v => -v); d = -d; }
+    if (d > 0.9995) { const q = a.map((v, i) => v + (b[i] - v)*k), L = Math.hypot(...q) || 1; return q.map(v => v/L); }
+    const th = Math.acos(d), sa = Math.sin((1 - k)*th)/Math.sin(th), sb = Math.sin(k*th)/Math.sin(th);
+    return a.map((v, i) => v*sa + b[i]*sb);
+  }
+  // ...and the film's two turns, as one (cineProj's own order: the turn about the vertical, then the tip toward us).
+  function quatEuler(ry, rx) {
+    const cy = Math.cos(ry), sy = Math.sin(ry), cx = Math.cos(rx), sx = Math.sin(rx);
+    return quatFromMat([cy, 0, sy, sx*sy, cx, -sx*cy, -cx*sy, sx, cx*cy]);
+  }
+  // Which way the camera wants the cube turned: to REVEAL THE PATH IN FRONT OF HIM. It looks between the side he is on and
+  // the side he is running onto — his side, and `reveal` of the next — and as he crosses a side it slides on to the next
+  // pair: (1-g)(here + r·next) + g(next + r·after), g easing across the side. At an edge that is exactly where the next
+  // side's sum begins, so it is continuous; and the side ahead is always turned toward us before he gets to it.
+  function cubeLook(runMs) {
+    const u = runMs / CUBE_RUN.tileMs, i = Math.floor(u), f = u - i, r = CUBE_RUN.reveal, g = f*f*(3 - 2*f);
+    const n0 = CUBE_SIDES[cubeSideAt(i)].n, n1 = CUBE_SIDES[cubeSideAt(i + 1)].n, n2 = CUBE_SIDES[cubeSideAt(i + 2)].n;
+    const w = [0, 1, 2].map(a => (1 - g)*(n0[a] + r*n1[a]) + g*(n1[a] + r*n2[a])), wl = Math.hypot(...w) || 1;
+    return w.map(v => v/wl);
+  }
+  // THE CAMERA, eased after him: each frame it turns the cube by a share of the one turn that would bring the way it
+  // wants to look (cubeLook) round to face us — the smallest turn there is, so it never spins the long way or flips at
+  // the top. Kept between frames; a frame asked twice (the same `ts`) does not turn it twice.
+  let _cubeCam = null;
+  function cubeCamQuat(ts, runMs) {
+    const want = (() => { const l = CUBE_RUN.lean, d = [l.x, l.y, -1], dl = Math.hypot(...d); return d.map(v => v/dl); })();
+    const turnToward = (q, k) => {
+      const m = quatMat(q), w = cubeLook((runMs == null ? ts : runMs) + CUBE_RUN.ahead);
+      const v = [m[0]*w[0] + m[1]*w[1] + m[2]*w[2], m[3]*w[0] + m[4]*w[1] + m[5]*w[2], m[6]*w[0] + m[7]*w[1] + m[8]*w[2]];
+      const ax = [v[1]*want[2] - v[2]*want[1], v[2]*want[0] - v[0]*want[2], v[0]*want[1] - v[1]*want[0]];
+      const sn = Math.hypot(...ax), cs = v[0]*want[0] + v[1]*want[1] + v[2]*want[2], th = Math.atan2(sn, cs);
+      if (!(th > 1e-5)) return q;
+      const axis = sn > 1e-9 ? ax.map(a => a/sn) : [0, 1, 0];
+      const out = quatMul(quatAxis(axis, th*k), q), L = Math.hypot(...out) || 1;
+      return out.map(x => x/L);
+    };
+    if (!_cubeCam) _cubeCam = { q: turnToward([1, 0, 0, 0], 1), at: ts };   // starts already looking where it wants
+    if (ts > _cubeCam.at) {
+      const dt = Math.min(100, ts - _cubeCam.at);
+      _cubeCam.q = turnToward(_cubeCam.q, 1 - Math.exp(-dt / CUBE_RUN.camMs));
+      _cubeCam.at = ts;
+    }
+    return _cubeCam.q;
+  }
+  // The whole cube with him on it, in view V: the far sides' glass and edges; the near sides' glass; a tile on each near
+  // side; him on his, if it is one of them; and the near sides' white edges over the lot. `runMs` is his clock.
+  // `o.sparkA` fades the edges' sparks (the opening hands them to the faces), `o.jitter` shakes him on the screen.
+  function drawCubeRun(V, runMs, ts, A, o) {
+    o = o || {};
+    drawCubeWire(V, A, true, o.sparkA);
+    const C = []; for (let k = 0; k < 8; k++) C.push(cineProj([k & 1, (k >> 1) & 1, (k >> 2) & 1], V));
+    const near = CUBE_FACES.map((f, j) => j).filter(j => !(CUBE_FACES[j].reduce((z, k) => z + C[k][2], 0) > 0));
+    drawCubeGlass(near.map(j => CUBE_FACES[j].map(k => C[k])), near, A, performance.now());
+    const sides = CUBE_LOOP.map(name => Object.assign({ name }, cubeSideQuad(name, V)));
+    const outfit = cubeOutfit(), wasLook = _lookOver;
+    _lookOver = outfit;                                         // (the tiles' earth and his trail read it)
+    ctx.save(); ctx.globalAlpha = A;
+    try {
+      CUBE_LOOP.forEach((name, k) => {
+        if (!sides[k].front) return;
+        const prev = cubeStep(name, cubeSideAt(k - 1)), next = cubeStep(name, cubeSideAt(k + 1));
+        onCubeSide(sides[k].q, () => introDrawPlatform({ c: 0, r: 0 }, prev, next, CUBE_LOC));
+      });
+      const L = cubeRunnerLocal(runMs), on = sides[((L.i % 6) + 6) % 6];
+      if (on.front) {
+        if (o.jitter) ctx.translate(o.jitter.x, o.jitter.y);
+        const s0 = V.S, phase = L.u*Math.PI*2*STRIDES_PER_TILE;
+        // HIS TRAIL, laid ON THE CUBE. Each point is where the ribbon leaves his body — trailAnchor, as the board finds it —
+        // worked out in his side's own frame and put onto the cube in 3D, with his "up" there as a direction on that side.
+        // Every frame the wake is projected through the cube's view as it now stands, so it turns with the cube instead of
+        // hanging in the air where the cube used to be; and it runs from his heels back to the first point lying on a side
+        // that is turned away from us, so none of it shows through the cube. (Points laid on the screen smeared off the
+        // cube as it turned, and his screen heading on a side seen slantwise put the ribbon off his body.)
+        const tr = lookItem("trail");
+        if (tr && tr.cols) {
+          const W = introWakes.cube || (introWakes.cube = { pts: [], last: ts });
+          W.pts = wakeAge(W.pts, Math.max(0, Math.min(80, ts - W.last)));   // clamped: tabs go away
+          W.last = ts;
+          const A = trailAnchor(ts, phase, true), ca = Math.cos(L.angle), sa = Math.sin(L.angle), SD = CUBE_SIDES[L.name];
+          const lx = (L.pos.x + CUBE_TILE*(A.x*ca - A.y*sa)) / CUBE_TILE, ly = (L.pos.y + CUBE_TILE*(A.x*sa + A.y*ca)) / CUBE_TILE;
+          const P3 = [0, 1, 2].map(i => SD.O[i] + lx*SD.U[i] + ly*SD.V[i]);
+          const N3 = [0, 1, 2].map(i => -sa*SD.U[i] + ca*SD.V[i]);
+          const last = W.pts[W.pts.length - 1];
+          if (!last || Math.hypot(P3[0] - last.P[0], P3[1] - last.P[1], P3[2] - last.P[2]) > TRAIL_MIN)
+            W.pts.push({ P: P3, N: N3, side: L.name, life: 0, w: Math.random()*2 - 1 });
+          const facing = {}; for (const sd of sides) facing[sd.name] = sd.front;
+          const wake = [];
+          for (let k = W.pts.length - 1; k >= 0; k--) {
+            const q = W.pts[k]; if (!facing[q.side]) break;
+            const a = cineProj(q.P, V), b = cineProj(q.P.map((v, i) => v + q.N[i]*0.05), V);
+            const dx = b[0] - a[0], dy = b[1] - a[1], dl = Math.hypot(dx, dy) || 1;
+            wake.push({ x: a[0], y: a[1], life: q.life, w: q.w, nx: dx/dl, ny: dy/dl });
+          }
+          wake.reverse();                                                     // tail first, as paintTrail wants it
+          if (wake.length > 1) paintTrail(tr, wake, s0*RUNNER.bodyH, ts);     // before him, so his body covers the join
+          if (tr.spark) { const a = cineProj(P3, V); drawSpark(ctx, a[0], a[1], s0*TRAIL_SPARK, ts, { col: "#ffffff", seed: 0.53 }); }
+        }
+        onCubeSide(on.q, () => withCanvas(ctx, CUBE_TILE, 0, 0, () => {
+          runnerShadowClip = () => bodyPath(tileSurface({ c: 0, r: 0 }, L.prev, L.next), nodeCenter({ c: 0, r: 0 }));
+          paintRunner(L.pos.x, L.pos.y, CUBE_TILE, phase, L.angle, true, ts, 0, true, cubeRunnerAs(outfit));
+        }));
+      }
+    } finally { _lookOver = wasLook; ctx.restore(); }
+    drawCubeWire(V, A, false, o.sparkA, 0);                   // (its glass is already down, under the tiles)
+  }
   function drawTitleScene(ts, alpha) {
-    const A = alpha == null ? 1 : alpha, P = titleSceneAt(ts), V = titleCubeView(P, titleCubeRot(ts));
-    drawCubeWire(V, A, true);                                      // the far edges, behind him
-    drawAngel(P, ts, A, { pose: "lotus", shut: true, where: titleSceneAt });   // him, in the lotus, eyes shut
-    drawCubeWire(V, A, false);                                     // ...and the near ones, in front
+    const A = alpha == null ? 1 : alpha, P = titleSceneAt(ts);
+    const V = titleCubeView(P, { ry: 0, rx: 0 });
+    V.m = quatMat(quatMul(cubeRoll(), cubeCamQuat(ts, performance.now()))); V.ortho = true;
+    drawCubeRun(V, performance.now(), ts, A);
   }
   // ---- THE OPENING ---------------------------------------------------------------------------------
   // The glass cube, the angel asleep in it, floats to the middle of the room; he trembles as something builds, and
@@ -26563,7 +27172,7 @@
                              //   rather than off him — he is only the size of a tile
   };
   let openActive = false, openT = 0, openNext = "level", openFired = 0, openHold = false;
-  let openCloud = null, openNet = null, openRot0 = null, openOwner = null;
+  let openCloud = null, openNet = null, openRot0 = null, openOwner = null, openRun0 = 0;
   let openFlaps = null, openFlapI = 0;               // the old film's flaps, on this clock (see startOpening)
   let openRuns = [], openRunsMax = 1;                // the wireframe's straight lines (see openLineRuns)
   // The Tileverse's wireframe as STRAIGHT LINES: every longest run of square edges lying end to end on one
@@ -26714,6 +27323,7 @@
     openFlaps = openCloud && openCloud.oLand ? openCloud.oLand.slice().sort((a, b) => a - b) : [];
     openFlapI = 0;
     openRot0 = titleCubeRot(performance.now());       // where the title's cube was when you tapped
+    openRun0 = performance.now();                     // ...and his clock round it, carried on from the title's
     openOwner = new Map();
     markCineSeen();
     const pf = document.getElementById("pauseFloat"); if (pf) pf.style.display = "none";
@@ -26809,12 +27419,23 @@
   function openCubeAt(t){ const T0 = titleSceneAt(performance.now()), k = cineSmooth(openK(OPENING.drift, t));
     const y1 = viewH/2 + T0.s*(RUNNER.legLen + RUNNER.bodyH*0.5);
     return { x: cineMix(T0.x, viewW/2, k), y: cineMix(T0.y, y1, k), s: T0.s, cube: T0.cube }; }
-  // His place at time t: in the cube as it floats to the middle, up like a rocket to the hover over the map on the
-  // boom, over to chapter one, and down into it.
+  // The cube's view before the boom: floating to the middle, turned by the camera following him round it, and handed
+  // over — a slerp, all of drift and tension long — to the pose the unfold opens from, which it holds exactly on the boom.
+  function openCubeView(t, M) {
+    const Vt = cineView(CINE.unfold[0], M.cam);
+    const qU = quatEuler(Math.atan2(Vt.sry, Vt.cry), Math.atan2(Vt.srx, Vt.crx));
+    const k = cineSmooth(cineC01(t / OPENING.unfold[0]));
+    const V = titleCubeView(openCubeAt(t), { ry: 0, rx: 0 });
+    V.m = quatMat(quatSlerp(quatMul(cubeRoll(), cubeCamQuat(performance.now(), openRun0 + t)), qU, k)); V.ortho = true;   // (the unfold takes perspective back on the boom)
+    return V;
+  }
+  // His place at time t: running round the cube as it floats to the middle, up like a rocket from wherever he is on it
+  // to the hover over the map on the boom, over to chapter one, and down into it.
   function openRunnerAt(t, M){
     const H = openHover(M), O = openOverOne(M);
     const mix = (a, b, k) => ({ x: cineMix(a.x, b.x, k), y: cineMix(a.y, b.y, k), s: cineMix(a.s, b.s, k) });
-    let P = openCubeAt(t);
+    const tc = Math.min(t, OPENING.boom);
+    let P = cubeRunnerAt(openCubeView(tc, M), openRun0 + tc);
     const rk = openK(OPENING.rise, t);
     if (rk > 0) P = mix(P, H, 1 - Math.pow(1 - rk, 3));        // all its speed at once, braking into the hover
     if (t >= OPENING.toOne[0]) P = mix(P, O, cineSmooth(openK(OPENING.toOne, t)));
@@ -26933,14 +27554,12 @@
     // ---- the cube, from the title's pose into the old film's unfold, as white edges ------------
     if (unfoldK < 1) {
       if (t < OPENING.unfold[0]) {
-        // still whole: turned from where you left it to the pose the unfold opens from
-        const tOld0 = CINE.unfold[0];
-        const Vt = cineView(tOld0, M.cam), ry1 = Math.atan2(Vt.sry, Vt.cry), rx1 = Math.atan2(Vt.srx, Vt.crx);
-        let dy = ry1 - openRot0.ry; dy = ((dy % (Math.PI*2)) + Math.PI*3) % (Math.PI*2) - Math.PI;
-        const k = cineSmooth(cineC01(t / OPENING.unfold[0]));
-        const V = titleCubeView(openCubeAt(t), { ry: openRot0.ry + dy*k, rx: cineMix(openRot0.rx, rx1, k) });   // floating to the middle
+        // still whole, with him running round it: the camera following him, handed over to the pose the unfold opens from
+        const V = openCubeView(t, M);
         const cubeSparks = 1 - cineC01((t - (OPENING.unfold[0] - 150)) / 150);   // ...handed to the faces as it opens
-        drawCubeWire(V, 1, true, cubeSparks); drawCubeWire(V, 1, false, cubeSparks);
+        const jj = tK > 0 ? Tt.s * OPENING.tenseTremble * tK*tK : 0;             // ...and him trembling as the tension creeps up
+        drawCubeRun(V, openRun0 + t, ts, 1, { sparkA: cubeSparks,
+                    jitter: jj ? { x: (Math.random()*2 - 1)*jj, y: (Math.random()*2 - 1)*jj } : null });
       } else {
         // opening: the old film's own hinges, on its own clock remapped to ours, framed from the title
         // cube's size and place out to the map's
@@ -27068,8 +27687,9 @@
       const j = P.s * OPENING.tremble * buildK*buildK;
       P = { x: P.x + (Math.random()*2 - 1)*j, y: P.y + (Math.random()*2 - 1)*j, s: P.s };
     }
-    drawAngel(P, ts, A, {
-      pose: "onefoot", fromLotus: 1 - wakeK, shut: wakeK < 0.5, where, curl: curlK, splay: splayK,
+    // (before the boom he is on the cube — drawCubeRun has him — and he comes off it running, not out of a lotus)
+    if (t >= OPENING.boom) drawAngel(P, ts, A, {
+      pose: "onefoot", fromLotus: 0, shut: false, where, curl: curlK, splay: splayK,
       drained: t >= burst, sparkA: t < burst ? 1 : 0, sparkK: 1 + OPENING.buildSpark*buildK*buildK + OPENING.tenseSpark*tK*tK,
       glitA: t < burst ? 1 : 0 });
     for (const paint of charmsFront) paint();                          // ...and the near talismans over him
