@@ -4963,7 +4963,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.62";                    // shown on the title & pause screens
+  const VERSION = "v10.63";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -8630,7 +8630,12 @@
   // is always the one you have not used for longest, which is the one the runner cleared first
   // and the one your hand would have reached for anyway. Returns false if (c,r) is not a hint
   // square, so the tap can go on to mean whatever else it might have meant.
-  const FLY_MS = 190;
+  const FLY_MS = 190;                        // (only for a flight that carries no time of its own — see quarterTile)
+  // A QUARTER OF A TILE'S TIME at his current pace: msPerCell, the ramped pace, taken as it stands — not the plate's reading
+  // with boosts, the guide's slow-down and the Hands of Time folded in, which would stretch these to nothing or forever.
+  // A tile sent to a hotspot flies in this, and a junction's race and its hotspots growing take this between them, so
+  // both keep step with him: the faster he runs, the quicker they go.
+  const quarterTile = () => (state.msPerCell || 1000) / 4;
   // The tile a tap would fetch: the oldest one not currently part of the track — parked counts,
   // it is still yours. Null when you have none, which is also what dims the hints, so what they
   // show and what a tap would do can never disagree.
@@ -8659,7 +8664,7 @@
       return true;
     }
     state.queued = null;                    // ...a tap that lands now supersedes one that waited
-    state.flyTile = { tile, c, r, t: 0,
+    state.flyTile = { tile, c, r, t: 0, dur: quarterTile(),
                       x0: cx(tile.c), y0: cy(tile.r), x1: cx(c), y1: cy(r) };
     haptic(6);
     return true;
@@ -8689,7 +8694,7 @@
     const f = state.flyTile;
     if (!f) return;
     f.t += dt;
-    if (f.t < FLY_MS) return;
+    if (f.t < (f.dur || FLY_MS)) return;
     state.flyTile = null;
     dropTileOn(f.tile, f.c, f.r);
   }
@@ -8702,7 +8707,7 @@
   function flyPos() {
     const f = state.flyTile;
     if (!f) return null;
-    const k = 1 - Math.pow(1 - Math.min(1, f.t / FLY_MS), 3);
+    const k = 1 - Math.pow(1 - Math.min(1, f.t / (f.dur || FLY_MS)), 3);
     return { id: f.tile.id, x: f.x0 + (f.x1 - f.x0)*k, y: f.y0 + (f.y1 - f.y0)*k, k };
   }
 
@@ -9232,6 +9237,31 @@
   const loopSpin = () => !!(state && state.loop && state.loop.closed);
   const holeU = () => state && state.hole
     ? clamp((state.cpsNow - HOLE.from)/Math.max(0.001, LOOP_MAX_CPS - HOLE.from), 0, 1) : 0;
+  // THE HOLE'S COLOUR. Kept apart from state.hole, because the hole outlives it: the board's hole is let go when the
+  // restoration takes over, and the finale goes on painting the same object (paintHole). A plain black disc to start, with
+  // no outline at all; every charm that goes in turns the disc flat in its colour AND adds a ring of that colour to a
+  // STACK round the edge — each new one inside the last, so the charms build a rainbow band that stays to the end
+  // (holeTalIn). The Mushroom goes in last, flashing its purple, and the disc then fades slowly back to black inside it.
+  const HOLE_INK = {
+    fadeMs: 3200,   // how long the disc takes to go from the Mushroom's purple back to black
+    lapMs:  7000,   // one lap of the outline by its two sparks
+    spark:  0.75,   // their size, against the tab bar's spark (and never wider than the hole)
+  };
+  let holeInk = null;
+  function holeInkReset() { holeInk = { rings: [], fill: null, fadeAt: 0 }; }
+  function holeInkTal(def) {
+    if (!holeInk) holeInkReset();
+    const col = talFace(def);
+    holeInk.rings.push(col); holeInk.fill = col;                        // a ring inside the rest, and the disc its colour
+    holeInk.fadeAt = def.id === "mush" ? performance.now() : 0;       // the last one: back to black from here
+  }
+  function holeFill() {
+    const I = holeInk; if (!I || !I.fill) return "#000000";
+    if (!I.fadeAt) return I.fill;
+    const k = Math.min(1, (performance.now() - I.fadeAt) / HOLE_INK.fadeMs), e = k*k*(3 - 2*k);
+    const [r, g, b] = hexRGB(I.fill);
+    return "rgb(" + Math.round(r*(1 - e)) + "," + Math.round(g*(1 - e)) + "," + Math.round(b*(1 - e)) + ")";
+  }
   function startHole() {
     const s = state, L = s.loop;
     if (!L || s.hole || s.restore || s.vortex) return;
@@ -9265,6 +9295,7 @@
                fly: [], gone: new Set(), tal: null, eaten: new Set(),
                cover, R: 0, total: order.length,
                need: Math.max(1, Math.round(order.length*HOLE.half)) };
+    holeInkReset();                  // ...black and unringed, until the first charm goes in
     Sound.vortex(true);
   }
   function endHole() {
@@ -9376,7 +9407,9 @@
     const H = state.hole; if (!H) return;
     if (!H.tal) {
       if (H.done < H.need*HOLE.talAt) return;
-      const list = (typeof TALISMANS !== "undefined" ? TALISMANS : []).slice(0, HOLE.talN);
+      // ...the Mushroom LAST, whatever the rack's order: it is the one the hole keeps (holeInkTal)
+      const all = (typeof TALISMANS !== "undefined" ? TALISMANS : []).slice(0, HOLE.talN);
+      const list = all.filter(d => d.id !== "mush").concat(all.filter(d => d.id === "mush"));
       H.tal = list.map((def, i) => ({
         def, t: -i*HOLE.talGap, dur: HOLE.talMs,
         // spread across the foot of the screen, and each turning its own way round
@@ -9402,6 +9435,7 @@
   // rings, a step higher with each one that goes (Sound.holeChime).
   function holeTalIn(H, def) {
     (H.flashes || (H.flashes = [])).push({ col: talFace(def), at: H.age });
+    holeInkTal(def);                                                   // ...and the hole takes the charm's colour
     H.growTo = (H.growTo || 0) + cell*HOLE.talGrow;
     try { Sound.holeChime && Sound.holeChime(H.talIn || 0); } catch (_) {}
     H.talIn = (H.talIn || 0) + 1;
@@ -9504,8 +9538,7 @@
   // THE THING ITSELF, at any place and any size. The light dragged round the outside first,
   // additively, and then the hole punched out of the middle of it in flat black — that order is
   // the whole of what makes a disc read as a hole rather than as a dark spot in a glow.
-  // `calm` is how still it has become: at 0 the rim is three ragged arcs turning, at 1 it is one
-  // even ring and nothing moves. Split out of drawHole so the ending can go on drawing the same
+  // `calm` is how still it has become, which the light round it widens and brightens with. Split out of drawHole so the ending can go on drawing the same
   // object over the map once the level it opened in has gone.
   function paintHole(hx, hy, R, u, ts, spin, calm) {
     if (!(R > 0)) return;
@@ -9519,24 +9552,34 @@
     g.addColorStop(1,    "rgba(120,90,255,0)");
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.arc(hx, hy, R*(1 + ring), 0, Math.PI*2); ctx.fill();
-    // The rim: three arcs turning while it is still eating, closing into one unbroken circle as
-    // it settles — the arcs lengthen to a full turn and stop, rather than fading out and a ring
-    // fading in over the top of them.
-    // ...and it THINS as it closes. A turning arc is a smear of light and wants weight; a
-    // finished circle is an edge, and an edge drawn a tenth of its own radius thick is a ring
-    // rather than a rim. The line all but vanishes into the glow it sits in.
-    const a0 = ts/820 * (spin || 1), len = 1.6 + q*(Math.PI*2 - 1.6);
-    ctx.lineWidth = Math.max(1, R*(0.11 - q*0.086));
-    for (let k = 0; k < 3; k++) {
-      const off = (1 - q)*k*1.1, fade = 1 - q*(k ? 1 : 0);      // the two trailing arcs go
-      if (fade <= 0.002) continue;
-      ctx.strokeStyle = "rgba(255,242,224," + (0.5*u/(k + 1)*fade*(1 + q*1.4)).toFixed(3) + ")";
-      ctx.beginPath(); ctx.arc(hx, hy, R*(1.03 + off*0.064), a0 + off, a0 + off + len);
-      ctx.stroke();
-    }
+    // No arcs round it any more. The disc in its colour (black, a charm's flat colour, or fading back to black after the
+    // Mushroom — holeFill), and round its edge the STACK of rings the charms have left: the first just outside the edge,
+    // each after it one ring further in, touching, so they read as one rainbow band — thinner as there are more of them
+    // or the hole is small, never more than half its radius. The newest, innermost ring carries the two sparks, rolling
+    // round it half a lap apart in its colour: the hotspots' look, on the one circle in the game.
     ctx.globalCompositeOperation = "source-over";
-    ctx.fillStyle = "#000000";
+    ctx.fillStyle = holeFill();
     ctx.beginPath(); ctx.arc(hx, hy, R, 0, Math.PI*2); ctx.fill();
+    const rings = (holeInk && holeInk.rings) || [];
+    if (!rings.length) { ctx.restore(); return; }                          // nothing gone in yet: no outline at all
+    const lw = Math.min(Math.max(FOOTER.rim + 1, R*0.02), R*0.5/rings.length);
+    const ringR = i => R + lw/2 - i*lw;                                   // the first outside the edge, each after it further in
+    ctx.lineWidth = lw;
+    rings.forEach((col, i) => {
+      const ri = ringR(i); if (!(ri > lw/2)) return;
+      ctx.strokeStyle = col;
+      ctx.beginPath(); ctx.arc(hx, hy, ri, 0, Math.PI*2); ctx.stroke();
+    });
+    const line = rings[rings.length - 1], rr = ringR(rings.length - 1);
+    const now = performance.now(), sz = Math.min(uiGrid() * TAB_SPARK, R*2) * HOLE_INK.spark;
+    if (sz > 0.5 && rr > 0) for (const [off, seed] of [[0, 0.61], [0.5, 0.19]]) {
+      const ang = ((now / HOLE_INK.lapMs) + off) * Math.PI*2 * (spin || 1);
+      ctx.save();
+      ctx.translate(hx + Math.cos(ang)*rr, hy + Math.sin(ang)*rr);
+      ctx.rotate(ang * rr / (sz * TAB_SPARK_ROLL));                     // rolling by the rim it has covered
+      drawSpark(ctx, 0, 0, sz, now, { alpha: ctx.globalAlpha, col: line, seed });
+      ctx.restore();
+    }
     ctx.restore();
   }
 
@@ -9596,15 +9639,16 @@
     // this it stops being a number at all and reads ∞.
     infinity: 1e12,
     dark:   1900,   // ...and everything going
-    eyeW:  0.230,   // an eye, as a fraction of the hole's own RADIUS
-    eyeH:  0.520,   // ...its height against its own width, once open. A SQUINT: at parity they
-                    // were two lit windows, and a thing that is looking at you narrows.
+    eyeW:  0.230,   // an eye's DIAMETER — they are circles — as a fraction of the hole's own RADIUS
     eyeGap:0.340,   // ...and how far each sits from the middle, again against the radius
     eyeY:  -0.120,   // ...and how far up the face they sit, against the radius. Off centre,
                     // because a pair of eyes in the exact middle of a disc is a smiley.
-    eyeBrow:0.400,  // ...how far the top-inner corner is dragged down. This is the whole of
-                    // what makes them evil rather than merely lit: an eye narrowed toward the
-                    // middle is a scowl, and it is one shape rather than a face drawn round it.
+    // THE ANGRY CUT: a straight line across the top of each circle, and everything above it taken away. Where the line
+    // crosses the eye's OUTER edge and its INNER one, in the eye's radii above its middle (negative is below). High on
+    // the outside and dropping toward the middle of the face is the scowl — the whole of what makes them evil rather than
+    // merely lit, and one shape rather than a brow drawn over it.
+    eyeCutOut: 0.55,
+    eyeCutIn: -0.05,
     line:    820,   // ms between credit lines arriving
     fade:    620,   // ...how long one takes to arrive
     hold:   1400,   // ...and a beat at the end before TAP TO CONTINUE
@@ -9859,7 +9903,7 @@
       const mapA = R.phase === "whip" ? Math.pow(Math.min(1, R.t/FIN.whip), FIN.mapIn) : 1;
       drawMap(ts, R.S, R.cx0, R.cy0, { hide: R.gone, alpha: mapA*(1 - dark) });
       // ...and the chapters on their way in. Drawn as their own square of the map, shrinking and
-      // carried round, exactly as the ground'\''s patches were.
+      // carried round, exactly as the ground's patches were.
       for (const f of R.fly) {
         const k = f.t/f.dur, e = Math.pow(k, 1.6);
         const a = Math.atan2(f.y - C.y, f.x - C.x) + f.sp*FIN.spin*e;
@@ -9872,13 +9916,13 @@
     }
     // THE HOLE, at whatever it has grown to. Through the rise it is walked from the size the
     // level left it at to a chapter and a fifth, UNDER the retreating picture — so when the
-    // picture hands over, the thing behind it is already exactly where the picture'\''s own hole
+    // picture hands over, the thing behind it is already exactly where the picture's own hole
     // was, and the join is not a join.
     const hx = C.x, hy = C.y, hr = R.R;
     ctx.save();
     if (dark > 0) ctx.globalAlpha = 1 - dark;
     paintHole(hx, hy, hr, 1, ts, 1, R.calm);
-    // ...and what opens in it. Two eyes, in the game'\''s own square idiom, unrolling from slits:
+    // ...and what opens in it. Two round eyes in the Mushroom's purple, cut into a scowl, opening from slits:
     // there is nothing in the black until there is, which is the whole of the moment.
     if (R.eye > 0) drawFinEyes(hx, hy, hr, R.eye, ts);
     ctx.restore();
@@ -9911,41 +9955,44 @@
     drawSpeedPlate(runaway >= FIN.infinity ? Infinity : runaway);
     return true;
   }
-  // EVIL. Two of them, and they are the runner'\''s own eyes turned inside out: the game draws
-  // every face it has with a pair of dark squares on something pale, so a pair of BURNING ones
-  // on something black is the same sentence said the other way round. They unroll from slits
-  // rather than fading up — a fade would be a picture appearing, and this is a thing opening.
+  // EVIL. Two of them: ROUND, burning in the Mushroom's purple — the charm the hole kept — and each with the top cut off
+  // it on a slant, high on the outside and dropping toward the middle of the face, which is the scowl (FIN.eyeCut*). They
+  // open from slits at the bottom rather than fading up — a fade would be a picture appearing, and this is a thing
+  // opening — so the cut, at the top, is the last of them to arrive.
   function drawFinEyes(hx, hy, R, k, ts) {
     const o = k*k*(3 - 2*k);
-    const w = R*FIN.eyeW, h = w*FIN.eyeH*o, gap = R*FIN.eyeGap;
-    if (!(h > 0.4)) return;
+    const r = R*FIN.eyeW/2, gap = R*FIN.eyeGap;
+    if (!(r*o > 0.4)) return;
     // A slow unease under the stare: they are not still, they are only nearly still.
     const dy = Math.sin(ts/1900)*R*0.012, dx = Math.sin(ts/2700)*R*0.010;
+    const mush = talById("mush"), rgb = hexRGB(mush ? talFace(mush) : "#c37ef1").join(",");
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     for (const sx of [-1, 1]) {
       const x = hx + sx*gap + dx, y = hy + dy + R*FIN.eyeY;
       // the burn around it first, so the eye sits in its own light rather than on top of it
-      const g = ctx.createRadialGradient(x, y, 0, x, y, w*3.2);
-      g.addColorStop(0,   "rgba(255,60,40," + (0.80*o).toFixed(3) + ")");
-      g.addColorStop(0.35,"rgba(224,18,14," + (0.34*o).toFixed(3) + ")");
-      g.addColorStop(1,   "rgba(180,0,0,0)");
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r*6.4);
+      g.addColorStop(0,    "rgba(" + rgb + "," + (0.80*o).toFixed(3) + ")");
+      g.addColorStop(0.35, "rgba(" + rgb + "," + (0.34*o).toFixed(3) + ")");
+      g.addColorStop(1,    "rgba(" + rgb + ",0)");
       ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(x, y, w*3.2, 0, Math.PI*2); ctx.fill();
-      // ...and the eye. Four corners, not a rectangle: the top edge falls away toward the
-      // middle of the face, which is the scowl. It opens by unrolling from the BOTTOM, so the
-      // last thing to arrive is the brow.
-      const xo = x + sx*w/2, xi = x - sx*w/2, ty = y - h/2;
+      ctx.beginPath(); ctx.arc(x, y, r*6.4, 0, Math.PI*2); ctx.fill();
+      // ...and the eye: everything below the cut...
+      const xo = x + sx*r, yo = y - r*FIN.eyeCutOut;             // where the cut meets the outer edge
+      const xi = x - sx*r, yi = y - r*FIN.eyeCutIn;              // ...and the inner one
+      const at = px => yo + (px - xo)*(yi - yo)/(xi - xo);       // the line, carried on past the circle
+      ctx.save();
       ctx.beginPath();
-      ctx.moveTo(xo, ty);
-      ctx.lineTo(xi, ty + h*FIN.eyeBrow);
-      ctx.lineTo(xi, y + h/2);
-      ctx.lineTo(xo, y + h/2);
-      ctx.closePath();
-      ctx.fillStyle = "rgba(255,74,44," + (0.98*o).toFixed(3) + ")";
+      ctx.moveTo(x - 2*r, at(x - 2*r)); ctx.lineTo(x + 2*r, at(x + 2*r));
+      ctx.lineTo(x + 2*r, y + 2*r); ctx.lineTo(x - 2*r, y + 2*r);
+      ctx.closePath(); ctx.clip();
+      // ...of a circle opening upward from a slit along its foot
+      ctx.beginPath(); ctx.ellipse(x, y + r*(1 - o), r, Math.max(0.2, r*o), 0, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(" + rgb + "," + (0.98*o).toFixed(3) + ")";
       ctx.fill();
-      ctx.fillStyle = "rgba(255,214,190," + (0.55*o*o).toFixed(3) + ")";   // the heat in it
+      ctx.fillStyle = "rgba(255,255,255," + (0.35*o*o).toFixed(3) + ")";   // the heat in it
       ctx.fill();
+      ctx.restore();
     }
     ctx.restore();
   }
@@ -11939,41 +11986,21 @@
       state.fall = { x:ri.sx, y:ri.sy, angle:ri.angle,
                      vx: -ri.tx*spd*WALL_BOUNCE + ux*spd*WALL_POP,
                      vy: -ri.ty*spd*WALL_BOUNCE + uy*spd*WALL_POP,
-                     va: (ri.tx >= 0 ? -1 : 1) * 0.006, t:0, cell0: cell, floor: worldH + viewH*PILE_DROP, px: ri.sx };
+                     va: (ri.tx >= 0 ? -1 : 1) * 0.006, t:0, floor: worldH + viewH*PILE_DROP, px: ri.sx };
     } else {
       state.fall = { x:ri.sx, y:ri.sy, angle:ri.angle,
                      vx:ri.tx * spd, vy:ri.ty * spd,  // run off the edge, then gravity takes over
-                     va:(ri.tx >= 0 ? 1 : -1) * 0.004, t:0, cell0: cell, floor: worldH + viewH*PILE_DROP, px: ri.sx };
+                     va:(ri.tx >= 0 ? 1 : -1) * 0.004, t:0, floor: worldH + viewH*PILE_DROP, px: ri.sx };
     }
   }
   // How far below the board the heap sits, and how long he lies in it before the words come.
-  // The drop pushes IN. Everything on the board is measured in cells, the heap included, so the
-  // whole scene scales together and the bodies stay the size of the runner lying on them.
-  const PILE_DROP = 1.35, PILE_REST = 2200, FALL_ZOOM = 1.35;
+  // No zoom: the board stays the size it was in play. The fall used to push in by a third, which
+  // rescaled `cell` on every frame of the drop — and everything cached against the cell's size
+  // (the stones, the junction's scratch layers) was rebuilt from nothing on each of those frames.
+  const PILE_DROP = 1.35, PILE_REST = 2200;
   const PILE_SKIRT = () => PILE.skirt;      // rows of heap carried on below the base, off-frame
   const pileY = () => (state.fall && state.fall.floor != null) ? state.fall.floor
                                                                : worldH + viewH*PILE_DROP;
-  // The drop pushes IN on him. Everything on the board is measured in `cell`, so growing it is
-  // the zoom — but the fall is carried in world pixels, and those have to be dragged along with
-  // it or he would be left behind by his own scale. The camera is derived from him each frame
-  // anyway, so it needs no correction of its own.
-  function tickFallZoom(dt) {
-    const f = state.fall; if (!f || !f.cell0) return;
-    // The fall pushes IN; the Ankh walks that back out. He is being returned to the board, and
-    // a board still held at the fall's magnification is not the board he left.
-    const A = f.ankh;
-    const want = f.cell0 * (A ? 1 : FALL_ZOOM);
-    const nc = cell + (want - cell) * Math.min(1, dt/(A ? 700 : 520));
-    const k = nc / cell;
-    if (!(k > 0) || Math.abs(k - 1) < 1e-7) return;
-    cell = nc; worldW = cell*COLS; worldH = cell*ROWS;
-    zoomWorldPoints(k);
-    f.x *= k; f.y *= k; f.vx *= k; f.vy *= k; f.floor *= k; f.px *= k;
-    // ...including everywhere the passage remembers him being. These are world pixels like any
-    // other and would otherwise be left pointing at a board that has changed size under them.
-    if (A) { A.x0 *= k; A.y0 *= k; A.fx *= k; A.fy *= k; }
-    camX *= k; camY *= k;
-  }
   function tickFall(dt) {
     const f = state.fall;
     // Caught. Gravity, the clock and the backstop below all belong to a fall that is no longer
@@ -11986,9 +12013,8 @@
       // which offered you a resurrection from a place he had already arrived at.
       state.ankhGrace = 0;
       f.land += dt;
-      // The zoom is still running under him, and the heap is measured in cells — so its summit
-      // rises while he lies on it. Sit him back on top of it each frame rather than leaving him
-      // at the height it was when he arrived.
+      // Sat back on top of the heap each frame rather than left at the height it was when he
+      // arrived, so anything that moves the summit (a tuning lab, a resize) carries him with it.
       // His FEET sit above the crest and everything else hangs below it. Drawn behind the heap,
       // that is what leaves a pair of legs kicking out of the top of a pile that has closed over
       // the rest of him — level with the crest, the summit row covers the legs too and he goes
@@ -11997,12 +12023,10 @@
       // tip about on a damped wobble, on the argument that it read as being caught by something
       // soft — but he is landing in the one gap the pyramid left for him, and a body settling
       // into its place over the next half second reads as the heap not being sure where he goes.
-      // He goes there. The heap is measured in cells and the zoom is still running under it, so
-      // this is re-applied every frame rather than set once at the moment of contact.
+      // He goes there — re-applied every frame rather than set once at the moment of contact.
       const spot = pileLandSpot();
-      // Re-read every frame, not stored at the moment of contact: the heap is measured in cells
-      // and the zoom is still running under it, so the summit moves while he lies on it — and it
-      // is the only way `tilt` and `splay` can be tuned in the lab against a body already down.
+      // Re-read every frame, not stored at the moment of contact: it is the only way `tilt` and
+      // `splay` can be tuned in the lab against a body already down.
       f.rest = Math.PI + PILE.tilt;
       f.x = spot.x; f.y = spot.y; f.angle = f.rest;
       // No kicking. The legs used to go on flailing and wind down to a halt; he is not
@@ -12271,7 +12295,6 @@
   // is the first body it draws and this is the first number that sequence yields. Same seed,
   // same draw, every heap in the game: it is a constant, worked out once here.
   const PILE_SUMMIT_J1 = mulberry32(PILE_SEED)();
-  const F0x = () => (state.fall ? state.fall.x : worldW/2);   // where the impact was, this frame
   // Where he comes down: NOT the apex, but one or two places down the flank of it. Landing dead
   // on the point is a stunt; landing just off it, on the slope, is a fall. `d` is how many
   // places out he lands, and `landX`/`landY` nudge the whole thing from there.
@@ -12325,82 +12348,71 @@
     _noGlow = 1;                    // nothing in the heap gives off light — see the flag
     try { paintFallPile(ts); } finally { _noGlow = 0; }
   }
+  // THE HEAP IS A PICTURE. Nothing in it moves: every body is a square with crosses for eyes, in a flat colour, at an
+  // angle drawn from a fixed seed — and he is not part of it (drawRunner draws him). So it is painted ONCE into a canvas
+  // of its own, in world units at the screen's pixel density, and stamped each frame with one drawImage instead of
+  // thirty to fifty full runner paints. Rebuilt only when something it is drawn from changes: the cell, the density,
+  // where it stands, how many rows the attempts have earned, or the PILE / EYES / RUNNER blocks the labs tune live.
+  //
+  // (It used to give way where he landed — the bodies nearest shoved clear and settling back over two seconds. Nobody
+  // could see it, and it was the one thing stopping the heap from being a still picture.)
+  let _pileCache = null;
   function paintFallPile(ts) {
+    const G = pileGeom(), s = cell, y0 = pileY(), mx = pileMidX(), skirt = PILE_SKIRT();
+    // How far past its place a body can reach: its own size any way up, plus its wander. Generous — the cost of a few
+    // spare pixels round the edge is nothing, and a body clipped at the edge of the cache would be a visible cut.
+    const reach = s * (PILE.sizeBase + PILE.sizeDepth + PILE.sizeJit + Math.max(PILE.jitX, PILE.jitY)) * 1.2;
+    const half = (G.rows + skirt) * G.stepX / 2 + reach;
+    const bx = Math.floor((mx - half) * dpr) / dpr;
+    const by = Math.floor((y0 - (G.rows - 1) * G.stepY - reach) * dpr) / dpr;
+    const bw = Math.max(1, Math.ceil((mx + half - bx) * dpr));
+    const bh = Math.max(1, Math.ceil((y0 + skirt * G.stepY + reach - by) * dpr));
+    const key = [s, dpr, bx, by, G.rows, JSON.stringify(PILE), JSON.stringify(EYES), JSON.stringify(RUNNER)].join("|");
+    let P = _pileCache;
+    if (!P || P.key !== key) {
+      const cv = (P && P.cv) || document.createElement("canvas");
+      if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
+      const g = cv.getContext("2d");
+      g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, bw, bh);
+      g.setTransform(dpr, 0, 0, dpr, -bx * dpr, -by * dpr);       // world units, aligned to the device pixel
+      const main = ctx; ctx = g;
+      try { paintPileBodies(ts); } finally { ctx = main; }
+      P = _pileCache = { key, cv, bx, by };
+    }
+    ctx.drawImage(P.cv, P.bx, P.by, P.cv.width / dpr, P.cv.height / dpr);
+  }
+  function paintPileBodies(ts) {
     const y0 = pileY(), s = cell;
-    // BUILT, not scattered. Rows, each one two bodies narrower than the row below it, stacked
-    // and offset half a step like brickwork — so the silhouette is a triangle by construction
-    // rather than by luck. Random placement kept producing a cloud with a vaguely pointed top;
-    // the shape has to be the structure, and the randomness only what stops it looking stamped.
+    // BUILT, not scattered. Rows, each one body narrower than the row below it, stacked and offset half a step like
+    // brickwork — so the silhouette is a triangle by construction rather than by luck, and the randomness is only what
+    // stops it looking stamped.
     const G = pileGeom();
     const stepX = G.stepX, stepY = G.stepY, rows = G.rows;
     const rnd = mulberry32(PILE_SEED);
-    // The impact, still ringing. He lands ON these people, and a heap that takes a body without
-    // moving is a heap made of bricks — so everything near the point of contact is shoved a
-    // little way clear of it and settles back over the next half second. It is a function of
-    // how long ago he landed, so the bodies drift home on their own with nothing to remember.
-    const F = state.fall;
-    const hit = (F && F.land != null) ? Math.exp(-F.land/380) : 0;
-    // Two or three bodies, not a quarter of the mountain. It used to reach three cells, which
-    // at this spacing is fourteen places in every direction — so a landing rippled through the
-    // whole heap and read as the pile being made of liquid. A heap is a heap: the ones he
-    // actually lands on give way, and the rest of it does not notice.
-    const REACH = Math.max(stepX, stepY) * 2.2;
-    let k = 0;
     _bodyOnly = 1;                    // squares with eyes — see the flag, and PILE above
     try {
-    // Top row first, bottom row last: on a heap the bodies nearest you are the ones at the
-    // front of the base, and they overlap everything behind them.
-    // ...and it carries on BELOW the base. The camera frames the summit high enough now that the
-    // bottom row would otherwise be on screen, and a mountain with a visible underside is a
-    // mountain floating in the air. The extra rows are full width and simply run off the frame.
-    for (let r = rows - 1; r >= -PILE_SKIRT(); r--) {
-      const cols = pileCols(r, G);
-      for (let c = 0; c < cols; c++, k++) {
-        const j1 = rnd(), j2 = rnd(), j3 = rnd(), j4 = rnd(), j5 = rnd();
-        const fit = pileOutfit(rnd);
-        let x = pileBodyX(pileMidX(), c, cols, stepX, j1);
-        let y = y0 - r*stepY + (j2 - 0.5)*s*PILE.jitY;
-        let shove = 0;
-        if (hit > 0.004) {
-          const dx = x - F.x, dy = y - F.y, dd = Math.hypot(dx, dy) || 1;
-          // Squared, so it is not a gentle slope across a crowd: the body he lands on takes
-          // nearly all of it and its neighbour takes a little.
-          const near = Math.max(0, 1 - dd/REACH);
-          shove = hit * near * near;
-          x += dx/dd * shove * s*0.30;
-          y += dy/dd * shove * s*0.22;
-        }
-        ctx.save();
-        // Solid, every one of them. The back rows used to sit a shade quieter to give the heap
-        // some depth, but a translucent body lets the one behind it show through its head — and
-        // a pile you can see INTO is a pile of ghosts. The size ramp does the depth now.
-        // Every one of them at its OWN angle, right round the circle. Alternating two clusters
-        // of tilt gave a heap where half the bodies leaned one way and half the other, which
-        // reads as a pattern; a body that has landed on a pile of bodies is lying however it
-        // landed, and no two of them landed the same way. They also turn a little as they are
-        // shoved, away from him, which stops the impact reading as one sheet sliding.
-        // More than half of them are UPSIDE DOWN — legs in the air, head in the heap. That is
-        // how you arrive here: head first, off the end of a chapter, the same way he just did.
-        // The rest lie any which way, so the heap does not come out combed.
-        // Any which way. There is no telling how a body landed on a heap of bodies, and a
-        // heap where most of them agreed on an angle read as a pattern rather than as a pile.
-        const ang = j4*Math.PI*2 + shove * 0.5 * (x >= F0x() ? 1 : -1);
-        // Bigger toward the BOTTOM. Nothing about a heap is in perspective, but a body at the
-        // front of the base being half again the size of one at the peak is the cheapest way to
-        // say that the peak is further away — and it makes the mountain read as one object
-        // rather than as a stack of identical stickers.
-        const depth = rows > 1 ? 1 - Math.max(0, r)/(rows - 1) : 1;
-        // The SUMMIT is left empty. He lands there — it is his place on the heap, and a body
-        // already lying in it means he comes down on top of somebody rather than into the gap
-        // the pyramid left for him. The random draws above still happen for it, so leaving it
-        // out does not reshuffle a single body below — and because it is drawn FIRST, its own
-        // j1 is the constant pileLandSpot reads as PILE_SUMMIT_J1 to stand exactly here.
-        if (!(r === rows - 1))
+      // Top row first, bottom row last: the bodies nearest you, at the front of the base, overlap everything behind.
+      for (let r = rows - 1; r >= -PILE_SKIRT(); r--) {
+        const cols = pileCols(r, G);
+        for (let c = 0; c < cols; c++) {
+          // Every draw is taken for every body, the summit included and j5 though nothing reads it: the scatter is a
+          // hash of the draw ORDER, so dropping one reshuffles every body after it.
+          const j1 = rnd(), j2 = rnd(), j3 = rnd(), j4 = rnd(), j5 = rnd();
+          const fit = pileOutfit(rnd);
+          const x = pileBodyX(pileMidX(), c, cols, stepX, j1);
+          const y = y0 - r*stepY + (j2 - 0.5)*s*PILE.jitY;
+          // Bigger toward the bottom (sizeDepth), which is the cheapest way to say the peak is further away.
+          const depth = rows > 1 ? 1 - Math.max(0, r)/(rows - 1) : 1;
+          // The SUMMIT is left empty: it is his place on the heap. Drawn first, so its j1 is the PILE_SUMMIT_J1
+          // pileLandSpot reads to stand exactly here.
+          if (r === rows - 1) continue;
+          ctx.save();
+          // Solid, and each at its OWN angle right round the circle — no two landed the same way.
           paintRunner(x, y, s*(PILE.sizeBase + depth*PILE.sizeDepth + j3*PILE.sizeJit),
-                      j4*6, ang, false, ts, 0, false, fit);
-        ctx.restore();
+                      j4*6, j4*Math.PI*2, false, ts, 0, false, fit);
+          ctx.restore();
+        }
       }
-    }
     } finally { _bodyOnly = 0; }
   }
 
@@ -12521,11 +12533,10 @@
     return (typeof at === "number" && at >= 0 && at < LEVELS.length && (bestPassed(best, at) || at <= frontier))
       ? at : frontier;
   }
-  // Put the board's zoom back where play left it. tickFallZoom grows `cell` by a third on the
-  // way down and NOTHING undoes it until the next level loads — so leaving the board without
-  // loading one carried that zoom out with it, and the next thing to ask `cell` what a tile
-  // looks like got an answer a third too big. The world points go with it, the same way they do
-  // on the way in: they are held in pixels laid down at the old size.
+  // Put the board's zoom back where play left it. The fall no longer zooms, but anything that leaves
+  // `cell` away from the play size and then leaves the board without loading a level would carry
+  // that size out with it, and the next thing to ask `cell` what a tile looks like would get the
+  // wrong answer. The world points go with it: they are held in pixels laid down at the old size.
   function resetPlayZoom() {
     const want = playCell();
     if (!(cell > 0)) { cell = want; worldW = cell*COLS; worldH = cell*ROWS; return; }
@@ -16202,8 +16213,9 @@
     if (s.hole && s.hole.top > 0) cps *= Math.pow(10, HOLE.runaway*s.hole.top/1000);
     return cps;
   }
-  // ∞'s spark: how big, against the plate's height, and one slow turn of it, in ms.
-  const SPEED_INF = { spark: 1.35, spinMs: 9000 };
+  // ∞'s spark: how big, against the plate's height, and one slow turn of it, in ms; and the white glow the black symbol
+  // stands in — its layers' blur, tight then wide, each against the figures' size.
+  const SPEED_INF = { spark: 1.35, spinMs: 9000, glow: [0.25, 0.70] };
   // The plate itself, reading `cps` — or ∞, for a number past counting.
   function drawSpeedPlate(cps) {
     const P = hudPlate(), m = P.left, fs = P.fs;
@@ -16274,15 +16286,27 @@
       const uC = vy + ((um.actualBoundingBoxDescent || 0) - (um.actualBoundingBoxAscent || 0))/2;
       ctx.font = infF;   const im = ctx.measureText(val);
       vy = uC - ((im.actualBoundingBoxDescent || 0) - (im.actualBoundingBoxAscent || 0))/2;
-      // ...with a BRIGHT WHITE SPARK behind it, turning slowly
+      // ...with a SPARK behind it in the Mushroom's purple — the charm the hole keeps — turning slowly
       const now = performance.now(), sxC = m + padX + im.width/2;
       ctx.save();
       ctx.translate(sxC, uC); ctx.rotate((now / SPEED_INF.spinMs) * Math.PI*2);
-      drawSpark(ctx, 0, 0, P.h * SPEED_INF.spark, now, { alpha: 1, col: "#ffffff", seed: 0.5 });
+      const mushDef = talById("mush");
+      drawSpark(ctx, 0, 0, P.h * SPEED_INF.spark, now, { alpha: 1, col: mushDef ? talFace(mushDef) : "#c37ef1", seed: 0.5 });
       ctx.restore();
-      ctx.font = infF; ctx.fillStyle = "#4baff1";
+      ctx.font = infF;
     }
-    if (tab) speedTab(ctx, val, m + padX, vy); else ctx.fillText(val, m + padX, vy);
+    if (tab) speedTab(ctx, val, m + padX, vy);
+    else if (inf) {
+      // ∞ IN BLACK, standing in a WHITE GLOW. The glow is the symbol's own blurred shadow, laid down once per layer — a
+      // tight bright one and a wide soft one — and then the black symbol on top with no shadow. (shadowBlur ignores the
+      // transform, so it is scaled by the pixel density or it would be half as wide on a phone.)
+      ctx.save();
+      ctx.fillStyle = "#000000"; ctx.shadowColor = "#ffffff"; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+      for (const b of SPEED_INF.glow) { ctx.shadowBlur = P.fs2 * b * (dpr || 1); ctx.fillText(val, m + padX, vy); }
+      ctx.restore();
+      ctx.fillStyle = "#000000"; ctx.fillText(val, m + padX, vy);
+    }
+    else ctx.fillText(val, m + padX, vy);
     ctx.font = smallF;                                                // ...and the unit as a dim suffix
     ctx.fillStyle = "rgba(214,218,240,0.66)";
     ctx.fillText(unit, m + padX + vw, midY + 1);
@@ -16892,6 +16916,13 @@
     const capR = cell*0.075;
     const cap = (pts, col) => { ctx.fillStyle = col;
       for (const [ex,ey] of pts) { ctx.beginPath(); ctx.arc(ex,ey,capR,0,Math.PI*2); ctx.fill(); } };
+    // A MONSTER'S turnaround is a perfect SQUARE rather than a dot — the same width the dot was, centred on the end of
+    // its route, its edges on whole pixels so it stays crisp — and its dashes are cut square to match.
+    const capSq = (pts, col) => { ctx.fillStyle = col;
+      for (const [ex,ey] of pts) {
+        const x0 = Math.round(ex - capR), y0 = Math.round(ey - capR), w = Math.max(1, Math.round(capR*2));
+        ctx.fillRect(x0, y0, w, w);
+      } };
     for (const h of state.hazards) {
       const mon = h.kind === "monster", K = mon ? monKind(h) : null;
       if (mon && K.move !== "rail" && !(h.path && h.path.length > 1)) continue;
@@ -16903,24 +16934,24 @@
         const y2 = h.axis==="h" ? (h.r+0.5)*cell  : (h.hi+0.5)*cell;
         ctx.save();
         if (mon) { ctx.strokeStyle = hexA(K.body, 0.30); ctx.lineWidth = Math.max(2, cell*0.04);
-                   ctx.lineCap = "round"; ctx.setLineDash([cell*0.14, cell*0.11]); }
+                   ctx.lineCap = "butt"; ctx.setLineDash([cell*0.14, cell*0.11]); }
         else     { ctx.strokeStyle = "rgba(150,156,172,0.55)"; ctx.lineWidth = Math.max(2, cell*0.05);
                    ctx.lineCap = "round"; }
         ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
         ctx.setLineDash([]);
-        cap([[x1,y1],[x2,y2]], mon ? hexA(K.body, 0.55) : "rgba(120,126,142,0.65)");
+        (mon ? capSq : cap)([[x1,y1],[x2,y2]], mon ? hexA(K.body, 0.55) : "rgba(120,126,142,0.65)");
         ctx.restore();
       }
       if (mon && h.path && h.path.length > 1) {                   // a drawn-by-hand patrol route
         const P = h.path;
         ctx.save();
         ctx.strokeStyle = hexA(K.body, 0.28); ctx.lineWidth = Math.max(1.5, cell*0.028);
-        ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.setLineDash([cell*0.12, cell*0.1]);
+        ctx.lineCap = "butt"; ctx.lineJoin = "miter"; ctx.setLineDash([cell*0.12, cell*0.1]);
         ctx.beginPath(); ctx.moveTo((P[0][0]+0.5)*cell, (P[0][1]+0.5)*cell);
         for (let i=1;i<P.length;i++) ctx.lineTo((P[i][0]+0.5)*cell, (P[i][1]+0.5)*cell);
         if (h.loop) ctx.closePath();
         ctx.stroke(); ctx.setLineDash([]);
-        if (!h.loop) cap([[(P[0][0]+0.5)*cell, (P[0][1]+0.5)*cell],
+        if (!h.loop) capSq([[(P[0][0]+0.5)*cell, (P[0][1]+0.5)*cell],
                           [(P[P.length-1][0]+0.5)*cell, (P[P.length-1][1]+0.5)*cell]], hexA(K.body, 0.55));
         ctx.restore();
       }
@@ -18665,12 +18696,20 @@
   // than unioned, so the shared trunk builds up and the arms only one route reaches stay faint.
   const jMask = document.createElement("canvas");
   const jEdge = document.createElement("canvas");      // ...and each route's edges, faded along their contour, laid on from
-  // The SPARK RACE as a junction is laid: one spark from the join to the end of each option, rolling, and HELD there.
-  const JUNCTION_RACE = { ms: 420, size: 0.25, small: 0.20, spin: 0.002, hold: 1.00 };   // how long the race takes; the
-                                                     // spark's size leaving the join, in tiles; the share of it left where
-                                                     // it stops; how fast it keeps turning there, radians a ms; and how far
-                                                     // along its route it stops, as a share of the way to the edge
-  let _juncRace = { key: null, t0: 0 };
+  // THE SPARK RACE as a junction is laid (drawJunctionRace): one spark off the join down each option, across the tile and
+  // straight on to the CENTRE of the hotspot past its end, drawing the blue lead behind it once it is off the tile. There
+  // it goes out and the hotspot grows into place. An option that runs into a wall, the board's edge or anything else that
+  // is not a hotspot loses its spark at the tile's edge, with no line.
+  // The WHOLE of it, trip and growth, takes a quarter of a tile's time at his pace (quarterTile), taken when the junction
+  // is laid — so the shares below are of that.
+  const JUNCTION_RACE = {
+    travel: 0.756, // the share the trip takes, join to a hotspot's centre — eased out, quick off the join; the rest is the
+                   // hotspot growing into place once its spark is in
+    size:   0.25,  // the spark leaving the join, in tiles...
+    small:  0.20,  // ...and the share of that left when it arrives
+    die:    0.146, // ...and the share a spark takes to go out against a wall
+  };
+  let _juncRace = { key: null, t0: 0, ms: 0, grow: 0, die: 0 };
   // the leading tile renders as a 3-way junction: three real platform pieces
   // oriented to the travel direction — a flat run forward, plus a curve each way
   // (up / down relative to travel) — signalling the path isn't set yet.
@@ -18825,27 +18864,6 @@
       ctx.restore();
     } finally { ctx = main; }
     ctx.drawImage(jScratch, DX/dpr, DY/dpr, px/dpr, px/dpr);
-    // ...and as it is laid: a spark RACING from the join to the end of each option, rolling and shrinking as it goes, and
-    // then HELD on the tile's edge (JUNCTION_RACE.hold), small and still turning, while this is the front of the track
-    // (JUNCTION_RACE). A new junction races anew.
-    const raceKey = n.c + "," + n.r + "," + (prev ? prev.c + "," + prev.r : "");
-    if (_juncRace.key !== raceKey) _juncRace = { key: raceKey, t0: ts };
-    const ru = (ts - _juncRace.t0) / JUNCTION_RACE.ms;
-    if (ru >= 0) {
-      const rk = Math.min(1, ru), re = 1 - (1 - rk)*(1 - rk), rsz = cell * JUNCTION_RACE.size;   // off fast, easing into the edge
-      const weights = [JUNCTION.left, JUNCTION.ahead, JUNCTION.right];
-      surfaces.forEach((S, i) => {
-        if (!(weights[i] > 0)) return;
-        const go = re * JUNCTION_RACE.hold;                            // how far along its route it has got
-        const p = samplePolyline(S, go), run = (S.length === 3 ? cell : Math.PI*cell/4) * go;
-        ctx.save();
-        const held = Math.max(0, ts - _juncRace.t0 - JUNCTION_RACE.ms);
-        ctx.translate(p.x, p.y);
-        ctx.rotate(run / (rsz * TAB_SPARK_ROLL) + held * JUNCTION_RACE.spin);   // rolling by the ground covered, then turning on the spot
-        drawSpark(ctx, 0, 0, rsz * (1 - (1 - JUNCTION_RACE.small) * re), ts, { alpha: 1, col: "#ffffff", seed: 0.21 + i*0.3 });
-        ctx.restore();
-      });
-    }
   }
 
   // A marker in each cell you can actually build into: a square ring — a half-tile square with
@@ -18875,6 +18893,7 @@
     const os = cell*0.25, R = os*MUSH_MARK.icon;
     for (const e of junctionExits(lead.n, lead.prev)) {
       const mx = C.x + e.d.x*cell, my = C.y + e.d.y*cell;
+      junctionTileLine(lead, e.d, col, 1);
       hotspotLead(C, e.d, mx, my, os, col);
       drawHotspot(mx - os, my - os, os*2, col, 1, ts, (e.c*7 + e.r*3) % 5 * 0.07);
       ctx.save();
@@ -18975,7 +18994,7 @@
     // level that opens with three squares already blinking has told you to hurry before it has
     // finished telling you where you are. They arrive with the first stride, and cold: markGrow
     // and markLive are left at rest until then, so the first thing you see is them opening.
-    if (state.status !== "play") { markGrow = 0; markLive = 0; markPick = 0; return; }
+    if (state.status !== "play") { markGrow = 0; markLive = 0; markPick = 0; _juncRace.key = null; return; }   // (a retry races again)
     const lead = leadNode();
     if (!lead) return;
     markGrow += ((state.drag ? 1 : 0) - markGrow) * 0.22;
@@ -18998,6 +19017,19 @@
     markLive += (live - markLive) * (live > markLive ? 0.42 : 0.14);
     const C = nodeCenter(lead.n);
     const a = MARK_EMPTY + (JUNCTION.mark - MARK_EMPTY)*markLive;
+    // THE RACE (JUNCTION_RACE). Keyed on the front and the tile before it, so a new junction races anew. Every hotspot
+    // waits on it: nothing of the square or its lead is drawn until its spark is in, and then it grows into place.
+    const raceKey = lead.n.c + "," + lead.n.r + "," + (lead.prev ? lead.prev.c + "," + lead.prev.r : "");
+    if (_juncRace.key !== raceKey) {
+      const q = quarterTile(), R = JUNCTION_RACE;
+      _juncRace = { key: raceKey, t0: ts, ms: q*R.travel, grow: q*(1 - R.travel), die: q*R.die };
+    }
+    const racing = lead.n.kind !== "platform";                      // a rail at the front has no join to race from
+    const rt = racing ? ts - _juncRace.t0 : Infinity;
+    const growK = Math.max(0, Math.min(1, (rt - _juncRace.ms) / Math.max(1, _juncRace.grow)));
+    const growE = 1 - Math.pow(1 - growK, 3);                        // quick, easing into place
+    const exits = junctionExits(lead.n, lead.prev);
+    if (racing && rt < _juncRace.ms + _juncRace.die) drawJunctionRace(lead, C, exits, rt, ts);
     // ONE CHOSEN, AND IT IS THE ONLY ONE LEFT. A tile already flying to a square, or an order
     // standing against one, is a decision you have made — and the other two stop being choices
     // the moment you make it. Leaving them up is the board offering alternatives to a question
@@ -19005,7 +19037,8 @@
     // is about to be sitting there.
     const fly = state.flyTile;
     const chosen = chosenPick();
-    for (const e of junctionExits(lead.n, lead.prev)) {
+    for (const e of exits) {
+      if (rt < _juncRace.ms) break;                                  // ...still on its way: the race is drawing this
       const mine = !!chosen && chosen.c === e.c && chosen.r === e.r;
       if (chosen && !mine) continue;                 // ...no longer a choice
       const mx = C.x + e.d.x*cell, my = C.y + e.d.y*cell;
@@ -19026,10 +19059,63 @@
       const base = cell*(0.125 + 0.125*markLive + 0.25*markGrow);
       const os = mine ? base + (cell*0.5 - base)*markPick : base;
       if (os <= 0) continue;
+      // GROWING INTO PLACE after its spark: the square from nothing, and the lead — which the race drew to the centre —
+      // drawing back to the square's edge as it opens.
+      const og = os * growE;
       // THE CHOSEN CHAPTER'S LOOK, in the rainbow's blue (a pixel heavier than the tab bar's line, as the chapter's ring is).
-      hotspotLead(C, e.d, mx, my, os, tvBlueHex());
-      drawHotspot(mx - os, my - os, os*2, tvBlueHex(), lit, ts, (e.c*7 + e.r*3) % 5 * 0.07);
+      junctionTileLine(lead, e.d, tvBlueHex(), 1);
+      hotspotLead(C, e.d, mx, my, og, tvBlueHex());
+      if (og > 0.5) drawHotspot(mx - og, my - og, og*2, tvBlueHex(), lit, ts, (e.c*7 + e.r*3) % 5 * 0.07);
     }
+  }
+  // THE RACE, drawn. One spark per option the junction offers (the same left / ahead / right frontDirs gives, weighted by
+  // JUNCTION), all on the one eased clock so they arrive together whatever the length of their route: along the option's
+  // own surface to the tile's edge, rolling by the ground it covers and shrinking as it goes, then —
+  //   · into a HOTSPOT: the blue line drawn behind it the whole way — across the tile, faded in from the join
+  //     (junctionTileLine), then straight on from the tile's edge to the centre of that cell. At the
+  //     centre it is gone, and drawJunctionMarks grows the square into place over the end of the line.
+  //   · against ANYTHING ELSE — a wall, the board's edge, a cell the track may not go: it stops at the tile's edge and goes
+  //     out there over its `die` share, and the line it drew across the tile goes with it.
+  function drawJunctionRace(lead, C, exits, rt, ts) {
+    const R = JUNCTION_RACE, blue = tvBlueHex(), rsz = cell * R.size;
+    const k = Math.min(1, rt / Math.max(1, _juncRace.ms)), re = 1 - (1 - k)*(1 - k);   // off fast, easing into the centre
+    const weights = [JUNCTION.left, JUNCTION.ahead, JUNCTION.right];
+    frontDirs(lead.n, lead.prev).forEach((d, i) => {
+      if (!(weights[i] > 0)) return;
+      const tc = lead.n.c + d.x, tr = lead.n.r + d.y;
+      const S = tileSurface(lead.n, lead.prev, { c: tc, r: tr });
+      let Ls = 0;
+      for (let j = 1; j < S.length; j++) Ls += Math.hypot(S[j].x - S[j-1].x, S[j].y - S[j-1].y);
+      if (!(Ls > 0)) return;
+      const hot = exits.some(e => e.c === tc && e.r === tr);
+      const L = Ls + cell/2, run = re * L;
+      let x, y, sz = rsz * (1 - (1 - R.small) * re);
+      if (run < Ls) {                                                    // still on the tile, drawing its line
+        const q = samplePolyline(S, run / Ls); x = q.x; y = q.y;
+        junctionTileLine(lead, d, blue, run / Ls);
+      } else if (!hot) {                                                 // ...and out against a wall
+        const kEdge = 1 - Math.sqrt(Math.max(0, 1 - Ls / L));          // the moment it reached the edge
+        const gone = (rt - kEdge * _juncRace.ms) / Math.max(1, _juncRace.die);
+        if (gone >= 1) return;
+        const q = S[S.length - 1]; x = q.x; y = q.y;
+        sz *= 1 - Math.max(0, gone);
+        junctionTileLine(lead, d, blue, 1, 1 - Math.max(0, gone));       // ...its line going out with it
+      } else {                                                           // ...or on into a hotspot, drawing its lead
+        if (k >= 1) return;                                              // in: the square takes over
+        junctionTileLine(lead, d, blue, 1);
+        const ex = C.x + d.x*cell/2, ey = C.y + d.y*cell/2, out = run - Ls;
+        x = ex + d.x*out; y = ey + d.y*out;
+        ctx.save();
+        ctx.strokeStyle = blue; ctx.lineWidth = FOOTER.rim + 1; ctx.lineCap = "butt";
+        ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(x, y); ctx.stroke();
+        ctx.restore();
+      }
+      if (!(sz > 0.2)) return;
+      ctx.save();
+      ctx.translate(x, y); ctx.rotate((hot ? run : Math.min(run, Ls)) / (rsz * TAB_SPARK_ROLL));
+      drawSpark(ctx, 0, 0, sz, ts, { alpha: 1, col: "#ffffff", seed: 0.21 + i*0.3 });
+      ctx.restore();
+    });
   }
   // ONE HOTSPOT, in any colour: a line ON the square's edge at full strength, always, and two sparks going round it half
   // a lap apart at `lit` — rolling, and smaller the lower they go (rimPointCCW, PICK_TRACE_SHRINK), exactly as on a chosen
@@ -19039,6 +19125,35 @@
   // — the middle of that edge of the tile, where the option's track runs out — straight to the near edge of the hotspot
   // square, so the square is plainly where that way goes. Nothing once the square has opened to the whole cell and the
   // two edges meet.
+  // ...and before the lead, the OPTION'S OWN LINE across the junction tile: its running surface from the join to the
+  // tile's edge, at the same weight, FADED — nothing where the track comes in, the full colour at the exit, where the lead
+  // carries it on to the hotspot. `u` is how much of it is drawn (0..1), for the race; the fade always spans the whole
+  // route, so a line still being drawn is as faint at the join as a finished one. `alpha` fades the lot, for a spark
+  // going out against a wall. Nothing on a rail at the front: its own line is already blue.
+  function junctionTileLine(lead, d, col, u, alpha) {
+    if (!lead || lead.n.kind === "platform") return;
+    const S = tileSurface(lead.n, lead.prev, { c: lead.n.c + d.x, r: lead.n.r + d.y });
+    if (!S || S.length < 2) return;
+    const seg = []; let L = 0;
+    for (let j = 1; j < S.length; j++) { const l = Math.hypot(S[j].x - S[j-1].x, S[j].y - S[j-1].y); seg.push(l); L += l; }
+    let want = Math.max(0, Math.min(1, u == null ? 1 : u)) * L;
+    if (!(want > 0.25)) return;
+    const a0 = S[0], a1 = S[S.length - 1];
+    const gd = ctx.createLinearGradient(a0.x, a0.y, a1.x, a1.y);        // join to exit (corner to corner on a turn)
+    gd.addColorStop(0, hexA(col, 0));
+    gd.addColorStop(1, hexA(col, 1));
+    ctx.save();
+    if (alpha != null) ctx.globalAlpha *= Math.max(0, Math.min(1, alpha));
+    ctx.strokeStyle = gd; ctx.lineWidth = FOOTER.rim + 1; ctx.lineCap = "butt"; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.moveTo(a0.x, a0.y);
+    for (let j = 1; j < S.length && want > 0; j++) {
+      const l = seg[j-1];
+      if (want >= l) { ctx.lineTo(S[j].x, S[j].y); want -= l; }
+      else { const t = want / l; ctx.lineTo(S[j-1].x + (S[j].x - S[j-1].x)*t, S[j-1].y + (S[j].y - S[j-1].y)*t); want = 0; }
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
   function hotspotLead(C, d, mx, my, os, col) {
     const x0 = C.x + d.x*cell/2, y0 = C.y + d.y*cell/2, x1 = mx - d.x*os, y1 = my - d.y*os;
     if (Math.hypot(x1 - x0, y1 - y0) < 0.5) return;
@@ -21543,7 +21658,6 @@
       if (state.rest) tickRest(dt);
       if (state.status === "falling") {
         if (state.ankhGrace > 0) state.ankhGrace -= dt;    // the window to reach for the Ankh
-        tickFallZoom(dt);
         tickFall(dt);
         tickFallCam(dt);
       }
