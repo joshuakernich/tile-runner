@@ -296,7 +296,8 @@
         <i>vertical rail</i> monsters slide along a rail exactly as the saws they replaced — drop one
         and drag its ends. A <i>square loop</i> circles a ring; a <i>hunter</i> is a
         malevolent tile entity that comes for the runner — it walks the shortest open route to
-        him, around walls rather than into them, and re-thinks it at every cell; a <i>trap</i>
+        him, around walls rather than into them, and re-thinks it at every cell; a <i>golem</i> hunts the same way but is stone — tapped in play it cracks, and it
+        shatters on its last tap; a <i>trap</i>
         sits still, yawns open wide enough to run
         through, then snaps shut on whatever is in it. Clicking the square a monster is <i>standing on</i>
         re-applies the kind box; clicking anywhere else on its route drops a new monster
@@ -377,6 +378,7 @@
           <option value="hunter">Hunter</option>
           <option value="trap">Trap</option>
         <option value="stealth">Stealth hunter</option>
+        <option value="golem">Stone golem</option>
         </select></label>
         <label class="opt" data-for="stone">stone hp <input type="number" id="stoneHp" value="2" step="1" min="1" max="5"></label>
         <label class="opt" data-for="talisman">talisman <select id="talPick">
@@ -634,9 +636,9 @@ function toWorking(o){
 // the six legal platform shapes: two connectors each, in the order the surface is drawn
 // The monster family, mirrored from index.html's MONSTER_KINDS — the editor has to draw and
 // place all six, and the colours are how you tell them apart on the board.
-const MON_KINDS = ["hrail","vrail","patrol","square","hunter","trap","stealth"];
+const MON_KINDS = ["hrail","vrail","patrol","square","hunter","trap","stealth","golem"];
 const MON_COL = { hrail:"#c37ef1", vrail:"#4baff1", patrol:"#c37ef1",      // the rainbow's colours, as the game's
-                  square:"#f7933b", hunter:"#6b7192", trap:"#f1645f", stealth:"#cfd8ff" };
+                  square:"#f7933b", hunter:"#6b7192", trap:"#f1645f", stealth:"#cfd8ff", golem:"#b3a582" };
 const monVariant = h => h.variant || (h.path ? "patrol" : (h.axis||"h")==="v" ? "vrail" : "hrail");
 const TAL_IDS = ["clock","magnet","star","finger","mush","rewind","pulse","spur","brake","ankh","lode"];
 const TAL_COL = {clock:"#8fd8ff", magnet:"#ff6d6d", star:"#ffd24a", finger:"#ffe9a8", mush:"#ff8fc8",
@@ -814,7 +816,7 @@ function monCells(h){
     for(let i=h.lo;i<=h.hi;i++) out.push(hz?[i,h.r]:[h.c,i]);
     return out;
   }
-  if (v==="hunter" || v==="stealth" || v==="trap") return [[h.c,h.r]];
+  if (v==="hunter" || v==="stealth" || v==="golem" || v==="trap") return [[h.c,h.r]];
   // The square loop is a ring of four corners. It used to fall through to the path branch
   // and come back EMPTY, which made it unhittable: you could not erase one, and nothing
   // could tell it was in the way.
@@ -1222,9 +1224,9 @@ function draw(){
     } else if (v==="square"){
       const w=h.w||2, hh=h.h||2;
       drawPatrol([[h.c,h.r],[h.c+w,h.r],[h.c+w,h.r+hh],[h.c,h.r+hh]], true, col, "#12102a");
-    } else if (v==="hunter" || v==="stealth" || v==="trap"){
+    } else if (v==="hunter" || v==="stealth" || v==="golem" || v==="trap"){
       const [x,y]=centerOf(h.c,h.r);
-      if (v==="hunter" || v==="stealth"){           // it goes wherever the runner is
+      if (v==="hunter" || v==="stealth" || v==="golem"){   // it goes wherever the runner is
         ctx.save(); ctx.strokeStyle=col; ctx.globalAlpha=0.5; ctx.lineWidth=2;
         ctx.setLineDash([4,4]); ctx.beginPath(); ctx.arc(x,y,CELL*0.42,0,7); ctx.stroke();
         ctx.setLineDash([]); ctx.restore();
@@ -1884,7 +1886,7 @@ function buildInspector(){
     who.textContent = v + " monster";
     opts.appendChild(inspRow("kind", inspSel(
       [["hrail","Horizontal rail"],["vrail","Vertical rail"],["patrol","Patrol"],
-       ["square","Square loop"],["hunter","Hunter"],["trap","Trap"],["stealth","Stealth"]],
+       ["square","Square loop"],["hunter","Hunter"],["trap","Trap"],["stealth","Stealth"],["golem","Golem"]],
       v, nv => { retypeMonster(ref, nv); selectAt(sel); })));
     // No pace to set. Every monster crosses a tile in exactly the time the RUNNER does and
     // rides his ramp with him, so the level's cps is the only speed on the board.
@@ -1896,6 +1898,8 @@ function buildInspector(){
         { className:"hint", textContent:"Or drag the S marker along the rail. Phase runs over the "
           + "whole there-and-back: under 0.5 is heading one way, over 0.5 the other." }));
     }
+    if (v === "golem")                                // how many taps it takes to break (the game's default is 2)
+      opts.appendChild(inspRow("taps to break", inspNum(ref.hp || 2, 1, 5, 1, x => ref.hp = clamp(Math.round(x), 1, 5))));
     if (v === "square") {
       opts.appendChild(inspRow("width",  inspNum(ref.w || 2, 1, 12, 1, x => ref.w = Math.max(1,x))));
       opts.appendChild(inspRow("height", inspNum(ref.h || 2, 1, 12, 1, x => ref.h = Math.max(1,x))));

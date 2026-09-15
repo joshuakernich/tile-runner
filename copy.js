@@ -37,6 +37,8 @@ var COPY_DATA = {
                 desc: "Round and round its ring, forever. Slip past between laps." },
     "stealth": { name: "The Stalker",
                  desc: "It hunts you too, but you only see it when it lunges. Remember where it was." },
+    "golem": { name: "The Golem",
+               desc: "It hunts you like the Hunter, but it's made of stone. Tap it to crack it — keep tapping and it shatters." },
     "trap": { name: "The Snapper",
               desc: "It sits and waits. Cross while its jaws are wide open." },
     "slider": { name: "Sliding Platform",
