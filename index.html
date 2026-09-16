@@ -4318,23 +4318,34 @@
       src.start(t); src.stop(t + 0.70);
       // TWO TONES, struck at the same instant as the crack and left to ring out under it. Zero attack on both, for
       // the reason the crack has one: a note that fades up has been hit by nothing.
-      const tone = (type, hz0, hz1, peak, dur) => {
-        const o2 = ac.createOscillator(); o2.type = type;
-        o2.frequency.setValueAtTime(hz0, t);
-        o2.frequency.exponentialRampToValueAtTime(hz1, t + dur*0.88);
+      // TWO LOW NOTES, A SEMITONE APART, ONE BEHIND THE OTHER — the jaws theme's own trick. The first is struck ON
+      // the beat and played out long; the second comes half a beat later and lasts half as long, so the pair leans
+      // forward into the next thrust rather than sitting still on this one.
+      //
+      // Sawtooths through a closing lowpass, not sines: down here a phone speaker cannot play the fundamental at all
+      // and it is the harmonics that carry the pitch — the lesson the grunt learned the hard way. The filter shuts as
+      // the note decays, so it darkens as it falls away instead of buzzing all the way down.
+      const beat = Math.max(0.15, beatSec || 1);
+      const note = (hz, when, dur, peak) => {
+        const at0 = t + when;
+        const o2 = ac.createOscillator(); o2.type = "sawtooth";
+        o2.frequency.setValueAtTime(hz, at0);
+        const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.Q.value = 1.1;
+        lp.frequency.setValueAtTime(hz*8, at0);
+        lp.frequency.exponentialRampToValueAtTime(hz*2.5, at0 + dur);
         const tg = ac.createGain();
-        tg.gain.setValueAtTime(Math.max(0.0004, vol*peak), t);
-        tg.gain.exponentialRampToValueAtTime(0.0005, t + dur);
-        o2.connect(tg); tg.connect(master);
-        o2.start(t); o2.stop(t + dur + 0.02);
+        tg.gain.setValueAtTime(Math.max(0.0004, vol*peak), at0);        // struck, with no attack, as the crack is
+        tg.gain.exponentialRampToValueAtTime(0.0005, at0 + dur);
+        o2.connect(lp); lp.connect(tg); tg.connect(master);
+        o2.start(at0); o2.stop(at0 + dur + 0.02);
       };
-      // DEEP: the weight of the thing, and now the loudest tone in it. A SAWTOOTH rather than a triangle — the same
-      // note with grit on it, and a good deal more of it gets through a speaker that cannot play the fundamental.
-      // Still kept clear of the grunt's own 105-135Hz, so the two thicken each other instead of beating.
-      tone("sawtooth", 92, 50, 0.60, 0.78);
-      // HIGH: no longer a whistle over the top. Down where a voice is, so it reads as part of the animal rather than
-      // as something singing above it.
-      tone("sine", 1350, 860, 0.20, 0.50);
+      note(82.41, 0,         beat*1.05, 0.62);   // E2, ON the beat — the thrust itself, played out long
+      note(87.31, beat*0.50, beat*0.52, 0.52);   // F2, half a beat behind it, and half as long
+      // THE GRUNT IS PARKED. Set this to 1 and it is back exactly as it was — the voiced buzz, its two formants, its
+      // catch and its heave are all still wired up below. It was the low end of this sound before the two notes took
+      // that job, and the two of them in the same octave were one thing too many down there.
+      const GRUNT = 0;
+      if (GRUNT) {
       // ...and the animal making it: a GRUNT. A stroke is EFFORT — a thing heaving itself forward — and noise alone reads
       // as machinery. The first grunt was a 100Hz buzz lowpassed under 800Hz, which a phone's speaker can barely play, so it
       // was all but never heard. This one is VOICED the way a throat is: a low buzz for its body, and its harmonics pushed
@@ -4363,6 +4374,7 @@
       f1.connect(og); f2.connect(f2g); f2g.connect(og); low.connect(lowG); lowG.connect(og);
       og.connect(master);
       o.start(t); o.stop(t + 0.36);
+      }
     }
     // A trap winding up to bite: a whine climbing over the whole tremble, so the warning is
     // something you can hear coming rather than something you had to be looking at. It ends
@@ -5065,7 +5077,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.69";                    // shown on the title & pause screens
+  const VERSION = "v10.70";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
