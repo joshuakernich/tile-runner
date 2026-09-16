@@ -5077,7 +5077,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.70";                    // shown on the title & pause screens
+  const VERSION = "v10.71";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -7186,6 +7186,7 @@
       hold: 0,                              // ms the runner is held still for, by whatever did it
       guides: (L.guides || []).slice(),     // the instructions this level writes on the board — see GUIDE
       guide: null, guideClears: 0,          // ...the one up now, and how many tiles have cleared so far
+      guidesOff: false,                     // ...and whether they have been waved off for this attempt (guideOnDrop)
       // The Ankh used to have to be pressed BEFORE you fell, which meant arming it on the off
       // chance and spending it on a level you would have cleared anyway. It is a second chance,
       // so it is offered at the moment you need one: fall with an unspent Ankh and the rack
@@ -9028,20 +9029,19 @@
   // beside a live path segment the runner is still on or heading toward (other than
   // the head it attaches to). Blocking these keeps the runner from ever instantly
   // turning around and running backwards alongside its own track.
-  // Two separate rules live here, and only one of them is inviolable.
+  // ONE RULE LIVES HERE: NO U-TURN. You may not lay a tile on the cell the runner is on, or the one he has just left.
+  // Cells cleared long ago are fair game again — that is what lets a circuit close.
   //
-  //   (1) NO U-TURN. You may not lay a tile on the cell the runner is on, or the one he has
-  //       just left. Cells cleared long ago are fair game again. This one is the engine.
-  //   (2) NO FORKING. You may not lay a tile alongside live track at or ahead of the runner,
-  //       because the drawn track would appear to branch. This one is only tidiness.
+  // There was a second, NO FORKING: nothing alongside live track at or ahead of him, so the drawn track could never
+  // appear to branch. It was tidiness rather than engine, and it was charging for it. On a plain corner it held the
+  // hotspot that turns back the way the path came for FOUR BEATS — refused not because anything stood there, and not
+  // because it doubled back, but because it sat beside track already laid, and released only once the runner had
+  // walked far enough along that track. It had been narrowed once before for the same complaint (a cell beside the
+  // far end of a U-turn pair, parked until the whole rail had cleared) and the general case survived. It is gone.
   //
-  // Rule (2) must never be the thing that ENDS a run. Backed into a corner, it can forbid
-  // every remaining neighbour of the head — the runner is standing on one of them, so any
-  // cell beside him is "a fork" — and then the freed tile has nowhere to go and he dies with
-  // tiles in hand. That is reachable with four tiles and up, because the extra tile keeps the
-  // runner's own cell live in the check for longer; with three he has always moved past it.
-  // So when nothing at all is legal, rule (2) stands down and only the U-turn rule applies.
-  function foldsBackAt(c, r, strict) {
+  // What that buys back is the turn-back square, offered the moment it is free. What it costs is that the drawn track
+  // CAN now run alongside itself beside the runner, which is what the rule was there to prevent.
+  function foldsBackAt(c, r) {
     const p = state.path;
     const on = state.runIdx;                   // the node he is standing on right now
     // Neither rule can fire below `on`, and on an endless level the path never stops
@@ -9066,45 +9066,12 @@
       // (1) the cell he is on, and every cell still ahead of him, are spoken for. Cells he
       //     has already left are free to use again — that is what lets a circuit close.
       if (!(i === on && underfoot) && n.c === c && n.r === r) return true;
-      // (2) nothing alongside live track AHEAD of him. Strictly ahead: his OWN cell is not
-      //     "ahead", and treating it as such was what made a ring impossible — every cell of
-      //     a 2x2 ring is beside the one before it, so closing one always looked like a fork.
-      //
-      //     LAID TILES ONLY. A fixed platform is not track you laid, it is ground the level
-      //     came with, and a tile beside one cannot fork anything: leaving a platform is
-      //     governed by its drawn ends (see trackConnects), so a cell it does not open onto is
-      //     simply floor. Counting them made a rail of two or more cells give this rule two or
-      //     three nodes to object to instead of one, and the cell beside the far end of a
-      //     U-turn pair — which is exactly where the track wants to go next — sat parked until
-      //     the runner had cleared the whole rail. That is the "first tile works, the rest wait
-      //     to lock on" of a two-cell rail: nothing was refused, only delayed, which is worse.
-      if (strict && i > on && !n.exited && !underfoot && n.kind !== "platform" &&
-          Math.abs(n.c - c) + Math.abs(n.r - r) === 1) return true;
     }
     return false;
   }
-  // Is there anywhere at all the head can legally go under the strict rules? Cached per
-  // (path length, runner position, occupancy), so a long run does not pay for it every frame.
-  let _boxedKey = null, _boxedVal = false;
-  function headBoxedIn() {
-    const p = state.path, h = p[p.length - 1];
-    if (!h) return false;
-    const k = p.length + ":" + state.runIdx + ":" + occGen;
-    if (k === _boxedKey) return _boxedVal;
-    const hand = state.drag ? state.drag.tile
-               : state.tiles.find(t => t.status === "free" || t.status === "parked");
-    const occ = occupiedFor(hand || null);
-    let boxed = true;
-    // ...asked only of the cells the front can actually go to: a platform's one way out, not all four of its neighbours
-    for (const d of frontDirs(h, p[p.length - 2])) {
-      const c = h.c + d.x, r = h.r + d.y;
-      if (!inBounds(c, r) || occ.has(key(c, r))) continue;
-      if (!foldsBackAt(c, r, true)) { boxed = false; break; }
-    }
-    _boxedKey = k; _boxedVal = boxed;
-    return boxed;
-  }
-  function foldsBack(c, r) { return foldsBackAt(c, r, !headBoxedIn()); }
+  // (headBoxedIn lived here. It existed only to stand rule (2) down when the head was cornered and a freed tile would
+  //  otherwise have had nowhere legal to go. With no rule (2) there is nothing to stand down, and nothing asked.)
+  function foldsBack(c, r) { return foldsBackAt(c, r); }
   function linkParkedTiles() {
     const s = state;
     let linked = false, guard = 0;
@@ -11550,6 +11517,7 @@
   function guideOnClear(tile) {
     const s = state;
     s.guideClears++;
+    if (s.guidesOff) return;                                        // waved off for this attempt — see guideOnDrop
     if ((s.guide && !s.guide.done) || !s.guides.length || !tile) return;
     const lead = leadNode();
     let key = null, at = null;
@@ -11566,10 +11534,19 @@
   // ...and every time a tile is put down. Done when a tile JOINS the track — onto the flag, for that one.
   // Any loose tile will do, not only the one the arrow started from.
   function guideOnDrop(tile, pos) {
-    const g = state.guide; if (!g || g.done || tile.status !== "active") return;
-    if (g.key === "flag" && !(state.goal && pos.c === state.goal.c && pos.r === state.goal.r)) return;
-    if ((g.key === "tap" || g.key === "tap2") && !(g.at && pos.c === g.at.c && pos.r === g.at.r)) return;
+    // NOT gated on the tile having linked. A tile dropped loose is still a tile the player has put down, and that is
+    // the whole case this has to answer: it used to return here, so going your own way was the one thing the guide
+    // could not see.
+    const g = state.guide; if (!g || g.done) return;
+    // WENT THEIR OWN WAY. A tile put down somewhere other than the square being pointed at is an answer: they have
+    // seen it and they are playing their own game. So the guide lets go of this one AND stops offering more for the
+    // rest of the attempt — being shown the same thing a third time after ignoring it twice is nagging, not
+    // teaching. Per attempt, not per level: a retry starts over and teaches again (see the state it is seeded in).
+    const want = g.key === "flag" ? state.goal
+               : (g.key === "tap" || g.key === "tap2") ? g.at
+               : guideTarget(g);
     g.done = true;
+    if (want && !(pos.c === want.c && pos.r === want.r)) state.guidesOff = true;
   }
   // His pace, and the guide's own clocks. Called from update(), so it all holds still under a pause.
   function guidePace(dt) {
@@ -11593,10 +11570,12 @@
   // tile's scale; `phase` staggers two squares on one screen. Along a hint ARROW: one rolling from its tail to its tip,
   // small to big to small, and round again. Drawn under whatever fade the caller has set.
   const GUIDE_SPARK = { lapMs: 6400, runMs: 2800, size: 0.15 };   // a lap of a square, a run of an arrow; size in tiles
-  function guideSquareSpark(x0, y0, ts, phase) {
-    const G = GUIDE_SPARK, sz = cell*G.size, u = ts / G.lapMs + (phase || 0);
-    const q = rimPointCCW(x0, y0, cell, tileR(cell), u);
-    const dn = Math.max(0, Math.min(1, (q.y - y0) / cell)), kz = 1 - PICK_TRACE_SHRINK * dn*dn*(3 - 2*dn);
+  // `w` is the square it goes round — the hotspot's own size, when the guide is ringing one — and a whole cell when
+  // it is not given.
+  function guideSquareSpark(x0, y0, ts, phase, w) {
+    const G = GUIDE_SPARK, sz = cell*G.size, u = ts / G.lapMs + (phase || 0), W = w > 0 ? w : cell;
+    const q = rimPointCCW(x0, y0, W, tileR(W), u);
+    const dn = Math.max(0, Math.min(1, (q.y - y0) / W)), kz = 1 - PICK_TRACE_SHRINK * dn*dn*(3 - 2*dn);
     ctx.save();
     ctx.translate(q.x, q.y); ctx.rotate(-u * 4*cell / (sz * TAB_SPARK_ROLL));   // rolling, turned by the ground it covers
     drawSpark(ctx, 0, 0, sz * kz, ts, { alpha: 1, col: GUIDE.ink, seed: 0.37 + (phase || 0) });
@@ -11617,10 +11596,14 @@
     const X = cx(to.c), Y = cy(to.r), lw = Math.max(1, cell*GUIDE.line);
     ctx.save();
     ctx.globalAlpha = A; ctx.lineJoin = "round";
-    const box = () => { ctx.beginPath(); rrect(X, Y, cell, cell, tileR(cell)); ctx.stroke(); };
+    // The same square the hotspot drew, so what is ringed and what is tappable are one thing (markHalf). The words
+    // below still hang off the CELL, not off this: they belong over the square, not on its rim.
+    const half = markHalf(to.c, to.r, ts), R2 = half > 0 ? half : cell/2;
+    const BX = X + cell/2 - R2, BY = Y + cell/2 - R2, BW = R2*2;
+    const box = () => { ctx.beginPath(); rrect(BX, BY, BW, BW, tileR(BW)); ctx.stroke(); };
     headGlowUnder(() => { ctx.lineWidth = lw; ctx.strokeStyle = "#000"; box(); });
     ctx.strokeStyle = GUIDE.ink; ctx.lineWidth = lw; box();
-    guideSquareSpark(X, Y, ts, 0);                                   // ...with its spark going round it
+    guideSquareSpark(BX, BY, ts, 0, BW);                             // ...with its spark going round it
     const bt = bylineType();
     let fp = bt.px, ls = parseFloat(bt.ls) || 0;
     const setType = () => { ctx.font = bt.weight + " " + fp + "px " + UI_FONT; ctx.letterSpacing = ls + "px"; };
@@ -11662,8 +11645,18 @@
     if (A <= 0.01) return;
     if (g.key === "tap" || g.key === "tap2") { drawGuideTap(to, A, g.key, ts); return; }
     const t = g.tile;
-    if (!(t.status === "free" || t.status === "parked") || (state.drag && state.drag.tile.id === t.id)) return;
+    // IT STAYS UP WHILE YOU CARRY IT. Vanishing the moment the tile left its square took the instruction away at the
+    // exact moment it was being followed — and if you put the tile down somewhere else, you had never been told
+    // where it was supposed to go. What it does drop is the two things drawn ON the source square, below.
+    const carrying = !!(state.drag && state.drag.tile.id === t.id);
+    if (!(t.status === "free" || t.status === "parked" || carrying)) return;
     const X0 = cx(t.c) + cell/2, Y0 = cy(t.r) + cell/2, X1 = cx(to.c) + cell/2, Y1 = cy(to.r) + cell/2;
+    // The TARGET is drawn at the hotspot's own size — the thing you are actually aiming at — and the source at a whole
+    // cell, because that is a real tile lying there. A square with no hotspot on it keeps the full cell it always had.
+    // Declared HERE, above the arrow: `corner()` takes this half-width to land the head on the smaller square, and a
+    // const read before its declaration throws rather than reading undefined.
+    const tHalf = markHalf(to.c, to.r, ts);
+    const tR = tHalf > 0 ? tHalf : cell/2;
     const dx = X1 - X0, dy = Y1 - Y0, D = Math.hypot(dx, dy);
     if (D < cell*0.9) return;
     const lw = Math.max(1, cell*GUIDE.line), hl = cell*GUIDE.head, hw = hl*0.72;
@@ -11676,8 +11669,8 @@
     // side the arc bows to — for a tile carried straight up with the arc bowing right, from the tile's top right corner to
     // the drop spot's bottom right. (A tie, on a diagonal, goes to the way the tile is travelling.)
     const sgn = (v, alt) => Math.abs(v) > 1e-6 ? Math.sign(v) : (Math.sign(alt) || 1);
-    const corner = (X, Y, fx, fy) => [X + sgn(fx + nx*sg, fx)*cell/2, Y + sgn(fy + ny*sg, fy)*cell/2];
-    const [SX, SY] = corner(X0, Y0, dx/D, dy/D), [EX, EY] = corner(X1, Y1, -dx/D, -dy/D);
+    const corner = (X, Y, fx, fy, h) => [X + sgn(fx + nx*sg, fx)*h, Y + sgn(fy + ny*sg, fy)*h];
+    const [SX, SY] = corner(X0, Y0, dx/D, dy/D, cell/2), [EX, EY] = corner(X1, Y1, -dx/D, -dy/D, tR);
     const aD = Math.hypot(EX - SX, EY - SY);
     const QX = (SX + EX)/2 + nx*sg*aD*GUIDE.bow, QY = (SY + EY)/2 + ny*sg*aD*GUIDE.bow;
     const arc = u => [(1-u)*(1-u)*SX + 2*(1-u)*u*QX + u*u*EX, (1-u)*(1-u)*SY + 2*(1-u)*u*QY + u*u*EY];
@@ -11689,8 +11682,10 @@
     const head = () => { ctx.beginPath(); ctx.moveTo(ex, ey);
                          ctx.lineTo(ex - ax*hl - ay*hw, ey - ay*hl + ax*hw);
                          ctx.lineTo(ex - ax*hl + ay*hw, ey - ay*hl - ax*hw); ctx.closePath(); };
-    const boxes = () => { for (const [bx, by] of [[X0, Y0], [X1, Y1]]) {
-                            ctx.beginPath(); rrect(bx - cell/2, by - cell/2, cell, cell, tileR(cell)); ctx.stroke(); } };
+    const boxes = () => {
+      if (!carrying) { ctx.beginPath(); rrect(X0 - cell/2, Y0 - cell/2, cell, cell, tileR(cell)); ctx.stroke(); }
+      ctx.beginPath(); rrect(X1 - tR, Y1 - tR, tR*2, tR*2, tileR(tR*2)); ctx.stroke();
+    };
     ctx.save();
     ctx.globalAlpha = A; ctx.lineCap = "butt"; ctx.lineJoin = "round";   // butt: the shaft starts ON the edge, not past it
     headGlowUnder(() => { ctx.lineWidth = lw; ctx.strokeStyle = "#000"; boxes();
@@ -11699,10 +11694,12 @@
     boxes();
     if (arrow) { shaft(); ctx.stroke(); head(); ctx.fill(); }
     // ...a spark round each box, half a lap apart, and one running the arrow's length
-    guideSquareSpark(X0 - cell/2, Y0 - cell/2, ts, 0);
-    guideSquareSpark(X1 - cell/2, Y1 - cell/2, ts, 0.5);
+    if (!carrying) guideSquareSpark(X0 - cell/2, Y0 - cell/2, ts, 0, cell);
+    guideSquareSpark(X1 - tR, Y1 - tR, ts, 0.5, tR*2);
     if (arrow) guideArrowSpark(arc, aD, ts);
-    // the ghost of the tile, the tile's own size, carried from its square onto the one it goes to
+    // the ghost of the tile, the tile's own size, carried from its square onto the one it goes to. Not while you are
+    // carrying the real one: a ghost setting off from an empty square, from under your finger, is two tiles.
+    if (carrying) { ctx.restore(); return; }
     const p = (g.t % GUIDE.lapMs) / GUIDE.lapMs, [gx, gy] = at(easeBoth(p));
     ctx.globalAlpha = A * 0.65 * Math.sin(Math.PI * p);
     ctx.fillStyle = hexA(GUIDE.ink, 0.30);
@@ -17506,20 +17503,83 @@
   // The shadow a monster throws. `paint` lays the silhouette down; it is drawn a long way off so only the shadow
   // comes back, carried through whatever transform the animal is under. The DROP is added in device pixels, which
   // is what keeps it falling down the SCREEN however the body itself is turned.
-  function monsterShadow(paint) {
+  // THE TWO LAYERS ANYTHING STANDING ON THE QUILT THROWS — a soft dark all round, and a heavier one straight below —
+  // at `k` times their usual strength. Blur and drop are in TILES. One set of numbers, so a monster and a tile lying
+  // beside it are lit by the same sun.
+  const groundLayers = (k) => {
+    const m = k == null ? 1 : k;
+    return [{ blur: MONSTER_LIGHT.ambBlur, drop: 0,                  alpha: MONSTER_LIGHT.ambA  * m },
+            { blur: MONSTER_LIGHT.blur,    drop: MONSTER_LIGHT.drop, alpha: MONSTER_LIGHT.alpha * m }];
+  };
+  // ...and HOW one is cast. The silhouette is drawn a long way off and only its shadow brought back, so none of the
+  // shape itself ever lands — just the blur. The drop is added in DEVICE pixels, which is what keeps it falling down
+  // the screen however the thing throwing it is turned or flipped.
+  function castShadow(paint, layers) {
     const M = ctx.getTransform(), far = 20000, sc = Math.hypot(M.a, M.b);
-    for (const L of [{ b: MONSTER_LIGHT.ambBlur, a: MONSTER_LIGHT.ambA, d: 0 },
-                     { b: MONSTER_LIGHT.blur,    a: MONSTER_LIGHT.alpha, d: MONSTER_LIGHT.drop }]) {
+    for (const L of layers) {
       ctx.save();
-      ctx.shadowColor = "rgba(0,0,0," + L.a + ")";
-      ctx.shadowBlur = L.b * cell * sc;
+      ctx.shadowColor = "rgba(0,0,0," + L.alpha + ")";
+      ctx.shadowBlur = L.blur * cell * sc;
       ctx.shadowOffsetX = far * M.a;
-      ctx.shadowOffsetY = far * M.b + L.d * cell * sc;      // ...and straight down the screen, as a wall's does
+      ctx.shadowOffsetY = far * M.b + L.drop * cell * sc;   // ...and straight down the screen, as a wall's does
       ctx.fillStyle = "#000";
       ctx.translate(-far, 0);
       paint();
       ctx.restore();
     }
+  }
+  function monsterShadow(paint) { castShadow(paint, groundLayers(1)); }
+  // ...and THE SAME SHADOW, BAKED. castShadow blurs on every call, which is fine for one monster and ruinous for
+  // eight-and-forty coins. This paints a rounded square's shadow once per size and stamps the picture instead.
+  //
+  // `pad` is what the shadow needs BEYOND the shape: the blur spreads about three times its radius, and the heavy
+  // layer falls by its drop as well. Without it the picture clips its own shadow at the edges.
+  const _shadowSprites = new Map();
+  const shadowPad = () => Math.ceil((MONSTER_LIGHT.blur*3 + MONSTER_LIGHT.drop) * 64) / 64;
+  function shadowSprite(bucket, radK) {
+    const pad = Math.ceil(bucket * shadowPad());
+    const k = bucket + "|" + radK;
+    let cv = _shadowSprites.get(k);
+    if (cv) return cv;
+    if (_shadowSprites.size > 48) _shadowSprites.clear();
+    const W = bucket + pad*2;
+    cv = document.createElement("canvas"); cv.width = W; cv.height = W;
+    const g = cv.getContext("2d");
+    // Baked in the picture's OWN pixels: one "cell" here is the bucket, so the block's fractions carry over exactly.
+    for (const L of groundLayers(1)) {
+      g.save();
+      g.shadowColor = "rgba(0,0,0," + L.alpha + ")";
+      g.shadowBlur = L.blur * bucket;
+      g.shadowOffsetX = W;                                  // cast from a shape parked one width to the left...
+      g.shadowOffsetY = L.drop * bucket;                    // ...and dropped straight down, as on the board
+      g.fillStyle = "#000";
+      const r = Math.max(0, radK * bucket);
+      g.beginPath();
+      const x0 = pad - W, y0 = pad, w = bucket;
+      g.moveTo(x0 + r, y0);
+      g.arcTo(x0 + w, y0,     x0 + w, y0 + w, r);
+      g.arcTo(x0 + w, y0 + w, x0,     y0 + w, r);
+      g.arcTo(x0,     y0 + w, x0,     y0,     r);
+      g.arcTo(x0,     y0,     x0 + w, y0,     r);
+      g.closePath(); g.fill();
+      g.restore();
+    }
+    _shadowSprites.set(k, cv);
+    return cv;
+  }
+  // Stamp one under a square of side `w` centred on (x, y), at strength `a`. Drawn in the CALLER's transform, so a
+  // tile that is tilted gets a tilted shadow without a picture per angle.
+  function stampShadow(x, y, w, a, rad) {
+    if (!(w > 0) || !(a > 0.004)) return;
+    const M = ctx.getTransform(), sc = Math.hypot(M.a, M.b);
+    const bucket = Math.min(256, Math.max(8, 1 << Math.ceil(Math.log2(Math.max(1, w * sc)))));
+    const radK = Math.round((rad == null ? TILE.radius : rad / Math.max(1, w)) * 16) / 16;   // a sixteenth of a side
+    const cv = shadowSprite(bucket, radK);
+    const pad = Math.ceil(bucket * shadowPad()) / bucket * w;     // the picture's margin, back in world units
+    const ga = ctx.globalAlpha;
+    ctx.globalAlpha = ga * Math.min(1, a);
+    ctx.drawImage(cv, x - w/2 - pad, y - w/2 - pad, w + pad*2, w + pad*2);
+    ctx.globalAlpha = ga;
   }
   // ...and the light INSIDE its TOP edge. The shape is clipped to, and then everything OUTSIDE the shape is filled —
   // invisible, being outside the clip — so all that lands is its shadow, thrown straight DOWN and therefore hugging
@@ -18446,11 +18506,12 @@
     const lift = (0.5 + 0.5*Math.sin(t)) * cell * COIN.float;
     const tilt = Math.sin(t*0.8) * COIN.rock;
     ctx.save();
-    // ground shadow, tied to the lift
-    const k = 1 - (COIN.float ? (lift / (cell*COIN.float)) * 0.35 : 0);
-    ctx.globalAlpha = COIN.shadowA * k; ctx.fillStyle = "#05040d";
-    ctx.beginPath(); ctx.ellipse(x, y + cell*0.13, s2*0.42*k, s2*0.12*k, 0, 0, Math.PI*2); ctx.fill();
-    ctx.globalAlpha = 1;
+    // THE GROUND SHADOW. It was a hard little ellipse — no blur, one layer, squashed flat — which read as a smudge
+    // rather than as something standing on the board. It throws the same shadow as everything else now, its own
+    // square silhouette, stamped from the baked picture rather than blurred here (there can be eight-and-forty of
+    // these in one frame). Held steady through the bob: the coin's float is told by the coin RISING, and a shadow
+    // breathing under it as well was two ways of saying one thing.
+    stampShadow(x, y + cell*0.10, s2, COIN.shadowA, r);
     ctx.translate(x, y - lift); ctx.rotate(tilt);
     paintCoin(s2, ts, seed == null ? bgHash(Math.floor(x / (cell || 1)), Math.floor(y / (cell || 1))) : seed);
     ctx.restore();
@@ -19286,6 +19347,14 @@
     die:    0.146, // ...and the share a spark takes to go out against a wall
   };
   let _juncRace = { key: null, t0: 0, ms: 0, grow: 0, die: 0 };
+  // WHAT EACH HOTSPOT CAME OUT AT, this frame. The guide rings the square you are aiming at, and "the square you are
+  // aiming at" is a size that breathes — it grows as the pool fills, again while you drag, and opens to a whole tile
+  // once you have chosen. Copying that expression into the guide would have been two of it; this is one, written
+  // where it is drawn and read where it is needed. Stamped with the frame, so a guide can never ring a hotspot that
+  // is no longer on the board.
+  const _markAt = new Map();
+  let _markTs = -1;
+  const markHalf = (c, r, ts) => (_markTs === ts ? _markAt.get(c + "," + r) : undefined);
   // the leading tile renders as a 3-way junction: three real platform pieces
   // oriented to the travel direction — a flat run forward, plus a curve each way
   // (up / down relative to travel) — signalling the path isn't set yet.
@@ -19607,6 +19676,7 @@
       }
       _juncRace = { key: raceKey, t0: ts, ms, grow: q*(1 - R.travel), die: q*R.die, wait };
     }
+    if (_markTs !== ts) { _markAt.clear(); _markTs = ts; }          // this frame's hotspots, for the guide to ring
     const racing = lead.n.kind !== "platform";                      // a rail at the front has no join to race from
     let rt = racing ? ts - _juncRace.t0 : Infinity;
     // WHERE THE SQUARE STARTS OPENING: a share of the growth BEFORE the spark lands (JUNCTION_RACE.early), so the
@@ -19653,6 +19723,7 @@
       // GROWING INTO PLACE after its spark: the square from nothing, and the lead — which the race drew to the centre —
       // drawing back to the square's edge as it opens.
       const og = os * growE;
+      _markAt.set(e.c + "," + e.r, og);        // ...and the guide rings exactly this (markHalf)
       // THE CHOSEN CHAPTER'S LOOK, in the rainbow's blue (a pixel heavier than the tab bar's line, as the chapter's ring is).
       junctionTileLine(lead, e.d, tvBlueHex(), 1);
       hotspotLead(C, e.d, mx, my, og, tvBlueHex());
@@ -22217,14 +22288,19 @@
   // Mushroom dropped. The pane is an ordinary pane, because it IS an ordinary tile, only later.
   // The single mark is in the grip: the centre dot is out and the eight around it light in turn
   // and fade behind the head, a loading wheel. It says WAIT, which is true, where a colour would
-  // have said NO, which is not. Tune it in spare-lab.html.
+  // have said NO, which is not.
   const SPARE = {
-    ms:      1100,   // one turn of the wheel
-    dotsA:   0.95,   // a dot at the moment it lights
-    dotsLow: 0.18,   // ...and once the wheel has left it behind
-    tail:    0.62,   // how much of the wheel is still lit behind the head, 1 = all of it
-    ease:    1.60,   // the shape of the fade — above 1 falls away fast, below 1 holds then drops
-    sheen:   0.16,   // the throb of the sixteen panes under the wheel, 0 = plain glass
+    scale:   0.88,   // how much smaller than a laid tile it is
+    tilt:    0.105,  // how far off square it lies, in radians — each one its own, up to this
+    // It HANGS rather than bounces: half the height it had and near enough twice as long over it. It no longer keeps
+    // the coin's clock — a coin is a small bright thing you are meant to notice, and a spare is a tile nobody has
+    // picked up yet, which should barely move at all.
+    float:   0.035,  // how high it hovers, fraction of a cell
+    floatMs: 1150,   // ...and one whole bob
+    shadowK: 0.94,   // the shadow's size against the tile
+    shadowA: 1.00,   // ...and its strength, as a multiple of what a MONSTER throws (groundLayers)
+    dotInk:  "#b6bccb",   // its grip: a light grey, and steady. A tile you cannot use yet is not asking for anything,
+                          // and the pulse the usable ones wear is exactly that asking.
   };
   const SPARE_SHEEN = "255,255,255";
   // The eight outer cells of the 3x3 grip, clockwise from the top: the order they light in.
@@ -22246,13 +22322,38 @@
   function drawFreeTile(x, y, ts, lifted, spare) {
     const s = cell, r = tileR(s);
     if (lifted) { ctx.fillStyle = "rgba(5,4,13,0.4)"; rrect(x+6, y+9, s, s, r); ctx.fill(); }
+    // A SPARE IS THE SAME TILE, SITTING DIFFERENTLY. Everything below draws exactly what a draggable tile draws; all
+    // that changes is the ground it is drawn on — shrunk, tipped, floating, with its shadow left behind on the floor.
+    // Its own tilt and its own place in the bob come off the cell it lies on, so no two are stamped alike.
+    let spared = false;
+    if (spare) {
+      const c0 = Math.round(x/cell), r0 = Math.round(y/cell);
+      const seed = (((c0*7 + r0*13) % 16) + 16) % 16 / 16;
+      const bob = Math.sin(ts/Math.max(1, SPARE.floatMs)*Math.PI*2 + seed*Math.PI*2) * cell*SPARE.float;
+      const tilt = (seed - 0.5) * 2 * SPARE.tilt;
+      const mx = x + s/2, my = y + s/2, ss = s * SPARE.scale * SPARE.shadowK;
+      // THE SHADOW A MONSTER THROWS, thrown by a tile — the same two layers and the same blur (castShadow), so the
+      // things lying on this board and the things walking over it agree about where the light is. It stays on the
+      // FLOOR while the tile rises off it, which is what makes it a hover rather than a wobble.
+      //
+      // Cast OUTSIDE the tile's own shrink: blur and drop are fractions of a CELL, and inside the scale they would
+      // shrink with the tile, leaving a small tile sitting on a small sharp shadow where everything around it has a
+      // soft one.
+      ctx.save();
+      ctx.translate(mx, my); ctx.rotate(tilt);
+      stampShadow(0, 0, ss, SPARE.shadowA, tileR(ss));       // stamped inside the tilt, so the shadow leans with it
+      ctx.restore();
+      ctx.save();
+      ctx.translate(mx, my + bob); ctx.rotate(tilt); ctx.scale(SPARE.scale, SPARE.scale); ctx.translate(-mx, -my);
+      spared = true;
+    }
     drawGlass(x, y, s);
     // 3x3 grid of dots in the centre — the "draggable" affordance. On a spare the middle one is
     // out and the ring turns instead: each dot snaps on as the head reaches it and fades as the
     // head moves off, so the mark reads as a wheel going round rather than a tile blinking. The
     // same mark serves a tile the level laid out on its own and one the Mushroom dropped — they
     // are the same state, and a state should look like itself.
-    if (spare) {
+    if (false) {
       // One wheel drives the whole tile. `lit(f)` is how bright a thing sitting f turns round
       // the ring should be right now: full the instant the head reaches it, then falling away
       // behind as the head goes on. Everything that moves on a spare asks this one question,
@@ -22291,11 +22392,18 @@
       }
       drawDragDots(x + s/2, y + s/2, s, null, a);      // a[4] is left at 0 — the centre is out
     } else {
-      const pulse = 0.5 + 0.5*Math.sin(ts/180);
-      ctx.globalAlpha = 0.6 + 0.35*pulse;
-      drawDragDots(x + s/2, y + s/2, s);
-      ctx.globalAlpha = 1;
+      // A SPARE's grip is STEADY and light grey; a usable tile's breathes in the house dark. The pulse is what says
+      // "you can pick this up", so the tile you cannot pick up yet does not wear it.
+      if (spare) {
+        drawDragDots(x + s/2, y + s/2, s, SPARE.dotInk);
+      } else {
+        const pulse = 0.5 + 0.5*Math.sin(ts/180);
+        ctx.globalAlpha = 0.6 + 0.35*pulse;
+        drawDragDots(x + s/2, y + s/2, s);
+        ctx.globalAlpha = 1;
+      }
     }
+    if (spared) ctx.restore();
   }
 
   // Nine small SQUARES (3x3) centred in the tile, signalling it can be dragged. Squares because
@@ -25527,8 +25635,6 @@
     // seek into the moment they are on show.
     sigil: (patch) => { if (patch) Object.assign(SIGIL, patch); return { ...SIGIL }; },
     tiloid: (patch) => { if (patch) Object.assign(TILOID, patch); return { ...TILOID }; },
-    // spare-lab.html drives this: the block, live, on the game's own tiles.
-    spare: (patch) => { if (patch) Object.assign(SPARE, patch); return { ...SPARE }; },
     // footer-lab.html drives this: the capsule at the foot of the Tileverse, live.
     footer: (patch) => { if (patch) Object.assign(FOOTER, patch); applyFooter(); return { ...FOOTER }; },
     // hitbox-lab.html drives these: the block, and the two boxes as the game has them RIGHT
