@@ -267,11 +267,14 @@
     <div id="tips">
       <div class="tip" data-for="wall">Drag to paint <b>walls</b>. Right-drag erases.</div>
       <div class="tip" data-for="hole">Drag to paint <b>holes</b>: cells cut out of the level's quilt, open to the sky, with the board's own edge glow round them. Nothing can be built in one. Holes side by side join into one big hole. Right-drag erases.</div>
+      <div class="tip" data-for="move"><b>Move</b>: drag anything on the board to move it — a block or a rail monster
+        by its body, or by an end handle to reshape its rail. Click something without dragging to select it and open its
+        settings. The tile types only ever <i>put things down</i>; this is the tool that picks them up.</div>
       <div class="tip" data-for="erase">Drag over anything to take it off the board.</div>
       <div class="tip" data-for="start"><b>Start</b> is the one cell that begins as laid track —
         every level has exactly one.</div>
       <div class="tip" data-for="tile"><b>Tile</b> drops another of the runner's tiles on the board —
-        click one again to take it away, and drag any of them freely. A level does <i>not</i> carry a
+        click one again to take it away, and use <b>Move</b> to drag them about. A level does <i>not</i> carry a
         starting route: tiles lined up out of the start <b>chain themselves into track</b> when it
         loads (drawn solid, with the front ringed), and any tile left elsewhere stays <b>loose</b>
         (drawn hollow) until the player drags it into place. Scatter them around the level if you
@@ -281,7 +284,7 @@
         level with no flag never ends, so the run only stops when the runner falls. A talisman maze
         uses the charm as its exit and carries no flag at all.</div>
       <div class="tip" data-for="block"><b>Slider block</b>: one click drops the block on a 3-cell rail,
-        with a nook each side. Drag the <i>block</i> to slide it along its rail (that's its starting
+        with a nook each side. With <b>Move</b>, drag the <i>block</i> to slide it along its rail (that's its starting
         cell); drag it past an end or sideways off the rail and the whole structure moves. Then drag
         either <b>end handle</b> (the ringed dots) to lengthen, shorten or swing the rail round — pull
         an end sideways and the rail rotates. The rail is where the block slides to; it needs a
@@ -294,7 +297,7 @@
         the blade past an end or off the line, or drag any other rail cell, to move the whole saw.</div>
       <div class="tip" data-for="monster"><b>Monster</b>: pick the kind first. <i>Horizontal</i> and
         <i>vertical rail</i> monsters slide along a rail exactly as the saws they replaced — drop one
-        and drag its ends. A <i>square loop</i> circles a ring; a <i>hunter</i> is a
+        and drag its ends with <b>Move</b>. A <i>square loop</i> circles a ring; a <i>hunter</i> is a
         malevolent tile entity that comes for the runner — it walks the shortest open route to
         him, around walls rather than into them, and re-thinks it at every cell; a <i>golem</i> hunts the same way but is stone — tapped in play it cracks, and it
         shatters on its last tap; a <i>trap</i>
@@ -304,7 +307,7 @@
         there, so routes may cross and overlap freely. Only <i>patrol</i> is drawn by hand: click each cell of its route in turn — the
         first click starts the path, every click after adds a waypoint. <b>Enter</b> finishes it as a
         there-and-back patrol; <b>L</b> closes it into a loop; <b>Esc</b> throws the draft away. It moves
-        at the runner's own pace and pauses briefly at each waypoint, and touching it is fatal.</div>
+        at the runner's own pace as a crew spread along the route — one every three tiles unless you set how many — and touching one is fatal.</div>
       <div class="tip" data-for="stone"><b>Stone</b>: drag to paint breakable stone blocks (the <i>hp</i>
         box sets how many taps to smash). Right-drag or drag over a stone to remove.</div>
       <div class="tip" data-for="platform"><b>Rail</b>: fixed free track cast into a wall. Click an
@@ -346,11 +349,15 @@
 
   <!-- ---------- right rail: the palette ---------- -->
   <aside class="rail">
+    <h2>Tools</h2>
+    <div class="tools" id="modes">
+      <div class="tool" data-tool="move">Move</div>
+      <div class="tool" data-tool="erase">Erase</div>
+    </div>
     <h2>Tile types</h2>
     <div class="tools" id="tools">
       <div class="tool sel" data-tool="wall">Wall</div>
       <div class="tool" data-tool="hole">Hole</div>
-      <div class="tool" data-tool="erase">Erase</div>
       <div class="tool" data-tool="start">Start</div>
       <div class="tool" data-tool="tile">Tile</div>
       <div class="tool" data-tool="goal">Goal</div>
@@ -637,7 +644,7 @@ function toWorking(o){
 // The monster family, mirrored from index.html's MONSTER_KINDS — the editor has to draw and
 // place all six, and the colours are how you tell them apart on the board.
 const MON_KINDS = ["hrail","vrail","patrol","square","hunter","trap","stealth","golem"];
-const MON_COL = { hrail:"#c37ef1", vrail:"#4baff1", patrol:"#c37ef1",      // the rainbow's colours, as the game's
+const MON_COL = { hrail:"#c37ef1", vrail:"#4baff1", patrol:"#49d47c",      // the rainbow's colours, as the game's
                   square:"#f7933b", hunter:"#6b7192", trap:"#f1645f", stealth:"#cfd8ff", golem:"#b3a582" };
 const monVariant = h => h.variant || (h.path ? "patrol" : (h.axis||"h")==="v" ? "vrail" : "hrail");
 const TAL_IDS = ["clock","magnet","star","finger","mush","rewind","pulse","spur","brake","ankh","lode"];
@@ -1237,6 +1244,8 @@ function draw(){
       monsterIcon(x,y,col,"#12102a");
     } else {
       drawPatrol(h.path, h.loop, col, "#12102a");
+      if (monVariant(h) === "patrol")                  // ...and each of its crew, where it sets off
+        patrolCrewAt(h).forEach(([c,r]) => { const [x,y] = centerOf(c,r); monsterIcon(x,y,col,"#12102a"); });
     }
   });
   // Where each one begins, as a grab handle sitting on its route.
@@ -1466,7 +1475,8 @@ function refreshOut(){
 // the thing being dragged: it never counts as blocking itself. Used to refuse a drop rather
 // than to clear the way — a drag crosses a lot of cells on its route, and quietly eating
 // whatever it passed over would be a very expensive way to move a coin two squares.
-function cellTaken(c, r, ignore){
+// `overRoutes`: the thing being dropped floats above the monsters (a coin), so their routes are no obstacle to it.
+function cellTaken(c, r, ignore, overRoutes){
   if(c<0||r<0||c>=L.cols||r>=L.rows) return "the edge";
   if(L.walls.has(keyOf(c,r))) return "a wall";
   if(L.holes && L.holes.has(keyOf(c,r))) return "a hole";
@@ -1482,7 +1492,7 @@ function cellTaken(c, r, ignore){
   for(const p of (L.coins||[]))     if(p!==ignore && at(p)) return "a coin";
   for(const p of (L.singularity||[])) if(p!==ignore && at(p)) return "crumbling ground";
   for(const b of L.blocks)          if(b!==ignore && blockCells(b).some(at)) return "a block";
-  for(const h of L.hazards)         if(h!==ignore && (isMon(h)?monCells(h):sawCells(h)).some(at))
+  if(!overRoutes) for(const h of L.hazards) if(h!==ignore && (isMon(h)?monCells(h):sawCells(h)).some(at))
                                       return isMon(h) ? "a monster" : "a saw";
   return null;
 }
@@ -1566,7 +1576,7 @@ function applyDrag(c,r){
   // A stone, platform, coin or talisman: two numbers to rewrite, onto open ground only.
   else if(d.type==='cellItem'){
     if(c===d.ref[0] && r===d.ref[1]) return;
-    const busy=cellTaken(c,r,d.ref);
+    const busy=cellTaken(c,r,d.ref, d.what==='coin');   // a coin hovers, so it may sit on a monster's route
     if(busy){ setStatus("can't drop the "+d.what+" there — "+busy+" is in the way"); return; }
     d.ref[0]=c; d.ref[1]=r; setStatus(d.what+" moved to "+c+","+r);
   }
@@ -1733,6 +1743,28 @@ function railT(h){
   return u <= 1 ? u : 2 - u;
 }
 // A monster's start, in board coordinates — fractional, because it can stand mid-leg.
+// A patrol is a CREW: as many as `count` says, or one to every three tiles of its route, spaced evenly round the circuit it
+// makes — the same arithmetic as the game's patrolCrew, so the board shows where each of them really starts.
+function patrolCrewAt(h){
+  const P = h.path || []; if (P.length < 2) return [];
+  const loop = !!h.loop, len = (a,b) => Math.abs(b[0]-a[0]) + Math.abs(b[1]-a[1]);
+  const legs = []; for (let i = 0; i < P.length - (loop ? 0 : 1); i++) legs.push(len(P[i], P[(i+1) % P.length]));
+  const track = legs.reduce((a,b) => a+b, 0); if (!(track > 0)) return [];
+  const cycle = loop ? track : track*2;
+  const n = Math.max(1, Math.min(cycle, h.count != null ? (h.count|0) : Math.round(track/3)));
+  const s0 = clamp(h.seg0|0, 0, legs.length-1);
+  let start = 0; for (let i = 0; i < s0; i++) start += legs[i];
+  start += Math.round(clamp(+h.segT0 || 0, 0, 0.999) * legs[s0]);
+  const out = [];
+  for (let m = 0; m < n; m++){
+    let d = (start + Math.round(m*cycle/n)) % cycle;
+    if (!loop && d > track) d = cycle - d;
+    let i = 0; while (i < legs.length-1 && d > legs[i]) { d -= legs[i]; i++; }
+    const A = P[i], B = P[(i+1) % P.length], t = legs[i] ? d/legs[i] : 0;
+    out.push([A[0] + (B[0]-A[0])*t, A[1] + (B[1]-A[1])*t]);
+  }
+  return out;
+}
 function monStartPos(h){
   const P = monPath(h); if (!P.length) return null;
   if (monIsRail(h)) {
@@ -1891,7 +1923,10 @@ function buildInspector(){
     // No pace to set. Every monster crosses a tile in exactly the time the RUNNER does and
     // rides his ramp with him, so the level's cps is the only speed on the board.
     opts.appendChild(Object.assign(document.createElement("div"),
-      { className:"hint", textContent:"Pace follows the runner — one tile in the time he takes one." }));
+      { className:"hint", textContent:"Pace follows the runner — one stroke to each of his tiles." }));
+    if (v !== "trap")                                 // how far each stroke carries it (the game's default is 1)
+      opts.appendChild(inspRow("spaces per stroke", inspNum(ref.step || 1, 1, 8, 1,
+        x => { const n = clamp(Math.round(x), 1, 8); if (n > 1) ref.step = n; else delete ref.step; })));
     if (v === "hrail" || v === "vrail") {
       opts.appendChild(inspRow("start phase", inspNum(ref.phase || 0, 0, 0.99, 0.05, x => ref.phase = x)));
       opts.appendChild(Object.assign(document.createElement("div"),
@@ -1906,8 +1941,14 @@ function buildInspector(){
     }
     if (v === "patrol" || v === "square") {
       const n = monPath(ref).length;
-      if (v === "patrol")
+      if (v === "patrol") {
         opts.appendChild(inspRow("loops", inspBool(ref.loop, x => { if (x) ref.loop = true; else delete ref.loop; })));
+        const auto = patrolCrewAt({ ...ref, count: undefined }).length;
+        opts.appendChild(inspRow("monsters", inspNum(ref.count || auto, 1, 99, 1,
+          x => { const c = Math.max(1, Math.round(x)); if (c === auto) delete ref.count; else ref.count = c; })));
+        opts.appendChild(Object.assign(document.createElement("div"),
+          { className:"hint", textContent:"How many ride the route, spaced evenly round it. Left alone it is one every three tiles (" + auto + " here)." }));
+      }
       // Where on its own route it sets off. Every path monster used to begin on waypoint one,
       // so two on the same route moved as one and a rail could only ever start at an end.
       opts.appendChild(inspRow("starts at #", inspNum((ref.seg0 | 0) + 1, 1, Math.max(1, n), 1,
@@ -2017,11 +2058,16 @@ cv.addEventListener("mousedown", e=>{
     // the canvas stops applying the moment it leaves.
     cv.style.cursor=EDGE_CURSOR[side]; document.body.style.cursor=EDGE_CURSOR[side]; return; }
   mouseDown=true; const c=cellFromEvent(e); if(!c) return;
-  // grab an existing element and drag it (any tool except erase / right-click)
-  if(tool!=="erase" && e.button!==2){ const hit=draggableAt(c.c,c.r);
+  // MOVE is a tool of its own: it grabs an existing element and drags it, and a click that never leaves the square selects
+  // it instead (see mouseup). Every tile type is for PUTTING THINGS DOWN — so none of them picks anything up, and a click
+  // on something already there does what that tool does to it (cycle a rail, take a coin away, re-apply a monster's kind).
+  if(tool==="move"){
+    if(e.button===2) return;
+    const hit=draggableAt(c.c,c.r);
     if(hit){ pushUndo(); dragEl={...hit, grab:{c:c.c,r:c.r}}; dragMoved=false;
-             lastCell=c; cv.style.cursor="grabbing"; return; } }
-  // ...and a press on bare board puts the inspector away
+             lastCell=c; cv.style.cursor="grabbing"; return; }
+    clearSel(); return;                          // ...and a press on bare board puts the inspector away
+  }
   if(e.button!==2) clearSel();
   if(tool==="wall"){ paintMode = (e.button===2 || L.walls.has(keyOf(c.c,c.r))) ? "erase" : "paint"; pushUndo(); paintWall(c.c,c.r); lastCell=c; commit(); draw(); refreshOut(); return; }
   if(tool==="hole"){ paintMode = (e.button===2 || (L.holes && L.holes.has(keyOf(c.c,c.r)))) ? "erase" : "paint"; pushUndo(); paintHole(c.c,c.r); lastCell=c; commit(); draw(); refreshOut(); return; }
@@ -2043,7 +2089,7 @@ cv.addEventListener("mousemove", e=>{
   const c=cellFromEvent(e);
   if(!mouseDown){ const side=edgeAt(e);
     cv.style.cursor = side ? EDGE_CURSOR[side]
-                     : (c && tool!=="erase" && draggableAt(c.c,c.r)) ? "grab" : "crosshair"; return; }
+                     : tool==="move" ? ((c && draggableAt(c.c,c.r)) ? "grab" : "default") : "crosshair"; return; }
   if(!c) return;
   if(dragEl){ dragMoved=true; applyDrag(c.c,c.r); lastCell=c; commit(); draw(); refreshOut(); return; }
   if(tool!=="wall" && tool!=="hole" && tool!=="erase" && tool!=="stone") return;
@@ -2065,7 +2111,7 @@ window.addEventListener("mouseup", ()=>{ mouseDown=false; lastCell=null; paintMo
     // selects rather than moves.
     if(!dragMoved) selectAt(dragEl);
     dragEl=null; commit(); refreshOut();
-  } cv.style.cursor="crosshair"; });
+  } cv.style.cursor = tool==="move" ? "default" : "crosshair"; });
 function cellFromEvent(e){ const rect=cv.getBoundingClientRect(); const x=e.clientX-rect.left-PAD, y=e.clientY-rect.top-PAD; const c=Math.floor(x/CELL), r=Math.floor(y/CELL); if(c<0||r<0||c>=L.cols||r>=L.rows)return null; return {c,r}; }
 
 // ---------- palette icons ----------
@@ -2081,6 +2127,13 @@ function toolIcon(g, t, S){
   g.clearRect(0,0,S,S);
   switch(t){
     case "wall":     box(M,M,F,F,S*.14,"#6b7185"); studs("#3a3f52"); break;
+    case "move":     g.strokeStyle="#b8ade8"; g.fillStyle="#b8ade8"; g.lineWidth=S*.08; g.lineCap="round";
+                     g.beginPath(); g.moveTo(S/2,S*.22); g.lineTo(S/2,S*.78); g.moveTo(S*.22,S/2); g.lineTo(S*.78,S/2); g.stroke();
+                     for(const [x,y,a] of [[S/2,S*.12,0],[S*.88,S/2,Math.PI/2],[S/2,S*.88,Math.PI],[S*.12,S/2,-Math.PI/2]]){
+                       g.save(); g.translate(x,y); g.rotate(a);
+                       g.beginPath(); g.moveTo(0,0); g.lineTo(S*.13,S*.15); g.lineTo(-S*.13,S*.15); g.closePath(); g.fill();
+                       g.restore(); }
+                     break;
     case "erase":    g.strokeStyle="#ff8a8a"; g.lineWidth=S*.11; g.lineCap="round";
                      g.beginPath(); g.moveTo(S*.28,S*.28); g.lineTo(S*.72,S*.72);
                      g.moveTo(S*.72,S*.28); g.lineTo(S*.28,S*.72); g.stroke(); break;
@@ -2208,7 +2261,7 @@ window.addEventListener("keydown",e=>{ if(e.key==="z"&&(e.ctrlKey||e.metaKey||tr
     if(e.key==="l"||e.key==="L"){ finishMonster(true); return; }
     if(e.key==="Escape"){ monDraft=null; setStatus("monster draft dropped"); draw(); return; }
   }
-  const map={"0":"erase","1":"wall","2":"start","3":"tile","5":"goal","6":"block",
+  const map={"v":"move","0":"erase","1":"wall","2":"start","3":"tile","5":"goal","6":"block",
              "8":"key","9":"door","s":"stone","p":"platform","t":"talisman","c":"coin","m":"monster"};
   if(map[e.key]&&document.activeElement.tagName!=="INPUT") selTool(map[e.key]); });
 

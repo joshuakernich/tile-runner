@@ -2664,6 +2664,14 @@
       for (const tn of chord.tones) if ((((tn - lead) % 12) + 12) % 12 !== 0) out.push(tn);
       return out;
     }
+    // THE OUTPUT STAGE. The mix was built quiet — master at 0.16, so the music's drum hits would never clip — which left
+    // the body of the music at about -27 dBFS and most effects peaking between -25 and -35: a whisper on a phone's speaker.
+    // So everything now leaves through a make-up gain and then a compressor set as a limiter: the whole mix comes up by
+    // `gain` (about +10dB), and the few hits that would go over are held under the ceiling. A compressor on its own let
+    // the music's sharpest drum hits through a decibel over full scale, faster than it could react — so after it comes a
+    // soft clip that leaves everything below `knee` of full scale exactly as it is and bends anything above it smoothly
+    // toward full scale, which nothing can then pass.
+    const OUT = { gain: 3.2, threshold: -6, ratio: 20, attack: 0.001, release: 0.12, clipKnee: 0.8 };
     let ac = null, master = null, sendBus = null, noiseBuf = null;
     let warpDry = null, warpWet = null, warpLfo = null;
     let muted = false, step = 0, beatSec = 1.15;
@@ -2697,6 +2705,17 @@
       ac = new AC();
       master = ac.createGain();
       master.gain.value = MU.master;
+      const outGain = ac.createGain(), limiter = ac.createDynamicsCompressor();       // (OUT, above)
+      outGain.gain.value = OUT.gain;
+      limiter.threshold.value = OUT.threshold; limiter.knee.value = 0; limiter.ratio.value = OUT.ratio;
+      limiter.attack.value = OUT.attack; limiter.release.value = OUT.release;
+      const ceiling = ac.createWaveShaper(), cc = new Float32Array(4096), k0 = OUT.clipKnee, room = 1 - OUT.clipKnee;
+      for (let i = 0; i < cc.length; i++) {
+        const x = (i / (cc.length - 1)) * 2 - 1, a = Math.abs(x);                // (a shaper's curve always spans -1..1)
+        cc[i] = Math.sign(x) * (a <= k0 ? a : k0 + room * Math.tanh((a - k0) / room));
+      }
+      ceiling.curve = cc; ceiling.oversample = "2x";
+      outGain.connect(limiter); limiter.connect(ceiling); ceiling.connect(ac.destination);
       musicBus = ac.createGain(); musicBus.gain.value = 1; musicBus.connect(master);
       ambBus  = ac.createGain(); ambBus.gain.value  = 1; ambBus.connect(master);
       // Everything leaves through one of two legs. Dry is the normal one. Wet runs the whole
@@ -2705,7 +2724,7 @@
       // corner sways — the Mushroom. warp() crossfades between the two.
       warpDry = ac.createGain(); warpDry.gain.value = 1;
       warpWet = ac.createGain(); warpWet.gain.value = 0;
-      master.connect(warpDry); warpDry.connect(ac.destination);
+      master.connect(warpDry); warpDry.connect(outGain);
       const wd = ac.createDelay(0.2); wd.delayTime.value = 0.035;
       const shaper = ac.createWaveShaper();
       const curve = new Float32Array(1024);                        // a soft-clip fold
@@ -2714,7 +2733,7 @@
       const wlp = ac.createBiquadFilter(); wlp.type = "lowpass";
       wlp.frequency.value = 1400; wlp.Q.value = 6;
       master.connect(wd); wd.connect(shaper); shaper.connect(wlp);
-      wlp.connect(warpWet); warpWet.connect(ac.destination);
+      wlp.connect(warpWet); warpWet.connect(outGain);
       warpLfo = ac.createOscillator(); warpLfo.type = "sine"; warpLfo.frequency.value = 2.4;
       const wg = ac.createGain(); wg.gain.value = 0.011;           // +/- 11ms of wobble
       warpLfo.connect(wg); wg.connect(wd.delayTime);
@@ -3112,18 +3131,53 @@
       o.connect(g); o2.connect(g); g.connect(master);
       o.start(t); o2.start(t); o.stop(t + 0.65); o2.stop(t + 0.65);
     }
-    // Falling: a descending whistle as the runner tumbles off the edge.
-    function fall() {
+    // FALLING: a long whistle, all the way down — the old cartoon drop, high to low, lasting as long as the fall does (the
+    // caller works that out, `secs`), with a slight waver in it and a breath of air through it. It stops where he does:
+    // fallStop, on the landing, on the Ankh's catch, or when a new chapter begins.
+    let _fallVoice = null;
+    function fall(secs) {
       if (muted || !ac || ac.state !== "running") return;
-      const t = ac.currentTime;
+      fallStop();
+      const t = ac.currentTime, d = Math.max(0.6, secs || 1.4);
       const o = ac.createOscillator(), g = ac.createGain();
       o.type = "sine";
-      o.frequency.setValueAtTime(920, t); o.frequency.exponentialRampToValueAtTime(120, t + 0.7);
+      o.frequency.setValueAtTime(2300, t);
+      o.frequency.exponentialRampToValueAtTime(420, t + d);               // the drop, the whole way down
+      const lfo = ac.createOscillator(), lg = ac.createGain();            // ...wavering a little
+      lfo.frequency.value = 5.5; lg.gain.value = 18;
+      lfo.connect(lg); lg.connect(o.frequency);
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.3, t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0006, t + 0.75);
+      g.gain.exponentialRampToValueAtTime(0.16, t + 0.06);
+      g.gain.setValueAtTime(0.16, t + d*0.7);
+      g.gain.exponentialRampToValueAtTime(0.09, t + d);
+      g.gain.exponentialRampToValueAtTime(0.0004, t + d + 0.12);
       o.connect(g); g.connect(master);
-      o.start(t); o.stop(t + 0.8);
+      o.start(t); lfo.start(t); o.stop(t + d + 0.2); lfo.stop(t + d + 0.2);
+      // ...and the air through it: noise in a narrow band that follows the note down
+      let air = null, ag = null;
+      if (noiseBuf) {
+        air = ac.createBufferSource(); air.buffer = noiseBuf; air.loop = true;
+        const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 14;
+        bp.frequency.setValueAtTime(2300, t); bp.frequency.exponentialRampToValueAtTime(420, t + d);
+        ag = ac.createGain();
+        ag.gain.setValueAtTime(0.0001, t); ag.gain.exponentialRampToValueAtTime(0.05, t + 0.08);
+        ag.gain.setValueAtTime(0.05, t + d*0.7);
+        ag.gain.exponentialRampToValueAtTime(0.0004, t + d + 0.12);
+        air.connect(bp); bp.connect(ag); ag.connect(master);
+        air.start(t); air.stop(t + d + 0.2);
+      }
+      _fallVoice = { o, lfo, g, air, ag };
+    }
+    // ...cut short, with a quick fade rather than a click, if it is still going.
+    function fallStop() {
+      const v = _fallVoice; _fallVoice = null;
+      if (!v || !ac) return;
+      const t = ac.currentTime;
+      for (const gn of [v.g, v.ag]) if (gn) {
+        try { gn.gain.cancelScheduledValues(t); gn.gain.setValueAtTime(Math.max(0.0004, gn.gain.value), t);
+              gn.gain.exponentialRampToValueAtTime(0.0004, t + 0.06); } catch (e) {}
+      }
+      for (const n of [v.o, v.lfo, v.air]) if (n) { try { n.stop(t + 0.08); } catch (e) {} }
     }
     // Death screen: a short, slow, sad descending phrase.
     function death() {
@@ -4935,7 +4989,7 @@
       musicBus.gain.setTargetAtTime(target, ac.currentTime, 0.12);
     }
     function isMuted() { return muted; }
-    return { unlock, clearTile, smash, charmBreak, charmGrow, coinSpill, roar, win, lose, fall, death, boost, slow, coin, coinBank, coinSlam, key, doorOpen,
+    return { unlock, clearTile, smash, charmBreak, charmGrow, coinSpill, roar, win, lose, fall, fallStop, death, boost, slow, coin, coinBank, coinSlam, key, doorOpen,
              slide, clack, tap, tapBig, swish, airSwish, flyWhoosh, tabClick, power, warp, vortex, thrum, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck, choir,
              ambient,
@@ -4975,7 +5029,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.67";                    // shown on the title & pause screens
+  const VERSION = "v10.68";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -6980,6 +7034,7 @@
     state.score = computeScore(); updateScoreHud();
   }
   function beginLevel(L, label) {
+    Sound.fallStop();                          // a fall still whistling from the chapter before goes quiet
     // Whatever the last chapter was doing, it is not doing it any more. The victory sequence
     // owns the frame while it runs, so a chapter loaded out from under it — Skip, the Tileverse,
     // a demo — would go on being drawn as a map with the new level running invisibly beneath.
@@ -7112,14 +7167,15 @@
       // fixed platforms: permanent free track cast into a wall plinth (see trackConnects)
       platforms: (L.platforms||[]).map((p,i)=>({ id:i, c:p[0], r:p[1], dirs:parsePfDirs(p[2]), lit:0 })),
       platformMap: new Map(),
-      hazards: (L.hazards||[]).map(h=>{ const ax = h.axis||"h", kind = h.kind||"saw";
+      hazards: (L.hazards||[]).flatMap(patrolCrew).map(h=>{ const ax = h.axis||"h", kind = h.kind||"saw";
         if (kind === "monster") {
           const CW = cell || 90;
           // A variant may be named outright; otherwise it is inferred, so the older data that
           // only carried a path still means what it always did.
           const variant = h.variant || (h.path ? "patrol" : ax === "v" ? "vrail" : "hrail");
           const K = MONSTER_KINDS[variant] || MONSTER_KINDS.patrol;
-          const base = { kind, variant, faceX:1, chompT:0 };   // pace comes from monPace()
+          // pace comes from monPace(); `step` is how many tiles each stroke carries it — one unless the level says
+          const base = { kind, variant, faceX:1, chompT:0, stride: Math.max(1, Math.min(8, (h.step | 0) || 1)) };
           if (K.move === "rail") {
             // Rail monsters move EXACTLY as the saws they replace: one traverse takes `speed`
             // ms whatever the rail's length, ping-ponging, with `phase` staggering the start.
@@ -7165,8 +7221,9 @@
           // can be redrawn shorter than the numbers saved against it.
           const loop0 = variant === "square" ? true : !!h.loop;
           const s0 = Math.max(0, Math.min(path.length - 1, h.seg0 | 0));
-          const n0 = loop0 ? (s0 + 1) % path.length
-                           : Math.max(0, Math.min(path.length - 1, s0 + 1));
+          const md = h.mdir0 === -1 ? -1 : 1;                 // which way it sets off (a crew's homeward half: patrolCrew)
+          const n0 = loop0 ? (s0 + md + path.length) % path.length
+                           : Math.max(0, Math.min(path.length - 1, s0 + md));
           const A = path[s0], B = path[n0];
           // Snapped to a whole tile along the leg, for the same reason a rail's start is: a
           // thrust is one tile, so beginning part-way through one leaves every thrust of that
@@ -7180,7 +7237,7 @@
           // would have thrown this start away on the very first tick. Seeding the clock with the
           // whole thrusts already behind it is what makes the start survive.
           return { ...base, path, loop: loop0,
-                   seg:s0, segT:t0, mdir:1, pause:0,
+                   seg:s0, segT:t0, mdir:md, pause:0,
                    rowT: step0 * effSpeed, rowP: 0,
                    wx:(ax0+0.5)*CW, wy:(ay0+0.5)*CW, cc:Math.round(ax0), cr:Math.round(ay0) };
         }
@@ -7943,7 +8000,7 @@
     if (type==="golem")    { demo({ ...MONSTER_KINDS.golem, hp: 2, vi: 0, gi: 0 }, rowP); return; }   // tapped once already
     if (type==="square")   { demo(MONSTER_KINDS.square, rowP); return; }
     if (type==="stealth")  {                  // seen on the thrust and gone by the recovery, as on the board (never quite gone here)
-      const dv = MONSTER.railDrive;
+      const dv = SWIM.swim / swimCycle();
       const a = rowP < dv ? 0.60 - 0.22*(rowP/dv) : 0.02 + 0.36*Math.pow(1 - (rowP - dv)/(1 - dv), 3);
       demo(MONSTER_KINDS.stealth, rowP, Math.max(0.10, a)); return;
     }
@@ -11162,7 +11219,7 @@
       const K = monKind(h), rgb = hexRGB(K.body || col);
       const dark = (0.2126*rgb[0] + 0.7152*rgb[1] + 0.0722*rgb[2]) / 255 < 0.12;
       s.butterflies.push({ x: h.wx, y: h.wy, t: 0, col: dark ? (K.eye || col) : (K.body || col),
-                           size: (K.move === "rail" || K.look === "rail") ? MONSTER.railSize : MONSTER.size,   // his own size
+                           size: (K.move === "rail" || K.look === "rail") ? SWIM.size : MONSTER.size,   // his own size
                            ang: Math.atan2(h.wy - rp.y, h.wx - rp.x), seed: Math.random() * 1000 });
     }
     s.hazards = s.hazards.filter(h => !doomed.includes(h));
@@ -11812,6 +11869,7 @@
     if (!f) { reviveRunner(); return; }        // caught before he was falling: just put him back
     s.ankhGrace = 0;
     f.vx = 0; f.vy = 0; f.va = 0;              // he stops. That is the whole of the first beat.
+    Sound.fallStop();                  // caught: the whistle stops where he does
     f.ankh = { beat: "hold", t: 0, idx: clamp(s.runIdx, 0, s.path.length - 1),
                x0: f.x, y0: f.y, a0: f.angle, fx: f.x, fy: f.y, fa: f.angle };
     Sound.duck(1);                             // the level's tune stands down for all of it
@@ -12007,7 +12065,7 @@
     if (!h || h.wx == null || h.wy == null) return null;
     const K = h.kind === "monster" ? monKind(h) : null;
     const body = cell * ((K && (K.move === "rail" || K.look === "rail"))
-                         ? MONSTER.railSize : MONSTER.size);
+                         ? SWIM.size : MONSTER.size);
     const w = body * HITBOX.monK / 2;
     return { x: h.wx, y: h.wy, hw: w, hh: w, ang: 0 };
   }
@@ -12082,7 +12140,6 @@
     state.status = "falling";
     state.combo = 0;                 // the run ends — combo breaks
     state.shake = Math.max(state.shake, cell * 0.10);
-    Sound.fall();                    // descending whistle as the runner tumbles
     haptic(60);
     state.drag = null;
     const spd = cell / state.msPerCell;            // the runner's forward speed (px/ms)
@@ -12098,6 +12155,10 @@
                      vx:ri.tx * spd, vy:ri.ty * spd,  // run off the edge, then gravity takes over
                      va:(ri.tx >= 0 ? 1 : -1) * 0.004, t:0, floor: worldH + viewH*PILE_DROP, px: ri.sx };
     }
+    // ...and the whistle, for exactly as long as he will be falling: the time gravity takes him from here to the heap.
+    const f = state.fall, dy = Math.max(0, pileLandSpot().y - f.y);
+    const fallMs = (-f.vy + Math.sqrt(Math.max(0, f.vy*f.vy + 2*FALL_G*dy))) / FALL_G;
+    Sound.fall(Math.max(0.6, Math.min(6, (fallMs || 0) / 1000)));
   }
   // How far below the board the heap sits, and how long he lies in it before the words come.
   // No zoom: the board stays the size it was in play. The fall used to push in by a third, which
@@ -12166,6 +12227,7 @@
       f.rest = Math.PI + PILE.tilt;
       f.angle = f.rest;
       state.shake = Math.max(state.shake || 0, cell*0.18);
+      Sound.fallStop();                // the whistle ends as he lands
       Sound.thud ? Sound.thud() : Sound.clack();
       haptic(18);
       spillPurse(f.x, f.y);          // ...and everything he was carrying comes out of him
@@ -16036,9 +16098,9 @@
     if (state.status === "ceremony") { drawCeremony(ts); return; }
     ctx.save();
     ctx.translate(-Math.round(camX - shx), -Math.round(camY - shy));
-    // THE LEVEL'S EDGE LIGHT — the sharp band just inside the board's edge and round every hole, and the sparks rolling along
-    // them — FIRST, under everything that stands on the level: walls, stones, tiles, the runner and the rest are all drawn
-    // over it. Its colour half went down with the quilt.
+    // THE EDGE LIGHT'S SPARKS, rolling round the board's edge and every hole, FIRST, under everything that stands on the
+    // level: walls, stones, tiles, the runner and the rest are all drawn over them. The light itself, and the walls'
+    // shadows, went down with the quilt (edgeTiles).
     if (_innerWhite) { boardInnerGlow(0, 0, ts, "white"); _innerWhite = false; }   // once per backdrop, never stale
     // THE CELLS ON SCREEN, and one more all round: for the shake, and for whatever spills past its own cell (a coin's bob
     // and spark, a platform's). Platforms and coins are drawn only inside it, as the walls below already are.
@@ -16052,19 +16114,6 @@
     // hinted at with hazard stripes when a tile strayed near it. Flip this to bring them back —
     // the machinery below is intact and costs nothing while nothing calls it, including the two
     // full-viewport canvases it would otherwise allocate for its mask.
-    // The walls' shadows, on the ground and the edge light, under everything that stands there — see WALL_SHADOW.
-    // Only the tiles on screen (and one more all round, for the shake), smoothed the cheap way, as the edge glow is.
-    const wallShade = wallShadowLayer();
-    if (wallShade) {
-      const R = WALL_SHADOW.res;
-      const c0 = Math.max(0, Math.floor(camX/cell) - 1), c1 = Math.min(COLS, Math.ceil((camX + viewW)/cell) + 1);
-      const r0 = Math.max(0, Math.floor(camY/cell) - 1), r1 = Math.min(ROWS, Math.ceil((camY + viewH)/cell) + 1);
-      if (c1 > c0 && r1 > r0) {
-        const sm = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = true;
-        ctx.drawImage(wallShade, c0*R, r0*R, (c1 - c0)*R, (r1 - r0)*R, c0*cell, r0*cell, (c1 - c0)*cell, (r1 - r0)*cell);
-        ctx.imageSmoothingEnabled = sm;
-      }
-    }
     if (EDGE_STRIPES) drawEdgeWalls();
     if (wallLayerDirty) buildWallLayer();
     if (wallLayer && state.walls && state.walls.size) {
@@ -16081,8 +16130,8 @@
     }
     drawWallEyes(ts);                             // ...and the eyes, which cannot be baked in
     for (const [sk, st] of state.stones) {
-      const [c, r] = sk.split(",").map(Number);
-      drawStone(c, r, ts, st);
+      const i = sk.indexOf(","), c = +sk.slice(0, i), r = +sk.slice(i + 1);
+      if (onView(c, r)) drawStone(c, r, ts, st);                                 // ...the ones on screen
     }
     drawPlatforms(ts, onView);
 
@@ -17191,7 +17240,7 @@
         // looking straight at it is rewarded and one who is not is still caught out.
         let ghostA = 1;
         if (K.ghost) {
-          const P = h.rowP || 0, dv = MONSTER.railDrive;
+          const P = h.rowP || 0, dv = SWIM.swim / swimCycle();
           ghostA = P < dv ? 0.60 - 0.22*(P/dv)          // the thrust: a suggestion, dimming as it ends
                           : 0.02 + 0.36*Math.pow(1 - (P-dv)/(1-dv), 3);
         }
@@ -17356,42 +17405,49 @@
     growlMin: 1900,  // ms between growls, at least
     growlVary: 2600, // ...plus up to this much, so several monsters never fall into step
     // The rail monsters are a different animal: they do not split. They are a smaller, whole
-    // tile with a ring of teeth running round the outside of it, like a chain on a sprocket.
-    railSize:   0.62,   // body, fraction of a cell — noticeably smaller than the biters
-    railMidSpike:1.55,  // the middle tooth of a bank is this many times the size of its
-                        // neighbours, in both length and width. Only an ODD bank has a middle
-                        // one to enlarge; an even count is left uniform.
-    railBank:   3,      // teeth per bank. Every rail monster has two banks of oars: a vertical
-                        // mover's are down its left and right sides, a horizontal mover's along
-                        // its top and bottom. Nothing has teeth right round it any more.
-    railToothH: 0.13,   // how far each stands off the edge, fraction of the body
-    railToothW: 0.60,   // how much of its share of the rim each one occupies
-    // The teeth do not march round at a constant rate any more — they ROW. One cycle is a
-    // quick power stroke with the teeth out and driving backwards, then a longer recovery
-    // where they feather in and slide forward to catch again. Same idea as an oar, and the
-    // asymmetry is the whole thing: equal halves read as a wobble, not as propulsion.
+    // tile with two banks of oars down its sides. How it ROWS — the shape of the stroke, and
+    // the oars themselves — lives in SWIM, since a stroke is counted in the runner's beats.
     railStrokeMs: 780,  // No longer sets the stroke LENGTH — a thrust is one tile now, and how
                         // long it takes is the monster's own ms-per-tile. Kept in the block so a
-                        // pasted MONSTER still fits, and because the shape of the stroke (drive
-                        // and coast, below) is still what a thrust looks like.
-    railDrive:  0.34,   // fraction of that spent driving; the rest is the recovery
-    railSweep:  0.085,  // how far round the rim a tooth travels in a stroke, in TURNS
-    railFeather:0.34,   // how far the teeth pull in on the recovery (1 = not at all)
-    railSurge:  0.030,  // body lurch along its line of travel per stroke, fraction of a cell
-    railSlide:  0.34,   // peak-to-peak travel of a bank, as a fraction of its own length. The
-                        // teeth are spaced across whatever is left over after that travel is
-                        // set aside, so however far they stroke they stay on the straight run
-                        // and none ever pops in or out at a rounded corner.
+                        // pasted MONSTER still fits.
     railEyeLead:0.16,   // how far the eyes sit toward the end he is travelling, fraction of
                         // the body. Held short of the inscribed panel's edge, since the panel
                         // is the only thing they read against.
-    railCoast:  0.55,   // travel rate through the recovery, relative to its average. The drive
-                        // makes up whatever this gives away, so the AVERAGE speed over a
-                        // stroke is exactly what it always was — the tuned rail levels keep
-                        // their timing, and only the moment-to-moment pace changes.
     panelPad:   0.11,   // the inscribed square's inset, fraction of the body
     panelA:     0.18,   // ...and how far it darkens what is under it
   };
+  // HOW A SWIMMER SWIMS, in the runner's own BEATS (tickBeat). One stroke is three parts, and the whole of it is meant to
+  // be countable along with him:
+  //   · SWIM — all of its travel, easing hard out of the catch and coasting to a stop on the tile;
+  //   · REST — still, oars trailed behind it;
+  //   · TENSION — the oars reach forward for the next catch and the body trembles with the effort of holding.
+  // A stroke lasts swim + rest + tension BEATS, so at the shipped 1 + ½ + ½ a swimmer crosses a tile on every OTHER beat;
+  // give a monster `step: 2` in the level and it covers two tiles in that stroke instead. monster-lab.html tunes all of
+  // this against the running game.
+  const SWIM = {
+    swim:      0.4,    // beats of travel...
+    rest:      0.3,    // ...then still...
+    tension:   0.3,    // ...then winding up for the next catch
+    ease:      2.0,    // how hard the travel eases out. 1 is none; past about 2 the last of the travel dribbles — at 3 it
+                       // is 87% across the tile by the halfway point and the rest of the swim reads as sitting still, so
+                       // the stroke stops looking like a thrust on the beat and starts looking like a long pause
+    size:      0.75,   // the body, as a fraction of a cell
+    tremble:   0.023,  // the shake through the tension, as a fraction of a cell
+    trembleHz: 23,     // ...and how fast it shakes
+    surge:     0.030,  // the body's own lurch along its line of travel per stroke, fraction of a cell
+    // THE OARS. Every one is a SQUARE HALVED ALONG ITS DIAGONAL, stood on that long cut: the hypotenuse lies
+    // flat on the body's edge, and the square's own corner is the point. Every tip is therefore a true right
+    // angle, and an oar is sized by its RADIUS — edge to point — which is what these two numbers are, as
+    // fractions of a WHOLE CELL. The radius is the whole shape: a right angle at the tip makes the base
+    // exactly twice it, and the feather scales the triangle evenly, so it is the same half-square however
+    // small it goes. Neither the spacing nor the stroke is set here — see the layout in drawRailMonster: the
+    // oars sit corner to corner, and the stroke is the longest the edge allows, front edge to back edge.
+    oars:      3,      // oars to a bank, two banks to an animal
+    oarOuter:  0.065,  // the ordinary oars: the radius, how far the point stands off the edge, fraction of a cell
+    oarMid:    0.100,  // ...and the big middle one, same measure. Only an ODD bank has a middle to enlarge.
+    oarFeather:0,      // how small they go as they swing forward for the next catch; 1 is not at all
+  };
+  const swimCycle = () => Math.max(0.05, SWIM.swim + SWIM.rest + SWIM.tension);
   // The family. One tile-shaped body, five ways of behaving — told apart by colour and by
   // which way the tile splits, so you can read what a monster does before it does it.
   //
@@ -17405,7 +17461,8 @@
   const MONSTER_KINDS = {
     hrail:  { move:"rail",   split:"h", body:"#c37ef1" },                 // was a horizontal saw
     vrail:  { move:"rail",   split:"v", body:"#4baff1" },                 // was a vertical saw
-    patrol: { move:"path",   split:"h", body:"#c37ef1" },                 // the waypoint walker
+    // The waypoint walker: the Circler's animal in the rainbow's green, and a CREW of them along its route (patrolCrew).
+    patrol: { move:"path", look:"rail", banks:"all", split:"h", body:"#49d47c" },
     // Round and round a ring — and it turns corners, so oars on two faces would be the wrong
     // two half the time. `banks:"all"` puts spikes on every face: the pair perpendicular to
     // travel row, the other pair simply bristle in and out with the stroke.
@@ -17493,22 +17550,49 @@
   // The rail monster: one whole tile with two banks of oars. It never opens — the menace is
   // that it rows straight at you, not that it bites — which is what tells it apart at a
   // glance from the ones that split.
-  // How fast a rower travels at stroke-phase P, relative to its own average. Coasts through
-  // the recovery at `railCoast`, and drives through the power stroke at whatever rate makes
-  // the mean come back to exactly 1 — `2sin²` averages 1 over its half-cycle, which is what
-  // makes that solvable in closed form instead of by fudging. It also meets the coast rate at
-  // both ends of the drive, so the pace never steps.
-  // Distance covered by stroke-phase P, as a fraction of one whole stroke — the integral of
-  // railRate, in closed form. Having it exactly means a leg can be positioned from its stroke
-  // clock rather than accumulated frame by frame, so the last stroke of a leg finishes on the
-  // end of the rail to the pixel instead of drifting there.
-  function railProgress(P) {
-    const d = MONSTER.railDrive, B = MONSTER.railCoast;
-    const driveMean = (1 - (1 - d)*B) / d;
-    if (P <= d) {
-      return B*P + (driveMean - B) * (P - (d/(2*Math.PI))*Math.sin(2*Math.PI*P/d));
+  // A PATROL IS A CREW. Its route carries as many monsters as its `count` says — or, left alone, one to every three tiles of
+  // track — spaced evenly round the whole circuit the route makes: round a loop, or out and back along a there-and-back
+  // route, so half of a there-and-back crew is always on its way home (and they pass through one another, as monsters
+  // do). The first sets off where the editor put it (seg0, segT0), and every start is a whole tile round the circuit.
+  function patrolCrew(h) {
+    if (!h || h.kind !== "monster" || (h.variant || (h.path ? "patrol" : "")) !== "patrol" || !h.path || h.path.length < 2) return [h];
+    const P = h.path, loop = !!h.loop, len = (a, b) => Math.abs(b[0] - a[0]) + Math.abs(b[1] - a[1]);
+    const legs = [];
+    for (let i = 0; i < P.length - (loop ? 0 : 1); i++) legs.push(len(P[i], P[(i + 1) % P.length]));
+    const track = legs.reduce((a, b) => a + b, 0);
+    if (!(track > 0)) return [h];
+    const cycle = loop ? track : track * 2;
+    const n = Math.max(1, Math.min(cycle, h.count != null ? (h.count | 0) : Math.round(track / 3)));
+    const s0 = Math.max(0, Math.min(legs.length - 1, h.seg0 | 0));
+    let start = 0;
+    for (let i = 0; i < s0; i++) start += legs[i];
+    start += Math.round(Math.max(0, Math.min(0.999, +h.segT0 || 0)) * legs[s0]);
+    const crew = [];
+    for (let m = 0; m < n; m++) {
+      const d = (start + Math.round(m * cycle / n)) % cycle, one = { ...h, variant: "patrol" };
+      delete one.count;
+      if (d < track) {                                     // on its way out (or round the loop), d tiles along
+        let i = 0, rest = d;
+        while (i < legs.length - 1 && rest >= legs[i]) { rest -= legs[i]; i++; }
+        Object.assign(one, { seg0: i, segT0: legs[i] ? rest / legs[i] : 0, mdir0: 1 });
+      } else {                                             // ...or on its way back, this many tiles from the start
+        let i = 0, rest = cycle - d;
+        while (i < legs.length - 1 && rest > legs[i]) { rest -= legs[i]; i++; }
+        Object.assign(one, { seg0: i + 1, segT0: legs[i] ? 1 - rest / legs[i] : 0, mdir0: -1 });
+      }
+      crew.push(one);
     }
-    return driveMean*d + B*(P - d);
+    return crew;
+  }
+  // How far a stroke has carried it, as a share of that stroke's whole travel, at `P` through the stroke (0..1). All of
+  // it happens inside the SWIM — hard out of the catch, easing into the tile — and through the rest and the tension it is
+  // standing still. Closed form, so a leg is POSITIONED from its stroke clock rather than accumulated frame by frame:
+  // that is what lands the last stroke of a leg on the end of the rail to the pixel instead of drifting there.
+  function swimProgress(P) {
+    const C = swimCycle(), sw = Math.min(C, SWIM.swim) / C;
+    if (!(P > 0)) return 0;
+    if (P >= sw || sw <= 0) return 1;
+    return 1 - Math.pow(1 - P / sw, Math.max(1, SWIM.ease));
   }
   // HOLES STOP A MONSTER. Nothing on the board flies: a route that runs into a hole in the quilt ends on the last tile of
   // ground before it and turns round there, as it would at the end of its rail. Only a real hole counts — a crumble is still
@@ -17526,12 +17610,10 @@
   // A walker turning back at a hole, standing on tile k of its current leg (of n). Mid-leg it is the same leg walked the
   // other way from the same tile, carrying straight on into its next thrust; on a waypoint it is the leg behind it, and
   // it sets off along that on the next beat.
-  function pathTurn(h, k, n, nextIdx) {
-    const B = h.b0 + k;                                // the beat it reached tile k on
-    if (k > 0) { h.seg = nextIdx; h.segT = 1 - k/n; h.b0 = B - (n - k); h.kMin = n - k; h.waitB = null; }
-    else { h.segT = 0; h.waitB = Math.floor(moveBeat()) + 1; h.b0 = h.waitB; h.kMin = 0; }
-    h.mdir = -h.mdir;
-    h.rowP = 0;
+  function pathTurn(h, k, n, nextIdx, B) {             // (B: the beat it stands on tile k)
+    if (k > 0) { h.seg = nextIdx; h.segT = 1 - k/n; h.tile0 = n - k; h.b0 = B; }
+    else { h.segT = 0; h.tile0 = 0; h.b0 = B + swimCycle(); }
+    h.lim = null; h.seen = -1; h.mdir = -h.mdir; h.rowP = 0;
   }
   // Lay out the leg the monster is about to swim: how far it has to go, and how many whole
   // strokes to do it in. The stroke is then stretched to fit, never truncated.
@@ -17549,20 +17631,16 @@
     // strokes of different size, and neither lined up with the grid they were crossing.
     const span = Math.max(1, Math.abs((h.hi ?? 0) - (h.lo ?? 0)));   // tiles across the whole rail
     const legTiles = Math.round(span * h.legSpan);
-    h.legN  = Math.max(1, legTiles);                                 // ...so this many thrusts
+    // ...and a thrust carries `stride` tiles of it (one, unless the level says), the last of them shorter when the leg does
+    // not divide by it — so a leg is still a whole number of thrusts, and still ends on a beat.
+    h.legN  = Math.max(1, Math.ceil(legTiles / Math.max(1, h.stride || 1)));
+    h.legTiles = legTiles;
     // And the leg is made to BE that many tiles, rather than that many thrusts stretched over
     // whatever was left. Rounding the count and keeping the old distance is what put a monster
     // between two tiles for a whole leg; this puts the two back in step by moving the distance
     // onto the thrust, which is the thing that is meant to be exactly one tile.
     h.legSpan = legTiles / span;                                     // (hemmed in by holes both ways: none, rowing on the spot)
     h.legDone = 0;
-  }
-  function railRate(P) {
-    const d = MONSTER.railDrive, B = MONSTER.railCoast;
-    if (P >= d) return B;
-    const driveMean = (1 - (1 - d)*B) / d;
-    const t = P/d, sn = Math.sin(t*Math.PI);
-    return B + (driveMean - B) * 2*sn*sn;
   }
   // THE GOLEM'S BODY, centred on the origin, `S` across: the stone tile as a stone on the board is drawn — its baked face
   // and carved cracks (stoneBitmap, the very bitmap a cell-sized stone uses, scaled to the body), on the surround's colour
@@ -17581,41 +17659,47 @@
     ctx.restore();
   }
   function drawRailMonster(x, y, ts, dir, K, off) {
-    const s = cell, S = s*MONSTER.railSize, h = S/2, R = tileR(S);
+    const s = cell, S = s*SWIM.size, h = S/2, R = tileR(S);
     // His eyes are his own colour, not the family's ink — they read against the inscribed
     // panel they sit on, which is the only thing darker than he is. Unless the kind names one:
     // a body dark enough to BE the panel has to borrow a colour from somewhere.
     const body = K.body || "#c37ef1", eye = K.eye || body;
-    // ---- the stroke -------------------------------------------------------------------
-    // P runs 0..1 through one row. During the DRIVE the teeth are fully out and sweep
-    // backwards along the rim; during the RECOVERY they pull in and slide forward again.
-    // Easing differs between the two on purpose: the drive snaps away and settles, the
-    // recovery is a smooth glide, which is what separates rowing from spinning.
-    // Handed in by updateHazards, which is what keeps the teeth and the travel in step —
-    // reading the shared clock here instead let the two drift apart, and made every monster
-    // on screen row in unison besides.
-    const P = off || 0;
-    const dv = MONSTER.railDrive;
-    let ang, reach, push;
-    if (P < dv) {
-      const t = P/dv, e = 1 - Math.pow(1 - t, 3);          // fast off the catch
-      ang = (0.5 - e) * MONSTER.railSweep;
-      reach = 1;
-      push = e;                                            // the body gains on the stroke...
-    } else {
-      const t = (P - dv)/(1 - dv), e = t*t*(3 - 2*t);      // smooth glide back
-      ang = (e - 0.5) * MONSTER.railSweep;
-      reach = 1 - (1 - MONSTER.railFeather) * Math.sin(t*Math.PI);
-      push = 1 - e;                                        // ...and coasts while he resets
+    // ---- the stroke, in its three parts (SWIM) -----------------------------------------
+    // P runs 0..1 through one whole stroke. Through the SWIM the oars are out and sweep backwards and the body does all of
+    // its travelling; through the REST they lie trailed behind it; through the TENSION they feather in and reach forward
+    // for the next catch, and the body trembles with the effort of holding. Handed in by updateHazards, which is what
+    // keeps the oars and the travel in step — reading the shared clock here let the two drift apart, and made every
+    // monster on screen row in unison besides.
+    const P = off || 0, C = swimCycle();
+    const swEnd = SWIM.swim / C, reEnd = (SWIM.swim + SWIM.rest) / C;
+    const vert = K.split === "v";
+    // `swing` is where the banks sit in their own travel: -½ is fully forward at the catch, +½ fully back at the finish.
+    let swing, oarScale = 1, push = 1, tense = 0;
+    if (P < swEnd) {                                              // the swim: hard off the catch, easing into the tile
+      const t = swEnd > 0 ? P / swEnd : 1, e = 1 - Math.pow(1 - t, Math.max(1, SWIM.ease));
+      swing = 0.5 - e;
+      push = e;
+    } else if (P < reEnd) {                                       // the rest: still, oars trailed behind it
+      swing = -0.5;
+    } else {                                                      // the tension: reaching forward, trembling
+      tense = (P - reEnd) / Math.max(1e-6, 1 - reEnd);
+      const e = tense*tense*(3 - 2*tense);
+      swing = e - 0.5;
+      // The WHOLE oar shrinks as it swings forward, never just its length: scaled evenly, it is still half a square.
+      oarScale = 1 - (1 - SWIM.oarFeather) * Math.sin(tense*Math.PI);
+      push = 1 - e;
     }
+    const shake = tense > 0 ? Math.sin(Math.PI * tense) * SWIM.tremble * s : 0;
+    const trA = shake * Math.sin(ts * SWIM.trembleHz * 0.001 * Math.PI*2);
+    const trB = shake * 0.6 * Math.sin(ts * SWIM.trembleHz * 0.0013 * Math.PI*2 + 1.7);
     const sgn = dir < 0 ? -1 : 1;
     ctx.save();
     // The lurch is VISUAL only — the hitbox stays on cc/cr — so a monster never eats you on
     // the strength of a wobble. Along his own line of travel: a vertical mover surges in y.
-    const surge = (push - 0.5) * s * MONSTER.railSurge * 2 * sgn;
+    const surge = (push - 0.5) * s * SWIM.surge * 2 * sgn;
     const sx = K.split === "v" ? 0 : surge, sy = K.split === "v" ? surge : 0;
     ctx.translate(x + sx, y + sy + Math.sin(ts/260)*s*MONSTER.bob);
-    const tl = S*MONSTER.railToothH * reach;
+    ctx.translate(vert ? trB : trA, vert ? trA : trB);             // the tension's tremble, mostly along its travel
     ctx.fillStyle = body;                  // teeth in his own colour: oars, not a cog
     // Two banks of oars, stroking together. Only the AXIS differs between the two kinds: a
     // vertical mover carries its banks down the left and right sides and strokes them up and
@@ -17626,36 +17710,48 @@
     // Travel is set aside FIRST and the teeth are spaced across what is left, so the whole
     // bank stays on the straight run of its edge no matter how far it strokes — no tooth ever
     // climbs into a rounded corner or pops in and out at an end.
-    const vert = K.split === "v";
     const base = -h + R, run = 2*(h - R);
-    const per = Math.max(1, MONSTER.railBank|0);
-    const amp = run * MONSTER.railSlide;
-    const step = (run - amp) / per;
-    const slide = (ang / MONSTER.railSweep) * amp * sgn;
-    const tw = step * MONSTER.railToothW;
-    // The middle of each bank is the big one — the stroke reads as coming FROM somewhere
-    // rather than from three identical prongs. Grown in both directions at once; the width
-    // stays inside its own spacing (railToothW is 0.6 of a step, so even at 1.55 it does not
-    // reach a neighbour) so the teeth never merge at the extremes of the stroke.
+    const per = Math.max(1, SWIM.oars|0);
+    // The middle of each bank is the big one — the stroke reads as coming FROM somewhere rather than from
+    // three identical prongs. It is its own size rather than a multiple of its neighbours'.
     const midK = (per % 2) ? (per - 1)/2 : -1;
+    // The oars sit CORNER TO CORNER — the trailing corner of one IS the leading corner of the next — so a bank
+    // is one unbroken zigzag rather than a row of separate prongs. Two oars are therefore spaced by their own
+    // two radii added, never by a shared slot: a uniform slot leaves a narrow oar floating in the middle of it,
+    // which is what put gaps between them and held the end ones short of the head's corners.
+    //
+    // The whole chain is twice the sum of the radii, and every scrap of edge left over is the stroke. So at the
+    // catch the leading oar's corner sits ON the head's leading corner, and at the finish the trailing oar's
+    // sits on the far one — and both ends fall where the feather is 1, so an oar is full size exactly when it
+    // has a corner to meet. A bank too big for its edge is shrunk to fit and simply stops stroking.
+    const raw = k => s * (k === midK ? SWIM.oarMid : SWIM.oarOuter);
+    let sum = 0; for (let k = 0; k < per; k++) sum += raw(k);
+    const fit = sum > 0 ? Math.min(1, run / (2*sum)) : 1;        // too much oar for the edge: bring the lot in
+    const rad = k => raw(k) * fit;
+    const amp = Math.max(0, run - 2*sum*fit);
+    const cen = [];                                              // centres at mid-stroke, each laid on the last
+    for (let k = 0, at = base + amp/2; k < per; k++) { at += rad(k); cen.push(at); at += rad(k); }
+    const slide = swing * amp * sgn;
     // One pair of banks. `downY` puts them on the left and right faces (spikes out along x,
     // spaced down y); otherwise on the top and bottom. `sl` is how far along their own face
     // they have slid — the rowing pair get the stroke, any others get none.
     const bank = (downY, sl) => {
       for (const side of [-1, 1]) {
         for (let k = 0; k < per; k++) {
-          const big = (k === midK) ? MONSTER.railMidSpike : 1;
-          const c = base + amp/2 + (k + 0.5)*step + sl;
-          const hw = tw*big/2, len = tl*big;
+          // The half-square, stood on its diagonal: the base lies along the edge and the point stands off it by
+          // the radius. A right angle at that point is what makes the base twice the radius — so one number is
+          // the whole oar.
+          const tip = rad(k) * oarScale;
+          const c = cen[k] + sl, w = tip*2;
           ctx.beginPath();
           if (downY) {
-            ctx.moveTo(side*h, c - hw);
-            ctx.lineTo(side*h, c + hw);
-            ctx.lineTo(side*(h + len), c);
+            ctx.moveTo(side*h, c - w/2);
+            ctx.lineTo(side*h, c + w/2);
+            ctx.lineTo(side*(h + tip), c);
           } else {
-            ctx.moveTo(c - hw, side*h);
-            ctx.lineTo(c + hw, side*h);
-            ctx.lineTo(c, side*(h + len));
+            ctx.moveTo(c - w/2, side*h);
+            ctx.lineTo(c + w/2, side*h);
+            ctx.lineTo(c, side*(h + tip));
           }
           ctx.closePath(); ctx.fill();
         }
@@ -17664,7 +17760,7 @@
     // The rowing pair sit on the faces PARALLEL to travel, because those are the only ones a
     // spike can sweep backwards along. A monster that turns corners also carries a second pair
     // on the faces it is heading into and away from; those cannot row — sliding them would be
-    // sideways — so they just bristle in and out on `reach` with the rest.
+    // sideways — so they just shrink and grow with the rest.
     bank(vert, slide);
     if (K.banks === "all") bank(!vert, 0);
     if (K.stone) drawGolemBody(h, S, R, K, ts);                    // a golem: the stone tile, over the tooth roots
@@ -20384,47 +20480,13 @@
   // layer into a world-sized offscreen once per level (or on resize) and blit it with a
   // single drawImage inside the camera transform.
   // WALL SHADOWS. A wall stands on the quilt, so it casts a little shadow onto it: a soft dark on every side, and a heavier
-  // one falling below. Walls that touch are ONE structure — the shadow is cast by their outline as a whole, filled as a
-  // single shape before it is blurred, so it never doubles up or shows a seam where two meet. Walls never change during a
-  // level, so it is baked once per board, and at low resolution, since a shadow has no edges to keep sharp. It lands only
-  // on ground: the board's edge is the bitmap's edge, and the holes (crumbles too) are cut out of it.
+  // one falling below. Walls that touch are ONE structure — the shadow of their squares side by side, which never doubles
+  // up or shows a seam where two meet. It lands only on ground, never on the sky past the board's edge or down a hole, and
+  // it is painted into the same cell tiles as the edge light (edgeTiles), under everything that stands on the cell.
   const WALL_SHADOW = {
-    res:    32,                                        // px per tile in the bake
     around: { blur: 0.10, drop: 0,    alpha: 0.20 },   // the soft dark all round — blur and drop in tiles
     under:  { blur: 0.18, drop: 0.14, alpha: 0.42 },   // the heavier shadow thrown below
   };
-  // One bake per board's set of walls, so two boards drawn by turns can never make each other rebake every frame.
-  const wallShadows = new WeakMap();
-  function wallShadowLayer() {
-    const s = state, W = s && s.walls;
-    if (!W || !W.size || !(COLS > 0) || !(ROWS > 0)) return null;
-    const key = COLS + "|" + ROWS + "|" + W.size + "|" + (s.holeKey || "");
-    const had = wallShadows.get(W);
-    if (had && had.key === key) return had.bmp || had.cv;
-    const R = WALL_SHADOW.res, cv = document.createElement("canvas");
-    cv.width = COLS * R; cv.height = ROWS * R;
-    const g = cv.getContext("2d"), far = 1e4;
-    for (const L of [WALL_SHADOW.around, WALL_SHADOW.under]) {
-      // The walls drawn far off to the left and only their shadow brought back over the board.
-      g.save();
-      g.shadowColor = "rgba(0,0,0," + L.alpha + ")"; g.shadowBlur = L.blur * R;
-      g.shadowOffsetX = far; g.shadowOffsetY = L.drop * R;
-      g.fillStyle = "#000"; g.beginPath();
-      for (const wk of W) { const i = wk.indexOf(","); g.rect(+wk.slice(0, i) * R - far, +wk.slice(i + 1) * R, R, R); }
-      g.fill("nonzero");
-      g.restore();
-    }
-    if (s.holeLoops && s.holeLoops.length) {
-      g.globalCompositeOperation = "destination-out";
-      g.beginPath(); holePath(g, 0, 0, R, s.holeLoops); g.fill("nonzero");
-      g.globalCompositeOperation = "source-over";
-    }
-    const entry = { cv, key, bmp: null };
-    wallShadows.set(W, entry);
-    // Handed to the GPU as an ImageBitmap once it is ready — a canvas as a drawImage source can be copied every frame.
-    if (typeof createImageBitmap === "function") createImageBitmap(cv).then(b => { entry.bmp = b; }, () => {});
-    return cv;
-  }
   let wallLayer = null, wallLayerDirty = true;
   function markWallLayerDirty() { wallLayerDirty = true; }
   // The walls are watching. They cannot go into the baked wall layer — that is drawn once per
@@ -21533,15 +21595,15 @@
       }
       ctx.restore();
     }
-    // ...and the level's colour just inside its edge. The sharp half of that light — the band and the
-    // sparks — goes down at the start of the board itself (draw), so every level item stands on it too.
+    // ...and the light just inside its edge, and the walls' shadows, off their tiles (edgeTiles). The sparks go down at the
+    // start of the board itself (draw), so every level item stands on them too.
     _innerWhite = !bgNoSky;
     if (!bgNoSky) boardInnerGlow(bx, by, ts, "colour");
   }
   // THE QUILT'S INNER GLOW. A SHARP white light just inside the board's edge — bright right at the
   // edge and gone within a fraction of a cell — on all four sides, each strip cut to a mitre at the
-  // corners so no two of them overlap and double up there. Gradients rather than a blur, so it stays
-  // crisp at any zoom and costs four fills. Then SPARKS — the game's standard one, in
+  // corners so no two of them overlap and double up there. Painted once for each kind of cell a board
+  // has, and stamped (edgeTiles). Then SPARKS — the game's standard one, in
   // the Tileverse's blue — rolling slowly round the quilt's outline in ONE direction, at the same speed in tiles everywhere,
   // turning by the distance they have come. The outline is taken as SHAPES, not sides (quiltShapes): the board's edge,
   // notched wherever a hole reaches it, is one; the rim of each hole inside it is another. Each shape carries sparks in
@@ -21657,6 +21719,135 @@
   // quilt's own cells, so a run that turns a corner stays one shape. A hole's rim is turned to run the way the holes'
   // outline does, as its sparks always have. Sides in pixels, each with the distance round the shape to its start (`at`),
   // and the whole length `P`. Traced again only when the holes change.
+  // THE EDGE LIGHT AND THE WALLS' SHADOWS, AS TILES. Both are soft, both reach less than a cell, and neither moves. So what
+  // either puts on a cell depends on nothing but that cell and its eight neighbours — which of them are OPEN (a hole, a
+  // crumble, off the board), which are WALLS, and which are ground — and every combination a board actually has is painted
+  // once, into an atlas, and stamped wherever it falls. A cell with nothing open or walled round it gets nothing, which is
+  // most of any board.
+  //
+  // Painted as fields, pixel by pixel, rather than as the strips and strokes they replace — and to the same shapes:
+  //   · the light is each band's fall-off (BOARD_INNER) against the distance to the nearest open cell, measured square, so
+  //     it is square-cornered round every corner as the mitred strips and strokes were: the level's colour, then the sharp
+  //     edge in the Tileverse's blue over it;
+  //   · the shadow is every wall's square blurred exactly as a canvas shadow blurs (a Gaussian, sigma half the blur) and
+  //     dropped, summed over the walls round the cell — touching walls are still one structure, since the blur of squares
+  //     that do not overlap is the sum of their blurs — the soft dark all round, then the heavier one below over it.
+  // Each tile carries a couple of pixels past its cell, so no seam shows where two meet. Tiles are painted as their cells
+  // first come on screen, a few dozen a frame at most.
+  const EDGE_TILE = { pad: 2, perRow: 8, bakePerFrame: 48 };
+  let _edgeTiles = null;
+  const _erf = (x) => {
+    const sg = x < 0 ? -1 : 1, a = Math.abs(x), t = 1 / (1 + 0.3275911*a);
+    return sg * (1 - ((((1.061405429*t - 1.453152027)*t + 1.421413741)*t - 0.284496736)*t + 0.254829592)*t*Math.exp(-a*a));
+  };
+  const _gaussSpan = (lo, hi, sigma) => 0.5 * (_erf(hi / (sigma*Math.SQRT2)) - _erf(lo / (sigma*Math.SQRT2)));   // N(0,sigma) in [lo, hi]
+  const _fall = (stops, u) => {
+    for (let i = 1; i < stops.length; i++) {
+      const [p0, a0] = stops[i - 1], [p1, a1] = stops[i];
+      if (u <= p1) return a0 + (a1 - a0) * ((u - p0) / Math.max(1e-6, p1 - p0));
+    }
+    return stops[stops.length - 1][1];
+  };
+  // The atlas for the look in force (sizes, colours, the two blocks), and which tile each cell of this board wears.
+  function edgeTileSet() {
+    const s = state, B = BOARD_INNER, WS = WALL_SHADOW;
+    const tpx = Math.max(8, Math.round(cell * Math.min(dpr || 1, 2)));
+    const vivid = s.bgTheme && s.bgTheme.colors ? innerVivid(s.bgTheme) : null, blue = hexRGB(tvBlueHex());
+    const look = [tpx, vivid ? vivid.join(",") : "-", blue.join(","), B.w, B.a, B.cw, B.ca,
+                  WS.around.blur, WS.around.drop, WS.around.alpha, WS.under.blur, WS.under.drop, WS.under.alpha].join("|");
+    let E = _edgeTiles;
+    if (!E || E.look !== look) E = _edgeTiles = { look, tpx, vivid, blue, tiles: new Map(), pages: [], used: 0 };
+    const holeKey = s.holeKey || "", wallN = s.walls ? s.walls.size : 0;
+    if (E.cols !== COLS || E.rows !== ROWS || E.holeKey !== holeKey || E.walls !== s.walls || E.wallN !== wallN) {
+      const open = new Set([...(s.holes || []), ...(s.singularity || [])]);
+      const at = (c, r) => (c < 0 || r < 0 || c >= COLS || r >= ROWS || open.has(key(c, r))) ? 2
+                         : (s.walls && s.walls.has(key(c, r)) ? 1 : 0);
+      E.keys = new Array(COLS * ROWS).fill(null);
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+        if (at(c, r) === 2) continue;
+        let k = "", any = false;
+        for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) { const v = at(c + dc, r + dr); if (v) any = true; k += v; }
+        if (any) E.keys[r*COLS + c] = k;
+      }
+      Object.assign(E, { cols: COLS, rows: ROWS, holeKey, walls: s.walls, wallN });
+    }
+    return E;
+  }
+  // One tile: `k` is the nine cells round it, row by row, 0 ground, 1 wall, 2 open. Null when it has nothing on it.
+  function edgeTile(E, k) {
+    const P = EDGE_TILE.pad, n = E.tpx, T = n + 2*P, B = BOARD_INNER, WS = WALL_SHADOW;
+    const open = [], walls = [];
+    for (let i = 0; i < 9; i++) {
+      const o = [(i % 3) - 1, ((i / 3) | 0) - 1];
+      if (k[i] === "2") open.push(o); else if (k[i] === "1") walls.push(o);
+    }
+    const cStops = [[0, B.ca], [0.30, B.ca*0.55], [0.70, B.ca*0.12], [1, 0]];   // the level's colour
+    const wStops = [[0, B.a], [0.18, B.a*0.45], [0.55, B.a*0.08], [1, 0]];      // ...and the sharp edge over it
+    // The shadow is separable: each wall's blur across times its blur down, so both are worked out once per column and
+    // once per row, for each of the three places a neighbouring wall can be.
+    const across = (sig) => [-1, 0, 1].map(wc => { const a = new Float64Array(T);
+      for (let i = 0; i < T; i++) { const x = (i - P + 0.5) / n; a[i] = _gaussSpan(wc - x, wc + 1 - x, sig); } return a; });
+    const down = (sig, drop) => [-1, 0, 1].map(wr => { const a = new Float64Array(T);
+      for (let j = 0; j < T; j++) { const y = (j - P + 0.5) / n; a[j] = _gaussSpan(wr + drop - y, wr + drop + 1 - y, sig); } return a; });
+    const sA = WS.around.blur / 2, sU = WS.under.blur / 2;
+    const XA = walls.length ? across(sA) : null, YA = walls.length ? down(sA, WS.around.drop) : null;
+    const XU = walls.length ? across(sU) : null, YU = walls.length ? down(sU, WS.under.drop) : null;
+    const img = new ImageData(T, T), D = img.data, vc = E.vivid, bl = E.blue;
+    let lit = 0;
+    for (let j = 0; j < T; j++) {
+      const y = (j - P + 0.5) / n;
+      for (let i = 0; i < T; i++) {
+        const x = (i - P + 0.5) / n;
+        let r = 0, g = 0, b = 0, a = 0;
+        if (open.length) {
+          let d = Infinity;
+          for (const [oc, orow] of open) {
+            const ex = Math.max(oc - x, 0, x - oc - 1), ey = Math.max(orow - y, 0, y - orow - 1), e = ex > ey ? ex : ey;
+            if (e < d) d = e;
+          }
+          if (vc && d < B.cw) { a = _fall(cStops, d / B.cw); r = vc[0]; g = vc[1]; b = vc[2]; }
+          if (d < B.w) {
+            const w = _fall(wStops, d / B.w);
+            if (w > 0) { const o = w + a*(1 - w); r = (bl[0]*w + r*a*(1 - w))/o; g = (bl[1]*w + g*a*(1 - w))/o; b = (bl[2]*w + b*a*(1 - w))/o; a = o; }
+          }
+        }
+        if (walls.length) {
+          let s1 = 0, s2 = 0;
+          for (const [wc, wr] of walls) { s1 += XA[wc + 1][i] * YA[wr + 1][j]; s2 += XU[wc + 1][i] * YU[wr + 1][j]; }
+          const a1 = WS.around.alpha * Math.min(1, s1), a2 = WS.under.alpha * Math.min(1, s2), sh = a2 + a1*(1 - a2);
+          if (sh > 0) { const o = sh + a*(1 - sh), keep = a*(1 - sh)/o; r *= keep; g *= keep; b *= keep; a = o; }
+        }
+        const A8 = Math.round(a * 255);
+        if (A8) { const p = (j*T + i) * 4; D[p] = r; D[p + 1] = g; D[p + 2] = b; D[p + 3] = A8; lit++; }
+      }
+    }
+    if (!lit) { E.tiles.set(k, null); return null; }
+    const per = EDGE_TILE.perRow, slot = E.used++, pg = Math.floor(slot / (per*per)), local = slot % (per*per);
+    let page = E.pages[pg];
+    if (!page) { page = E.pages[pg] = document.createElement("canvas"); page.width = page.height = per * T; }
+    const sx = (local % per) * T, sy = Math.floor(local / per) * T;
+    page.getContext("2d").putImageData(img, sx, sy);
+    const t = { page, sx: sx + P, sy: sy + P, n };
+    E.tiles.set(k, t);
+    return t;
+  }
+  // Every cell on screen, stamped with its tile. The board's origin is at (0,0) of the current transform and at (bx, by) on
+  // the screen.
+  function edgeTiles(bx, by) {
+    if (!state) return;
+    const E = edgeTileSet();
+    const c0 = Math.max(0, Math.floor(-bx / cell)), c1 = Math.min(COLS - 1, Math.floor((viewW - bx) / cell));
+    const r0 = Math.max(0, Math.floor(-by / cell)), r1 = Math.min(ROWS - 1, Math.floor((viewH - by) / cell));
+    let budget = EDGE_TILE.bakePerFrame;
+    const sm = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = true;
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+      const k = E.keys[r*COLS + c]; if (!k) continue;
+      let t = E.tiles.get(k);
+      if (t === undefined) { if (budget <= 0) continue; budget--; t = edgeTile(E, k); }
+      if (t) ctx.drawImage(t.page, t.sx, t.sy, t.n, t.n, c*cell, r*cell, cell, cell);
+    }
+    ctx.imageSmoothingEnabled = sm;
+  }
   let _quiltShapes = null;
   function quiltShapes() {
     const s = state, ck = COLS + "x" + ROWS + "@" + cell + "|" + ((s && s.holeKey) || "");
@@ -21680,7 +21871,9 @@
         sides.push({ x0: x0*cell, y0: y0*cell, dx: (x1 - x0)*cell, dy: (y1 - y0)*cell, len, at });
         at += len;
       }
-      return { loop, sides, P: at };
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;      // ...and its bounds, to skip it off screen
+      for (const [x, y] of loop) { x0 = Math.min(x0, x*cell); x1 = Math.max(x1, x*cell); y0 = Math.min(y0, y*cell); y1 = Math.max(y1, y*cell); }
+      return { loop, sides, P: at, x0, y0, x1, y1 };
     });
     _quiltShapes = { key: ck, shapes };
     return shapes;
@@ -21688,86 +21881,21 @@
   let _innerWhite = false;        // set by the backdrop when the edge is up this frame; the white pass reads it
   function boardInnerGlow(bx, by, ts, part) {
     if (!(cell > 2) || !(worldW > 0) || !(worldH > 0)) return;
-    const W = worldW, H = worldH;
-    // One band of light round the inside of the edge, `gw` deep, in `rgb`, its strength at each stop
-    // given as [position, alpha]. Four mitred strips, so no two of them overlap at a corner.
-    const band = (gw, rgb, stops) => {
-      gw = Math.min(gw, W/2, H/2);
-      const edges = [   // [strip polygon, gradient from, gradient to]
-        [[[0,0],[W,0],[W-gw,gw],[gw,gw]],   [0,0], [0,gw]],       // top
-        [[[W,0],[W,H],[W-gw,H-gw],[W-gw,gw]], [W,0], [W-gw,0]],   // right
-        [[[W,H],[0,H],[gw,H-gw],[W-gw,H-gw]], [0,H], [0,H-gw]],   // bottom
-        [[[0,H],[0,0],[gw,gw],[gw,H-gw]],   [0,0], [gw,0]],       // left
-      ];
-      const tone = "rgba(" + rgb.join(",") + ",";
-      for (const [poly, a, b] of edges) {
-        const gd = ctx.createLinearGradient(a[0], a[1], b[0], b[1]);
-        for (const [at, al] of stops) gd.addColorStop(at, tone + al.toFixed(3) + ")");
-        ctx.beginPath();
-        poly.forEach(([px, py], i) => i ? ctx.lineTo(px, py) : ctx.moveTo(px, py));
-        ctx.closePath();
-        ctx.fillStyle = gd; ctx.fill();
-      }
-    };
-    // ...and the same band round the inside of every HOLE — on the quilt's side of its outline, which is the side the light
-    // is on at the board's edge. Built as strokes of the outline, widest first, each clipped to the quilt, so the fall-off
-    // follows the outline round every corner and a pair of joined holes is lit as the one shape it is. Each stroke's alpha
-    // is worked out so that the ones stacked over a point add up to the band's own strength at that depth.
-    const loops = (state && state.holeLoops) || [];
-    const clipQuilt = () => {                                 // the quilt, less its holes
-      if (!loops.length) return;
-      ctx.beginPath(); ctx.rect(0, 0, W, H); holePath(ctx, 0, 0, cell, loops); ctx.clip("evenodd");
-    };
-    // One band as strokes of a path (`addPath` puts it on), widest first; the caller's clip decides which side it lands on.
-    const strokeBand = (addPath, gw, rgb, stops) => {
-      const N = 10;
-      const alphaAt = x => {
-        for (let i = 1; i < stops.length; i++) {
-          const [p0, a0] = stops[i - 1], [p1, a1] = stops[i];
-          if (x <= p1) return a0 + (a1 - a0)*((x - p0) / Math.max(1e-6, p1 - p0));
-        }
-        return stops[stops.length - 1][1];
-      };
-      const want = []; for (let k = 1; k <= N; k++) want[k] = Math.min(0.999, Math.max(0, alphaAt((k - 0.5)/N)));
-      ctx.save();
-      ctx.lineJoin = "miter"; ctx.miterLimit = 4; ctx.lineCap = "butt";
-      ctx.beginPath(); addPath();
-      for (let k = N; k >= 1; k--) {
-        const a = k === N ? want[N] : 1 - (1 - want[k]) / Math.max(1e-6, 1 - want[k + 1]);
-        if (!(a > 0.002)) continue;
-        ctx.strokeStyle = "rgba(" + rgb.join(",") + "," + a.toFixed(4) + ")";
-        ctx.lineWidth = 2*gw*k/N;                            // reaching `gw` k/N of the way in, either side (the far side is clipped off)
-        ctx.stroke();
-      }
-      ctx.restore();
-    };
-    const holeBand = (gw, rgb, stops) => { if (loops.length) strokeBand(() => holePath(ctx, 0, 0, cell, loops), gw, rgb, stops); };
+    // The light itself — both bands, round the board's edge and round every hole — and the walls' shadows are TILES now
+    // (edgeTiles), stamped in the colour pass. The white pass is the sparks alone.
     ctx.save();
     ctx.translate(bx, by);
-    const T = state && state.bgTheme, vivid = T && T.colors ? innerVivid(T) : null;
-    if (part === "colour") {
-      if (vivid) {                                           // the level's colour, at full saturation, under the level
-        const CA = BOARD_INNER.ca, stops = [[0, CA], [0.30, CA*0.55], [0.70, CA*0.12], [1, 0]];
-        ctx.save(); clipQuilt();
-        band(cell * BOARD_INNER.cw, vivid, stops);
-        holeBand(cell * BOARD_INNER.cw, vivid, stops);
-        ctx.restore();
-      }
-      ctx.restore();
-      return;
-    }
-    // the sharp edge, right at the boundary, over the level — in the Tileverse's blue, as are its sparks
-    const A = BOARD_INNER.a, edgeCol = tvBlueHex(), edgeStops = [[0, A], [0.18, A*0.45], [0.55, A*0.08], [1, 0]];
-    ctx.save(); clipQuilt();
-    band(cell * BOARD_INNER.w, hexRGB(edgeCol), edgeStops);
-    holeBand(cell * BOARD_INNER.w, hexRGB(edgeCol), edgeStops);
-    ctx.restore();
+    if (part === "colour") { edgeTiles(bx, by); ctx.restore(); return; }
+    const edgeCol = tvBlueHex();
     // THE SPARKS, shape by shape (quiltShapes): so many to a shape for its length, evenly spaced, all travelling at `tps`,
     // and each shrinking to nothing at every corner it comes to. Each shape is set off from the others so none run in step.
     const sz = cell * BOARD_INNER.spark, rollR = sz * TAB_SPARK_ROLL;
     const travelled = ts / 1000 * BOARD_INNER.tps * cell;
+    // ...only the ones on screen: a big board full of holes is a great many shapes, most of them out of sight
+    const vm = sz * 2 + ((state && state.shake) || 0);
+    const vx0 = camX - bx - vm, vx1 = camX - bx + viewW + vm, vy0 = camY - by - vm, vy1 = camY - by + viewH + vm;
     quiltShapes().forEach((S, si) => {
-      if (!(S.P > 0)) return;
+      if (!(S.P > 0) || S.x1 < vx0 || S.x0 > vx1 || S.y1 < vy0 || S.y0 > vy1) return;
       const n = Math.max(1, Math.round(S.P / cell / BOARD_INNER.sparkGap)), gap = S.P / n;
       const lead = ((si * 0.618) % 1) * gap;
       for (let j = 0; j < n; j++) {
@@ -21777,8 +21905,10 @@
         if (e.len / cell < BOARD_INNER.sparkMin - 1e-9) continue;    // too short a side to show one on
         const u = (d - e.at) / e.len, k = Math.sin(Math.PI * u);    // nothing at either corner of the side it is on
         if (k < 0.02) continue;
+        const px = e.x0 + e.dx*u, py = e.y0 + e.dy*u;
+        if (px < vx0 || px > vx1 || py < vy0 || py > vy1) continue;
         ctx.save();
-        ctx.translate(e.x0 + e.dx*u, e.y0 + e.dy*u);
+        ctx.translate(px, py);
         ctx.rotate(d / rollR);
         drawSpark(ctx, 0, 0, sz * k, ts, { col: edgeCol, seed: 0.11 + ((si*7 + j*3) % 11) * 0.083 });
         ctx.restore();
@@ -22665,10 +22795,10 @@
     s.beat += Math.max(0, adv);
   }
   const beatNow = () => (state && state.beat) || 0;
-  // THE MOVERS' BEAT: a quarter of a beat AHEAD of the runner's. Everything that swims or flies sets off on it, so each
-  // thrust starts a quarter beat before a tile clears and is well under way as it does — the traps and the jaws keep the
+  // THE MOVERS' BEAT: an eighth of a beat AHEAD of the runner's. Everything that swims or flies sets off on it, so each
+  // thrust starts an eighth of a beat before a tile clears and is under way as it does — the traps and the jaws keep the
   // beat itself (trapPhase, chompPhase).
-  const MOVE_LEAD = 0.25;
+  const MOVE_LEAD = 0.125;
   const moveBeat = () => beatNow() + MOVE_LEAD;
   const nextMoveBeat = () => Math.ceil(moveBeat() - 1e-9);      // the first whole movers' beat from now
   // A CHOMPER'S JAWS, ON THE BEAT: exactly the trap's bite (TRAP, trapPhase) — closed 2, opening ½, open 2, closing ½ and
@@ -22691,29 +22821,35 @@
           // the last thrust of a leg finish exactly on the end of the rail — it arrives at its
           // slowest, coasting out of a recovery, and only then turns.
           if (h.legN == null) { railLegSetup(h); h.b0 = nextMoveBeat(); }   // its first thrust waits for the beat
-          const k = Math.max(0, moveBeat() - h.b0), done = Math.floor(k);  // thrusts since the leg began, on the beat
+          const C = swimCycle(), k = Math.max(0, (moveBeat() - h.b0) / C), done = Math.floor(k);   // strokes since the leg began
           h.rowP = k - done;
           // A HOLE OPENED AHEAD. A crumble the runner has just taken away can land across a leg already under way. Each
           // time the monster arrives on a tile it looks at the next one, and if the ground has gone the leg is cut short
           // right here — which the lines below then finish exactly as they finish any leg.
+          const S = Math.max(1, h.stride || 1), span = Math.max(1, Math.abs(h.hi - h.lo)), sgn = h.dir > 0 ? 1 : -1;
           if (done > h.legDone && done < h.legN) {
             h.legDone = done;
-            const sp = h.hi - h.lo, sg = Math.sign(sp) * (h.dir > 0 ? 1 : -1);
-            const pc = Math.round(h.lo + sp * (h.legFrom + (h.dir > 0 ? 1 : -1) * h.legSpan * done / h.legN));
-            if (holeAt(...railTile(h, pc + sg))) { h.legN = done; h.legTo = (pc - h.lo) / sp; }
+            const sp = h.hi - h.lo, sg = Math.sign(sp) * sgn;
+            const from = done * S, pc = Math.round(h.lo + sp * (h.legFrom + sgn * from / span));
+            for (let j = 1, len = Math.min(S, h.legTiles - from); j <= len; j++) {
+              if (!holeAt(...railTile(h, pc + sg*j))) continue;
+              // ...the stroke it is starting stops on the tile before the hole, and the leg ends there
+              h.legTiles = from + j - 1; h.legN = done + (j > 1 ? 1 : 0); h.legTo = (pc + sg*(j - 1) - h.lo) / sp;
+              break;
+            }
           }
-          const prog = (done + railProgress(h.rowP)) / h.legN;
-          if (prog >= 1) {                          // that was the last stroke of the leg
+          if (done >= h.legN) {                     // that was the last stroke of the leg
             // Carry the overshoot into the new leg instead of dropping it. The old code reset
             // the stroke clock to zero at every turn, so each one quietly ate up to a frame —
             // the monster fell a little further behind its own beat on every length of the rail.
-            const b0 = h.b0 + h.legN;               // ...which ended on a beat: the next leg starts on it
+            const b0 = h.b0 + h.legN * C;           // ...which ended on a beat: the next leg starts on it
             h.t = h.legTo;
             h.dir = -h.dir;
             railLegSetup(h);
             h.b0 = b0;
           } else {
-            h.t = h.legFrom + (h.dir > 0 ? 1 : -1) * h.legSpan * prog;
+            const tiles = Math.min(h.legTiles, done * S) + Math.min(S, Math.max(0, h.legTiles - done * S)) * swimProgress(h.rowP);
+            h.t = h.legFrom + sgn * tiles / span;
           }
           const p = h.lo + (h.hi - h.lo) * h.t;
           h.pos = p;
@@ -22769,10 +22905,12 @@
           // and arrives coasting, instead of sliding across at a constant rate.
           // A hop IS one tile, so it is one thrust — see railLegSetup.
           if (h.b0 == null) h.b0 = nextMoveBeat();                          // it sets off on a beat
-          const hk = Math.max(0, moveBeat() - h.b0), hdone = Math.floor(hk);
+          const hk = Math.max(0, (moveBeat() - h.b0) / swimCycle()), hdone = Math.floor(hk);
           h.rowP = hk - hdone;
-          h.segT = Math.min(1, hdone + railProgress(h.rowP));            // one hop, one thrust, beat to beat
-          if (moveBeat() >= h.b0) monsterStroke(h, hdone);
+          h.segT = Math.min(1, hdone + swimProgress(h.rowP));            // one hop, one stroke
+          // Counted on the monster, not from its stroke clock: a hop IS one stroke, so `hdone` is 0 for every one of
+          // them, and keying the swish off that sounded the first hop and then nothing ever again.
+          if (moveBeat() >= h.b0) monsterStroke(h, h.hops || 0);
           // It is built with from === to and no destination yet. segT used to be seeded at 1
           // to force the first pick on the opening tick; now that segT is DERIVED from the
           // stroke clock that seed is overwritten, so ask the question directly instead. A
@@ -22780,35 +22918,57 @@
           // every frame — `held` tells the two apart, so a waiting one rows on the spot for a
           // hop and then tries again rather than freezing mid-stroke.
           const adrift = h.from[0] === h.to[0] && h.from[1] === h.to[1] && !h.held;
-          if (h.segT >= 1 || adrift) {
-            if (h.segT >= 1) h.b0 += 1;               // the next hop starts on the beat this one ended on
+          // A hop is one WHOLE stroke, not just the swim that carries it. `segT` is the TRAVEL, and the travel is over
+          // at the end of the swim — so ending the hop on segT alone restarted the stroke clock half a cycle early,
+          // `hk` clamped back to 0, and the REST and the TENSION were never reached. This is the one that hunts, and it
+          // never shuddered and never feathered its oars in; a stealth never faded out between thrusts either, since its
+          // fade reads the same clock. Waiting for the whole cycle is what a rail monster's leg already does.
+          //
+          // Where it IS does not change: segT is still the travel, it still arrives at the end of the swim and holds
+          // there through the rest and the tension, so it claims its new cell on exactly the beat it always did.
+          const spent = hdone >= 1;
+          if (spent || adrift) {
+            if (spent) { h.b0 += swimCycle() * hdone; h.hops = (h.hops || 0) + 1; }   // the next hop, on the beat this one ended on
             h.segT = 0; h.rowP = 0; h.from = h.to.slice(); h.held = false;
-            const taken = huntClaims(h);
-            let next = monsterHuntStep(h.from, taken);
-            if (!next) {
-              const opts = [], back = [];
-              for (const [dc, dr] of DIRS) {
-                const c = h.from[0] + dc, r = h.from[1] + dr;
-                if (!inBounds(c, r) || s.walls.has(key(c, r)) || s.stones.has(key(c, r)) || holeAt(c, r)) continue;
-                if (platformCell(c, r)) continue;      // ...solid to it here too, or it swims
-                                                       // through one the moment it loses him
-                if (taken.has(key(c, r))) continue;
-                (h.came && c === h.came[0] && r === h.came[1] ? back : opts).push([c, r]);
+            // A STROKE OF `stride` TILES: the route for the whole of it is picked as it starts, a tile at a time — each the
+            // way the chase says, or a wander when there is nothing to chase — and swum in the one thrust.
+            const taken = huntClaims(h), route = [h.from.slice()];
+            let came = h.came;
+            for (let n = 0; n < Math.max(1, h.stride || 1); n++) {
+              const cur = route[route.length - 1];
+              let next = monsterHuntStep(cur, taken);
+              if (!next) {
+                const opts = [], back = [];
+                for (const [dc, dr] of DIRS) {
+                  const c = cur[0] + dc, r = cur[1] + dr;
+                  if (!inBounds(c, r) || s.walls.has(key(c, r)) || s.stones.has(key(c, r)) || holeAt(c, r)) continue;
+                  if (platformCell(c, r)) continue;      // ...solid to it here too, or it swims
+                                                         // through one the moment it loses him
+                  if (taken.has(key(c, r))) continue;
+                  (came && c === came[0] && r === came[1] ? back : opts).push([c, r]);
+                }
+                const pick = (opts.length ? opts : back);
+                if (pick.length) next = pick[Math.floor(Math.random()*pick.length)];
               }
-              const pick = (opts.length ? opts : back);
-              if (pick.length) next = pick[Math.floor(Math.random()*pick.length)];
+              if (!next) break;
+              came = cur; route.push(next);
             }
             // Hemmed in by the others: hold this square for a hop rather than barge through one
             // of them. Whichever of them moves first frees a way on.
-            if (next) { h.came = h.from.slice(); h.to = next; }
-            else      { h.to = h.from.slice(); h.held = true; }
+            h.route = route;
+            if (route.length > 1) { h.came = route[route.length - 2].slice(); h.to = route[route.length - 1].slice(); }
+            else                  { h.to = h.from.slice(); h.held = true; }
           }
-          const fx = h.from[0] + (h.to[0]-h.from[0])*h.segT, fy = h.from[1] + (h.to[1]-h.from[1])*h.segT;
+          // ...and where it is along that route, a tile of it at a time
+          const R = h.route && h.route.length > 1 ? h.route : [h.from, h.to];
+          const along = h.segT * (R.length - 1), i = Math.max(0, Math.min(R.length - 2, Math.floor(along))), f = along - i;
+          const RA = R[i], RB = R[i + 1] || RA;
+          const fx = RA[0] + (RB[0]-RA[0])*f, fy = RA[1] + (RB[1]-RA[1])*f;
           h.wx = (fx+0.5)*cell; h.wy = (fy+0.5)*cell;
           h.cc = Math.round(fx); h.cr = Math.round(fy);
           // Which way it is swimming decides where the banks sit and which end the eyes lead
           // toward. Held from the last real move, so it does not flip about while stationary.
-          const hdx = h.to[0] - h.from[0], hdy = h.to[1] - h.from[1];
+          const hdx = RB[0] - RA[0], hdy = RB[1] - RA[1];
           if (hdy !== 0)      { h.headSplit = "v"; h.headDir = hdy < 0 ? -1 : 1; }
           else if (hdx !== 0) { h.headSplit = "h"; h.headDir = hdx < 0 ? -1 : 1; }
           if (hdx !== 0) h.faceX = hdx < 0 ? -1 : 1;
@@ -22824,42 +22984,47 @@
         const at = h.seg;
         const nextIdx = h.loop ? (at + h.mdir + h.path.length) % h.path.length   // a loop can be walked backwards now: see pathTurn
                                : Math.max(0, Math.min(h.path.length - 1, at + h.mdir));
-        if (h.b0 == null) {                           // its first thrust waits for the beat, from the tile it starts on
+        const S = Math.max(1, h.stride || 1);
+        // A walker swims a RUN: from tile `tile0` of its leg, starting on beat `b0`, in strokes of S tiles, to the leg's end
+        // — or to `lim`, the last tile before a hole. Its first run waits for the beat, from the tile it starts on.
+        if (h.b0 == null) {
           const A1 = h.path[at], B1 = h.path[nextIdx], n1 = (Math.abs(B1[0]-A1[0]) + Math.abs(B1[1]-A1[1])) || 1;
-          h.kMin = Math.round((h.segT || 0) * n1); h.b0 = nextMoveBeat() - h.kMin;
+          h.tile0 = Math.round((h.segT || 0) * n1); h.lim = null; h.seen = -1; h.b0 = nextMoveBeat();
         }
-        if (h.waitB != null && moveBeat() < h.waitB) { /* turned back at a hole on a waypoint: off on the next beat */ }
-        else if (nextIdx !== at) {
+        if (nextIdx !== at) {
           const A0 = h.path[at], B0 = h.path[nextIdx];
           const segCells = (Math.abs(B0[0]-A0[0]) + Math.abs(B0[1]-A0[1])) || 1;
-          // HOLES TURN IT ROUND. Whenever it stands on a tile — setting off, and each time it crosses into another — it
-          // looks at the next tile of the leg, and where the ground has gone it goes back the way it came (pathTurn).
           const ux = Math.sign(B0[0]-A0[0]), uy = Math.sign(B0[1]-A0[1]);
-          const gone = (k) => !!PK && k < segCells && holeAt(A0[0] + ux*(k+1), A0[1] + uy*(k+1));
-          const k0 = h.segT * segCells, kr = Math.round(k0);
-          const turned = Math.abs(k0 - kr) < 1e-6 && gone(kr);
-          if (turned) pathTurn(h, kr, segCells, nextIdx);
-          // A rower crosses a leg in a whole number of thrusts, positioned from its stroke
-          // clock; anything else slides along at a constant rate as it always did.
-          if (turned) {
-            // it spends this tick turning
-          } else {
-            // EVERY walker thrusts, a tile a beat — the jaw-walker too, which used to glide at a constant rate — so each
-            // lurches forward as a tile clears. Only the rowers make the stroke's swish.
-            const sk = Math.max(h.kMin || 0, moveBeat() - h.b0), sdone = Math.floor(sk);
-            h.rowP = sk - sdone;
-            h.segT = Math.min(1, (sdone + railProgress(h.rowP)) / segCells);
-            if (PK && PK.look === "rail" && moveBeat() - h.b0 >= (h.kMin || 0)) monsterStroke(h, sdone);
+          const C = swimCycle(), kk = (moveBeat() - h.b0) / C;
+          // HOLES TURN IT ROUND. As each stroke begins it looks along the tiles that stroke will cross, and where the ground
+          // has gone the run ends on the tile before; if that is the tile it is on, it goes back the way it came (pathTurn).
+          let turned = false;
+          if (PK && kk >= 0) {
+            const lim = h.lim == null ? segCells : h.lim, d = Math.floor(kk), from = h.tile0 + d*S;
+            if (d > h.seen && from < lim) {
+              h.seen = d;
+              for (let j = 1, len = Math.min(S, lim - from); j <= len; j++)
+                if (holeAt(A0[0] + ux*(from + j), A0[1] + uy*(from + j))) { h.lim = from + j - 1; break; }
+              if (h.lim === from) { pathTurn(h, from, segCells, nextIdx, h.b0 + d * C); turned = true; }
+            }
           }
-          const k1 = Math.floor(h.segT * segCells + 1e-9);
-          if (!turned && h.segT < 1 && k1 > Math.floor(k0 + 1e-9) && gone(k1)) pathTurn(h, k1, segCells, nextIdx);
-          if (h.segT >= 1) {
-            h.b0 += segCells; h.kMin = 0;              // the leg ended on a beat, and the next sets off on it — no dwell
-            h.segT = 0; h.rowP = 0;
-            h.seg = nextIdx;
-            if (!h.loop) {                          // ping-pong: flip at the ends
-              if (h.seg >= h.path.length - 1) h.mdir = -1;
-              else if (h.seg <= 0) h.mdir = 1;
+          if (!turned) {
+            const lim = h.lim == null ? segCells : h.lim, rem = Math.max(0, lim - h.tile0);
+            const runN = Math.max(1, Math.ceil(rem / S)), k = Math.max(0, kk), sd = Math.floor(k), rp = k - sd;
+            h.rowP = rp;
+            const tiles = sd >= runN ? lim
+                        : h.tile0 + Math.min(rem, sd*S) + Math.min(S, Math.max(0, rem - sd*S)) * swimProgress(rp);
+            h.segT = Math.min(1, tiles / segCells);
+            if (PK && PK.look === "rail" && kk >= 0) monsterStroke(h, sd);
+            if (sd >= runN) {                            // the run is over, on a beat
+              const B = h.b0 + runN * C;
+              if (lim >= segCells) {                     // ...at the waypoint: the next leg sets off on the same beat
+                h.seg = nextIdx; h.segT = 0; h.tile0 = 0; h.lim = null; h.seen = -1; h.rowP = 0; h.b0 = B;
+                if (!h.loop) {                          // ping-pong: flip at the ends
+                  if (h.seg >= h.path.length - 1) h.mdir = -1;
+                  else if (h.seg <= 0) h.mdir = 1;
+                }
+              } else pathTurn(h, lim, segCells, nextIdx, B);   // ...short of a hole: back the way it came
             }
           }
         }
@@ -25236,6 +25401,9 @@
     },
     // cosmos-lab.html drives this: the sky's own block, live.
     cosmos: (patch) => { if (patch) Object.assign(COSMOS, patch); applyCosmos(); return { ...COSMOS }; },
+    // monster-lab.html drives these: how a swimmer swims, and the family's own block behind it.
+    swim: (patch) => { if (patch) Object.assign(SWIM, patch); return { ...SWIM }; },
+    monsters: (patch) => { if (patch) Object.assign(MONSTER, patch); return { ...MONSTER }; },
     // ...and the standard spark, live, for whatever lab tunes it.
     spark: (patch) => { if (patch) Object.assign(SPARK, patch); return { ...SPARK }; },
     // ...and the glow round the map's and the level's edges.

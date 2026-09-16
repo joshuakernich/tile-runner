@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta http-equiv="Cache-Control" content="no-store"/>
+<title>Tile Runner — Monster Swim Lab</title>
+<style>
+  :root{ --bg:#12102a; --panel:#1b1838; --line:#2b2850; --ink:#cfe9ff; --accent:#7dd0ff; --beat:#49d47c; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:10px 14px;border-bottom:1px solid var(--line);
+         display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;}
+  header h1{font-size:15px;margin:0 12px 0 0;font-weight:700;letter-spacing:.5px;}
+  .app{display:grid;grid-template-columns:min(46vw,560px) minmax(0,1fr);gap:14px;padding:14px;align-items:start;}
+  /* Two columns of cards: every setting in sight at once, which is the point of a tuning page. */
+  .rail{position:sticky;top:14px;display:grid;grid-template-columns:1fr 1fr;gap:12px;align-content:start;
+        max-height:96vh;overflow:auto;}
+  .rail .card{margin:0;min-width:0;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;}
+  .card h2{font-size:11px;letter-spacing:1px;opacity:.55;margin:0 0 8px;
+           font-weight:700;text-transform:uppercase;}
+  .row{display:flex;align-items:center;gap:6px;margin:7px 0;font-size:12px;}
+  .row label{flex:0 0 78px;opacity:.85;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .row input[type=range]{flex:1;min-width:0;accent-color:var(--accent);}
+  .row output{flex:0 0 38px;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent);}
+  button{background:#233;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+         padding:8px 10px;cursor:pointer;font:inherit;font-size:12px;width:100%;
+         white-space:normal;line-height:1.35;}
+  button:hover{border-color:var(--accent);}
+  button.prim{background:#1c6;color:#04120a;font-weight:700;border:none;}
+  .presets{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+  .presets button{padding:6px 0;font-size:11px;}
+  .hint{font-size:11px;line-height:1.5;opacity:.65;}
+  /* a line of its own under each oar setting, tucked under the slider it belongs to */
+  .desc{font-size:10px;line-height:1.3;opacity:.5;margin:-3px 0 8px 2px;}
+  .stage{display:flex;flex-direction:column;gap:8px;align-items:center;min-width:0;}
+  iframe{width:100%;max-width:520px;height:74vh;border:1px solid var(--line);
+         border-radius:12px;background:#000;display:block;}
+  .legend{font-size:11px;opacity:.7;line-height:1.6;max-width:520px;}
+  code{color:var(--accent);}
+  .warn{color:#ffd24a;}
+  /* THE BEAT LAMP: the runner's own beat, off the game's clock — the stroke should land on it. */
+  .beatbar{display:flex;align-items:center;gap:10px;width:100%;max-width:520px;}
+  .lamp{width:16px;height:16px;border-radius:50%;background:#20305a;box-shadow:0 0 0 1px var(--line) inset;}
+  .lamp.on{background:var(--beat);box-shadow:0 0 12px var(--beat);}
+  .track{position:relative;flex:1;height:14px;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:#161436;}
+  .track i{position:absolute;top:0;bottom:0;width:2px;background:#3b3a6b;}
+  .track b{position:absolute;top:0;bottom:0;width:3px;background:var(--accent);border-radius:2px;}
+  .track u{position:absolute;top:0;bottom:0;background:rgba(73,212,124,.22);}
+  /* where the travel is all but done (95%): past this the body is barely moving, however long the swim runs on */
+  .track s{position:absolute;top:0;bottom:0;width:2px;background:#ffd24a;}
+  .beatnum{font-size:11px;opacity:.7;min-width:118px;text-align:right;}
+</style>
+</head>
+<body>
+<header>
+  <h1>TILE RUNNER · MONSTER SWIM</h1>
+  <span class="hint" id="status">booting the game…</span>
+</header>
+
+<div class="app">
+  <aside class="rail">
+    <div class="card">
+      <h2>The stroke, in beats</h2>
+      <div class="row"><label for="swim">swim</label><input type="range" id="swim" min="0.25" max="3" step="0.05" value="0.4"><output id="swimOut"></output></div>
+      <div class="row"><label for="rest">rest</label><input type="range" id="rest" min="0" max="2" step="0.05" value="0.3"><output id="restOut"></output></div>
+      <div class="row"><label for="tension">tension</label><input type="range" id="tension" min="0" max="2" step="0.05" value="0.3"><output id="tensionOut"></output></div>
+      <div class="row"><label for="ease">ease out</label><input type="range" id="ease" min="1" max="6" step="0.1" value="2"><output id="easeOut"></output></div>
+      <div class="presets" style="margin-top:8px">
+        <button data-p="1,0.5,0.5">1 · ½ · ½</button>
+        <button data-p="1,0,0">all swim</button>
+        <button data-p="0.5,0.25,0.25">half time</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>The body</h2>
+      <div class="row"><label for="size">size</label><input type="range" id="size" min="0.3" max="1" step="0.01" value="0.75"><output id="sizeOut"></output></div>
+      <div class="row"><label for="tremble">tremble</label><input type="range" id="tremble" min="0" max="0.06" step="0.001" value="0.023"><output id="trembleOut"></output></div>
+      <div class="row"><label for="trembleHz">tremble Hz</label><input type="range" id="trembleHz" min="4" max="60" step="1" value="23"><output id="trembleHzOut"></output></div>
+      <div class="row"><label for="surge">surge</label><input type="range" id="surge" min="0" max="0.2" step="0.005" value="0.03"><output id="surgeOut"></output></div>
+    </div>
+
+    <div class="card">
+      <h2>The oars</h2>
+      <div class="row"><label for="oars">oars</label><input type="range" id="oars" min="1" max="6" step="1" value="3"><output id="oarsOut"></output></div>
+      <div class="desc">oars to a bank, two banks to an animal</div>
+      <div class="row"><label for="oarOuter">outer</label><input type="range" id="oarOuter" min="0.01" max="0.12" step="0.005" value="0.065"><output id="oarOuterOut"></output></div>
+      <div class="desc">radius: edge to point, share of a tile</div>
+      <div class="row"><label for="oarMid">middle</label><input type="range" id="oarMid" min="0.01" max="0.12" step="0.005" value="0.1"><output id="oarMidOut"></output></div>
+      <div class="desc">the big one, on an odd bank only</div>
+      <div class="row"><label for="oarFeather">feather</label><input type="range" id="oarFeather" min="0" max="1" step="0.01" value="0"><output id="oarFeatherOut"></output></div>
+      <div class="desc">how small swinging forward; 1 is not at all</div>
+    </div>
+
+    <div class="card">
+      <h2>The board</h2>
+      <div class="row"><label for="cps">pace</label><input type="range" id="cps" min="0.3" max="2.5" step="0.05" value="1"><output id="cpsOut"></output></div>
+      <div class="row"><label for="step">spaces</label><input type="range" id="step" min="1" max="4" step="1" value="1"><output id="stepOut"></output></div>
+      <div class="row"><label for="cols">tile size</label><input type="range" id="cols" min="4" max="9" step="1" value="7"><output id="colsOut"></output></div>
+      <button id="reboard" style="margin-top:6px">Reset</button>
+    </div>
+
+    <div class="card">
+      <h2>Export</h2>
+      <button class="prim" id="copy">Copy SWIM block</button>
+    </div>
+
+    <div class="card">
+      <h2>Reload</h2>
+      <button id="restoreBtn">Restore my saved settings</button>
+      <button id="resetBtn" style="margin-top:6px">Reset all to shipped</button>
+      <button id="reload" style="margin-top:6px">Reload the game</button>
+    </div>
+  </aside>
+
+  <div class="stage">
+    <div class="beatbar">
+      <span class="lamp" id="lamp"></span>
+      <span class="track" id="track"><u id="swimSpan"></u><s id="landMark"></s><b id="head"></b></span>
+      <span class="beatnum" id="beatNum">—</span>
+    </div>
+    <iframe id="game" src="about:blank" title="Tile Runner"></iframe>
+  </div>
+</div>
+
+<script>
+// The lab drives the REAL game in the frame rather than drawing a monster of its own: the game keeps
+// its art in one file, and a lab with its own copy of the animal is a lab that quietly goes stale.
+const $ = id => document.getElementById(id);
+const frame = $("game");
+let W = null;
+// The game is a PWA with a service worker, which will happily hand this frame a cached index.html —
+// a lab tuning code the file on disk no longer contains. A unique query per load cannot match it.
+const GAME_SRC = () => "index.html?lab=" + Date.now();
+
+const SWIM_KEYS = ["swim", "rest", "tension", "ease", "size", "tremble", "trembleHz", "surge",
+                   "oars", "oarOuter", "oarMid", "oarFeather"];
+let SHIPPED = null;                 // the blocks as the game booted with them, for Reset
+
+// A board of swimmers with room around each, plus a scrap of track for the runner so the beat runs.
+function board(cols, step){
+  const rows = 11;
+  const L = { n: 0, name: "SWIM", cols, rows, cps: +$("cps").value, intro: [],
+              start: [0, rows-1], init: [[0, rows-1], [0, rows-2]], goal: [cols-1, rows-1],
+              walls: [], stone: [], platforms: [], doors: [], keys: [], coins: [], talismans: [],
+              crumble: [], blocks: [], hazards: [] };
+  const C = c => Math.max(0, Math.min(cols-1, c));
+  const s = step > 1 ? { step } : {};
+  L.hazards.push({ kind:"monster", variant:"hrail", axis:"h", r: 1, lo: C(0), hi: C(cols-1), phase: 0, ...s });
+  L.hazards.push({ kind:"monster", variant:"vrail", axis:"v", c: C(cols-1), lo: 3, hi: 7, phase: 0, ...s });
+  L.hazards.push({ kind:"monster", variant:"square", c: C(0), r: 3, w: Math.max(1, Math.min(3, cols-2)), h: 2, ...s });
+  L.hazards.push({ kind:"monster", variant:"hunter", c: C(1), r: rows-3, ...s });
+  L.hazards.push({ kind:"monster", variant:"patrol", path: [[C(cols-2), 6], [C(cols-2), rows-2]], ...s });
+  return L;
+}
+
+// Everything on this page is written down as you move it and put back when you come back. A tuning
+// page you have to set up again every time is a tuning page you stop opening.
+const SAVE_KEY = "tilerunner:monster-lab:v2";
+function save(){
+  const v = {};
+  document.querySelectorAll("input").forEach(el => { if (el.id) v[el.id] = el.value; });
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(v)); } catch (e) {}
+}
+function readSaved(){
+  try { return JSON.parse(localStorage.getItem(SAVE_KEY) || "null")
+              || JSON.parse(localStorage.getItem(SAVE_KEY + ":kept") || "null"); } catch (e) { return null; }
+}
+// A saved value is only taken if its slider would accept it — a number inside its own range. Everything else keeps the
+// value the markup carries, which is the shipped block. A lab that restores nonsense tunes the game into nonsense.
+function restore(){
+  const v = readSaved();
+  if (!v || typeof v !== "object") return false;
+  let took = 0;
+  for (const id in v) {
+    const el = $(id); if (!el) continue;
+    const n = +v[id];
+    if (!isFinite(n) || n < +el.min || n > +el.max) continue;
+    el.value = String(n); took++;
+  }
+  return took > 0;
+}
+document.addEventListener("input", save, true);
+
+const fmt = v => (Math.round(v * 1000) / 1000).toString();
+function fields(){
+  const out = {};
+  for (const k of SWIM_KEYS) { const el = $(k); if (el) out[k] = +el.value; }
+  return out;
+}
+function showOuts(){
+  for (const k of SWIM_KEYS) { const el = $(k), o = $(k + "Out"); if (el && o) o.textContent = fmt(+el.value); }
+  $("cpsOut").textContent = fmt(+$("cps").value);
+  $("stepOut").textContent = $("step").value;
+  $("colsOut").textContent = $("cols").value;
+}
+// ...pushed into the running game, which is the only thing that draws a monster here.
+function push(){
+  showOuts();
+  if (!W || !W.__TR || !W.__TR.swim) return;
+  const v = fields(), swim = {};
+  for (const k of SWIM_KEYS) swim[k] = k === "oars" ? Math.round(v[k]) : v[k];
+  try {
+    W.__TR.swim(swim);
+    $("status").textContent = "a stroke of " + fmt(swim.swim + swim.rest + swim.tension) + " beats — live";
+  } catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+}
+function reboard(){
+  if (!W || !W.__TR || !W.__TR.demo) return;
+  try { W.__TR.demo(board(+$("cols").value, +$("step").value), "SWIM"); push(); startRun(); }
+  catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+}
+
+// The board comes up behind the chapter's card, and a lab is no use until the level is actually running — the beat only
+// exists while it is. So tap the card away, and any mechanic card behind it, until he is off: what a hand would do.
+function startRun(){
+  let tries = 0;
+  (function tick(){
+    if (!W || !W.__TR || !W.__TR.state) return;
+    let st = null; try { st = W.__TR.state(); } catch (e) { return; }
+    if (st && st.status === "play") return;
+    const d = W.document;
+    let card = d.getElementById("poem-n");
+    while (card && !(card.classList && card.classList.contains("show"))) card = card.parentElement;
+    if (card) card.dispatchEvent(new W.PointerEvent("pointerdown", { bubbles: true, pointerId: 1 }));
+    const pop = d.getElementById("mechpop");
+    if (pop && pop.classList.contains("show")) pop.click();
+    if (++tries < 80) setTimeout(tick, 120);
+  })();
+}
+// ---- the beat lamp: the game's own beat, so the stroke can be watched against it
+function tickLamp(){
+  requestAnimationFrame(tickLamp);
+  if (!W || !W.__TR || !W.__TR.state) return;
+  let st = null;
+  try { st = W.__TR.state(); } catch (e) { return; }
+  const beat = st && st.beat;
+  if (beat == null) { $("beatNum").textContent = "—"; return; }
+  const cycle = +$("swim").value + +$("rest").value + +$("tension").value;
+  const inBeat = beat - Math.floor(beat);
+  const inStroke = cycle > 0 ? ((beat % cycle) + cycle) % cycle / cycle : 0;
+  $("lamp").classList.toggle("on", inBeat < 0.12);
+  $("head").style.left = (inStroke * 100).toFixed(2) + "%";
+  $("swimSpan").style.left = "0%";
+  $("swimSpan").style.width = (cycle > 0 ? Math.min(1, +$("swim").value / cycle) * 100 : 0).toFixed(2) + "%";
+  $("beatNum").textContent = "beat " + beat.toFixed(2) + " · " + (st.status || "");
+}
+// the beats, ticked off along the bar
+function marks(){
+  const track = $("track"), cycle = +$("swim").value + +$("rest").value + +$("tension").value;
+  // the amber mark: where 95% of the tile is behind it. A swim whose mark sits far from its end is a swim that LOOKS
+  // shorter than it is — the rest of it is the body creeping the last hair, which reads as resting.
+  const e = Math.max(1, +$("ease").value), land = 1 - Math.pow(0.05, 1/e);
+  $("landMark").style.left = (cycle > 0 ? Math.min(1, (+$("swim").value * land) / cycle) * 100 : 0).toFixed(2) + "%";
+  track.querySelectorAll("i").forEach(el => el.remove());
+  for (let b = 1; b < Math.ceil(cycle); b++) {
+    const i = document.createElement("i");
+    i.style.left = (b / cycle * 100).toFixed(2) + "%";
+    track.appendChild(i);
+  }
+}
+
+// The game boots into its title screen and its own loop; wait for the debug surface rather than
+// guessing at a delay.
+function attach(){
+  W = frame.contentWindow;
+  let tries = 0;
+  (function wait(){
+    if (W.__TR && W.__TR.demo && W.__TR.swim) {
+      if (!SHIPPED) SHIPPED = { swim: W.__TR.swim() };
+      if (!readSaved()) fromBlocks(SHIPPED);          // first visit: the shipped numbers
+      reboard(); marks();
+      return;
+    }
+    if (++tries > 200) {
+      $("status").innerHTML = '<span class="warn">the game never came up — is this being SERVED? ' +
+        'file:// blocks the frame from being read.</span>';
+      return;
+    }
+    setTimeout(wait, 50);
+  })();
+}
+function fromBlocks(b){
+  for (const k of SWIM_KEYS) if ($(k) && b.swim[k] != null) $(k).value = b.swim[k];
+  showOuts(); save();
+}
+
+document.addEventListener("input", (e) => {
+  if (!e.target || !e.target.id) return;
+  if (e.target.id === "cols" || e.target.id === "step" || e.target.id === "cps") { showOuts(); reboard(); return; }
+  push(); marks();
+});
+// Reset puts the level back to its opening — the game reloaded from scratch, the board laid again and the runner
+// back at his start — rather than only re-laying the board under a run already part way through it. Your settings
+// are untouched: attach() finds them saved and leaves them alone.
+$("reboard").onclick = () => { frame.src = GAME_SRC(); };
+$("reload").onclick = () => { SHIPPED = null; frame.src = GAME_SRC(); };
+$("restoreBtn").onclick = () => { if (restore()) { push(); marks(); reboard(); } };
+$("resetBtn").onclick = () => {
+  // Reset goes back to the shipped block — but the settings you were part way through are worth
+  // keeping, so they are put aside where Restore can still reach them.
+  try { const cur = localStorage.getItem(SAVE_KEY); if (cur) localStorage.setItem(SAVE_KEY + ":kept", cur); } catch (e) {}
+  if (SHIPPED) { fromBlocks(SHIPPED); push(); marks(); reboard(); }
+};
+document.querySelectorAll(".presets button").forEach(b => b.onclick = () => {
+  const [sw, re, te] = b.dataset.p.split(",").map(Number);
+  $("swim").value = sw; $("rest").value = re; $("tension").value = te;
+  push(); marks(); save();
+});
+$("copy").onclick = () => {
+  const v = fields();
+  const line = (k, val, note) => "    " + (k + ":").padEnd(11) + (String(val) + ",").padEnd(7) + " // " + note;
+  const block = [
+    "  const SWIM = {",
+    line("swim", fmt(v.swim), "beats of travel..."),
+    line("rest", fmt(v.rest), "...then still..."),
+    line("tension", fmt(v.tension), "...then winding up for the next catch"),
+    line("ease", fmt(v.ease), "how hard the travel eases out: 1 is none, 3 a strong arrival"),
+    line("size", fmt(v.size), "the body, as a fraction of a cell"),
+    line("tremble", fmt(v.tremble), "the shake through the tension, as a fraction of a cell"),
+    line("trembleHz", fmt(v.trembleHz), "...and how fast it shakes"),
+    line("surge", fmt(v.surge), "the body's own lurch along its line of travel per stroke, fraction of a cell"),
+    line("oars", Math.round(v.oars), "oars to a bank, two banks to an animal"),
+    line("oarOuter", fmt(v.oarOuter), "the ordinary oars: the radius, how far the point stands off the edge, fraction of a cell"),
+    line("oarMid", fmt(v.oarMid), "...and the big middle one, same measure. Only an ODD bank has a middle to enlarge."),
+    line("oarFeather", fmt(v.oarFeather), "how small they go as they swing forward for the next catch; 1 is not at all"),
+    "  };",
+  ].join("\n");
+  navigator.clipboard.writeText(block).then(
+    () => $("status").textContent = "SWIM block copied",
+    () => $("status").innerHTML = '<span class="warn">clipboard refused — the block is in the console</span>');
+  console.log(block);
+};
+restore(); showOuts(); marks(); tickLamp();
+frame.addEventListener("load", attach);
+frame.src = GAME_SRC();
+</script>
+</body>
+</html>

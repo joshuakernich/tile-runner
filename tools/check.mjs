@@ -13,7 +13,7 @@ import vm from "node:vm";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (f) => readFileSync(join(ROOT, f), "utf8");
-const HTML = ["index.html", "level-editor.html", "runner-lab.html", "icon-lab.html", "music-lab.html", "stone-generator.html"];
+const HTML = ["index.html", "level-editor.html", "runner-lab.html", "icon-lab.html", "music-lab.html", "monster-lab.html", "stone-generator.html"];
 
 let failures = 0, checks = 0;
 const ok   = (m) => { checks++; console.log("  \x1b[32m✓\x1b[0m " + m); };
