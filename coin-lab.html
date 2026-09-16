@@ -53,6 +53,8 @@
       <div class="row"><label>float ms</label><input type="range" id="floatMs" min="200" max="2000" step="20"><output></output></div>
       <div class="row"><label>rock</label><input type="range" id="rock" min="0" max="0.5" step="0.005"><output></output></div>
       <div class="row"><label>shadow</label><input type="range" id="shadowA" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>shadow size</label><input type="range" id="shadowK" min="0.3" max="1.2" step="0.01"><output></output></div>
+      <div class="row"><label>shadow drop</label><input type="range" id="shadowY" min="0" max="0.2" step="0.005"><output></output></div>
     </div>
     <div class="grp"><h2>Face</h2>
       <div class="row"><label>panel pad</label><input type="range" id="panelPad" min="0" max="0.3" step="0.005"><output></output></div>
@@ -76,6 +78,8 @@ const SHIPPED = {
   floatMs: 620,
   rock: 0.08,
   shadowA: 0.28,
+  shadowK: 0.72,
+  shadowY: 0.06,
   panelPad: 0.18,
   panelA: 1.00,
 };
@@ -101,11 +105,14 @@ function drawCoin(x, y, ts) {
   const lift = (0.5 + 0.5*Math.sin(t)) * cell * COIN.float;
   const tilt = Math.sin(t*0.8) * COIN.rock;
   ctx.save();
-  // ground shadow, tied to the lift
-  const k = 1 - (COIN.float ? (lift / (cell*COIN.float)) * 0.35 : 0);
-  ctx.globalAlpha = COIN.shadowA * k; ctx.fillStyle = "#05040d";
-  ctx.beginPath(); ctx.ellipse(x, y + cell*0.13, s2*0.42*k, s2*0.12*k, 0, 0, Math.PI*2); ctx.fill();
-  ctx.globalAlpha = 1;
+  // ground shadow: the coin's own square, shrunk to shadowK and dropped by shadowY, held steady
+  // through the bob (the game stamps a baked, blurred one — this is a soft stand-in for it)
+  const ss = s2 * COIN.shadowK;
+  ctx.save();
+  ctx.globalAlpha = COIN.shadowA; ctx.fillStyle = "#05040d";
+  ctx.filter = "blur(" + (ss*0.12).toFixed(1) + "px)";
+  rrect(x - ss/2, y + cell*COIN.shadowY - ss/2, ss, ss, tileR(ss)); ctx.fill();
+  ctx.restore();
   ctx.translate(x, y - lift); ctx.rotate(tilt);
   ctx.fillStyle = COIN_EDGE;                                    // the edge it sits on
   rrect(-h + s2*0.06, -h + s2*0.10, s2, s2, r); ctx.fill();
@@ -142,7 +149,7 @@ function frame(ts){
 }
 requestAnimationFrame(frame);
 
-const KEYS = ["size","float","floatMs","rock","shadowA","panelPad","panelA"];
+const KEYS = ["size","float","floatMs","rock","shadowA","shadowK","shadowY","panelPad","panelA"];
 
 // Everything on this page is written down as you move it and put back when you come back. A
 // tuning page you have to set up again every time you open it is a tuning page you stop opening
@@ -160,7 +167,7 @@ function restore(){
   return true;
 }
 
-const DP = k => /Ms$/.test(k) ? 0 : (k==="size"||k==="float"||k==="rock"||k==="panelPad" ? 3 : 2);
+const DP = k => /Ms$/.test(k) ? 0 : (k==="size"||k==="float"||k==="rock"||k==="panelPad"||k==="shadowY" ? 3 : 2);
 function sync(){
   save();
   for (const k of KEYS){

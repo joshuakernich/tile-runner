@@ -3943,6 +3943,101 @@
       o.connect(g); g.connect(dry); g.connect(wet);
       o.start(t0); o.stop(t0 + 5.6);
     }
+    // A CIRCUIT CLOSED — the loud one. The track has just shut on itself, which is the biggest thing a player can build,
+    // and it gets a fanfare to match, in four layers over about three seconds, most of it into the room:
+    //   · a rush of air sweeping up under a sub drop — the thing taking off;
+    //   · a bright major arpeggio racing up three octaves on detuned saws through a filter opening as it climbs;
+    //   · a sparkle cascade tumbling down from the top of it;
+    //   · and a held major chord struck as glass bells at the peak, ringing out over a swell.
+    function loopClosed() {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime, dry = ac.createGain(), wet = ac.createGain();
+      dry.gain.value = 0.7; wet.gain.value = 1.8;
+      dry.connect(master); wet.connect(sendBus);
+      const hz = (semi) => BASE * Math.pow(2, semi/12);
+      // the rush, sweeping up to the peak
+      if (noiseBuf) {
+        const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+        const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 1.6;
+        bp.frequency.setValueAtTime(400, t0); bp.frequency.exponentialRampToValueAtTime(9000, t0 + 0.62);
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.09, t0 + 0.55);
+        g.gain.exponentialRampToValueAtTime(0.0002, t0 + 1.1);
+        src.connect(bp); bp.connect(g); g.connect(dry); g.connect(wet);
+        src.start(t0); src.stop(t0 + 1.15);
+      }
+      { // the sub, dropping as it goes up
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "sine"; o.frequency.setValueAtTime(120, t0); o.frequency.exponentialRampToValueAtTime(38, t0 + 0.5);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.35, t0 + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0003, t0 + 0.7);
+        o.connect(g); g.connect(dry); o.start(t0); o.stop(t0 + 0.75);
+      }
+      // the arpeggio: up the major chord, three octaves, quicker as it climbs
+      const ARP = [0, 4, 7, 12, 16, 19, 24, 28, 31, 36];
+      const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.Q.value = 4;
+      lp.frequency.setValueAtTime(900, t0); lp.frequency.exponentialRampToValueAtTime(8000, t0 + 0.62);
+      const arpOut = ac.createGain(); arpOut.gain.value = 1;
+      lp.connect(arpOut); arpOut.connect(dry); arpOut.connect(wet);
+      let t = t0;
+      ARP.forEach((semi, n) => {
+        const dur = 0.30, vel = 0.07 * (0.8 + 0.2*n/ARP.length);
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(vel, t + 0.006);
+        g.gain.exponentialRampToValueAtTime(0.0004, t + dur);
+        for (const cents of [-10, 0, 10]) {
+          const o = ac.createOscillator(); o.type = "sawtooth";
+          o.frequency.setValueAtTime(hz(12 + semi), t); o.detune.setValueAtTime(cents, t);
+          o.connect(g); o.start(t); o.stop(t + dur + 0.05);
+        }
+        g.connect(lp);
+        t += 0.075 - n*0.003;
+      });
+      const peak = t;
+      // the bells, struck at the peak: a major chord spread over two octaves
+      for (const [semi, lvl] of [[24, 1], [28, 0.8], [31, 0.75], [36, 0.6], [43, 0.35]]) {
+        [[1, 0.045, 3.2], [2.76, 0.020, 2.2], [5.40, 0.010, 1.4], [8.93, 0.005, 0.9]].forEach(([mul, pk, life]) => {
+          for (const cents of [-7, 7]) {
+            const o = ac.createOscillator(), g = ac.createGain();
+            o.type = "sine"; o.frequency.setValueAtTime(hz(semi)*mul, peak); o.detune.setValueAtTime(cents, peak);
+            g.gain.setValueAtTime(0.0001, peak);
+            g.gain.exponentialRampToValueAtTime(pk*lvl, peak + 0.004);
+            g.gain.exponentialRampToValueAtTime(0.0002, peak + life);
+            o.connect(g); g.connect(dry); g.connect(wet);
+            o.start(peak); o.stop(peak + life + 0.05);
+          }
+        });
+      }
+      { // ...a warm swell under them
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, peak);
+        g.gain.exponentialRampToValueAtTime(0.05, peak + 0.35);
+        g.gain.exponentialRampToValueAtTime(0.0003, peak + 2.6);
+        for (const [semi, cents] of [[12, -8], [19, 8], [24, 0]]) {
+          const o = ac.createOscillator(); o.type = "triangle";
+          o.frequency.setValueAtTime(hz(semi), peak); o.detune.setValueAtTime(cents, peak);
+          o.connect(g); o.start(peak); o.stop(peak + 2.7);
+        }
+        g.connect(dry); g.connect(wet);
+      }
+      // ...and the sparkles tumbling down off the top
+      const SPK = [48, 45, 43, 40, 38, 36, 33, 31, 28, 26, 24, 21];
+      SPK.forEach((semi, n) => {
+        const ts = peak + 0.05 + n*0.055 + Math.random()*0.02, lvl = 0.035 * (1 - n*0.05);
+        for (const [mul, amp] of [[1, 1], [2, 0.3]]) {
+          const o = ac.createOscillator(), g = ac.createGain();
+          o.type = "sine"; o.frequency.setValueAtTime(hz(semi)*mul, ts);
+          g.gain.setValueAtTime(0.0001, ts);
+          g.gain.exponentialRampToValueAtTime(lvl*amp, ts + 0.003);
+          g.gain.exponentialRampToValueAtTime(0.0002, ts + 0.35);
+          o.connect(g); g.connect(dry); g.connect(wet);
+          o.start(ts); o.stop(ts + 0.4);
+        }
+      });
+    }
     // A CHARM GOING INTO THE HOLE: a rich, resonant glass tone, rung a step higher up the scale for every one that goes.
     // A struck glass bell — the inharmonic partials a real bell rings with, three voices a few cents apart on each so it
     // beats slowly as it rings — over a soft sine an octave under it for body, held long and most of it into the room.
@@ -5041,7 +5136,7 @@
              slide, clack, tap, tapBig, swish, airSwish, flyWhoosh, tabClick, power, warp, vortex, thrum, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck, choir,
              ambient,
-             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, charmReveal, tallyRing, boom, twinkle, holeChime, infinityRing, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
+             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, charmReveal, tallyRing, boom, twinkle, holeChime, infinityRing, loopClosed, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
              levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, talismanTheme, choirLift, setMusicGate,
              musicNow: () => ({ ...MU }) };
   })();
@@ -5077,7 +5172,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.71";                    // shown on the title & pause screens
+  const VERSION = "v10.72";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -9324,6 +9419,73 @@
     }
     return 0;
   }
+  // THE CIRCUIT, LIT. The moment the ring shuts, a blue line is drawn along its running surface —
+  // the same surface every tile and platform in it is drawn on (tileSurface), round each curve —
+  // out from the cell it closed on, both ways at once, and a spark races round it the way he is
+  // running. It is the junction's line (junctionTileLine): its blue, its weight, its spark.
+  const LOOP_LINE = {
+    drawMs: 420,        // how long it takes to run round the ring once it shuts
+    cellMs: 1500,       // the spark's time per cell — an unhurried lap, well behind his pace
+    spark:  0.12,       // its size, in tiles — half the junction race's (JUNCTION_RACE.size)
+  };
+  function loopLinePts(R) {
+    const n = R.length, pts = [];
+    for (let k = 0; k < n; k++) {
+      const S = tileSurface(R[k], R[(k + n - 1) % n], R[(k + 1) % n]);
+      for (let j = k ? 1 : 0; j < S.length; j++) pts.push(S[j]);
+    }
+    return pts;                                    // ends back on its first point: a closed lap
+  }
+  function drawLoopLine() {
+    const Lp = state && state.loop;
+    if (!Lp || !Lp.closed || !Lp.ring || state.vortex) return;
+    const R = Lp.ring, n = R.length, now = performance.now();
+    // Rotated so the lap starts halfway round from the cell it closed on (the last of the ring), and the line grows out of
+    // that cell both ways and meets itself on the far side.
+    const pts = loopLinePts(R);
+    const seg = []; let tot = 0;
+    for (let j = 1; j < pts.length; j++) { const l = Math.hypot(pts[j].x - pts[j-1].x, pts[j].y - pts[j-1].y); seg.push(l); tot += l; }
+    if (!(tot > 0)) return;
+    const perCell = tot / n, o = (n - 0.5) * perCell;       // the middle of the closing cell, as a distance round the lap
+    const at = (dist) => {                                    // the point `dist` round the lap from its start
+      let d = ((dist % tot) + tot) % tot;
+      for (let j = 0; j < seg.length; j++) {
+        if (d <= seg[j] || j === seg.length - 1) {
+          const t = seg[j] ? Math.min(1, d / seg[j]) : 0;
+          return { x: pts[j].x + (pts[j+1].x - pts[j].x)*t, y: pts[j].y + (pts[j+1].y - pts[j].y)*t };
+        }
+        d -= seg[j];
+      }
+      return pts[pts.length - 1];
+    };
+    const grow = clamp((now - Lp.shut) / LOOP_LINE.drawMs, 0, 1), e = 1 - (1 - grow)*(1 - grow);
+    const blue = tvBlueHex();
+    ctx.save();
+    ctx.strokeStyle = blue; ctx.lineWidth = FOOTER.rim + 1; ctx.lineCap = "butt"; ctx.lineJoin = "round";
+    ctx.beginPath();
+    if (grow >= 1) {
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let j = 1; j < pts.length - 1; j++) ctx.lineTo(pts[j].x, pts[j].y);
+      ctx.closePath();
+    } else {
+      // walk from o - half to o + half, a step a little finer than the curves' own points
+      const half = e * tot/2, step = Math.max(1, perCell / 24);
+      const p0 = at(o - half); ctx.moveTo(p0.x, p0.y);
+      for (let d = o - half + step; d < o + half; d += step) { const q = at(d); ctx.lineTo(q.x, q.y); }
+      const p1 = at(o + half); ctx.lineTo(p1.x, p1.y);
+    }
+    ctx.stroke();
+    ctx.restore();
+    // ...and the junction race's spark, in the line's blue, rolling as it goes — once the line is whole.
+    if (grow >= 1) {
+      const run = (now - Lp.shut - LOOP_LINE.drawMs) / LOOP_LINE.cellMs * perCell;
+      const q = at(o + run), rsz = cell * LOOP_LINE.spark;
+      ctx.save();
+      ctx.translate(q.x, q.y); ctx.rotate(run / (rsz * TAB_SPARK_ROLL));
+      drawSpark(ctx, 0, 0, rsz, now, { alpha: 1, col: blue, seed: 0.21 });
+      ctx.restore();
+    }
+  }
   function noticeLoop() {
     const s = state;
     if (s.vortex) return;
@@ -9357,8 +9519,11 @@
     // circuit is a state he is IN — the front of the track stops being a junction, the ramp
     // starts compounding, and the ending waits for the pace to top out. Everything the vortex
     // needs is worked out here all the same, because here is where the ring is under our hand.
+    // THE FANFARE, for a circuit that has just shut — not for one that was already shut and has changed its length.
+    if (!(s.loop && s.loop.closed) && L >= 4 && s.status === "play") { try { Sound.loopClosed && Sound.loopClosed(); } catch (_) {} }
     s.loop = { len: L, at: s.runIdx, closed: true,
-               wx: cx/L, wy: cy/L, spin: area >= 0 ? 1 : -1 };
+               wx: cx/L, wy: cy/L, spin: area >= 0 ? 1 : -1,
+               ring, shut: performance.now() };
   }
   // ---------- The hole in the middle of it ------------------------------------------------
   // What a topped-out circuit turns into. He is running a ring at ten tiles a second and there
@@ -16174,6 +16339,7 @@
     drawManualDoors(ts);
     drawHazardPaths(ts);      // ground markings — under the track and the tiles standing on it
     drawTrack(ts);
+    if (!win) drawLoopLine();                     // a closed circuit, lit along its length
     if (state.drag) drawTargets(ts);
     // The loose tiles are OFF during the victory replay. They are lying on the very cells the
     // route is being rebuilt across — they are the same three tiles, recycled — so leaving them
@@ -16934,7 +17100,7 @@
         // that had not been told. The hints, the tap and the art now agree because they ask one
         // question; the node is the same one either way.
         if (i === p.length - 1 && leadNode()) drawJunction(p[i], p[i-1], ts);
-        else drawPlatformTile(p[i], p[i-1], nextNode(i));
+        else if (!drawRingMerge(i)) drawPlatformTile(p[i], p[i-1], nextNode(i));
       }
 
     // The victory replay's route goes down HERE — the last thing in the track layer, before the
@@ -18161,6 +18327,8 @@
     floatMs:  620,    // one full bob
     rock:     0.08,   // lazy rotation, radians
     shadowA:  0.28,   // ground shadow opacity
+    shadowK:  0.72,   // ...its size against the coin — under it rather than spread round it
+    shadowY:  0.06,   // ...and how far below the coin's middle it sits, fraction of a cell
     panelPad: 0.18,   // the inscribed square's inset, fraction of the coin
     panelA:   1.00,   // ...and how solidly it is filled, in COIN_EDGE
   };
@@ -18511,7 +18679,8 @@
     // square silhouette, stamped from the baked picture rather than blurred here (there can be eight-and-forty of
     // these in one frame). Held steady through the bob: the coin's float is told by the coin RISING, and a shadow
     // breathing under it as well was two ways of saying one thing.
-    stampShadow(x, y + cell*0.10, s2, COIN.shadowA, r);
+    const ss = s2 * COIN.shadowK;
+    stampShadow(x, y + cell*COIN.shadowY, ss, COIN.shadowA, tileR(ss));
     ctx.translate(x, y - lift); ctx.rotate(tilt);
     paintCoin(s2, ts, seed == null ? bgHash(Math.floor(x / (cell || 1)), Math.floor(y / (cell || 1))) : seed);
     ctx.restore();
@@ -18946,6 +19115,18 @@
   // one tile's platform piece, clipped to its own cell. The top surface is the
   // tile's surface polyline (a straight line, or a quarter-circle arc for
   // corners); the body hangs off the down-normal side.
+  // THE BACK OF A CIRCUIT THAT SHUT UNDER HIS FEET. Close a ring while he is still on its rear-most tile and that tile
+  // is drawn in the RING's shape at once — entered from the front of the ring, not from wherever he came in — so the
+  // circuit reads as closed the moment it is. He goes on riding the curve he came in on (surfaceAtTile is unchanged) until
+  // he clears it; then the tile frees and re-links behind the front in this same shape, and this has nothing to do.
+  function drawRingMerge(i) {
+    const s = state, p = s.path, Lp = s.loop;
+    if (!Lp || !Lp.closed || i !== p.length - Lp.len || i < 1) return false;
+    const n = p[i], front = p[p.length - 1];
+    if (!front || front === n || !trackConnects(n, front)) return false;
+    drawPlatformTile(n, front, nextNode(i));
+    return true;
+  }
   function drawPlatformTile(n, prev, next) {
     drawPlatformSurface(n, tileSurface(n, prev, next), curTrack());
   }
@@ -22299,7 +22480,7 @@
     floatMs: 1150,   // ...and one whole bob
     shadowK: 0.94,   // the shadow's size against the tile
     shadowA: 1.00,   // ...and its strength, as a multiple of what a MONSTER throws (groundLayers)
-    dotInk:  "#b6bccb",   // its grip: a light grey, and steady. A tile you cannot use yet is not asking for anything,
+    dotInk:  "rgba(255,255,255,0.10)",   // its grip: white at a tenth, and steady. A tile you cannot use yet is not asking for anything,
                           // and the pulse the usable ones wear is exactly that asking.
   };
   const SPARE_SHEEN = "255,255,255";
