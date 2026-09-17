@@ -5172,7 +5172,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.72";                    // shown on the title & pause screens
+  const VERSION = "v10.73";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -7261,7 +7261,8 @@
       shake:0, beatPulse:0, pops:[], lights:[], laidFlash:[], trail:[], trailT:0,
       // --- Batch 2: optional extra cell types & hazards ---
       coinCells: new Set((L.coins||[]).map(c=>key(c[0],c[1]))),
-      coinPop: new Map(),                   // coins just uncovered by a break, growing in (revealCoin)
+      hearts: new Map(),                    // diamond hearts uncovered by a break: cell -> { col, at } (revealHeart)
+      heartSeq: 0,                          // ...and how many so far, which walks them round the rainbow
       // [c, r, id] — a talisman sits on the floor and is grabbed by passing over it
       talismans: (L.talismans||[]).filter(t => talLive(t[2]))
                                   .map(t=>({ c:t[0], r:t[1], id:t[2], got:false })),
@@ -7303,6 +7304,11 @@
       coinRun: [],                          // ...and coins on their way from him to the counter
       coinsShown: 0,                        // what the counter is SAYING, which lags coinsGot
       coinHudPop: -1e9,                     // when the counter last took one
+      heartsGot: 0,                         // diamond hearts taken this run
+      heartsShown: 0,                       // ...what their counter is SAYING, which lags it as coinsShown does
+      heartHudPop: -1e9,                    // ...when it last took one
+      heartHudCol: null,                    // ...and the colour of that one, which the counter wears
+      heartRun: [],                         // hearts on their way from him to their counter
       loop: null,                           // a circuit he is going round, once we are sure
       vortex: null,                         // ...and what happens to the world when he is
       singularity: new Set((L.singularity||[]).map(c=>key(c[0],c[1]))),
@@ -8589,17 +8595,18 @@
   // ONCE — stepping it down in a loop would stack a crunch and a burst of shards per remaining
   // layer, and a three-hit stone would go off three times louder than a one-hit stone standing
   // beside it.
-  // A COIN UNDER THE RUBBLE. Whatever breaks a stone or a golem leaves a coin on the cell it stood on — put down as though
-  // it had been lying there all along (coinCells), so it is taken like any other: run over it, or reel it in. It grows out
-  // of the break rather than appearing (COIN_REVEAL, drawn with the coins), its clock starting the first frame it is seen.
-  const COIN_REVEAL = { ms: 360 };
-  function revealCoin(c, r) {
+  // A DIAMOND HEART UNDER THE RUBBLE. Whatever breaks a stone or a golem leaves a faceted heart on the cell it stood on,
+  // each one the NEXT colour of the rainbow (the Holy Talismans' six, in shelf order) — so a row of stones broken one after
+  // another comes up red, orange, yellow, green, blue, violet. It morphs out of the tile's square (HEART.morphMs, its clock starting the
+  // first frame it is drawn), hovers, and goes when he runs over it. It gives nothing yet: it is there to be seen.
+  function revealHeart(c, r) {
     const s = state;
-    if (!s || !s.coinCells || !inBounds(c, r)) return;
+    if (!s || !inBounds(c, r)) return;
+    if (!s.hearts) s.hearts = new Map();
     const k = key(c, r);
-    if (s.coinCells.has(k)) return;
-    s.coinCells.add(k);
-    (s.coinPop || (s.coinPop = new Map())).set(k, -1);
+    if (s.hearts.has(k)) return;
+    const cols = TALISMANS.map(t => t.col);
+    s.hearts.set(k, { col: cols[(s.heartSeq++ || 0) % cols.length], at: -1 });
   }
   function breakStone(c, r, all) {
     const st = state.stones.get(key(c, r));
@@ -8619,7 +8626,7 @@
     }
     // final tap — shatter
     state.stones.delete(key(c, r));
-    revealCoin(c, r);                          // ...and what was under it
+    revealHeart(c, r);                         // ...and what was under it
     markOccDirty();                            // a stone opened up — occupancy changed
     // ...including the one that breaks it. It used to chip with the tile-clear note and
     // shatter with the smash, which made a stone sound like two different materials depending
@@ -8656,7 +8663,7 @@
       return true;
     }
     s.hazards = s.hazards.filter(h => h !== g);
-    revealCoin(c, r);                            // ...and it leaves a coin where it broke
+    revealHeart(c, r);                           // ...and it leaves a heart where it broke
     markOccDirty();
     s.shake = Math.max(s.shake, cell * 0.16);
     for (let i = 0; i < 12; i++) {
@@ -11357,7 +11364,7 @@
     }
     for (const [sk, c, r] of doomed) {
       s.stones.delete(sk);
-      revealCoin(c, r);                          // ...and what was under it
+      revealHeart(c, r);                         // ...and what was under it
       const wx = (c+0.5)*cell, wy = (r+0.5)*cell;
       for (let i = 0; i < 12; i++) {
         const a = (i/12)*Math.PI*2 + (i%5)*0.29, sp = cell*0.0015;
@@ -11393,7 +11400,7 @@
     });
     if (!doomed.length) return 0;           // the shout already rang; nothing to add
     for (const h of doomed) {
-      if (monKind(h).stone) revealCoin(Math.floor(h.wx / cell), Math.floor(h.wy / cell));   // a golem still leaves its coin
+      if (monKind(h).stone) revealHeart(Math.floor(h.wx / cell), Math.floor(h.wy / cell));   // a golem still leaves its heart
       // ...into a BUTTERFLY: a tile in the monster's own colour, split down the middle into two half-tiles that flap,
       // flitting up and away from him (BUTTERFLY). A body too dark to read as one flies in its eyes' colour instead.
       const K = monKind(h), rgb = hexRGB(K.body || col);
@@ -11490,9 +11497,22 @@
       }
       s.coinRun = s.coinRun.filter(f => !f.done);
     }
+    if (s.heartRun && s.heartRun.length) {       // ...and hearts to theirs, the same way
+      for (const f of s.heartRun) f.t += dt;
+      for (const f of s.heartRun) if (!f.done && f.t - f.delay >= COINRUN.flash + COINRUN.fly) {
+        f.done = true;
+        s.heartsShown = (s.heartsShown || 0) + 1;
+        s.heartHudPop = performance.now(); s.heartHudCol = f.col;
+        Sound.coinBank();
+      }
+      s.heartRun = s.heartRun.filter(f => !f.done);
+    }
     if (s.coinFly.length) {                       // coins already in flight, wherever from
       for (const f of s.coinFly) f.t += dt;
-      for (const f of s.coinFly) if (f.t >= (f.dur || COIN_FLY_MS) && !f.done) { f.done = true; grabCoin(f.c, f.r, true); }
+      for (const f of s.coinFly) if (f.t >= (f.dur || COIN_FLY_MS) && !f.done) {
+        f.done = true;
+        if (f.heart) grabHeart(f.c, f.r, f.heart, true); else grabCoin(f.c, f.r, true);
+      }
       s.coinFly = s.coinFly.filter(f => !f.done);
     }
     if (!s.power.kind || s.power.t <= 0) return;
@@ -11516,6 +11536,13 @@
         if (d > MAGNET.radius) continue;
         s.coinCells.delete(ck);
         s.coinFly.push({ c, r, t: 0, done: false, dur: Math.max(COIN_FLY_MIN, d * COIN_FLY_PER_TILE) });
+      }
+      if (s.hearts) for (const [hk, h] of Array.from(s.hearts)) {     // ...and the hearts, on the same flight
+        const i = hk.indexOf(","), c = +hk.slice(0, i), r = +hk.slice(i+1);
+        const d = Math.hypot(rx - (c+0.5), ry - (r+0.5));
+        if (d > MAGNET.radius) continue;
+        s.hearts.delete(hk);
+        s.coinFly.push({ c, r, t: 0, done: false, heart: h.col, dur: Math.max(COIN_FLY_MIN, d * COIN_FLY_PER_TILE) });
       }
     }
     if (s.power.t <= 0) {                          // done — put everything back
@@ -11559,6 +11586,17 @@
     notePick("coin", c, r);
     Sound.coin(); haptic(6);
   }
+  // ...and one diamond heart, the same way: counted, and sent up to ITS counter (drawHeartRuns) — which is not on the
+  // screen until the first one is on its way to it. Nothing is banked: the count is this run's.
+  function grabHeart(c, r, col, flew) {
+    const s = state;
+    s.heartsGot = (s.heartsGot || 0) + 1;
+    const rp = (flew && s.status === "play" && s.path && s.path.length) ? visualAt(s.runIdx + s.runT) : null;
+    (s.heartRun || (s.heartRun = [])).push({ wx: rp ? rp.x : (c + 0.5)*cell, wy: rp ? rp.y - cell*0.3 : (r + 0.5)*cell,
+      w0: cell*HEART.size, col, t: 0, done: false, delay: Math.min(5, s.heartRun.length) * COINRUN.stagger });
+    if (!flew) { spawnPop(c, r, col); spawnLight(c, r); }
+    Sound.coin(); haptic(6);
+  }
   // The Hammer of God: lift a tile that has already been laid, along with everything laid
   // after it, and put it back in your hand. Only ahead of the runner — pulling the ground
   // out from under him would just be a scripted death.
@@ -11573,6 +11611,11 @@
     for (const ck of Array.from(s.coinCells)) {
       const [c, r] = ck.split(",").map(Number);
       if (near(c, r)) { s.coinCells.delete(ck); grabCoin(c, r); }
+    }
+    // hearts: taken by passing over them, as the coins are
+    if (s.hearts) for (const [hk, h] of Array.from(s.hearts)) {
+      const [c, r] = hk.split(",").map(Number);
+      if (near(c, r)) { s.hearts.delete(hk); grabHeart(c, r, h.col); }
     }
     // talismans: passing over one unlocks it permanently, win or lose — but you have to be ON
     // it. At the coins' 0.7 of a cell he swept them up from the next tile along, which for the
@@ -16377,21 +16420,24 @@
     for (const ck of state.coinCells) {
       const i = ck.indexOf(","), c = +ck.slice(0, i), r = +ck.slice(i + 1);
       if (!onView(c, r)) continue;                                                  // ...the ones on screen
-      const x = (c+0.5)*cell, y = (r+0.5)*cell, pop = state.coinPop && state.coinPop.get(ck);
-      if (pop == null) { drawCoin(x, y, ts, bgHash(c, r)); continue; }
-      // ...and one just uncovered by a break, growing out of it: quick, a little past full size, then settling
-      if (pop < 0) state.coinPop.set(ck, ts);
-      const k = Math.min(1, Math.max(0, (ts - (pop < 0 ? ts : pop)) / COIN_REVEAL.ms));
-      if (k >= 1) { state.coinPop.delete(ck); drawCoin(x, y, ts, bgHash(c, r)); continue; }
-      const ob = 1.70158, e = 1 + (ob + 1)*Math.pow(k - 1, 3) + ob*Math.pow(k - 1, 2);
-      if (e > 0.01) { ctx.save(); ctx.translate(x, y); ctx.scale(e, e); drawCoin(0, 0, ts, bgHash(c, r)); ctx.restore(); }
+      drawCoin((c+0.5)*cell, (r+0.5)*cell, ts, bgHash(c, r));
+    }
+    // ...and the hearts under broken stone, with them: they hover as the coins do
+    if (state.hearts) for (const [hk, h] of state.hearts) {
+      const i = hk.indexOf(","), c = +hk.slice(0, i), r = +hk.slice(i + 1);
+      if (!onView(c, r)) continue;
+      if (h.at < 0) h.at = ts;
+      // the tile it was, morphing into the heart: quick, a touch past the heart, then settling
+      const k = Math.min(1, Math.max(0, (ts - h.at) / HEART.morphMs));
+      const ob = 1.2, e = k >= 1 ? 1 : 1 + (ob + 1)*Math.pow(k - 1, 3) + ob*Math.pow(k - 1, 2);
+      drawHeart((c+0.5)*cell, (r+0.5)*cell, ts, h.col, e, c*7 + r*3);
     }
     drawMagnetField(ts);
     for (const f of state.coinFly) {                 // reeled in: coin -> runner, over its own time (see COIN_FLY_PER_TILE)
       const rp = visualAt(state.runIdx + state.runT);
       const u = Math.min(1, f.t / (f.dur || COIN_FLY_MS)), e = u*u*(3 - 2*u);   // ease so it accelerates in
-      drawCoin((f.c+0.5)*cell + ((rp.x) - (f.c+0.5)*cell)*e,
-               (f.r+0.5)*cell + ((rp.y - cell*0.3) - (f.r+0.5)*cell)*e, ts, bgHash(f.c, f.r));
+      const fx = (f.c+0.5)*cell + ((rp.x) - (f.c+0.5)*cell)*e, fy = (f.r+0.5)*cell + ((rp.y - cell*0.3) - (f.r+0.5)*cell)*e;
+      if (f.heart) drawHeart(fx, fy, ts, f.heart, 1, f.c*7 + f.r*3); else drawCoin(fx, fy, ts, bgHash(f.c, f.r));
     }
 
     drawTally();                                  // ...and the count, over the cell it came from
@@ -16431,6 +16477,8 @@
     drawSpeedHud();
     drawCoinHud();
     drawCoinRuns(shx, shy);      // ...and whatever is on its way to it, over the top of it
+    drawHeartHud();              // the hearts' counter beside it, once there is a heart to count
+    drawHeartRuns(shx, shy);
     drawCeremony(ts);                   // over the board and under nothing: it IS the screen
     drawTalismanFlash(16, ts);
     drawVortex(ts);                     // ...and the whirlpool, over the top of everything
@@ -16862,6 +16910,71 @@
     ctx.fillStyle = "rgba(214,218,240,0.66)";       // the speedo's own suffix ink
     ctx.fillText(B.rest, B.restX, B.midY + inkNudge(B.restFont));
     ctx.restore();
+  }
+  // THE HEART COUNTER, beside the coins' — on the same plate, in the same type, with the heart where the coin is. Not
+  // there at all until the first heart is on its way to it: then it is suddenly there, popping in, and it stays for the
+  // run. It wears the colour of the last heart to land. No "of": nobody knows how many stones a run will break.
+  // Worked out once for the plate and the flight, as coinHudBox is. To the RIGHT of the coin counter, which stays where
+  // it was; on a level with no coins it takes the coin counter's place in the middle.
+  const HEART_HUD = { gap: 0.55, popMs: 260 };   // gap: between the two plates, in the plate's type sizes
+  function heartHudBox() {
+    const s = state;
+    if (!hudLive() || !((s.heartsShown || 0) > 0 || (s.heartRun && s.heartRun.length))) return null;
+    const P = hudPlate(), C = coinHudBox();
+    const num = String(s.heartsShown || 0), font = "900 " + P.fs2 + "px " + UI_FONT;
+    ctx.save();
+    ctx.font = font; const nw = ctx.measureText(num).width;
+    ctx.textBaseline = "alphabetic";
+    const dm = ctx.measureText("0123456789"), inkH = dm.actualBoundingBoxAscent + dm.actualBoundingBoxDescent;
+    ctx.restore();
+    const cw = Math.round((inkH > 0 ? inkH : P.fs2*0.72) * 1.15), gap = Math.round(P.fs2*0.55), padX = Math.round(P.fs*0.55);
+    const w = padX*2 + cw + gap + nw;
+    const x = C ? C.x + C.w + Math.round(P.fs2*HEART_HUD.gap) : Math.round((viewW - w)/2);
+    return { x, y: P.top, w, h: P.h, midY: P.top + P.h/2, iconX: x + padX, iconW: cw, textX: x + padX + cw + gap, num, font };
+  }
+  // A heart as the HUD draws one, `w` across, centred on (x, y).
+  function hudHeart(x, y, w, col) {
+    ctx.save(); ctx.translate(x, y); paintHeart(w, col, 1, Math.max(1, w*0.05)); ctx.restore();
+  }
+  function drawHeartHud() {
+    const B = heartHudBox(); if (!B) return;
+    const s = state, col = s.heartHudCol || (s.heartRun && s.heartRun[0] && s.heartRun[0].col) || TALISMANS[0].col;
+    ctx.save();
+    // It POPS IN the first time — from nothing to a little past full — and after that jumps as each one lands, as the coins' does.
+    const now = performance.now();
+    if (!s.heartHudBorn) s.heartHudBorn = now;
+    const born = now - s.heartHudBorn, age = now - (s.heartHudPop || -1e9);
+    let k = 1;
+    if (born < HEART_HUD.popMs) k = Math.max(0.01, easeOutBack(born / HEART_HUD.popMs));
+    else if (age >= 0 && age < COINRUN.bump) k = 1 + 0.16*(1 - easeOutBack(age/COINRUN.bump));
+    if (k !== 1) { const px = B.x + B.w/2, py = B.midY; ctx.translate(px, py); ctx.scale(k, k); ctx.translate(-px, -py); }
+    ctx.textBaseline = "middle";
+    rrect(B.x, B.y, B.w, B.h, 0);
+    ctx.fillStyle = "rgba(10,8,22,0.62)"; ctx.fill();
+    hudHeart(B.iconX + B.iconW/2, B.midY, B.iconW, col);
+    ctx.textAlign = "left"; ctx.font = B.font; ctx.fillStyle = col;
+    ctx.fillText(B.num, B.textX, B.midY + inkNudge(B.font));
+    ctx.restore();
+  }
+  // ...and the hearts on their way to it: flaring where they were taken, then racing up, exactly as the coins do.
+  function drawHeartRuns(shx, shy) {
+    const s = state; if (!s || !s.heartRun || !s.heartRun.length) return;
+    const B = heartHudBox(); if (!B) return;
+    const ox = Math.round(camX - shx), oy = Math.round(camY - shy);
+    const x1 = B.iconX + B.iconW/2, y1 = B.midY;
+    for (const f of s.heartRun) {
+      const t = f.t - f.delay;
+      if (t < 0) continue;
+      const x0 = f.wx - ox, y0 = f.wy - oy;
+      if (t < COINRUN.flash) {
+        const g = Math.sin(Math.PI * (t/COINRUN.flash));
+        hudHeart(x0, y0, f.w0 * (1 + (COINRUN.pop - 1)*g), f.col);
+        continue;
+      }
+      const u = Math.min(1, (t - COINRUN.flash)/COINRUN.fly), e = u*u;
+      const cxp = x0 + (x1 - x0)*0.18, cyp = y0 + (y1 - y0)*COINRUN.bow, m = 1 - e;
+      hudHeart(m*m*x0 + 2*m*e*cxp + e*e*x1, m*m*y0 + 2*m*e*cyp + e*e*y1, f.w0 + (B.iconW - f.w0)*e, f.col);
+    }
   }
   // The run itself, in SCREEN space: it starts on the board and finishes on the glass, so it
   // cannot live inside the board transform — the world point it left is converted here with
@@ -18015,7 +18128,7 @@
     const bm = stoneBitmap(cs, cell, tileR(cell), K.vi || 0, K.gi || 0, taps);
     rrect(-h, -h, S, S, R); ctx.fillStyle = STONE_EDGE; ctx.fill();
     ctx.drawImage(bm, 0, 0, cs, cs, -h, -h, S, S);
-    const p2 = S*PLATE_PAD, r3 = Math.max(0, R - p2*0.6);
+    const p2 = S*stoneFaceInset(), r3 = Math.max(0, R - p2*0.6);
     ctx.save();
     rrect(-h + p2, -h + p2, S - 2*p2, S - 2*p2, r3); ctx.clip();
     if (K.hit > 0) { ctx.globalAlpha = K.hit*0.45; ctx.fillStyle = "#ffffff"; ctx.fillRect(-h, -h, S, S); }
@@ -18665,6 +18778,123 @@
     // be mistaken for. Three flat tones now do the work: the edge, the face, and the panel.
     g.restore();
     g.restore();
+  }
+  // ---- THE DIAMOND HEART ------------------------------------------------------------------
+  // The brilliant cut from heart-gems.html: the heart's outline, a ring of midpoints pulled in toward the middle and lifted,
+  // and a raised centre — a kite and a triangle for each point round the edge (HEART.points). No edge under it and no
+  // shadow; an outline in its own colour, and a spark of that colour going round it. Shaded as the low-poly stone is, light at the top and dark at the bottom with the facet play
+  // over it, in whatever colour it was handed — lightened toward white, darkened toward black.
+  const HEART = {
+    size:     0.46,   // across, fraction of a cell
+    // HOW MANY points round the outline, evenly spaced round the classic heart curve starting from the bottom point, so the
+    // heart is always symmetric. Few enough that it misses the lobes' round tops and comes out a CHEVRON — squared shoulders,
+    // a straight run to the point — which is the look. An EVEN count puts a point in the notch; an ODD one straddles it
+    // with two, so the notch is a short flat dip between the lobes. Three facets to every point: nine is twenty-seven.
+    points:   9,
+    morphMs:  260,    // how long the smashed tile takes to become the heart
+    float:    0.05,   // hover height, fraction of a cell
+    floatMs:  620,    // one whole bob — the coin's clock
+    grad:     0.60,   // light at the top, dark at the bottom
+    contrast: 1.10,   // the facet play
+    lite:     0.85,   // how far toward white its lightest facet can go...
+    deep:     0.65,   // ...and toward black its darkest
+    // ---- its outline, and the spark going round it, both in the heart's own colour ----
+    rimW:     0.025,  // the outline's weight, fraction of a cell
+    sparkK:   0.30,   // the spark's size, against the heart
+    lapMs:    2400,   // one lap of the outline
+  };
+  // THE HEART, and the TILE it starts as. Built twice on the one set of vertices: once on the heart's outline, once on the
+  // same outline pushed out onto the square of the cell it was revealed in — each point along its own direction out to the
+  // square's edge, and the point nearest each corner snapped into that corner — with the ring and the centre built on each
+  // in the same way. So every vertex has a place on the tile and a place on the heart, and the break morphs one into the
+  // other (drawHeart's `morph`). The shading is the heart's throughout: the facets keep their inks as they change shape.
+  const _heartGeom = (() => {
+    const T = Array.from({ length: HEART.points }, (_, i) => Math.PI + i/HEART.points*Math.PI*2);
+    const n = T.length, raw = T.map(t => [16*Math.sin(t)**3, -(13*Math.cos(t) - 5*Math.cos(2*t) - 2*Math.cos(3*t) - Math.cos(4*t))]);
+    const xs = raw.map(p => p[0]), ys = raw.map(p => p[1]);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), k = Math.max(x1 - x0, y1 - y0);
+    const O = raw.map(p => [(p[0] - (x0 + x1)/2)/k, (p[1] - (y0 + y1)/2)/k]);        // centred on the origin, 1 across
+    const h = 0.5 / HEART.size;                                                         // the cell's half width, in heart units
+    const Q = O.map(p => { const m = Math.max(Math.abs(p[0]), Math.abs(p[1])) || 1; return [p[0]/m*h, p[1]/m*h]; });
+    const used = new Set();
+    for (const [cx0, cy0] of [[-h,-h],[h,-h],[h,h],[-h,h]]) {
+      let best = -1, bd = 1e9;
+      Q.forEach((q, i) => { if (used.has(i)) return; const d = Math.hypot(q[0] - cx0, q[1] - cy0); if (d < bd) { bd = d; best = i; } });
+      if (best >= 0) { Q[best] = [cx0, cy0]; used.add(best); }
+    }
+    const build = (R) => {
+      const c = [0, 0.02];
+      const V = R.map(p => [p[0], p[1], 0]);
+      const M = V.map((p, i) => { const q = V[(i+1) % n]; return [c[0] + ((p[0]+q[0])/2 - c[0])*0.62, c[1] + ((p[1]+q[1])/2 - c[1])*0.62, 0.2]; });
+      const C = [c[0], c[1], 0.34], f = [];
+      for (let i = 0; i < n; i++) { const j = (i+1) % n, hh = (i + n - 1) % n;
+        f.push([V[i], V[j], M[i]], [V[i], M[i], M[hh]], [M[hh], M[i], C]); }
+      return f;
+    };
+    const heart = build(O), tile = build(Q);
+    const L = (() => { const v = [-0.35, -0.9, 1], m = Math.hypot(...v); return v.map(x => x/m); })();
+    const facets = heart.map((pts, fi) => {
+      let nx = 0, ny = 0, nz = 0;
+      for (let i = 0; i < 3; i++) { const [xa,ya,za] = pts[i], [xb,yb,zb] = pts[(i+1) % 3];
+        nx += (ya - yb)*(za + zb); ny += (za - zb)*(xa + xb); nz += (xa - xb)*(ya + yb); }
+      const m = Math.hypot(nx, ny, nz) || 1; nx /= m; ny /= m; nz /= m;
+      if (nz < 0) { nx = -nx; ny = -ny; nz = -nz; }
+      return { pts, sq: tile[fi], cy: (pts[0][1] + pts[1][1] + pts[2][1]) / 3 + 0.5, face: nx*L[0] + ny*L[1] + nz*L[2] - L[2] };
+    });
+    return { facets, rim: O, rimSq: Q };
+  })();
+  const _heartFacets = _heartGeom.facets;
+  const _heartInk = new Map();          // colour -> its facets' fills, worked out once
+  function heartInks(col) {
+    let ink = _heartInk.get(col);
+    if (ink) return ink;
+    const [r, g, b] = hexRGB(col), H = HEART;
+    ink = _heartFacets.map(f => {
+      const d = (0.5 - f.cy)*H.grad + f.face*H.contrast;
+      const t = d >= 0 ? 255 : 0, k = d >= 0 ? Math.min(1, d)*H.lite : Math.min(1, -d)*H.deep;
+      return "rgb(" + Math.round(r + (t - r)*k) + "," + Math.round(g + (t - g)*k) + "," + Math.round(b + (t - b)*k) + ")";
+    });
+    _heartInk.set(col, ink);
+    return ink;
+  }
+  // `morph` runs 0 (the tile it was) to 1 (the heart), and may overshoot a little on the way. Its hover and its spark only
+  // arrive with the heart.
+  // The heart itself at the origin, `s` across — its facets and its outline, `m` of the way from the tile to the heart —
+  // with no hover and no spark. The board's heart, one reeled in, one flying to the counter and the counter's own icon
+  // are all this.
+  function paintHeart(s, col, m, rimW) {
+    const ink = heartInks(col);
+    const at = (p, q) => [(q[0] + (p[0] - q[0])*m)*s, (q[1] + (p[1] - q[1])*m)*s];     // heart point p, tile point q
+    ctx.lineWidth = 0.6; ctx.lineJoin = "round";
+    _heartFacets.forEach((f, i) => {
+      const a = at(f.pts[0], f.sq[0]), b = at(f.pts[1], f.sq[1]), c = at(f.pts[2], f.sq[2]);
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c[0], c[1]); ctx.closePath();
+      ctx.fillStyle = ink[i]; ctx.fill(); ctx.strokeStyle = ink[i]; ctx.stroke();   // (a hair of its own colour closes the seams)
+    });
+    // THE OUTLINE, in its colour, on its own corners
+    const R = _heartGeom.rim, RQ = _heartGeom.rimSq;
+    ctx.beginPath(); R.forEach((p, i) => { const q = at(p, RQ[i]); i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); }); ctx.closePath();
+    ctx.strokeStyle = col; ctx.lineWidth = rimW; ctx.lineJoin = "miter"; ctx.stroke();
+  }
+  function drawHeart(x, y, ts, col, morph, phase) {
+    const m = morph == null ? 1 : morph, done = m >= 1, s = cell * HEART.size;
+    const lift = (0.5 + 0.5*Math.sin(ts / HEART.floatMs + (phase || 0))) * cell * HEART.float * Math.max(0, Math.min(1, m));
+    ctx.save();
+    ctx.translate(x, y - lift);
+    paintHeart(s, col, m, Math.max(1, cell*HEART.rimW));
+    const R = _heartGeom.rim, n = R.length;
+    if (done) {                                  // ...and once it is a heart, a spark of its colour going round, rolling
+      const seg = []; let lap = 0;
+      for (let i = 0; i < n; i++) { const a = R[i], b = R[(i+1) % n], l = Math.hypot(b[0] - a[0], b[1] - a[1]); seg.push(l); lap += l; }
+      let d = (((ts / HEART.lapMs) + (phase || 0)*0.137) % 1) * lap, j = 0;
+      while (j < n - 1 && d > seg[j]) { d -= seg[j]; j++; }
+      const a = R[j], b = R[(j+1) % n], u = seg[j] ? Math.min(1, d / seg[j]) : 0;
+      const sx = (a[0] + (b[0] - a[0])*u)*s, sy = (a[1] + (b[1] - a[1])*u)*s, sz = s*HEART.sparkK;
+      ctx.save(); ctx.translate(sx, sy); ctx.rotate(((ts / HEART.lapMs) % 1) * lap*s / (sz * TAB_SPARK_ROLL));
+      drawSpark(ctx, 0, 0, sz, ts, { alpha: 1, col, seed: ((phase || 0) % 7) * 0.13 });
+      ctx.restore();
+    }
+    ctx.restore();
   }
   // `seed` picks where its spark sits. The board passes the coin's cell, so a coin's spark is in
   // the same place every frame and every visit; one being reeled in passes the cell it left.
@@ -21408,6 +21638,166 @@
   // is cheap and goes over the top per frame.
   const _stoneCache = new Map();
   const STONE_GRAINS = 4;          // distinct grain draws, so same-state neighbours don't twin
+  // ---- THE LOW-POLY STONE ------------------------------------------------------------------
+  // A rough-hewn rock rather than an inscribed panel: a jittered 4x4 triangle mesh with a height at every vertex,
+  // the rim at nothing and the middle highest. Each facet is shaded by two things — WHERE it sits, light at the top
+  // of the stone and dark at the bottom, which is the part that has to read the same on every stone; and which way
+  // it FACES, lit from above, kept small enough that it never turns that fall over. The face's base shade still
+  // steps down with each tap (STONE_FACE), as the panel's did.
+  //
+  // Damage never touches a facet. It CRACKS, along the mesh's own edges: a crack comes in from a vertex on the rim
+  // and walks inward edge by edge, thick at the rim and tapering to a point, putting out branches at its joints
+  // that walk away from it and come to points of their own. The whole of a stone's cracking is worked out at its
+  // worst from one seeded stream, and a healthier stone shows the front of it — so a hit grows the cracks that are
+  // there rather than drawing new ones. Explored in stone-facets.html.
+  const STONE_STYLE = "lowpoly";   // "lowpoly", or "panel" for the inscribed face and carved fissures before it
+  const STONE_POLY = {
+    mesh:     4,       // squares to a side of the mesh
+    jitter:   0.14,    // how far an inside vertex wanders, fraction of a mesh square... (x4, so of the tile /4)
+    rimJit:   0.12,    // ...and a rim vertex, along its edge
+    height:   0.55,    // the relief: how high the middle stands against the rim, in tiles, per tile from the edge
+    bump:     0.08,    // ...and a random lift on top of that, per vertex
+    grad:     0.80,    // light at the top, dark at the bottom
+    contrast: 0.45,    // the facet play on top of it
+    lite:     "#fff6de",   // what a facet is lightened toward...
+    dark:     "#231d12",   // ...and darkened toward
+    grain:    true,    // the stone's grit over the facets
+  };
+  const STONE_CRACK = {
+    mainSteps: [4, 3], // edges each crack runs at one tap: the first, then a second from another side
+    twoTaps:   2,      // ...and how far the first has got at two taps (the second is not there yet)
+    branchP:   0.75,   // chance a crack puts out a branch at each of its joints
+    branchSteps: 2,    // edges a branch runs at one tap
+    branchW:   0.70,   // a branch's width where it leaves, against the crack's width there
+    w:         0.055,  // a crack's width at the rim, fraction of the tile
+  };
+  function _sRng(seed) { let a = seed >>> 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function _sPolyMesh(seed) {
+    const P = STONE_POLY, N = P.mesh, r = _sRng(seed*7919 + 13), V = [];
+    for (let j = 0; j <= N; j++) { V[j] = [];
+      for (let i = 0; i <= N; i++) {
+        const edge = i === 0 || j === 0 || i === N || j === N;
+        let x = i/N, y = j/N;
+        if (!edge) { x += (r() - 0.5)*P.jitter; y += (r() - 0.5)*P.jitter; }
+        else if ((i === 0 || i === N) && j > 0 && j < N) y += (r() - 0.5)*P.rimJit;
+        else if ((j === 0 || j === N) && i > 0 && i < N) x += (r() - 0.5)*P.rimJit;
+        const d = Math.max(Math.abs(x - 0.5), Math.abs(y - 0.5));
+        V[j][i] = [x, y, edge ? 0 : (0.5 - d)*P.height + r()*P.bump];
+      } }
+    const f = [];
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const a = V[j][i], b = V[j][i+1], c = V[j+1][i+1], d = V[j+1][i];
+      if ((i + j + (r() < 0.5 ? 1 : 0)) % 2) { f.push([a, b, c], [a, c, d]); }
+      else { f.push([a, b, d], [b, c, d]); }
+    }
+    return f;
+  }
+  const _sLight = (() => { const v = [0, -0.95, 1], m = Math.hypot(...v); return v.map(x => x/m); })();
+  function _sFacetFace(pts) {                                   // which way it faces, against flat: -..+
+    let nx = 0, ny = 0, nz = 0;
+    for (let i = 0; i < pts.length; i++) { const [x1,y1,z1] = pts[i], [x2,y2,z2] = pts[(i+1) % pts.length];
+      nx += (y1 - y2)*(z1 + z2); ny += (z1 - z2)*(x1 + x2); nz += (x1 - x2)*(y1 + y2); }
+    const m = Math.hypot(nx, ny, nz) || 1; nx /= m; ny /= m; nz /= m;
+    if (nz < 0) { nx = -nx; ny = -ny; nz = -nz; }
+    return nx*_sLight[0] + ny*_sLight[1] + nz*_sLight[2] - _sLight[2];
+  }
+  function _sTone(hex, d) {
+    const [r, g, b] = hexRGB(hex), [tr, tg, tb] = hexRGB(d >= 0 ? STONE_POLY.lite : STONE_POLY.dark), k = Math.min(1, Math.abs(d));
+    return "rgb(" + Math.round(r + (tr - r)*k) + "," + Math.round(g + (tg - g)*k) + "," + Math.round(b + (tb - b)*k) + ")";
+  }
+  // The cracks at `taps`, as { pts, w0 } polylines in tile units along the mesh's edges.
+  function _sPolyCracks(facets, seed, taps) {
+    if (taps >= 3) return [];
+    const C = STONE_CRACK, K = p => Math.round(p[0]*1000) + "," + Math.round(p[1]*1000);
+    const V = new Map(), N = new Map();
+    for (const f of facets) f.forEach((p, i) => {
+      const q = f[(i + 1) % f.length], a = K(p), b = K(q);
+      V.set(a, p); V.set(b, q);
+      if (!N.has(a)) N.set(a, new Set()); if (!N.has(b)) N.set(b, new Set());
+      N.get(a).add(b); N.get(b).add(a);
+    });
+    const onRim = p => p[0] < 0.001 || p[1] < 0.001 || p[0] > 0.999 || p[1] > 0.999;
+    const corner = p => (p[0] < 0.001 || p[0] > 0.999) && (p[1] < 0.001 || p[1] > 0.999);
+    const rim = [...V.keys()].filter(k => onRim(V.get(k)) && !corner(V.get(k))).sort();
+    if (!rim.length) return [];
+    const r = _sRng(seed*977 + 3), used = new Set();
+    const side = p => p[1] < 0.001 ? 0 : p[0] > 0.999 ? 1 : p[1] > 0.999 ? 2 : 3;
+    const walk = (from, steps, score) => {
+      const keys = [from];
+      let cur = from;
+      for (let n = 0; n < steps; n++) {
+        const opts = [...N.get(cur)].filter(k => !used.has(k) && !keys.includes(k) && !onRim(V.get(k)));
+        if (!opts.length) break;
+        let best = null, bs = -1e9;
+        for (const k of opts) { const sc = score(V.get(k)) + r()*0.12; if (sc > bs) { bs = sc; best = k; } }
+        keys.push(best); cur = best;
+      }
+      keys.forEach(k => used.add(k));
+      return keys;
+    };
+    const first = rim[Math.floor(r()*rim.length)];
+    const others = rim.filter(k => side(V.get(k)) !== side(V.get(first)));
+    const second = others.length ? others[Math.floor(r()*others.length)] : null;
+    const out = [];
+    [first, second].forEach((start, ci) => {
+      if (!start) return;
+      const st = V.get(start);
+      const main = walk(start, C.mainSteps[ci], p => Math.hypot(p[0] - st[0], p[1] - st[1]));
+      const mainPts = main.map(k => V.get(k)), branches = [];
+      // Branches are worked out whatever the health, so the stream is spent the same way at every health.
+      for (let i = 1; i < main.length - 1; i++) {
+        if (r() > C.branchP) continue;
+        const bk = walk(main[i], C.branchSteps, p => Math.min(...mainPts.map(q => Math.hypot(p[0] - q[0], p[1] - q[1]))));
+        if (bk.length > 1) branches.push({ at: i, keys: bk });
+      }
+      const len = taps === 2 ? (ci === 0 ? Math.min(C.twoTaps, main.length - 1) : 0) : main.length - 1;
+      if (len < 1) return;
+      out.push({ pts: mainPts.slice(0, len + 1), w0: 1 });
+      for (const b of branches) {
+        if (b.at >= len) continue;                                   // its root is not cracked yet
+        const reach = taps === 2 ? Math.min(1, len - b.at) : b.keys.length - 1;
+        out.push({ pts: b.keys.slice(0, reach + 1).map(k => V.get(k)), w0: C.branchW * (1 - b.at/len) });
+      }
+    });
+    return out.filter(c => c.pts.length > 1);
+  }
+  function _sPolyCrack(g, crack, s) {
+    const path = crack.pts, w0 = s*STONE_CRACK.w*crack.w0, L = [0];
+    for (let i = 1; i < path.length; i++) L.push(L[i-1] + Math.hypot(path[i][0] - path[i-1][0], path[i][1] - path[i-1][1]));
+    const tot = L[L.length - 1] || 1, left = [], right = [];
+    path.forEach((p, i) => {
+      const a = path[Math.max(0, i - 1)], b = path[Math.min(path.length - 1, i + 1)];
+      let tx = b[0] - a[0], ty = b[1] - a[1]; const m = Math.hypot(tx, ty) || 1; tx /= m; ty /= m;
+      const hw = (w0/2) * (1 - L[i]/tot) / s;                     // full at the root, nothing at the tip
+      left.push([p[0] - ty*hw, p[1] + tx*hw]); right.push([p[0] + ty*hw, p[1] - tx*hw]);
+    });
+    // Cut to TRANSPARENT, as the panel's fissures are, so the surround drawStone lays behind shows through.
+    // An OPAQUE ink, whatever was last set: destination-out removes as much as the fill covers, and the grit leaves
+    // a fill at a fifth — which cut every crack a fifth of the way through and left it all but invisible.
+    g.save(); g.globalCompositeOperation = "destination-out"; g.fillStyle = "#000";
+    g.beginPath();
+    left.forEach((p, i) => i ? g.lineTo(p[0]*s, p[1]*s) : g.moveTo(p[0]*s, p[1]*s));
+    for (let i = right.length - 1; i >= 0; i--) g.lineTo(right[i][0]*s, right[i][1]*s);
+    g.closePath(); g.fill();
+    if (crack.w0 < 1) { g.beginPath(); g.arc(path[0][0]*s, path[0][1]*s, w0/2, 0, 7); g.fill(); }   // a round root on a branch
+    g.restore();
+  }
+  function _sPolyPaint(g, s, rad, seed, taps) {
+    const P = STONE_POLY, base = STONE_FACE[3 - taps] || STONE_FACE[2], facets = _sPolyMesh(seed);
+    g.save(); _srr(g, 0, 0, s, s, rad); g.clip();
+    g.fillStyle = STONE_EDGE; g.fillRect(0, 0, s, s);                  // under the facets' antialiased seams
+    for (const f of facets) {
+      const cy = (f[0][1] + f[1][1] + f[2][1]) / 3;
+      g.beginPath(); g.moveTo(f[0][0]*s, f[0][1]*s); g.lineTo(f[1][0]*s, f[1][1]*s); g.lineTo(f[2][0]*s, f[2][1]*s); g.closePath();
+      g.fillStyle = _sTone(base, (0.5 - cy)*P.grad + _sFacetFace(f)*P.contrast);
+      g.fill(); g.strokeStyle = g.fillStyle; g.lineWidth = 0.6; g.stroke();   // (a hair of its own colour closes the seams)
+    }
+    if (P.grain) _sTexture(g, s, seed*613 + 31);
+    for (const c of _sPolyCracks(facets, seed, taps)) _sPolyCrack(g, c, s);
+    g.restore();
+  }
+  const stoneFaceInset = () => STONE_STYLE === "lowpoly" ? 0 : PLATE_PAD;
   function stoneBitmap(S, s, rad, vi, gi, taps) {
     // Keyed on the size too, rather than cleared whenever the size changes: a mechanic card draws its stone at the card's
     // size over a board drawing its own at the board's, and the old rule rebuilt both, every frame, for as long as it was up.
@@ -21415,10 +21805,15 @@
     if (!_stoneCache.has(key) && _stoneCache.size > 96) _stoneCache.clear();
     const hit = _stoneCache.get(key);
     if (hit) return hit;
-    const v = _STONE_VARS[vi % _STONE_VARS.length];
-    const cfg = _stoneCracks(v, taps);
     const bm = document.createElement("canvas"); bm.width = S; bm.height = S;
     const g = bm.getContext("2d");
+    if (STONE_STYLE === "lowpoly") {                         // one mesh per (variant, grain): twelve rocks
+      _sPolyPaint(g, s, rad, vi*STONE_GRAINS + gi + 1, taps);
+      _stoneCache.set(key, bm);
+      return bm;
+    }
+    const v = _STONE_VARS[vi % _STONE_VARS.length];
+    const cfg = _stoneCracks(v, taps);
     g.save(); _srr(g,0,0,s,s,rad); g.clip();
     g.fillStyle = STONE_EDGE; g.fillRect(0,0,s,s);          // the surround, identical on every stone
     _sTexture(g, s, gi*977 + 41);                           // ...but grained, so it isn't a dead band
@@ -21462,7 +21857,8 @@
     // The face, the same inset rounded square the bitmap carves. It used to call the bitmap's own panel builder, which
     // lays its path on the BITMAP's context — so the clip here was an empty path, and the flash and the shimmer below were
     // clipped away to nothing on every stone.
-    rrect(s*PLATE_PAD, s*PLATE_PAD, s - 2*s*PLATE_PAD, s - 2*s*PLATE_PAD, Math.max(0, rad - s*PLATE_PAD*0.6)); ctx.clip();
+    const ip = stoneFaceInset();
+    rrect(s*ip, s*ip, s - 2*s*ip, s - 2*s*ip, Math.max(0, rad - s*ip*0.6)); ctx.clip();
     if (st && st.hit > 0) {                            // fresh-hit flash
       ctx.globalAlpha = st.hit*0.45; ctx.fillStyle = "#ffffff"; ctx.fillRect(0,0,s,s);
     }
