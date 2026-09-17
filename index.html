@@ -5172,7 +5172,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.73";                    // shown on the title & pause screens
+  const VERSION = "v10.74";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -22554,8 +22554,20 @@
   //     that do not overlap is the sum of their blurs — the soft dark all round, then the heavier one below over it.
   // Each tile carries a couple of pixels past its cell, so no seam shows where two meet. Tiles are painted as their cells
   // first come on screen, a few dozen a frame at most.
-  const EDGE_TILE = { pad: 2, perRow: 8, bakePerFrame: 48 };
+  //
+  // WHAT THIS COST, and why it is shaped as it is now. A tile used to be painted at the cell's full DEVICE size — 252px square
+  // on a desktop at 2x — pixel by pixel in script, and a board coming on screen asked for a few dozen of them in one frame:
+  // 456ms, measured, with the whole game stopped. And the atlas was keyed on that size, so every change of cell (the map's
+  // cell, a level's, a resize) threw it away and began again — which is why the freezes came at "random" moments in menus
+  // and play alike. Three things now:
+  //   · `px`: a tile is painted at most this many pixels a side and scaled up where it is stamped. Everything in it is a
+  //     soft fall-off, which scaling cannot spoil, and a sixteenth of the pixels is a sixteenth of the time;
+  //   · `bakeMs`: a frame stops painting tiles once it has spent this long on them (always at least one), and the rest come
+  //     in over the next frames — a cell whose tile is not ready yet simply shows no light for a frame or two;
+  //   · `keep`: atlases are held per look, a few at once, so going from the map to a level and back does not paint either again.
+  const EDGE_TILE = { pad: 2, perRow: 8, bakePerFrame: 48, px: 64, bakeMs: 4, keep: 4 };
   let _edgeTiles = null;
+  const _edgeAtlases = new Map();         // look -> atlas, most recently used last
   const _erf = (x) => {
     const sg = x < 0 ? -1 : 1, a = Math.abs(x), t = 1 / (1 + 0.3275911*a);
     return sg * (1 - ((((1.061405429*t - 1.453152027)*t + 1.421413741)*t - 0.284496736)*t + 0.254829592)*t*Math.exp(-a*a));
@@ -22571,12 +22583,19 @@
   // The atlas for the look in force (sizes, colours, the two blocks), and which tile each cell of this board wears.
   function edgeTileSet() {
     const s = state, B = BOARD_INNER, WS = WALL_SHADOW;
-    const tpx = Math.max(8, Math.round(cell * Math.min(dpr || 1, 2)));
+    const tpx = Math.max(8, Math.min(EDGE_TILE.px, Math.round(cell * Math.min(dpr || 1, 2))));
     const vivid = s.bgTheme && s.bgTheme.colors ? innerVivid(s.bgTheme) : null, blue = hexRGB(tvBlueHex());
     const look = [tpx, vivid ? vivid.join(",") : "-", blue.join(","), B.w, B.a, B.cw, B.ca,
                   WS.around.blur, WS.around.drop, WS.around.alpha, WS.under.blur, WS.under.drop, WS.under.alpha].join("|");
     let E = _edgeTiles;
-    if (!E || E.look !== look) E = _edgeTiles = { look, tpx, vivid, blue, tiles: new Map(), pages: [], used: 0 };
+    if (!E || E.look !== look) {
+      E = _edgeAtlases.get(look);
+      if (E) _edgeAtlases.delete(look);                                  // (re-inserted below: most recently used last)
+      else E = { look, tpx, vivid, blue, tiles: new Map(), pages: [], used: 0 };
+      _edgeAtlases.set(look, E);
+      while (_edgeAtlases.size > EDGE_TILE.keep) _edgeAtlases.delete(_edgeAtlases.keys().next().value);
+      _edgeTiles = E;
+    }
     const holeKey = s.holeKey || "", wallN = s.walls ? s.walls.size : 0;
     if (E.cols !== COLS || E.rows !== ROWS || E.holeKey !== holeKey || E.walls !== s.walls || E.wallN !== wallN) {
       const open = new Set([...(s.holes || []), ...(s.singularity || [])]);
@@ -22659,11 +22678,15 @@
     const c0 = Math.max(0, Math.floor(-bx / cell)), c1 = Math.min(COLS - 1, Math.floor((viewW - bx) / cell));
     const r0 = Math.max(0, Math.floor(-by / cell)), r1 = Math.min(ROWS - 1, Math.floor((viewH - by) / cell));
     let budget = EDGE_TILE.bakePerFrame;
+    const t0 = performance.now();
     const sm = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = true;
     for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
       const k = E.keys[r*COLS + c]; if (!k) continue;
       let t = E.tiles.get(k);
-      if (t === undefined) { if (budget <= 0) continue; budget--; t = edgeTile(E, k); }
+      if (t === undefined) {
+        if (budget <= 0 || (budget < EDGE_TILE.bakePerFrame && performance.now() - t0 > EDGE_TILE.bakeMs)) continue;
+        budget--; t = edgeTile(E, k);
+      }
       if (t) ctx.drawImage(t.page, t.sx, t.sy, t.n, t.n, c*cell, r*cell, cell, cell);
     }
     ctx.imageSmoothingEnabled = sm;
