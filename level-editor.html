@@ -386,6 +386,10 @@
           <option value="trap">Trap</option>
         <option value="stealth">Stealth hunter</option>
         <option value="golem">Stone golem</option>
+        <option value="warden">BOSS · Warden (hunts)</option>
+        <option value="leviathan">BOSS · Leviathan (rail)</option>
+        <option value="maw">BOSS · Maw (bites)</option>
+        <option value="colossus">BOSS · Colossus (stone)</option>
         </select></label>
         <label class="opt" data-for="stone">stone hp <input type="number" id="stoneHp" value="2" step="1" min="1" max="5"></label>
         <label class="opt" data-for="talisman">talisman <select id="talPick">
@@ -886,7 +890,15 @@ function placeMonster(c,r){
     // Built first, tested, and only then pushed — the refusal has to know the shape of the
     // thing, and a rail or a ring is several cells wide.
     let cand;
-    if (kind === "hrail" || kind === "vrail"){
+    // The LEVIATHAN is a boss on a rail: it is placed exactly as a rail monster is — a lane, a low end and a high one —
+    // and only its variant and its size differ. Without this it went down as a bare {c, r} and the game had no lane to
+    // row it along.
+    if (kind === "leviathan"){
+      const d = defaultRail(c,r); delete d.pos0;
+      d.axis = "h"; if (d.c != null){ d.r = r; delete d.c; }
+      d.lo = Math.max(0, c-1); d.hi = Math.min(L.cols-2, d.lo+2); d.lo = Math.max(0, d.hi-2);
+      cand = {kind:"monster", variant:kind, ...d, phase:0};
+    } else if (kind === "hrail" || kind === "vrail"){
       const d = defaultRail(c,r); delete d.pos0;
       d.axis = kind === "vrail" ? "v" : "h";        // the picker wins over defaultRail's guess
       if (d.axis === "v" && d.r != null){ d.c = c; delete d.r;
@@ -1918,7 +1930,8 @@ function buildInspector(){
     who.textContent = v + " monster";
     opts.appendChild(inspRow("kind", inspSel(
       [["hrail","Horizontal rail"],["vrail","Vertical rail"],["patrol","Patrol"],
-       ["square","Square loop"],["hunter","Hunter"],["trap","Trap"],["stealth","Stealth"],["golem","Golem"]],
+       ["square","Square loop"],["hunter","Hunter"],["trap","Trap"],["stealth","Stealth"],["golem","Golem"],
+       ["warden","BOSS Warden"],["leviathan","BOSS Leviathan"],["maw","BOSS Maw"],["colossus","BOSS Colossus"]],
       v, nv => { retypeMonster(ref, nv); selectAt(sel); })));
     // No pace to set. Every monster crosses a tile in exactly the time the RUNNER does and
     // rides his ramp with him, so the level's cps is the only speed on the board.

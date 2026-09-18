@@ -3949,7 +3949,31 @@
       o.connect(g); g.connect(dry); g.connect(wet);
       o.start(t0); o.stop(t0 + 5.6);
     }
-    // A CIRCUIT CLOSED — the loud one. The track has just shut on itself, which is the biggest thing a player can build,
+      // GROUND CRACKING, not rock breaking. A crack is a thing that RUNS: a few short splinters over a tenth of a second,
+    // each a filtered tick a little lower than the last, with a thin tail — where the crunch is one bite of noise and
+    // arrives as an event. `k` is how far into the crumble it is, 0..1: deeper cracks are lower and longer.
+    function crack(k) {
+      if (muted || !ac || ac.state !== "running" || !noiseBuf) return;
+      const t0 = ac.currentTime, kk = Math.max(0, Math.min(1, k == null ? 0 : k));
+      const n = 3 + Math.round(kk*2);
+      for (let i = 0; i < n; i++) {
+        const t = t0 + i*(0.018 + Math.random()*0.022);
+        const src = ac.createBufferSource(); src.buffer = noiseBuf;
+        src.playbackRate.value = 1.3 - kk*0.5 + Math.random()*0.3;
+        const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 6 - kk*3;
+        const hz = (2600 - kk*1200) * (0.8 + Math.random()*0.5);
+        bp.frequency.setValueAtTime(hz, t);
+        bp.frequency.exponentialRampToValueAtTime(Math.max(120, hz*0.35), t + 0.09);
+        const g = ac.createGain();
+        const v = (0.20 + kk*0.16) * (1 - i/(n + 1)*0.5);      // ...and loud enough to be a crack rather than a rustle
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(v, t + 0.004);
+        g.gain.exponentialRampToValueAtTime(0.0002, t + 0.10 + kk*0.10);
+        src.connect(bp); bp.connect(g); g.connect(master); g.connect(sendBus);
+        src.start(t); src.stop(t + 0.22 + kk*0.12);
+      }
+    }
+  // A CIRCUIT CLOSED — the loud one. The track has just shut on itself, which is the biggest thing a player can build,
     // and it gets a fanfare to match, in four layers over about three seconds, most of it into the room:
     //   · a rush of air sweeping up under a sub drop — the thing taking off;
     //   · a bright major arpeggio racing up three octaves on detuned saws through a filter opening as it climbs;
@@ -5142,7 +5166,7 @@
              slide, clack, tap, tapBig, swish, airSwish, flyWhoosh, tabClick, power, warp, vortex, thrum, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck, choir,
              ambient,
-             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, charmReveal, tallyRing, boom, twinkle, holeChime, infinityRing, loopClosed, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
+             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, charmReveal, tallyRing, boom, twinkle, holeChime, infinityRing, loopClosed, crack, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
              levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, talismanTheme, choirLift, setMusicGate,
              musicNow: () => ({ ...MU }) };
   })();
@@ -5178,7 +5202,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.75";                    // shown on the title & pause screens
+  const VERSION = "v10.76";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -7283,11 +7307,19 @@
       heartHudPop: -1e9,                    // ...when it last took one
       heartHudCol: null,                    // ...and the colour of that one, which the counter wears
       heartRun: [],                         // hearts on their way from him to their counter
+      fliesGot: 0,                          // butterflies the Bell has freed this run
+      fliesShown: 0,                        // ...what their counter is SAYING
+      flyHudPop: -1e9,                      // ...when it last took one
+      flyHudCol: null,                      // ...and the colour of that one
+      flyRun: [],                           // butterflies on their way from where they flew to their counter
       loop: null,                           // a circuit he is going round, once we are sure
       vortex: null,                         // ...and what happens to the world when he is
       singularity: new Set((L.singularity||[]).map(c=>key(c[0],c[1]))),
       collapsed: new Set(),
       eaten: [],                            // tiles the rift is currently swallowing
+      crumbleGone: new Set(),               // squares of a crumble already broken off it (CRUMBLE.throw)
+      crumbleFly: [],                       // ...and the ones still in the air
+      tilt: new Map(),                      // how far each crumbling cell's tile has been turned and dropped by its gives
       // fixed platforms: permanent free track cast into a wall plinth (see trackConnects)
       platforms: (L.platforms||[]).map((p,i)=>({ id:i, c:p[0], r:p[1], dirs:parsePfDirs(p[2]), lit:0 })),
       platformMap: new Map(),
@@ -7325,7 +7357,7 @@
           }
           if (K.move === "hunt") {
             // A golem carries a stone's state: taps left, the fresh-hit flash, and which crack set and grain it drew.
-            const hp0 = Math.max(1, (h.hp | 0) || 2);
+            const hp0 = Math.max(1, (h.hp | 0) || K.hp || 2);      // ...a boss of stone takes its kind's own taps
             const stone = K.stone ? { hp: hp0, max: hp0, hit: 0,
                                       vi: _sHash(h.c*7 + 3, h.r*13 + 5) % _STONE_VARS.length,
                                       gi: _sHash(h.c*41 + 9, h.r*11 + 5) % STONE_GRAINS } : null;
@@ -8601,9 +8633,12 @@
     if (!s || !inBounds(c, r)) return;
     if (!s.hearts) s.hearts = new Map();
     const k = key(c, r);
-    if (s.hearts.has(k)) return;
     const cols = TALISMANS.map(t => t.col);
-    s.hearts.set(k, { col: cols[(s.heartSeq++ || 0) % cols.length], at: -1 });
+    const one = { col: cols[(s.heartSeq++ || 0) % cols.length], at: -1 };
+    // MORE THAN ONE ON A SQUARE. A golem broken where a stone's heart is already lying used to leave nothing at all. They
+    // stack instead, and the cell FANS them across its middle (drawn below), so two or three read as two or three.
+    const have = s.hearts.get(k);
+    if (have) have.push(one); else s.hearts.set(k, [one]);
   }
   function breakStone(c, r, all) {
     const st = state.stones.get(key(c, r));
@@ -8642,9 +8677,12 @@
   // a small knock, its cracks a stage deeper — and the last one shatters it and it is gone. The tap lands on the body you
   // can SEE, a tile's width about where it is, not on the cell it is counted in: it is moving, and a tap on it should land.
   function tapGolem(wx, wy) {
-    const s = state, h2 = cell * 0.5;
-    const g = s.hazards.find(h => h.kind === "monster" && monKind(h).stone &&
-                                  Math.abs(wx - h.wx) <= h2 && Math.abs(wy - h.wy) <= h2);
+    const s = state;
+    const g = s.hazards.find(h => {
+      if (h.kind !== "monster" || !monKind(h).stone) return false;
+      const K = monKind(h), h2 = cell * monBig(K) * 0.5, o = monOff(K);     // a boss is four cells of stone
+      return Math.abs(wx - (h.wx + o)) <= h2 && Math.abs(wy - (h.wy + o)) <= h2;
+    });
     if (!g) return false;
     g.hp -= 1; g.hit = 1;
     haptic(g.hp > 0 ? 10 : 18);
@@ -8779,6 +8817,16 @@
         const now = performance.now();
         if (now - _butterflySang > 150) { _butterflySang = now; try { Sound.twinkle && Sound.twinkle(); } catch (_) {} }
       }
+    }
+    // ...and once one has flown, it goes up to the COUNTER, the way a coin or a heart does: it is the Bell's tally, and a
+    // thing that simply faded out over the board left nothing to say how many you had freed.
+    for (const f of s.butterflies) {
+      if (f.t < butterflyLife() || f.counted) continue;
+      f.counted = true;
+      s.fliesGot = (s.fliesGot || 0) + 1;
+      const q = butterflyAt(f, butterflyLife());
+      (s.flyRun || (s.flyRun = [])).push({ wx: q.x, wy: q.y, w0: q.W, col: f.col, t: 0, done: false,
+                                           delay: Math.min(5, s.flyRun.length) * COINRUN.stagger });
     }
     s.butterflies = s.butterflies.filter(f => f.t < butterflyLife());
   }
@@ -9333,6 +9381,7 @@
       s.walked.push({ c: now.c, r: now.r });
       if (s.goal && now.c === s.goal.c && now.r === s.goal.r) { s.runT = 0; endWin(); return; }
     }
+    crumbleShake();         // ...and halfway across a crumbling cell, the ground gives a little under him
     freeClearedTiles();
     collectKey();
     linkParkedTiles();      // connect any staged tile that now touches the front
@@ -11435,8 +11484,9 @@
     const h2 = cell/2;
     const doomed = s.hazards.filter(h => {
       if (h.kind !== "monster") return false;
-      const nx = Math.max(h.wx - h2, Math.min(rp.x, h.wx + h2));
-      const ny = Math.max(h.wy - h2, Math.min(rp.y, h.wy + h2));
+      const K = monKind(h), hh = h2 * monBig(K), o = monOff(K);        // ...and a boss is the square of four it stands on
+      const nx = Math.max(h.wx + o - hh, Math.min(rp.x, h.wx + o + hh));
+      const ny = Math.max(h.wy + o - hh, Math.min(rp.y, h.wy + o + hh));
       return Math.hypot(nx - rp.x, ny - rp.y) <= reach;
     });
     if (!doomed.length) return 0;           // the shout already rang; nothing to add
@@ -11538,6 +11588,16 @@
       }
       s.coinRun = s.coinRun.filter(f => !f.done);
     }
+    if (s.flyRun && s.flyRun.length) {           // ...and butterflies to theirs
+      for (const f of s.flyRun) f.t += dt;
+      for (const f of s.flyRun) if (!f.done && f.t - f.delay >= COINRUN.flash + COINRUN.fly) {
+        f.done = true;
+        s.fliesShown = (s.fliesShown || 0) + 1;
+        s.flyHudPop = performance.now(); s.flyHudCol = f.col;
+        Sound.coinBank();
+      }
+      s.flyRun = s.flyRun.filter(f => !f.done);
+    }
     if (s.heartRun && s.heartRun.length) {       // ...and hearts to theirs, the same way
       for (const f of s.heartRun) f.t += dt;
       for (const f of s.heartRun) if (!f.done && f.t - f.delay >= COINRUN.flash + COINRUN.fly) {
@@ -11578,12 +11638,13 @@
         s.coinCells.delete(ck);
         s.coinFly.push({ c, r, t: 0, done: false, dur: Math.max(COIN_FLY_MIN, d * COIN_FLY_PER_TILE) });
       }
-      if (s.hearts) for (const [hk, h] of Array.from(s.hearts)) {     // ...and the hearts, on the same flight
+      if (s.hearts) for (const [hk, hs] of Array.from(s.hearts)) {    // ...and the hearts, on the same flight
         const i = hk.indexOf(","), c = +hk.slice(0, i), r = +hk.slice(i+1);
         const d = Math.hypot(rx - (c+0.5), ry - (r+0.5));
         if (d > MAGNET.radius) continue;
         s.hearts.delete(hk);
-        s.coinFly.push({ c, r, t: 0, done: false, heart: h.col, dur: Math.max(COIN_FLY_MIN, d * COIN_FLY_PER_TILE) });
+        for (const h of hs)
+          s.coinFly.push({ c, r, t: 0, done: false, heart: h.col, dur: Math.max(COIN_FLY_MIN, d * COIN_FLY_PER_TILE) });
       }
     }
     if (s.power.t <= 0) {                          // done — put everything back
@@ -11655,9 +11716,9 @@
       if (near(c, r)) { s.coinCells.delete(ck); grabCoin(c, r); }
     }
     // hearts: taken by passing over them, as the coins are
-    if (s.hearts) for (const [hk, h] of Array.from(s.hearts)) {
+    if (s.hearts) for (const [hk, hs] of Array.from(s.hearts)) {
       const [c, r] = hk.split(",").map(Number);
-      if (near(c, r)) { s.hearts.delete(hk); grabHeart(c, r, h.col); }
+      if (near(c, r)) { s.hearts.delete(hk); for (const h of hs) grabHeart(c, r, h.col); }
     }
     // talismans: passing over one unlocks it permanently, win or lose — but you have to be ON
     // it. At the coins' 0.7 of a cell he swept them up from the next tile along, which for the
@@ -11967,6 +12028,98 @@
     const wy = Y0 - cell/2 + cell*GUIDE.wordRow + inkNudge(ctx.font);
     ctx.fillStyle = GUIDE.ink;
     ctx.fillText(dragWord, X0 + ls/2, wy);                  // (half its tracking back: canvas lays it after the last letter too)
+    ctx.restore();
+  }
+  // CROSSING A CRUMBLE, IN THREE. It does not simply wait and then fall: it gives three times under him — as he arrives on
+  // it, halfway across, and as he leaves — and each time the tile TWISTS further round and drops further into the hole,
+  // staying where it is put rather than springing back, so by the time he is off it the thing is plainly on its way down.
+  // A few of the cell's outer squares break off it at every one of the three.
+  //
+  // WHERE HE IS, in a cell: `runT` is 0 at the MIDDLE of the tile his index names and a half at its far edge (a tile spans
+  // param [i-½, i+½] — see visualAt), so the first half of a cell is crossed while the index still names the one before
+  // it. That is why "arrive" is the PREVIOUS node's second half and "half" is this node's own zero.
+  function crumbleShake() {
+    const s = state, P = CRUMBLE;
+    if (s.status !== "play" || !s.singularity || !s.singularity.size) return;
+    const p = s.path;
+    const at = (n, stage) => {
+      if (!n || n.kind !== "tile" || (n.shook || 0) > stage) return;
+      if (!s.singularity.has(key(n.c, n.r)) || (s.collapsed && s.collapsed.has(key(n.c, n.r)))) return;
+      n.shook = stage + 1;
+      crumbleGive(n.c, n.r, stage);
+    };
+    const here = p[s.runIdx], next = p[s.runIdx + 1];
+    if (s.runT >= 0.5) at(next, 0);          // ...he has just come onto the NEXT cell: its first give
+    at(here, 1);                             // halfway across this one (its index names it from its middle on)
+    if (s.runT >= 0.5) at(here, 2);          // ...and the last of the three as he goes off its far edge
+  }
+  // ONE of those three gives: the tile turns further and sinks further, and squares break off the cell.
+  function crumbleGive(c, r, stage) {
+    const s = state, P = CRUMBLE, k = key(c, r);
+    // ONE WAY, THEN THE OTHER. The gives alternate — over, back past it, over again — rather than screwing the tile round
+    // in one direction, which read as a drill. Which way the FIRST one goes is the cell's own, so two crumbles side by
+    // side do not lurch together.
+    const first = (bgHash(c*7, r*11) & 1) ? 1 : -1;
+    const turn = (stage % 2 ? -first : first);
+    if (!s.tilt) s.tilt = new Map();
+    const cur = s.tilt.get(k) || { ang: 0, drop: 0, fromA: 0, fromD: 0, t: P.twistMs };
+    const step = stage + 1;                                   // each give is further than the last
+    s.tilt.set(k, { fromA: cur.ang, fromD: cur.drop,
+                    ang: cur.ang + P.twist*step*turn, drop: cur.drop + P.drop*step, t: 0 });
+    // ...and the squares that go with it: the outermost ones of the cell, thrown out and away from its middle
+    const all = crumblePieces(c, r), N = Math.max(1, Math.round(P.pieces));
+    const rim = all.filter(pc => { const i = pc.k % N, j = (pc.k / N) | 0; return i === 0 || j === 0 || i === N-1 || j === N-1; });
+    const mid = { x: cx(c) + cell/2, y: cy(r) + cell/2 };
+    // how many squares chip at THIS give: four or five at the first, five or six more at the second — and at the LAST,
+    // every outer square it has left, so he steps off a cell with nothing round its edge at all.
+    const span = P.throw[Math.min(stage, P.throw.length - 1)] || [2, 2];
+    const want = span[0] < 0 ? rim.length
+               : span[0] + ((bgHash(c*29 + stage, r*17 + stage) >>> 7) % Math.max(1, span[1] - span[0] + 1));
+    const start = (bgHash(c*13 + stage*5, r*7 + stage) >>> 5) % Math.max(1, rim.length);
+    for (let t = 0; t < Math.min(want, rim.length); t++) {
+      const pc = rim[(start + t*3) % rim.length];         // walked, not drawn at random: nothing is picked twice
+      const gk = c + "," + r + ":" + pc.k;
+      if (s.crumbleGone.has(gk)) continue;
+      s.crumbleGone.add(gk);
+      const px = pc.x0 + pc.q/2, py = pc.y0 + pc.q/2;
+      const ax = Math.atan2(py - mid.y, px - mid.x) + (Math.random() - 0.5)*0.5;
+      s.crumbleFly.push({ x: px, y: py, q: pc.q, a: pc.a, t: 0,
+                          vx: Math.cos(ax)*cell*P.throwV, vy: Math.sin(ax)*cell*P.throwV - cell*P.throwUp,
+                          spin: (Math.random() < 0.5 ? -1 : 1) * P.spinOff });
+    }
+    s.shake = Math.max(s.shake || 0, cell*0.025*(stage + 1));
+    Sound.crack && Sound.crack(stage/2);          // ...a crack running through it, not a bite out of it
+  }
+  // the squares that broke off one, on their way out: thrown, turning, falling and fading — and the tiles' own tilts,
+  // each easing to where its last give put it and staying there
+  function tickCrumbleFly(dt) {
+    const s = state;
+    if (s.crumbleFly && s.crumbleFly.length) {
+      for (const f of s.crumbleFly) { f.t += dt; f.vy += 0.0016*dt; f.x += f.vx*dt; f.y += f.vy*dt; }
+      s.crumbleFly = s.crumbleFly.filter(f => f.t < CRUMBLE.throwMs);
+    }
+    if (s.tilt) for (const v of s.tilt.values()) if (v.t < CRUMBLE.twistMs) v.t += dt;
+  }
+  // where a crumbling cell's tile is sitting right now: how far round it has been turned, and how far it has dropped
+  function crumbleTilt(c, r) {
+    const s = state, v = s && s.tilt && s.tilt.get(key(c, r));
+    if (!v) return null;
+    const u = Math.min(1, v.t / Math.max(1, CRUMBLE.twistMs)), e = easeOutBack(u);
+    return { ang: v.fromA + (v.ang - v.fromA)*e, drop: v.fromD + (v.drop - v.fromD)*e };
+  }
+  function drawCrumbleFly() {
+    const s = state; if (!s || !s.crumbleFly || !s.crumbleFly.length) return;
+    const blue = tvBlueHex();
+    ctx.save();
+    for (const f of s.crumbleFly) {
+      const u = f.t / CRUMBLE.throwMs;
+      ctx.save();
+      ctx.translate(f.x, f.y); ctx.rotate(f.spin*f.t);
+      ctx.globalAlpha = f.a * Math.max(0, 1 - u*u);
+      ctx.fillStyle = blue;
+      ctx.fillRect(-f.q/2, -f.q/2, f.q, f.q);
+      ctx.restore();
+    }
     ctx.restore();
   }
   function freeClearedTiles() {
@@ -12360,9 +12513,9 @@
     if (!h || h.wx == null || h.wy == null) return null;
     const K = h.kind === "monster" ? monKind(h) : null;
     const body = cell * ((K && (K.move === "rail" || K.look === "rail"))
-                         ? SWIM.size : MONSTER.size);
-    const w = body * HITBOX.monK / 2;
-    return { x: h.wx, y: h.wy, hw: w, hh: w, ang: 0 };
+                         ? SWIM.size : MONSTER.size) * monBig(K);
+    const w = body * HITBOX.monK / 2, o = monOff(K);
+    return { x: h.wx + o, y: h.wy + o, hw: w, hh: w, ang: 0 };   // a boss stands on the corner between its four cells
   }
   // Do two boxes overlap? Separating axis, four axes — the two of each box. Cheap, exact, and
   // it does not mind that one of them is turned: a runner rounding a corner sits at forty-five
@@ -12940,6 +13093,10 @@
             // and must not be chewed up by the thing replaying it.
             picks: (state.picked || []).map(q => Object.assign({}, q, { t: -1 })),
             coins: 0, coinsTotal: ((state.L && state.L.coins) || []).length, clock: 0, pickSnd: -1e9,
+            // ...and what else the chapter yielded, in the order the summary says it: the hearts under its stone and the
+            // butterflies the Bell made of its monsters. Each is a line of its own under the purse (see SUMMARY_ROWS).
+            hearts: state.heartsGot || 0, heartCols: (state.heartCols || []).slice(),
+            flies: state.fliesGot || 0, flyCol: state.flyHudCol || null,
             // The purse as it stood before this chapter, and what the chapter put in it.
             was: purseWas || 0, gain: purseGain || 0, nextWasOpen: _nextWasOpen,
             // What this chapter yielded that was not money. Copied, like `picks`: the run's own
@@ -14988,7 +15145,7 @@
         }
       }
       // ...and the charm arriving under the purse (see drawWinCharm)
-      if (!P.skip && charmShown(P) && !P.sndCharm && P.t >= payoutEnd(P) + PAYOUT.tail) {
+      if (!P.skip && charmShown(P) && !P.sndCharm && P.t >= charmAt(P)) {
         P.sndCharm = 1; Sound.charmReveal && Sound.charmReveal(); haptic([10, 22, 10]);
       }
     } else if (P.ph === "wait") {
@@ -15214,7 +15371,12 @@
       // the chapter you just finished — what it was called, what it paid, and what it held —
       // and a line hanging on its own at the bottom of the screen is a separate remark.
       // (one line under the purse, as far below it as the takings stood above — see drawWinCharm)
-      if (!P.skip) drawWinCharm(P, payoutEnd(P) + PAYOUT.tail, hy + size*WIN_TALLY_Y + PURSE_PX*PAYOUT.rise, outK);
+      if (!P.skip) {
+        const y0 = hy + size*WIN_TALLY_Y + PURSE_PX*PAYOUT.rise, rows = summaryRows(P);
+        rows.forEach((row, i) => drawSummaryRow(P, row, payoutEnd(P) + PAYOUT.tail + i*SUMMARY.step,
+                                                y0 + i*PURSE_PX*SUMMARY.row, outK));
+        drawWinCharm(P, charmAt(P), y0 + rows.length*PURSE_PX*SUMMARY.row, outK);
+      }
     }
     // THE PURSE STAYS. The tally the chapter's takings fell into does not leave with the words: over the pan it
     // rises from under COMPLETE to stand just under the TILEVERSE heading, and it stays there for as long as the
@@ -15232,7 +15394,7 @@
     // settled, never over the top of the number still changing.
     // The way out waits for the charm to have had its moment. Offered under it, the eye takes
     // the prompt and the announcement is something you read on the way past.
-    const outAt = payoutEnd(P) + PAYOUT.tail + (charmShown(P) ? CHARM_HOLD : 0);
+    const outAt = charmAt(P) + (charmShown(P) ? CHARM_HOLD : 0);
     if (P.ph === "name" && !P.skip && P.t > outAt) {
       ctx.save();
       drawFootFade();                       // ...on the same ground the Tileverse's button has
@@ -15413,6 +15575,39 @@
   // routine that quietly showed the first would be a bug nobody found for a year.
   const CHARM_IN = 560, CHARM_HOLD = 900;
   const charmShown = (P) => !!(P && P.charm && P.charm.length);
+  // WHAT ELSE THE CHAPTER GAVE YOU, said after the money and in this order: the hearts under its stone, then the
+  // butterflies the Bell made of its monsters, then the charm. Each is one line under the purse, one step further down,
+  // arriving a beat after the one above it — so the summary counts out what you are walking away with rather than
+  // showing it all at once.
+  const SUMMARY = { step: 520, row: 1.15 };      // ms between one line and the next, and how far apart they sit, in tally heights
+  const summaryRows = (P) => {
+    const out = [];
+    if (!P) return out;
+    if (P.hearts > 0) out.push({ kind: "heart", n: P.hearts, col: (P.heartCols && P.heartCols[P.heartCols.length - 1]) || HEART_CHIP_COL });
+    if (P.flies > 0)  out.push({ kind: "fly",   n: P.flies,  col: P.flyCol || "#c37ef1" });
+    return out;
+  };
+  // when the charm's line comes in: after the money and after every row above it
+  const charmAt = (P) => payoutEnd(P) + PAYOUT.tail + summaryRows(P).length*SUMMARY.step;
+  // ONE OF THOSE LINES: "+n" and the mark, at the tally's own size and spacing, rising into place with the charm's pop.
+  function drawSummaryRow(P, row, at, y, outK) {
+    if (!row || P.ph !== "name") return;
+    const e = clamp((P.t - at) / CHARM_IN, 0, 1), k = e * (outK == null ? 1 : outK);
+    if (k <= 0) return;
+    const h = PURSE_PX, gap = PURSE_GAP, cw = h*PURSE_COIN, numF = "900 " + h + "px " + UI_FONT;
+    ctx.save();
+    ctx.font = numF; ctx.letterSpacing = "1px"; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+    const txt = "+" + row.n, tw = ctx.measureText(txt).width, lineW = cw + gap + tw;
+    const x0 = viewW/2 - lineW/2, yy = y + inkNudge(numF);
+    const pop = 0.80 + 0.20*easeOutBack(e), rise = (1 - easeOut(e)) * h * 0.5;
+    ctx.globalAlpha = k;
+    ctx.translate(viewW/2, y + rise); ctx.scale(pop, pop); ctx.translate(-viewW/2, -y);
+    if (row.kind === "heart") { ctx.save(); ctx.translate(x0 + cw/2, y); flatHeart(cw, row.col); ctx.restore(); }
+    else hudFly(x0 + cw/2, y, cw, row.col);
+    ctx.fillStyle = row.col;
+    ctx.fillText(txt, x0 + cw + gap, yy);
+    ctx.restore();
+  }
   // THE CHARM ON THE TALLY: every talisman picked up on the level, one line UNDER the purse — as far below it as the
   // takings stood above it, at their size and in their spacing (the purse's own: PURSE_PX, its coin, PURSE_GAP) — a
   // little white "+", the badge the size of the coin, and the name in the charm's own colour. It rises into place with
@@ -15496,6 +15691,16 @@
   // The coin is a shade under the type because that is what the chip does with it too: coinChip
   // pads its box by 1.32, so the coin you actually see on that screen is about 20 across.
   const PURSE_PX = 26, PURSE_GAP = 9, PURSE_COIN = 0.76;
+  // EVERY COIN TAKEN: what that does to the takings on their way in, and the word for it afterwards.
+  const FULL_COINS = {
+    ink:     "#ffe14a",   // the line goes this yellow rather than the coin's own gold
+    shineMs: 900,         // one pass of the white band across it
+    size:    1.35,        // "100%" against the tally's type
+    rise:    0.9,         // how far it lifts as it comes in, in tally heights
+    in:      220,         // ...how long that takes
+    ms:      1500,        // ...how long it is up altogether
+    out:     320,         // ...and how long it takes to go
+  };
   // When the number on screen is the true one. Everything downstream — the tap that moves the
   // sequence on, the prompt that offers it — waits for this rather than for a fixed 700, so the
   // beat cannot be tapped away in the middle of its own arithmetic.
@@ -15599,6 +15804,9 @@
       // That is the hinge of the whole beat: what was a score becomes a sum.
       const ptxt = String(gain);
       const rest = P.coinsTotal ? " of " + P.coinsTotal : "";
+      // EVERY COIN ON THE BOARD. The takings say so before they are paid in: the line goes bright yellow with a white
+      // shimmer running across it, and when it lands a "100%" pops up where it stood (see below).
+      const full = !!(P.coinsTotal && P.coins >= P.coinsTotal);
       const restF = "700 " + h + "px " + UI_FONT;
       const ofA = rest ? 1 - clamp((up - PAYOUT.ofHold)/PAYOUT.ofFade, 0, 1) : 0;
       ctx.save();
@@ -15615,15 +15823,48 @@
       const px0 = viewW/2 - gw/2;
       hudCoin(px0, py, cw);
       ctx.font = numF;
-      ctx.fillStyle = COIN_FACE;
+      ctx.fillStyle = full ? FULL_COINS.ink : COIN_FACE;
       ctx.fillText(ptxt, px0 + cw + gap, py + inkNudge(numF));
+      // ...and the shimmer over the whole line — the coin and the figure — going round and round while it hangs there
+      if (full) {
+        const sh = ((up / FULL_COINS.shineMs) % 1 + 1) % 1, band = h*1.4;
+        const bx = px0 - band + (gw + band*2)*sh;
+        const gd = ctx.createLinearGradient(bx - band, 0, bx + band, 0);
+        gd.addColorStop(0, "rgba(255,255,255,0)"); gd.addColorStop(0.5, "rgba(255,255,255,0.9)");
+        gd.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.fillStyle = gd;
+        rrect(px0, py - cw/2, cw, cw, tileR(cw)); ctx.fill();
+        ctx.fillText(ptxt, px0 + cw + gap, py + inkNudge(numF));
+        ctx.restore();
+      }
       if (ofA > 0.004) {
         ctx.globalAlpha = alpha * pa * ofA;
         ctx.font = restF;
-        ctx.fillStyle = "rgba(214,218,240,0.66)";
+        ctx.fillStyle = full ? FULL_COINS.ink : "rgba(214,218,240,0.66)";
         ctx.fillText(rest, px0 + cw + gap + pw, py + inkNudge(restF));
       }
       ctx.restore();
+    }
+    // ...AND THE HUNDRED PER CENT, popped up where the takings were the moment they land in the purse: white, over
+    // nothing, out again on its own clock. It is the one thing on this screen that is not a number about money.
+    if (landed && gain > 0 && P.coinsTotal && P.coins >= P.coinsTotal) {
+      const F = FULL_COINS, age = t - land;
+      if (age >= 0 && age < F.ms) {
+        const e = clamp(age / F.in, 0, 1), out = clamp((age - (F.ms - F.out)) / F.out, 0, 1);
+        const pop = 0.7 + 0.3*easeOutBack(e);
+        ctx.save();
+        ctx.globalAlpha = alpha * e * (1 - out);
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        const f = "900 " + Math.round(h*F.size) + "px " + UI_FONT;
+        ctx.font = f;
+        const ty = y - h*PAYOUT.rise - (h*F.rise)*easeOut(e);
+        ctx.translate(viewW/2, ty); ctx.scale(pop, pop);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText("100%", 0, inkNudge(f));
+        ctx.restore();
+      }
     }
     ctx.restore();
   }
@@ -16361,6 +16602,7 @@
       // gently on, it stays the same kind of thing the cosmos and the title screen are.
       drawVoid(ts);
     else { drawBoardBackdrop(ts, shx, shy);   // sky, then the level's quilt over it...
+           drawEatenBehind(ts, shx, shy);     // ...whatever is falling out of a crumble, down the hole it left...
            if (state.hole) drawHoleThrough(ts, shx, shy); }  // ...worn through where it has been eaten
     // pause / win / death: show ONLY the level background (a clean replica) behind the card
     if (endScreen || menuOpen) {
@@ -16444,6 +16686,7 @@
     drawPickups(ts);
     drawMushGrow(ts);                             // the tile the charm is making, over the coins
     drawShards();
+    drawCrumbleFly();             // ...and the squares that broke off a crumble as he crossed it
     drawButterflies(ts);
     drawPops();
     drawLights();
@@ -16466,14 +16709,20 @@
       drawCoin((c+0.5)*cell, (r+0.5)*cell, ts, bgHash(c, r));
     }
     // ...and the hearts under broken stone, with them: they hover as the coins do
-    if (state.hearts) for (const [hk, h] of state.hearts) {
+    if (state.hearts) for (const [hk, hs] of state.hearts) {
       const i = hk.indexOf(","), c = +hk.slice(0, i), r = +hk.slice(i + 1);
       if (!onView(c, r)) continue;
-      if (h.at < 0) h.at = ts;
-      // the tile it was, morphing into the heart: quick, a touch past the heart, then settling
-      const k = Math.min(1, Math.max(0, (ts - h.at) / HEART.morphMs));
-      const ob = 1.2, e = k >= 1 ? 1 : 1 + (ob + 1)*Math.pow(k - 1, 3) + ob*Math.pow(k - 1, 2);
-      drawHeart((c+0.5)*cell, (r+0.5)*cell, ts, h.col, e, c*7 + r*3);
+      // Fanned across the middle of the cell when there is more than one here, so a pair reads as a pair. One sits dead
+      // centre as it always did.
+      const n = hs.length, span = cell*HEART.fan*(n - 1);
+      hs.forEach((h, j) => {
+        if (h.at < 0) h.at = ts;
+        // the tile it was, morphing into the heart: quick, a touch past the heart, then settling
+        const k = Math.min(1, Math.max(0, (ts - h.at) / HEART.morphMs));
+        const ob = 1.2, e = k >= 1 ? 1 : 1 + (ob + 1)*Math.pow(k - 1, 3) + ob*Math.pow(k - 1, 2);
+        const dx = n > 1 ? -span/2 + span*(j/(n - 1)) : 0;
+        drawHeart((c+0.5)*cell + dx, (r+0.5)*cell, ts, h.col, e, c*7 + r*3 + j*2.1);
+      });
     }
     for (const f of state.coinFly) {                 // reeled in: coin -> runner, over its own time (see COIN_FLY_PER_TILE)
       const rp = visualAt(state.runIdx + state.runT);
@@ -16521,6 +16770,8 @@
     drawCoinRuns(shx, shy);      // ...and whatever is on its way to it, over the top of it
     drawHeartHud();              // the hearts' counter beside it, once there is a heart to count
     drawHeartRuns(shx, shy);
+    drawFlyHud();                // ...and the butterflies' beside that, once the Bell has freed one
+    drawFlyRuns(shx, shy);
     drawCeremony(ts);                   // over the board and under nothing: it IS the screen
     drawTalismanFlash(16, ts);
     drawVortex(ts);                     // ...and the whirlpool, over the top of everything
@@ -16999,6 +17250,74 @@
     ctx.fillText(B.num, B.textX, B.midY + inkNudge(B.font));
     ctx.restore();
   }
+  // THE BUTTERFLY COUNTER, right of the hearts' and built the same way: not there until the Bell has freed one, then it is
+  // suddenly there and stays for the run, wearing the colour of the last one to land.
+  function flyHudBox() {
+    const s = state;
+    if (!hudLive() || !((s.fliesShown || 0) > 0 || (s.flyRun && s.flyRun.length))) return null;
+    const P = hudPlate(), H = heartHudBox(), C = coinHudBox();
+    const num = String(s.fliesShown || 0), font = "900 " + P.fs2 + "px " + UI_FONT;
+    ctx.save();
+    ctx.font = font; const nw = ctx.measureText(num).width;
+    ctx.textBaseline = "alphabetic";
+    const dm = ctx.measureText("0123456789"), inkH = dm.actualBoundingBoxAscent + dm.actualBoundingBoxDescent;
+    ctx.restore();
+    const cw = Math.round((inkH > 0 ? inkH : P.fs2*0.72) * 1.15), gap = Math.round(P.fs2*0.55), padX = Math.round(P.fs*0.55);
+    const w = padX*2 + cw + gap + nw;
+    const prev = H || C;
+    const x = prev ? prev.x + prev.w + Math.round(P.fs2*HEART_HUD.gap) : Math.round((viewW - w)/2);
+    return { x, y: P.top, w, h: P.h, midY: P.top + P.h/2, iconX: x + padX, iconW: cw, textX: x + padX + cw + gap, num, font };
+  }
+  // One butterfly as the HUD draws it: its two half-tiles, open, in its own colour — the same body drawButterflies flies.
+  function hudFly(x, y, w, col) {
+    ctx.save(); ctx.translate(x, y);
+    ctx.fillStyle = col;
+    for (const side of [-1, 1]) {
+      ctx.save(); ctx.scale(side, 1);
+      ctx.beginPath(); ctx.rect(0, -w/2, w/2 + 1, w); ctx.clip();
+      rrect(-w/2, -w/2, w, w, tileR(w)); ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+  function drawFlyHud() {
+    const B = flyHudBox(); if (!B) return;
+    const s = state, col = s.flyHudCol || (s.flyRun && s.flyRun[0] && s.flyRun[0].col) || "#c37ef1";
+    ctx.save();
+    const now = performance.now();
+    if (!s.flyHudBorn) s.flyHudBorn = now;
+    const born = now - s.flyHudBorn, age = now - (s.flyHudPop || -1e9);
+    let k = 1;
+    if (born < HEART_HUD.popMs) k = Math.max(0.01, easeOutBack(born / HEART_HUD.popMs));
+    else if (age >= 0 && age < COINRUN.bump) k = 1 + 0.16*(1 - easeOutBack(age/COINRUN.bump));
+    if (k !== 1) { const px = B.x + B.w/2, py = B.midY; ctx.translate(px, py); ctx.scale(k, k); ctx.translate(-px, -py); }
+    ctx.textBaseline = "middle";
+    rrect(B.x, B.y, B.w, B.h, 0);
+    ctx.fillStyle = "rgba(10,8,22,0.62)"; ctx.fill();
+    hudFly(B.iconX + B.iconW/2, B.midY, B.iconW, col);
+    ctx.textAlign = "left"; ctx.font = B.font; ctx.fillStyle = col;
+    ctx.fillText(B.num, B.textX, B.midY + inkNudge(B.font));
+    ctx.restore();
+  }
+  function drawFlyRuns(shx, shy) {
+    const s = state; if (!s || !s.flyRun || !s.flyRun.length) return;
+    const B = flyHudBox(); if (!B) return;
+    const ox = Math.round(camX - shx), oy = Math.round(camY - shy);
+    const x1 = B.iconX + B.iconW/2, y1 = B.midY;
+    for (const f of s.flyRun) {
+      const t = f.t - f.delay;
+      if (t < 0) continue;
+      const x0 = f.wx - ox, y0 = f.wy - oy;
+      if (t < COINRUN.flash) {
+        const g = Math.sin(Math.PI * (t/COINRUN.flash));
+        hudFly(x0, y0, f.w0 * (1 + (COINRUN.pop - 1)*g), f.col);
+        continue;
+      }
+      const u = Math.min(1, (t - COINRUN.flash)/COINRUN.fly), e = u*u;
+      const cxp = x0 + (x1 - x0)*0.18, cyp = y0 + (y1 - y0)*COINRUN.bow, m = 1 - e;
+      hudFly(m*m*x0 + 2*m*e*cxp + e*e*x1, m*m*y0 + 2*m*e*cyp + e*e*y1, f.w0 + (B.iconW - f.w0)*e, f.col);
+    }
+  }
   // ...and the hearts on their way to it: flaring where they were taken, then racing up, exactly as the coins do.
   function drawHeartRuns(shx, shy) {
     const s = state; if (!s || !s.heartRun || !s.heartRun.length) return;
@@ -17265,8 +17584,17 @@
         // third thing (a closed circuit has no front) the art went on being drawn by the copy
         // that had not been told. The hints, the tap and the art now agree because they ask one
         // question; the node is the same one either way.
+        // ...and a tile over a crumble sits where its gives have left it: turned further and dropped further at each of
+        // the three (crumbleShake), and it stays there — nothing springs back.
+        const tl = crumbleTilt(p[i].c, p[i].r), twist = !!tl;
+        if (twist) {
+          const mx = cx(p[i].c) + cell/2, my = cy(p[i].r) + cell/2, k = Math.max(0.2, 1 - tl.drop);
+          ctx.save();
+          ctx.translate(mx, my); ctx.rotate(tl.ang); ctx.scale(k, k); ctx.translate(-mx, -my);
+        }
         if (i === p.length - 1 && leadNode()) drawJunction(p[i], p[i-1], ts);
         else if (!drawRingMerge(i)) drawPlatformTile(p[i], p[i-1], nextNode(i));
+        if (twist) ctx.restore();
       }
 
     // The victory replay's route goes down HERE — the last thing in the track layer, before the
@@ -17404,7 +17732,6 @@
     const s = state;
     for (const ck of s.singularity) if (!s.collapsed.has(ck)) { const [c,r]=ck.split(",").map(Number); drawSingularity(c,r,false,ts); }
     for (const ck of s.collapsed) { const [c,r]=ck.split(",").map(Number); drawSingularity(c,r,true,ts); }
-    drawEaten();                                  // ...and whatever is currently going down one
     for (const bk of s.boost) { const [c,r]=bk.split(",").map(Number); drawFxPickup(c,r,ts,"boost"); }
     for (const bk of s.slow)  { const [c,r]=bk.split(",").map(Number); drawFxPickup(c,r,ts,"slow"); }
     for (const d of s.doors) {
@@ -17637,11 +17964,18 @@
         // a hard cut reads as the game dropping frames, where a fade reads as the thing
         // itself going. It never reaches zero — a hair of it is left, so a player who is
         // looking straight at it is rewarded and one who is not is still caught out.
+        // GONE MEANS GONE. It used to keep a hair of itself — 0.02 — on the reasoning that a player looking straight at it
+        // should be rewarded; what that actually left was a shadow and a lit edge sitting on the board with nothing
+        // casting them, which reads as a drawing fault rather than as a thing you can only just see. It goes to nothing
+        // now, shadow and highlight with it (they are drawn inside its own alpha), and it BEGINS at nothing: until it has
+        // taken its first stroke there is no ghost of it at all.
         let ghostA = 1;
         if (K.ghost) {
-          const P = h.rowP || 0, dv = SWIM.swim / swimCycle();
-          ghostA = P < dv ? 0.60 - 0.22*(P/dv)          // the thrust: a suggestion, dimming as it ends
-                          : 0.02 + 0.36*Math.pow(1 - (P-dv)/(1-dv), 3);
+          const P = h.rowP, dv = SWIM.swim / swimCycle();
+          ghostA = P == null ? 0
+                 : P < dv ? 0.60 - 0.22*(P/dv)          // the thrust: a suggestion, dimming as it ends
+                          : 0.38*Math.pow(1 - (P-dv)/(1-dv), 3);
+          if (ghostA <= 0.004) continue;                // nothing of it at all: not even the shadow it would throw
         }
         let jx = 0, jy = 0;
         if (K.move === "trap") {
@@ -17653,7 +17987,7 @@
           }
         }
         if (ghostA < 1) ctx.save(), ctx.globalAlpha = ghostA;
-        drawMonster(h.wx + jx, h.wy + jy, ts, dirN, phase, KD);
+        drawMonsterBig(h.wx + jx, h.wy + jy, ts, dirN, phase, KD);
         if (ghostA < 1) ctx.restore();
         continue;
       }
@@ -18015,7 +18349,30 @@
               body:"#574d38", eye:"#574d38", stone:true },
     trap:   { move:"trap",   split:"h", body:"#f1645f",                   // sits still and waits
               gap: 1.30 },                                               // ...yawning a tile wide
+    // ---- THE BOSSES ---------------------------------------------------------------------------------------------
+    // Four tiles of animal. `big` is how many cells it covers each way, and it is the whole of what makes one: a boss is
+    // drawn at that many cells across, its body sits on the CORNER between its cells rather than in the middle of one (so
+    // it covers exactly the square of four it claims), and everything that asks where it is — the hitbox that kills him,
+    // the Bell that unmakes it, the tap that breaks a stone one — reads the same number. It still moves, rows and bites
+    // exactly as its small cousin does: a boss is not a new engine, it is the same animal at twice the size.
+    //
+    // Its cell (c, r) is its TOP-LEFT: the four it stands on are that one and its right, its down and its diagonal.
+    // The WARDEN hunts him down as the Hunter does, and is simply too big to run round.
+    warden:  { move:"hunt", look:"rail", banks:"all", split:"h", big: 2,
+               body:"#171326", eye:"#f7933b", boss:true },
+    // The LEVIATHAN rows a rail, as the rail pair do — a wall of an animal sweeping a lane.
+    leviathan: { move:"rail", look:"rail", banks:"all", split:"h", big: 2,
+                 body:"#1d3f6b", eye:"#4baff1", boss:true },
+    // The MAW sits and bites, as the Trap does, over a gate four squares wide.
+    maw:     { move:"trap", split:"h", big: 2, body:"#8e1f3a", gap: 1.30, boss:true },
+    // ...and the COLOSSUS is the Golem grown: stone, hunting, and breakable — but it takes twice the taps.
+    colossus:{ move:"hunt", look:"rail", banks:"all", split:"h", big: 2, hp: 4,
+               body:"#574d38", eye:"#574d38", stone:true, boss:true },
   };
+  // How many cells across a kind is, and where its middle sits against the cell it is counted in: a boss of `big` 2 is
+  // drawn half a cell down and right of its own, which puts it over the square of four it stands on.
+  const monBig = (K) => Math.max(1, (K && K.big) || 1);
+  const monOff = (K) => (monBig(K) - 1) * cell / 2;
   // It was the "wanderer" until it learned to hunt. Old level data still says so.
   MONSTER_KINDS.wander = MONSTER_KINDS.hunter;
   const monKind = h => MONSTER_KINDS[h.variant] || MONSTER_KINDS.patrol;
@@ -18330,6 +18687,17 @@
     // one is given no bias and simply carries its eyes up or down the panel.
     const lead = S * MONSTER.railEyeLead * sgn;
     drawEyes(ctx, vert ? 0 : lead, vert ? lead : 0, s, eye, vert ? 0 : sgn, ts, 0);
+    ctx.restore();
+  }
+  // A BOSS IS THE SAME ANIMAL, TWICE THE SIZE. Everything below draws one cell's worth; this stands it on the corner
+  // between its four cells and scales the lot about that point, so a boss needs no drawing of its own.
+  function drawMonsterBig(x, y, ts, faceX, phase, K) {
+    const b = monBig(K);
+    if (b <= 1) { drawMonster(x, y, ts, faceX, phase, K); return; }
+    const o = monOff(K), X = x + o, Y = y + o;
+    ctx.save();
+    ctx.translate(X, Y); ctx.scale(b, b); ctx.translate(-X, -Y);
+    drawMonster(X, Y, ts, faceX, phase, K);
     ctx.restore();
   }
   function drawMonster(x, y, ts, faceX, phase, cfg) {
@@ -18866,6 +19234,7 @@
     points:   9,
     morphMs:  260,    // how long the smashed tile takes to become the heart
     float:    0.05,   // hover height, fraction of a cell
+    fan:      0.26,   // how far apart two on one square sit, fraction of a cell (they fan across its middle)
     floatMs:  620,    // one whole bob — the coin's clock
     grad:     0.60,   // light at the top, dark at the bottom
     contrast: 1.10,   // the facet play
@@ -19091,14 +19460,33 @@
     dark:     "#1b4a6e",   // ...and in this dark blue along its bottom and right...
     darkA:    1,     // ...at this...
     darkW:    2,     // ...and this thick, px
-    fall:   760,     // ms the squares take to fall away once it gives
+    fall:   620,     // ms the squares take to fall away once it gives — a hang, and then it is gone
+    // How far it travels DOWN the screen over that, in cells. It is clipped to the hole it is falling into, so it goes on
+    // down past the bottom edge of that hole and is cut off by the ground — which is exactly what falling through a floor
+    // looks like. A little over a cell, so it is plainly travelling before the gap takes it.
+    fallY:  3.20,
     spin:   1.6,     // radians a square turns on its way out
     // THE GLASS, each square at its own opacity somewhere in this range — some of it thinner than the rest. Which square is
     // how thick is hashed off the cell, so it is the same every frame and every visit.
     opacity: [0.20, 0.40],
     sheen:  0.30,    // the light across it from the top-left corner (at a square's opacity against the thickest)
+    // HALFWAY ACROSS IT, IT GIVES A LITTLE. Not the fall — that comes when he is clear of it — but the warning: the tile
+    // under him TWISTS, hard and then settling, and a few of the cell's outer squares break off and are flung aside.
+    shakeAt:  0.5,   // where across the cell it happens, 0 at the edge he comes in by, 1 at the one he leaves by
+    twist:    0.075, // how far the tile turns at the FIRST give, radians — the second is twice this and the third three
+                     // times, and they add up: it ends the crossing well over and well down
+    twistMs:  260,   // ...and how long one give takes to arrive at its new place (it does not come back)
+    // how many of the cell's outer squares chip off at each of the three gives, as [fewest, most]; [-1, -1] is ALL of
+    // the ones still on it
+    throw:  [[4, 5], [5, 6], [-1, -1]],
+    throwV:   0.0016,// how hard, in cells per ms
+    throwUp:  0.0009,// ...and how much of that is upward
+    throwMs:  900,   // how long one takes to go
+    spinOff:  0.010, // radians a flung square turns per ms
+    drop:     0.030, // ...and how far it shrinks at the first give, as though it had dropped into the hole — again, the
+                     // second and third are twice and three times this, and they add up
   };
-  const EATEN_MS = 760;                    // how long a lost tile takes to go (with the cell's squares: CRUMBLE.fall)
+  const EATEN_MS = 620;                    // how long a lost tile takes to go (with the cell's squares: CRUMBLE.fall)
   function tickEaten(dt) {
     const s = state; if (!s || !s.eaten || !s.eaten.length) return;
     for (const e of s.eaten) e.t += dt;
@@ -19114,6 +19502,7 @@
     const list = [];
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
       const k = j*N + i;
+      if (state && state.crumbleGone && state.crumbleGone.has(c + "," + r + ":" + k)) continue;   // ...it broke off as he crossed
       const [lo, hi] = CRUMBLE.opacity, a = lo + h(k + 311)*(hi - lo);
       list.push({ k, x0: x + i*q, y0: y + j*q, q, a, turn: h(k + 13) < 0.5 ? -1 : 1 });
     }
@@ -19122,28 +19511,55 @@
   // ...when it GIVES: the tile that was lost on it, and the cell's squares, falling away into the sky — each one shrinking and
   // turning out of its place on a schedule of its own, and the tile (the blank glass pane with its grip dots, the thing the
   // player carries — losing a tile is what this costs, so a tile is what you see leave) after them.
+  // ...drawn UNDER the board, in the board's own frame: the quilt is laid with its holes cut out of it, so a tile falling
+  // out of a crumble shows through the hole it is falling into and passes behind the ground either side of it — which is
+  // what "it fell through the floor" looks like. (It used to be drawn over the board, where it sailed across the ground.)
+  function drawEatenBehind(ts, shx, shy) {
+    const s = state; if (!s || !s.eaten || !s.eaten.length) return;
+    const bx = -Math.round(camX - (shx || 0)), by = -Math.round(camY - (shy || 0));
+    ctx.save();
+    // CLIPPED TO THE HOLES, and drawn over the quilt rather than under it. Under it, the pane — which is half
+    // transparent — was washed out by the quilt laid on top and simply vanished, while the cell's bright squares came
+    // through; clipped to the hole instead, the whole thing is at full strength inside the gap it is falling into and
+    // nothing of it crosses the ground either side, which is the same reading and a visible one.
+    ctx.beginPath();
+    holePath(ctx, bx, by, cell, (s.holeLoops || []));
+    ctx.clip();
+    ctx.translate(bx, by);
+    drawEaten();
+    ctx.restore();
+  }
   function drawEaten() {
     const s = state; if (!s.eaten) return;
     const P = CRUMBLE;
     for (const e of s.eaten) {
-      const qp = Math.pow(Math.min(1, e.t / P.fall), 2);          // slow to let go, then gone
+      const qp = Math.pow(Math.min(1, e.t / P.fall), 2.2);        // slow to let go, gathering all the way down
+      const fy = cell*P.fallY*Math.pow(Math.min(1, e.t / P.fall), 3);   // ...and how far down the screen it has got
       for (const pc of crumblePieces(e.c, e.r)) {
         const d = Math.min(1, qp*(1.15 + 0.7*((pc.k*0.618) % 1)));
         if (d >= 1) continue;
         const sz = pc.q*(1 - d);
         ctx.save();
-        ctx.translate(pc.x0 + pc.q/2, pc.y0 + pc.q/2);
+        ctx.translate(pc.x0 + pc.q/2, pc.y0 + pc.q/2 + fy);
         ctx.rotate(P.spin*d*pc.turn);
         ctx.globalAlpha = pc.a*(1 - d);
         ctx.fillStyle = tvBlueHex(); ctx.fillRect(-sz/2, -sz/2, sz, sz);
         ctx.restore();
       }
-      const k = Math.min(1, e.t / EATEN_MS), qq = 1 - Math.pow(1 - k, 3), k2 = 1 - qq*0.73;
+      // THE TILE GOES DOWN SLOWLY. It used to be eased OUT — most of its travel in the first few frames, which reads as
+      // being snatched. It falls instead: barely moving as it lets go, gathering all the way down, turning as it goes,
+      // and only fading at the end of it (there is nothing under it but sky, so it has no reason to fade early).
+      // EASED IN, and hard: it hangs where it was for a moment — the ground has only just gone — and then drops, gathering
+      // the whole way down. Cubed for the travel and the turn (a fall), squared for the shrink (it goes on getting smaller
+      // rather than snatching away at the end).
+      const k = Math.min(1, e.t / EATEN_MS), fall = k*k*k, qq = k*k, k2 = 1 - qq*0.45;
       ctx.save();
-      ctx.translate(cx(e.c) + cell*0.5, cy(e.r) + cell*0.5);
-      ctx.rotate(qq * Math.PI * 0.8);
+      // ...and it goes DOWN the screen as it goes, not just away: it is falling into the sky under the board, so it
+      // travels while it shrinks (CRUMBLE.fallY, in cells over the whole fall, gathering as the shrink does).
+      ctx.translate(cx(e.c) + cell*0.5, cy(e.r) + cell*0.5 + cell*CRUMBLE.fallY*fall);
+      ctx.rotate(fall * Math.PI * 0.55);
       ctx.scale(k2, k2);
-      ctx.globalAlpha = 1 - k*k;
+      ctx.globalAlpha = 1 - Math.pow(k, 4);          // ...and it holds its colour nearly all the way down
       drawGlass(-cell/2, -cell/2, cell);
       drawDragDots(0, 0, cell);
       ctx.restore();
@@ -21670,6 +22086,16 @@
     w:       0.16,   // the bed's width — the frame carried along the rail — in tiles
     sparkMs: 3750,   // one trip of the spark from end to end (a full hotspot's pace: a tile's width in a quarter of its lap)
   };
+  // A SHIMMER ALONG THE BRIDGE — the run of crumbling tiles a level lays across a gap. Each tile takes a wash of the
+  // rainbow's blue in turn, the crest moving from one to the next along the diagonal, so a line of them reads as one
+  // bridge being lit end to end rather than as a row of separate panes. (Drawn with the crumbles; see drawBoardBackdrop.)
+  const BRIDGE_SHIMMER = {
+    a:      0.70,   // how blue a tile goes at the top of its turn — most of the way over, so the crest is plainly a light
+    ms:     1500,   // how long the crest takes to come round again on any one tile
+    span:   1.6,    // how many tiles apart the crests are, measured DOWN THE DIAGONAL: the wave runs corner to corner
+                    // across the bridge (the phase is c + r), so it crosses a run of tiles at forty-five degrees
+    sharp:  9,      // how tight the strip of light is — high, so it has two clean edges rather than fading in and out
+  };
   function drawPlatform(pf, ts) {
     const x = cx(pf.c), y = cy(pf.r), s = cell, rad = tileR(s);
     const n = { c: pf.c, r: pf.r };
@@ -22635,10 +23061,20 @@
         sheen.addColorStop(0, "rgba(255,255,255," + G.sheen + ")");
         sheen.addColorStop(0.45, "rgba(255,255,255,0)");
         sheen.addColorStop(1, "rgba(255,255,255,0)");
+        // ...and the SHIMMER, square by square rather than tile by tile: a narrow strip of light running corner to corner
+        // across the whole bridge, so it crosses a tile as a band with two edges rather than lighting the tile as one
+        // block. Its phase is the square's own place on the diagonal, in tiles (BRIDGE_SHIMMER).
+        const B = BRIDGE_SHIMMER;
         for (const pc of crumblePieces(c, r)) {
           if (!(pc.a > 0)) continue;
           ctx.globalAlpha = pc.a;                    ctx.fillStyle = blue;  ctx.fillRect(bx + pc.x0, by + pc.y0, pc.q, pc.q);
           ctx.globalAlpha = pc.a / G.opacity[1];     ctx.fillStyle = sheen; ctx.fillRect(bx + pc.x0, by + pc.y0, pc.q, pc.q);
+          const diag = (pc.x0 + pc.y0 + pc.q) / cell;          // where this square sits along the diagonal, in tiles
+          const w = (((ts / Math.max(1, B.ms) - diag/Math.max(0.01, B.span)) % 1) + 1) % 1;
+          const lit = Math.pow(Math.max(0, Math.sin(Math.PI * w)), B.sharp);
+          if (lit > 0.01) {
+            ctx.globalAlpha = B.a * lit;             ctx.fillStyle = blue;  ctx.fillRect(bx + pc.x0, by + pc.y0, pc.q, pc.q);
+          }
         }
       }
       ctx.restore();
@@ -23492,6 +23928,7 @@
       else if (state.status !== "crunched") updateHazards(dt);   // ...and nothing else moves either
       tickLover(dt);
       tickEaten(dt);
+      tickCrumbleFly(dt);                  // squares broken off a crumble, and the twist in the tile over it
       tickCeremony(dt);
       if (state.roar) tickRoar(dt);
       if (state.mush) tickMushroom(dt);
