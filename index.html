@@ -1924,6 +1924,9 @@
   /* Out of reach: the same tag in lead rather than gold. It still says the number — what you
      cannot afford is exactly the thing you need the price of. */
   .shop-tag.poor .st-tag { background:var(--tag-lead); color:#d3d6e4; }
+  /* A price in HEARTS hangs on a tag in the heart's red rather than the coin's yellow, the heart and its figure black on it
+     as the coin's are. (Poor, it is the same lead tag as any other.) */
+  .shop-tag.heart:not(.poor) .st-tag { background:#f1645f; color:#000; }
   .shop-tag.poor .st-tag::before { background:rgba(0,0,0,0.28); }
   /* ...and the offer, under it, only when there is something to offer. A BUTTON, the same
      height and the same gold plate as every other one in the game — it was a green pill of its
@@ -1952,8 +1955,11 @@
      somewhere else on the screen would have read as an error rather than as a price. Three
      short lines because the tag is narrow and a single long one would have been wider than the
      thing it belongs to. */
+  /* Centred under the tag's PRICE rather than under its whole box: the box carries the point and the eyelet on its left
+     (padding 2.1 squares there against 1.15 on the right), so its middle sits left of where the coin and figure are. The
+     left edge is brought in by the difference, which moves the centre right by half of it. */
   .shop-tag .st-no {
-    position:absolute; top:100%; left:0; right:0; margin-top:calc(var(--chq) * 0.6);
+    position:absolute; top:100%; left:calc(var(--chq) * 0.95); right:0; margin-top:calc(var(--chq) * 0.6);
     font-size:var(--ui); letter-spacing:var(--ls); font-weight:900; text-transform:uppercase;
     color:var(--tag-lead-lit); line-height:1.35; text-align:center; white-space:pre;
     animation:poem-in 260ms 260ms ease-out both; }
@@ -5172,7 +5178,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.74";                    // shown on the title & pause screens
+  const VERSION = "v10.75";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -5637,12 +5643,14 @@
   const WALLET_KEY = "tilerunner:wallet";
   function loadWallet(){
     try { const w = JSON.parse(localStorage.getItem(WALLET_KEY)) || {};
-          return { tiles: w.tiles|0, owned: new Set(w.owned || []) }; }
-    catch(_) { return { tiles: 0, owned: new Set() }; }
+          return { tiles: w.tiles|0, hearts: w.hearts|0, owned: new Set(w.owned || []) }; }
+    catch(_) { return { tiles: 0, hearts: 0, owned: new Set() }; }
   }
+  // `hearts` is the second currency: the diamond hearts under broken stone, banked on a clear as the coins are and spent
+  // on the racks that are priced in them (a LOOK category's `pay: "hearts"`).
   function saveWallet(){
     try { localStorage.setItem(WALLET_KEY,
-      JSON.stringify({ tiles: wallet.tiles, owned: [...wallet.owned] })); } catch(_){}
+      JSON.stringify({ tiles: wallet.tiles, hearts: wallet.hearts, owned: [...wallet.owned] })); } catch(_){}
   }
   const wallet = loadWallet();
 
@@ -6487,33 +6495,39 @@
   // in `seg`, one bone of his leg, so a pose keeps its shape at any size. swagger-lab.html tunes these
   // through __TR.poses(); paste its block back over this one.
   const POSES = {
-    lotus: { knee: 0.78, kneeDrop: 0.445, foot: 0.88, footDrop: 0.25, breathe: 0.05, breatheMs: 430 },
-    fetal: { backReach: 0.72, frontReach: 0.92, kneeUp: 0.55, footBack: 0.45, footDrop: 0.85 },
+    // The legs CROSS: `foot` is further back in than the knee is out, so each foot passes the middle and tucks under the
+    // other knee. `toe` is a short bone off the end, in leg bones, and `toeDown` how steeply it points at the floor
+    // (radians below level, carrying on the way the foot tucked).
+    lotus: { knee: 0.78, kneeDrop: 0.445, foot: 1.30, footDrop: 0.36, toe: 0.22, toeDown: 1.15, breathe: 0.05, breatheMs: 430 },
+    // `rollStretch`: how long the legs are when a ROLL straightens them over the top, against his standing leg
+    // `rollOpen`: how far toward straight, 0..1, the BACK leg goes at the top of the roll; `rollOpenFront` the front one
+    fetal: { backReach: 0.72, frontReach: 0.92, kneeUp: 0.55, footBack: 0.45, footDrop: 0.85, rollStretch: 1.00,
+             rollOpen: 0.50, rollOpenFront: 0.90 },
     // Flung open: both legs thrown wide and down either side of him, the knees barely bent. The opening's
     // burst, when the talismans come out of him. Out is away from the middle, drop is down from the hip.
     splay: { kneeOut: 0.30, kneeDrop: 0.70, footOut: 0.62, footDrop: 1.30, toeUp: 0.60 },   // toeUp: radians
   };
+  // Priced in HEARTS, not coins (the rack is `pay:"hearts"` in LOOK) — a fifth of what each cost in coins, rounded.
   const SWAGGERS = [
     { id:"classic", name:"Classic",   cost:0 },
-    { id:"lean",    name:"Lean Back", cost:5, lean:-0.30, bob:0.70, swing:1.20, lift:1.15 },
-    { id:"float",   name:"Floating",  cost:10, pose:"lotus",   hover:0.085, bob:0.35, swing:0, lift:0 },
-    // a NEGATIVE hover: the ball sinks until it is all but touching the track, because a
-    // roll that happens in mid-air is just a spin
-    { id:"roll",    name:"Rolling",   cost:10, pose:"fetal",   spin:0.0055, hover:-0.068, bob:0 },
+    { id:"lean",    name:"Lean Back", cost:1, lean:-0.30, bob:0.70, swing:1.20, lift:1.15 },
+    // No hover: the roll puts whatever part of the ball is lowest ON the track as it turns (see paintRunner), so it bumps
+    // up onto each corner and back down onto each side. It used to sink a fixed -0.068 and spin over that point.
+    { id:"roll",    name:"Rolling",   cost:2, pose:"fetal",   spin:0.0055, bob:0 },
     // Built from the same handful of knobs — a pose, how far he leans, how hard he bobs, how
     // wide the arms swing, how high the knees come up. No new drawing code.
-    { id:"stomp",   name:"Stomp",     cost:20, lean:0.20, bob:2.60, swing:1.35, lift:2.60,
+    { id:"stomp",   name:"Stomp",     cost:4, lean:0.20, bob:2.60, swing:1.35, lift:2.60,
       hop:0.055 },   // the hop is the SLAM: one hard bounce a stride, on top of the bob
     // The one style that moves him differently rather than just holding him differently: two
     // jumps a tile, planted at 0, a half and 1, still on the ground between them. Every other
     // swagger is a decoration on a runner who slides along at a constant rate; this one makes
     // the tile grid something he lands on.
-    { id:"jump",    name:"Pogo",      cost:30, leap:2, leapH:0.20, leapHold:0.40,
-      swing:0, lift:0, bob:0 },
+    { id:"jump",    name:"Pogo",      cost:6, leap:2, leapH:0.20, leapHold:0.40,
+      swing:0, lift:0, bob:0, kneesBend:true },   // ...landing and taking off on bent knees, both forward
     // The same gearing, thrown wide: he opens at the apex and shuts again to land, so the
     // straddle is the thing the eye reads rather than the height.
-    { id:"splits",  name:"Splits",    cost:35, leap:2, leapH:0.22, leapHold:0.34, leapSplit:0.14,
-      swing:0, lift:0, bob:0 },
+    { id:"splits",  name:"Splits",    cost:7, leap:2, leapH:0.22, leapHold:0.34, leapSplit:0.14,
+      swing:0, lift:0, bob:0, splitAlt:true },   // ...the other foot forward each leap
     // One leg does all the work and the other stays folded up out of the way, landing after
     // landing. The onefoot pose already draws exactly that; it just never had a leap under it.
     //
@@ -6522,75 +6536,26 @@
     // thing, one of which was the other with the jump taken out. Its `id` is left alone: it is
     // what a saved wardrobe has written down, and renaming it would take the swagger off
     // everybody who had bought it.
-    { id:"flamingo",name:"Hop",       cost:35, leap:2, leapH:0.18, leapHold:0.38, pose:"onefoot",
+    { id:"flamingo",name:"Hop",       cost:7, leap:2, leapH:0.18, leapHold:0.38, pose:"onefoot",
       swing:0, lift:0, bob:0 },
-    // THE MOONWALK, and it is one number: a NEGATIVE swing. The stride reach is sin(phase) and
-    // the foot lift is cos(phase), a quarter turn apart — which is a walk. Flip the sign of the
-    // reach alone and the two come apart the other way round: the foot that is on the ground is
-    // now the one sweeping backward, and the one in the air is the one returning. He goes on
-    // travelling forward at the same rate, because that is the track's business and not his
-    // legs'. That gap between where he is going and what his feet are doing IS the illusion.
-    //
-    // ...and the RETURNING foot is a real step. The sliding foot stays down — that is the half
-    // of the walk that sells it — but the other one comes right up, rolls onto its toe as it
-    // leaves the floor, and swings through to land in front. It used to skim at a quarter of the
-    // usual lift, which made the two feet the same thing going opposite ways; a moonwalk is a
-    // slide and a step happening at once. `liftLead` is what puts the lift BEFORE the swing —
-    // the foot is already off the floor and pointed by the time it travels — and `toe` is the
-    // one thing on this runner that is a foot rather than the end of a leg.
-    { id:"moon",    name:"Moonwalk",  cost:40, swing:-1.35, lift:1.30, bob:0.25, lean:-0.12,
-      liftLead:0.62, toe:0.052, toeDrop:1.25 },
+    // RUNNING BACKWARDS. A negative swing still turns him round to face the way he came (paintRunner mirrors him), and
+    // `backward` keeps his stride a RUN in the world rather than a moonwalk's slide: the foot in the air is the one
+    // travelling the way he is going, and the foot on the ground is the one he is pushing past — a man running backwards,
+    // not a man appearing to walk forwards. A little lean over his toes, the way you do going backwards. (It took the
+    // Moonwalk's place on the rack and keeps its id, so a wardrobe that bought the one has the other.)
+    { id:"moon",    name:"Backwards", cost:8, swing:-1.10, lift:1.00, bob:1.00, lean:0.10, backward:true },
     // One whole turn per leap, timed to the flight rather than to the clock: he leaves the
     // ground upright and arrives upright, having gone all the way over in between. Higher and
     // with a longer flight than the others, because a turn needs room to finish.
-    { id:"somer",   name:"Somersault",cost:45, leap:2, leapH:0.24, leapHold:0.28, leapSpin:1,
-      leapSplit:0.028, swing:0, lift:0, bob:0 },
-    { id:"backflip",name:"Backflip",  cost:50, leap:2, leapH:0.25, leapHold:0.28, leapSpin:-1,
-      leapSplit:0.028, swing:0, lift:0, bob:0 },
+    { id:"somer",   name:"Somersault",cost:9, leap:2, leapH:0.24, leapHold:0.28, leapSpin:1,
+      leapSplit:0.028, swing:0, lift:0, bob:0, kneesBend:true, landStraight:true },
+    { id:"backflip",name:"Backflip",  cost:10, leap:2, leapH:0.25, leapHold:0.28, leapSpin:-1,
+      leapSplit:0.028, swing:0, lift:0, bob:0, kneesBend:true, landStraight:true },
+    // ...and LAST, the dearest of them: floating cross-legged, the lotus — the one that leaves the ground and stays off it.
+    { id:"float",   name:"Floating",  cost:12, pose:"lotus",   hover:0.085, bob:0.35, swing:0, lift:0 },
   ];
-  // Each swatch is the same bust in the pose that style would hold it in — a still frame
-  // reads the difference far better than a name does.
-  SWAGGERS.forEach(w => { w.swatch = (g,S) => {
-    g.save(); g.translate(S/2, 0);
-    if (w.lean)  g.rotate(w.lean*0.8);
-    if (w.spin)  g.rotate(0.7);
-    if (w.leapSpin) g.rotate(0.9 * Math.sign(w.leapSpin));
-    if (w.hover || w.hop || w.leapH) g.translate(0, -S*(w.hover || w.hop || w.leapH)*0.8);
-    g.translate(-S/2, 0);
-    const b = swatchBust(g, S, "#bfe6ff", "#17263f");
-    // a suggestion of legs under the body, in whatever the style holds them in
-    g.strokeStyle = "#bfe6ff"; g.lineWidth = S*0.05; g.lineCap = "round"; g.lineJoin = "round";
-    const bx = S/2, by = b.y + b.h, u = S*0.11;
-    g.beginPath();
-    if (w.pose === "lotus") {                     // cross-legged: a shallow fold under him
-      g.moveTo(bx - b.w*0.20, by); g.lineTo(bx - b.w*0.60, by + u*0.52); g.lineTo(bx - b.w*0.06, by + u*0.80);
-      g.moveTo(bx + b.w*0.20, by); g.lineTo(bx + b.w*0.60, by + u*0.52); g.lineTo(bx + b.w*0.06, by + u*0.80);
-    } else if (w.pose === "fetal") {              // curled: knees out front, feet tucked under
-      g.moveTo(bx - b.w*0.16, by); g.lineTo(bx + b.w*0.44, by - u*0.42); g.lineTo(bx + b.w*0.08, by + u*0.30);
-      g.moveTo(bx + b.w*0.16, by); g.lineTo(bx + b.w*0.82, by - u*0.56); g.lineTo(bx + b.w*0.44, by + u*0.30);
-    } else if (w.pose === "onefoot") {            // one leg down, the other bent up under him
-      g.moveTo(bx + b.w*0.20, by); g.lineTo(bx + b.w*0.26, by + u*1.05);
-      g.moveTo(bx - b.w*0.20, by); g.lineTo(bx + b.w*0.20, by + u*0.44); g.lineTo(bx - b.w*0.42, by + u*0.74);
-    } else if (w.leapSplit) {                     // thrown wide, the way it reads at the apex
-      const rch = S*0.16;
-      g.moveTo(bx - b.w*0.20, by); g.lineTo(bx - b.w*0.20 - rch, by + u*0.72);
-      g.moveTo(bx + b.w*0.20, by); g.lineTo(bx + b.w*0.20 + rch, by + u*0.72);
-    } else if ((w.swing == null ? 1 : w.swing) < 0) {
-      // A backward stride drawn as a STILL crosses its own legs — the left foot ends up right
-      // of the right one — which reads as a stumble, not a slide. So the moonwalk's card gets
-      // the pose the still is actually of: both feet trailing behind him, one further back than
-      // the other, which is the shape everybody already has in their head.
-      const rch = S*0.09*Math.abs(w.swing);
-      g.moveTo(bx - b.w*0.20, by); g.lineTo(bx - b.w*0.20 - rch*1.25, by + u*0.94);
-      g.moveTo(bx + b.w*0.20, by); g.lineTo(bx + b.w*0.20 - rch*0.35, by + u);
-    } else {
-      const rch = S*0.09*(w.swing == null ? 1 : w.swing);
-      g.moveTo(bx - b.w*0.20, by); g.lineTo(bx - b.w*0.20 - rch, by + u);
-      g.moveTo(bx + b.w*0.20, by); g.lineTo(bx + b.w*0.20 + rch, by + u);
-    }
-    g.stroke();
-    g.restore();
-  }; });
+  // A swagger's card is not a still: it is the runner himself, in the kit you start in, running in that style on a loop
+  // — see swaggerIcon, which the shop's rack animates. A frozen frame of a roll or a flip says very little about it.
 
   // KICKS — drawn at each foot, in the runner's local frame, +x being travel. The foot
   // itself is the anchor, so they follow the stride and the lift for free.
@@ -6600,6 +6565,8 @@
   // leg's own curve hanging below it, which is exactly what makes a flat-bottomed boot look
   // round. Every kick's sole belongs on this line.
   const KICK_SOLE = 0.026;
+  // ...and how far a foot's toe tips UP at the top of its step, in radians (paintRunner, on the lifted forward-swinging foot)
+  const STEP_TOE_UP = 0.30;
   // Two shapes every kick is built from, so the whole family stands on one ground and is cut
   // to one set of proportions. `bootBody` is the upper: a rounded box whose BOTTOM is always
   // the sole line, however tall its top. `soleSlab` is what it stands on.
@@ -7066,10 +7033,15 @@
     { key:"drip",   label:"Drip",    items:SKIN_COLOURS },
     { key:"hat",    label:"Hat",     items:HATS,     pad:{ t:30 } },
     { key:"trail",   label:"Trail",   items:TRAILS },
-    { key:"swagger", label:"Swagger", items:SWAGGERS, pad:{ t:22, x:18 } },
     { key:"kicks",   label:"Kicks",   items:KICKS },
     { key:"track",   label:"Track",   items:TRACKS },
+    // ...and last, the one rack bought with HEARTS rather than coins: its `cost`s are counted in hearts.
+    { key:"swagger", label:"Swagger", items:SWAGGERS, pad:{ t:22, x:18 }, pay:"hearts" },
   ];
+  // What a rack is paid in, what you hold of it, and its mark — coin or heart — at a size, optionally inked flat.
+  const payIn = cat => (cat && cat.pay) || "tiles";
+  const balanceOf = cat => payIn(cat) === "hearts" ? (wallet.hearts || 0) : wallet.tiles;
+  const payChip = (cat, px, ink) => payIn(cat) === "hearts" ? heartChip(px, ink) : coinChip(px, ink);
   LOOK.forEach(l => { l.icon = LOOK_ICONS[l.key]; });
   // A tap on stock you do not own puts it ON — on the figure at the top of the shop, nowhere
   // else — and turns its cell into its own buy button. Nothing is spent until you tap it again.
@@ -7302,9 +7274,11 @@
       power: { used: new Set(), kind: null, t: 0, ms: 0, armed: false, ankh: false, beat: null },
       coinFly: [],                          // coins on their way to him, pulled by the Magnet
       coinRun: [],                          // ...and coins on their way from him to the counter
+      freeze: 0,                            // ms of stopped time left: the Hammer's and the Bell's three beats (startRoar)
       coinsShown: 0,                        // what the counter is SAYING, which lags coinsGot
       coinHudPop: -1e9,                     // when the counter last took one
       heartsGot: 0,                         // diamond hearts taken this run
+      heartCols: [],                        // ...and each one's colour, in the order taken (they spill on a fall)
       heartsShown: 0,                       // ...what their counter is SAYING, which lags it as coinsShown does
       heartHudPop: -1e9,                    // ...when it last took one
       heartHudCol: null,                    // ...and the colour of that one, which the counter wears
@@ -8276,6 +8250,16 @@
   // the pace, the saws, the coins and the camera all carry on as if he were sliding — only the
   // drawing stutters, which is the whole trick: he arrives at each tile exactly when he always
   // did, having spent the journey standing still and then leaping.
+  // THE PUSH OFF, for a leap on bent knees: over the last `share` of the time on the ground the legs drive from the crouch
+  // back to straight — quick off the bottom (eased out), reaching straight by `rise` of the way through — and then STAY
+  // straight for the rest of it, so the straightening is on screen as its own thing before the feet leave rather than
+  // happening in the last frame. 0 crouched .. 1 straight.
+  const LEAP_PUSH = { share: 0.32, rise: 0.60 };
+  function leapPush(g) {
+    const P = LEAP_PUSH, p = Math.max(0, Math.min(1, (g - (1 - P.share)) / P.share));
+    const u = Math.min(1, p / P.rise);
+    return 1 - (1 - u)*(1 - u);
+  }
   function leapAt(w, param) {
     const step = 1 / w.leap;                         // grounded every 1/leap of a tile
     const idx = Math.floor(param / step);            // which leap this is — its parity is which
@@ -8289,6 +8273,19 @@
       // The impact is a hard squash — it SHOULD arrive as a snap, since that is what landing
       // is — and it recovers over the first half of the stand. The rest of the stand is the
       // wind-up: he sinks again, on purpose this time, loading for the next jump.
+      // `landStraight` comes down on STRAIGHT legs instead: it touches down standing, holds that a beat so the plant is seen,
+      // then DROPS into a full squat and stays down in it — the load for the next flip — and DRIVES back up to straight legs
+      // before it goes (leapPush), so it leaves the ground the way it landed on it.
+      if (w.landStraight) {
+        const HOLD = 0.25, DROP = 0.30;                   // shares of the stand: straight, then the fall into the squat
+        const k = Math.max(0, Math.min(1, (g - HOLD) / DROP)), e = 1 - (1 - k)*(1 - k);
+        return { param: anchor, lift: 0, foot, air: 0, pose: -e * (1 - leapPush(g)) };
+      }
+      // (with bent knees, the wind-up finishes a little early and the legs are SEEN to straighten before they leave: leapPush)
+      if (w.kneesBend) {
+        const wind = -0.75 * Math.min(1, Math.max(0, (g - 0.55) / Math.max(0.01, 0.45 - LEAP_PUSH.share)));
+        return { param: anchor, lift: 0, foot, air: 0, pose: (g < 0.55 ? -(1 - g/0.55) : wind) * (1 - leapPush(g)) };
+      }
       return { param: anchor, lift: 0, foot, air: 0,
                pose: g < 0.55 ? -(1 - g/0.55) : -0.75 * (g - 0.55)/0.45 };
     }
@@ -8711,7 +8708,7 @@
     // ...and they make a noise on the way out. They were thrown, drawn, spun and left to fade in
     // silence under the thud of him landing, which made the one moment the run's takings are
     // visibly lost the one moment nothing said so.
-    Sound.coinSpill(n);
+    Sound.coinSpill(n + Math.min(SPILL.max, ((state && state.heartCols) || []).length));   // (the hearts rattle out with them)
     for (let i = 0; i < n; i++) {
       // Fanned rather than random: a ring of directions walked in steps that do not divide into
       // it, so they come out evenly spread and never in a pattern you could count.
@@ -8724,6 +8721,20 @@
         spin: ((i & 1) ? 1 : -1) * SPILL.spin * (0.6 + ((i*5) % 7)/7),
         life: 0, max: SPILL.life, sz: cell * SPILL.size });
     }
+    // ...and every HEART he picked up on the level, each in its own colour, thrown the same way and carried on after the
+    // coins' turns round the ring, so the two are mixed through the one burst rather than one lot after the other.
+    const hc = ((state && state.heartCols) || []).slice(0, SPILL.max);
+    hc.forEach((col, k) => {
+      const i = n + k;
+      const a = (i * 2.399963 + 1.2) % (Math.PI*2);
+      const sp = 0.55 + ((i * 7) % 11)/11 * 0.9;
+      state.shards.push({
+        coin: true, heart: col, x, y,
+        vx: Math.cos(a) * cell * SPILL.out * sp,
+        vy: -Math.abs(Math.sin(a)) * cell * SPILL.up * sp - cell*SPILL.up*0.35,
+        spin: ((i & 1) ? 1 : -1) * SPILL.spin * (0.6 + ((i*5) % 7)/7),
+        life: 0, max: SPILL.life, sz: cell * HEART.size });
+    });
   }
   // THE BELL'S BUTTERFLIES: what a monster the Bell of Unmaking catches becomes. It APPEARS as the monster's own tile, at
   // exactly its size, under a quick white flash of the figure that hides the change; SHRINKS fast to a small thing a
@@ -8830,6 +8841,7 @@
       ctx.translate(p.x, p.y); ctx.rotate(p.life * (p.spin || 0));
       // THE ACTUAL COIN, not a sketch of one: the same edge, face, panel and spark as the coins on
       // the board. Each keeps the spark spot it is first given, so the light stays put on it as it flies.
+      if (p.heart) { paintHeart(p.sz, p.heart, 1, Math.max(1, cell*HEART.rimW)); ctx.restore(); continue; }   // a heart: the faceted one, its outline, no spark
       if (p.seed == null) p.seed = (Math.random() * 4294967296) >>> 0;
       paintCoin(p.sz, performance.now(), p.seed);
       ctx.restore();
@@ -10582,11 +10594,13 @@
     ms:      840,    // one ring's trip from the rim to him
     band:    0.13,   // how thick a ring is, as a share of the radius
     ease:    3.00,   // its life: how it comes in at the rim and how it lands at the middle
-    ringA:   0.56,   // a square at the middle of a ring
+    // ONE colour — the Lodestone's own (charmCol) — and the ring's LEADING edge is its inner one, since it is collapsing
+    // inward: brightest on the inside of the band, falling away through it to the outside.
+    leadA:   0.95,   // the leading (inner) edge of a ring, at its brightest
+    bodyA:   0.30,   // ...and its trailing side
+    glowA:   0.55,   // ...and the light inside that leading edge, which is all the light there is
     wash:    0,      // the flat wash over the whole reach — off, so only the rings mark it
-    chequer: 1,      // alternates the two tones square by square
   };
-  const MAGNET_TONE = { mid: "rgba(255,140,140,", rim: "rgba(255,236,236," };
   const COIN_FLY_MS = 240;     // how long a pulled coin takes to reach him, when it carries no time of its own
   // A pulled coin flies at a CONSTANT SPEED rather than in a fixed time, so a coin at the edge of the
   // Lodestone's reach arrives after one lying beside him — the field visibly reeling in from the rim.
@@ -10702,19 +10716,12 @@
     radius:  1.75,   // how far it reaches, in tiles
     hole:    0.35,   // the quiet he stands in at the middle, in tiles
     grid:    4,      // squares per tile, each way
-    sweepMs: 700,    // one turn of the hand round him
-    turns:   2,      // how many turns it makes before it is spent
-    tail:    0.55,   // how much of the circle is still lit behind the hand
-    ease:    1.60,   // the shape of that fade — above 1 falls away fast behind it
-    rimA:    0.92,   // a square at the rim as the hand passes
-    innerA:  0.30,   // ...and one just outside the quiet
-    low:     0.06,   // what is left of a square once the hand has gone by
-    outMs:   140,    // the whole circle fading at the end
-    chequer: 1,      // alternates the two tones square by square
-    point:   1,      // 1 shaves a square off each radial end of the leading edge, rounding it
-    rainbow: 0.28,   // how far the tones are pulled toward a hue running round the circle
-    hue0:    250,    // where that hue starts, in degrees
-    hueSpan: 300,    // ...and how far round the wheel it travels over one turn of the circle
+    // It is a RING opening away from him now rather than a hand sweeping round him, in ONE colour — the Bell's own
+    // (charmCol) — with a strong rim at its leading edge and its own wake filled in behind.
+    rimA:    0.95,   // the rim, at its brightest
+    bodyA:   0.26,   // ...and the circle behind it
+    edge:    0.55,   // how far back that brightness reaches, in tiles
+    glowA:   0.55,   // the light INSIDE that rim, and nowhere outside the ring
   };
   const PULSE_TILES = 1;                   // (the old flat reach; the Bell's radius is BELL.radius)
   const HAMMER_TILES = 1;                  // (the debug hook's old radius; the charm is a BEAM now)
@@ -10731,7 +10738,7 @@
   // hammer-lab.html.
   const HAMMER = {
     reach:   3,      // how far the line carries, in tiles
-    clear:   0.85,   // how far ahead of him the line must start, in tiles — nothing lands on him
+    clear:   0.25,   // how far ahead of him the line must start, in tiles — nothing lands on him
     step:    26,     // ms between one tile of the beam and the next
     hold:    240,    // ...and how long the whole line stands before it goes
     outStep: 110,    // ms between one tile LEAVING and the next — the line dissolves back to front
@@ -10741,14 +10748,22 @@
     edgeA:   0.85,   // ...and the two outside them
     ripple:  0,      // ms for that weight to travel from the middle out; 0 = it stays put
     spread:  0.90,   // how wide the travelling band is, as a share of the half-width
-    inMs:    50,     // the snap-on as a tile arrives
-    outMs:   90,     // ...and the fade as it leaves
-    chequer: 1,      // 1 alternates the two stone tones square by square, 0 uses the one
-    nose:    1,      // SQUARES deep at the leading edge drawn at the OUTSIDE weight — a rim, not a tile
-    point:   1,      // 1 takes the outer corners off the leading edge, rounding the tip
-    rainbow: 0.18,   // how far the stone tones are pulled toward a running hue, 0 = plain stone
-    hue0:    40,     // where that hue starts, in degrees
-    hueSpan: 300,    // ...and how far round the wheel it travels over the whole line
+    // ...and what it is made of now: ONE colour — the Hammer's own (charmCol) — with a strong band at the leading edge
+    // falling away behind it to the body's weight. The head of the line is a semicircle of the beam's half width.
+    leadA:   0.95,   // the leading edge, at its brightest
+    bodyA:   0.34,   // ...and the line behind it
+    edge:    0.85,   // how far back that brightness reaches, in tiles
+    rim:     0.14,   // ...and a rim of that same brightness all round the stream's own outline, in tiles — its sides and
+                     // the semicircle it ends in — so the beam has an edge rather than fading out into the ground
+    // THE LINE CLEARS FROM THE BACK. The rows nearest him go first and go fast, so the beam reads as being drawn back
+    // into the hammer rather than switched off along its whole length at once.
+    quickRows: 2,    // how many rows at the near end clear early...
+    quickRate: 3.5,  // ...and how much faster than the rest of the line they do it
+    hollow:  0.50,   // the share of the width down the MIDDLE that carries no body at all — the beam is its two outer
+                     // lanes and its rim, and the middle of it is empty ground with the light showing through
+    glowA:   0.55,   // the light INSIDE its edge: added over the colour along the leading edge and the rim, and nowhere else
+    dissolve: 0.55,  // how ragged the front of its dissolve is (FX_DISSOLVE_JITTER is what everything else uses): high
+                     // enough that squares well ahead of the front go early and stragglers hold on well behind it
   };
   // A hue as three channels, 0..1. Small and local: the beam is the only thing in the game that
   // wants one, and it wants it once per square.
@@ -10829,10 +10844,32 @@
   // `dir` overrides where the Hammer's line goes — [dx, dy], either sign or zero. Nothing in
   // the game passes it; hammer-lab.html does, so a swing can be aimed without steering a runner
   // into a corner to get a diagonal out of him.
+  // THE SHOUT STOPS TIME. Both charms freeze the level for exactly THREE BEATS — a beat being one tile at the pace he is
+  // running, as the Lodestone's three are — and in that time nothing moves but the charm: the monsters hold where they
+  // stand, the beat itself stops counting (so the traps and the jaws hold their gape), and he stays where he is. The
+  // shout's own clock is stretched to fill the freeze, so the wind-up, the blast and the settle are the three beats
+  // rather than a fixed second and a half with the world standing still around it afterwards.
+  // EACH CHARM'S EFFECT, IN BEATS — a beat being one tile at the pace he is running, as the Lodestone's three are. The
+  // line goes out over one, stands for one and fades over one, and so does the Bell's ring. The world is frozen for the
+  // whole of it (the wind-up included) and lets go as the last of it goes.
+  const ROAR_BEAT_MS = [260, 1400];      // the shortest and longest a beat may be, in ms
+  // `rest` is the quiet after the effect has gone and before he runs again: the freeze is out + hold + fade + rest either
+  // way, so shortening the fade and lengthening the rest by the same half beat clears the board sooner without moving
+  // the moment he starts running.
+  const ROAR_PHASE = {
+    finger: { out: 1, hold: 0.5, fade: 1, rest: 0.5 },   // (the line starts coming apart half a beat sooner, and takes a whole one over it)
+    pulse:  { out: 1, hold: 1, fade: 0.5, rest: 0.5 },
+  };
+  const roarBeats = (kind) => { const P = ROAR_PHASE[kind] || ROAR_PHASE.finger; return P.out + P.hold + P.fade + (P.rest || 0); };
   function startRoar(kind, dir){
     const s = state;
-    s.roar = { t: 0, fired: false, kind, dir: dir || null };
-    s.hold = ROAR_MS;                       // he is not going anywhere until it is done
+    // ...and a beat is HIS beat, held to a sane range: a lab board crawls at a ten-thousandth of a tile a second, and four
+    // beats of that is a freeze nobody would ever see the end of.
+    const beat = Math.max(ROAR_BEAT_MS[0], Math.min(ROAR_BEAT_MS[1], s.msPerCell || 1000 / Math.max(0.01, s.cpsNow || 1)));
+    const span = ROAR.wind + roarBeats(kind)*beat;
+    s.roar = { t: 0, fired: false, kind, dir: dir || null, beat };
+    s.hold = span;                          // he is not going anywhere until it is done...
+    s.freeze = span;                        // ...and neither is anything else (see frame)
   }
   function tickRoar(dt){
     const s = state, R = s.roar; if (!R) return;
@@ -10841,12 +10878,7 @@
       R.fired = true;
       if (R.kind === "pulse") unmakeMonsters(BELL.radius, "#c9b6ff");
       else {
-        R.beam = hammerBeam(R.dir); R.hit = 0;
-        // Paced to the shout: the line goes out and comes back inside the blast however long it
-        // turns out to be, so a beam across a wide board is quicker per tile rather than still
-        // arriving when the shouting has stopped.
-        R.step = Math.min(HAMMER.step,
-                          (ROAR.blast - HAMMER.hold) * 0.5 / Math.max(1, R.beam.length));
+        R.beam = hammerBeam(R.dir); R.hit = 0;     // ...and it is paced in BEATS now (ROAR_PHASE, roarFront)
       }
       try { Sound.roar && Sound.roar(R.kind); } catch(_){}
       haptic([12, 26, 60]);
@@ -10856,7 +10888,8 @@
     // to do one damage apiece, the same as a tap, which left a three-hit stone standing there
     // cracked with the line lying right across it: the Hammer of God, and the rock shrugged.
     if (R.fired && R.beam) {
-      const want = Math.min(R.beam.length, Math.floor((R.t - ROAR.wind) / R.step) + 1);
+      // ...as the FRONT of the line reaches it: the line travels its whole length over the `out` beats (roarFront)
+      const want = Math.min(R.beam.length, Math.ceil(roarFront(R) * R.beam.length));
       while (R.hit < want) {
         const b = R.beam[R.hit++];
         if (s.stones.has(key(b.c, b.r))) breakStone(b.c, b.r, true);
@@ -10871,10 +10904,25 @@
     // it, and the roar object is the only thing keeping either on screen. He is already free to
     // run — `hold` ran out on its own clock — so this holds nothing up, it just lets the thing
     // finish going.
-    const spent = R.kind === "pulse"
-      ? R.t - ROAR.wind >= Math.max(1, BELL.sweepMs)*Math.max(1, BELL.turns)
-      : (!R.beam || R.t - ROAR.wind >= beamGoneAt(R));
-    if (R.t >= ROAR_MS && spent) s.roar = null;
+    if (roarBeat(R) >= roarBeats(R.kind)) s.roar = null;      // the whole of it is over, and the world starts again
+  }
+  // How far through its effect a roar is, in BEATS since the shout went out (see ROAR_PHASE), and how far its leading edge
+  // has travelled, 0..1. Everything either charm draws reads these, so the drawing and the freeze cannot disagree.
+  function roarBeat(R) {
+    if (!R || !R.fired) return 0;
+    return (R.t - ROAR.wind) / Math.max(1, R.beat || 1);
+  }
+  function roarFront(R) {
+    const P = ROAR_PHASE[R && R.kind] || ROAR_PHASE.finger;
+    const k = Math.max(0, Math.min(1, roarBeat(R) / Math.max(0.01, P.out)));
+    return 1 - (1 - k)*(1 - k);                       // out hard, settling into its reach
+  }
+  // ...and what is left of it: full while it goes out and stands, then away over the fade beat.
+  // `rate` fades a part of it faster than the rest (the Hammer's first rows go before the rest of the line does).
+  function roarFade(R, rate) {
+    const P = ROAR_PHASE[R && R.kind] || ROAR_PHASE.finger, b = roarBeat(R);
+    const gone = (b - (P.out + P.hold)) / Math.max(0.01, P.fade) * (rate || 1);
+    return Math.max(0, Math.min(1, 1 - gone));
   }
   // 0 while he runs, 1 at the top of the shout — drives both his lean and the ring.
   function roarK(){
@@ -10887,14 +10935,6 @@
   // wall it cannot break. His heading is SNAPPED to one of eight — the four axes and the four
   // true diagonals — because on a corner he is half way through a turn, and a beam fired at
   // twenty-three degrees is a line nothing on a square board can line up with.
-  // When the last of the line has finished leaving, measured from the shout like everything
-  // else in the beam. The near end goes first and each tile follows `outStep` behind the one
-  // before it, so a long line takes a long time to unmake itself.
-  function beamGoneAt(R) {
-    const L = R.beam ? R.beam.length : 0;
-    if (!L) return 0;
-    return (L - 1)*R.step + HAMMER.hold + (L - 1)*HAMMER.outStep + Math.max(1, HAMMER.outMs);
-  }
   function hammerBeam(dir) {
     const s = state, ri = runnerInfo();
     const k = Math.round(Math.atan2(ri.ty, ri.tx) / (Math.PI/4));
@@ -10930,79 +10970,71 @@
   // instead of just fading.
   function drawHammerBeam() {
     const R = state && state.roar; if (!R || !R.fired || !R.beam || !R.beam.length) return;
-    const C = ROAR_KIND.finger, u = R.t - ROAR.wind, L = R.beam.length;
-    const goneAt = (L - 1)*R.step + HAMMER.hold;      // when the FIRST tile starts to go
+    const env = roarFade(R); const envFast = roarFade(R, HAMMER.quickRate);
+    if (env <= 0.01) return;
+    const L = R.beam.length, col = charmCol("finger"), RGB = hexRGB(col);
     const n = Math.max(1, Math.round(HAMMER.grid)), q = cell/n, sub = 1/n;
-    const MID = rgbOf(C.mid), RIM = rgbOf(C.rim);
     const dx = R.beam.dx || 0, dy = R.beam.dy || 0;
     const m = Math.hypot(dx, dy) || 1, ux = dx/m, uy = dy/m;
     const nx = -uy, ny = ux;                          // across the line
     const dStep = m;                                  // tiles from one beam cell to the next
     const halfW = 0.5*HAMMER.width;
-    const in0 = 0.5/n, out0 = 0.5 - 0.5/n, span = Math.max(1e-3, out0 - in0);
     const b0 = R.beam[0], ox0 = b0.c + 0.5, oy0 = b0.r + 0.5;      // the origin, in tiles
     const alongMin = -dStep/2, alongMax = (L - 1)*dStep + dStep/2;
-    const stepF = (Math.abs(ux) + Math.abs(uy))/n;                 // one square, along the line
-    // The beam is a BAND, not a run of filled cells. On an axis the two come to the same thing —
-    // a one-tile band covers exactly the cells the line names — but on a diagonal, cells only
-    // touch at their corners, so filling them gives a staircase of separate squares. Drawn as a
-    // band, the stream runs unbroken at forty-five degrees with its own clean edges, and the
-    // squares it lights are whichever ones of the world's grid fall inside it. That means
-    // reaching into the cells the line merely clips, so the scan takes one cell either side of
-    // the run and lets the geometry decide.
+    // WHERE THE FRONT HAS GOT TO, and the SEMICIRCLE it ends in: the head of the line is a half-disc of the beam's own
+    // half-width, so the stream comes to a round nose rather than a flat wall — and the nose is where the light is.
+    const front = alongMin + (alongMax - alongMin)*roarFront(R);
+    const nose = front - halfW;
     let c0 = Infinity, c1 = -Infinity, r0 = Infinity, r1 = -Infinity;
     for (const b of R.beam) { c0 = Math.min(c0, b.c); c1 = Math.max(c1, b.c);
                               r0 = Math.min(r0, b.r); r1 = Math.max(r1, b.r); }
     c0 = Math.max(0, c0 - 1); c1 = Math.min(COLS - 1, c1 + 1);
     r0 = Math.max(0, r0 - 1); r1 = Math.min(ROWS - 1, r1 + 1);
-    // The light, laid down the line the squares are about to be lit along, and under them. Its
-    // ends are the beam's own ends and its width the beam's own width, so it cannot describe a
-    // stream that is not there — and its leading end travels out with the beam rather than
-    // arriving whole, or the light would reach the far wall before the Hammer did.
-    {
-      const ax = (ox0 + alongMin*ux)*cell, ay = (oy0 + alongMin*uy)*cell;
-      const bx = (ox0 + alongMax*ux)*cell, by = (oy0 + alongMax*uy)*cell;
-      const grew = Math.min(1, u/Math.max(1, (L - 1)*R.step + HAMMER.inMs));
-      const left = Math.max(0, 1 - Math.max(0, u - goneAt)/Math.max(1, HAMMER.outMs*2));
-      charmGlowLine(ax, ay, ax + (bx - ax)*grew, ay + (by - ay)*grew,
-                    halfW*2*cell*CHARM_GLOW.beam, RIM, CHARM_GLOW.a*left);
-    }
     ctx.save();
     for (let cc = c0; cc <= c1; cc++) for (let rr = r0; rr <= r1; rr++) {
       if (state.walls.has(key(cc, rr))) continue;     // it does not light rock it cannot pass
       const x = cx(cc), y = cy(rr);
       for (let gy = 0; gy < n; gy++) for (let gx = 0; gx < n; gx++) {
-        // this square's centre, in tiles, measured off the first beam cell's centre
         const sx = cc + (gx + 0.5)*sub - ox0, sy = rr + (gy + 0.5)*sub - oy0;
         const perp = Math.abs(sx*nx + sy*ny);
         if (perp > halfW) continue;                   // outside the stream
         const along = sx*ux + sy*uy;
         if (along < alongMin || along > alongMax) continue;
-        // Which tile of the line it belongs to — that is what gives it its moment and its hue.
-        const i = clamp(Math.round(along/dStep), 0, L - 1);
-        const inAt = i*R.step, outAt = goneAt + i*HAMMER.outStep;
-        if (u < inAt || u >= outAt + HAMMER.outMs) continue;
-        // Snaps on, fades off: arriving is an impact and leaving is not.
-        const a = u < outAt ? Math.min(1, (u - inAt)/Math.max(1, HAMMER.inMs))
-                            : 1 - (u - outAt)/Math.max(1, HAMMER.outMs);
+        // inside the line, and inside its rounded head
+        if (along > nose && Math.hypot(along - nose, perp) > halfW) continue;
+        if (along > front) continue;
+        // THE LEADING EDGE: a strong band of colour at the front, falling away behind it over `edge` tiles to the line's
+        // own weight. The whole stream is the charm's one colour; only its strength says where the front is.
+        const back = Math.max(0, front - along);
+        const lead = Math.max(0, 1 - back/Math.max(0.01, HAMMER.edge));
+        // ...and the stream's OWN OUTLINE, at that same strength: how far this square is inside the edge, measured across
+        // the line along its length and out from the nose's centre round its head, so the rim follows the rounded tip.
+        const inset = along > nose ? halfW - Math.hypot(along - nose, perp) : halfW - perp;
+        const rim = Math.max(0, 1 - Math.max(0, inset)/Math.max(0.01, HAMMER.rim));
+        const k = Math.max(lead*lead, rim*rim);
+        // ...and the middle lanes are EMPTY: they carry none of the body, only whatever the leading edge and the rim put
+        // there as they pass, so the line reads as two rails with the ground showing between them.
+        const body = perp < halfW*HAMMER.hollow ? 0 : HAMMER.bodyA;
+        // the rows nearest him let go first (HAMMER.quickRows), and much faster than the rest
+        const row = Math.round((along - alongMin - dStep/2)/dStep);
+        const e = row < HAMMER.quickRows ? envFast : env;
+        const far = (along - alongMin) / Math.max(1e-3, alongMax - alongMin);
+        if (!fxHere(e, far, cc, rr, gx, gy, n, HAMMER.dissolve)) continue;   // ...a square at a time, from him outward
+        const a = body + (HAMMER.leadA - body)*k;
         if (a <= 0.01) continue;
-        const ld = clamp((perp - in0)/span, 0, 1);    // 0 on the axis, 1 at the outside lane
-        // The far end of the line is its POINT. The leading edge is a RIM — `nose` squares deep,
-        // not whole tiles — burning at the outside weight, so the stream ends in a thin dim
-        // border rather than a tile that quietly gave up; and the very front of that rim loses
-        // its outer corners, which is what stops the line ending in a flat wall.
-        if (HAMMER.point >= 0.5 && ld > 0.999 && along > alongMax - stepF) continue;
-        const nose = along > alongMax - Math.max(0, HAMMER.nose)*stepF;
-        const p = HAMMER.ripple > 0 ? (u - inAt)/HAMMER.ripple : 0;   // where the band has got to
-        const w = nose ? 0 : (HAMMER.ripple > 0
-          ? clamp(1 - Math.abs(ld - p)/Math.max(0.01, HAMMER.spread), 0, 1)
-          : 1 - ld);
-        const chq = HAMMER.chequer >= 0.5 && ((gx + gy) & 1);
-        ctx.globalAlpha = a * (HAMMER.edgeA + (HAMMER.coreA - HAMMER.edgeA)*w);
-        ctx.fillStyle = charmTone(chq ? MID : RIM, chq ? 0.92 : 0.96,
-                                  clamp((along - alongMin)/(alongMax - alongMin), 0, 1),
-                                  HAMMER.rainbow, HAMMER.hue0, HAMMER.hueSpan);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = a;
+        ctx.fillStyle = col;
         ctx.fillRect(x + gx*q, y + gy*q, q + 0.5, q + 0.5);
+        // THE LIGHT, INSIDE THE EDGE. It used to be a lamp under the whole thing, spilling out past it onto the ground;
+        // it is a glow hugging the INSIDE of its own outline now — the leading edge and the rim, burning brighter than the
+        // colour can on its own — so nothing of the charm is drawn outside the shape it actually takes.
+        if (k > 0.02 && HAMMER.glowA > 0) {
+          ctx.globalCompositeOperation = "lighter";
+          ctx.globalAlpha = HAMMER.glowA * k;
+          ctx.fillRect(x + gx*q, y + gy*q, q + 0.5, q + 0.5);
+          ctx.globalCompositeOperation = "source-over";
+        }
       }
     }
     ctx.restore();
@@ -11078,6 +11110,23 @@
     ctx.drawImage(bellGlowSprite(h0, span, turn), x - r, y - r, r*2, r*2);
     ctx.restore();
   }
+  // A CHARM'S OWN COLOUR, and the only colour its effect is drawn in: the talisman's, off the shelf (TALISMANS). The
+  // effects used to be two stone tones chequered together with a hue running across them; each is now one flat colour,
+  // and all that varies across it is how strong it is — which is what says where its leading edge is.
+  const charmCol = (id) => { const t = talById(id); return (t && t.col) || "#ffffff"; };
+  // HOW AN EFFECT GOES: not by fading — every square of it at three quarters of itself is a wash, and the thing stops
+  // being made of ground — but ONE SQUARE AT A TIME, FROM HIM OUTWARD. A square's moment is how far out it sits: the ones
+  // nearest him go first and the far end holds on longest, so the thing is drawn back off the board the way it went onto
+  // it. `far` is that distance, 0 at him and 1 at the effect's own reach; the jitter is what keeps the front of the
+  // dissolve from being a clean line across it. Everything still showing is at full strength until its own moment comes.
+  const FX_DISSOLVE_JITTER = 0.22;
+  const fxHere = (e, far, cc, rr, gx, gy, n, jitter) => {
+    if (e >= 1) return true;
+    if (e <= 0) return false;
+    const j = ((bgHash(cc*(n|0) + gx, rr*(n|0) + gy) % 4096)/4096 - 0.5)
+            * (jitter == null ? FX_DISSOLVE_JITTER : jitter);
+    return e >= (1 - Math.max(0, Math.min(1, far))) + j;
+  };
   function charmGlow(x, y, r, rgb, a) {
     if (!(a > 0.01) || !(r > 0)) return;
     const c = (v) => "rgba(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + "," + v.toFixed(3) + ")";
@@ -11160,6 +11209,9 @@
     // ...and the Ankh's, which is the one charm effect that is not a thing done TO the board —
     // it is around HIM, off the edge of it, so it answers to the fall rather than to a roar.
     drawAnkhSwirl(ts);
+    // ...and the Lodestone's field, which is a charm effect like the other two and belongs over the board with them: it
+    // used to go down among the coins, where a laid tile or a loose one could be drawn on top of it.
+    drawMagnetField(ts);
     const R = state && state.roar; if (!R || !R.fired) return;
     if (R.kind === "finger") drawHammerBeam();
     else if (R.kind === "pulse") drawBellSweep();
@@ -11170,23 +11222,17 @@
   // over them — but turned into a circle, which is the shape the Bell's reach actually is.
   function drawBellSweep(){
     const R = state && state.roar; if (!R || !R.fired) return;
-    const u = R.t - ROAR.wind;
-    const life = Math.max(1, BELL.sweepMs) * Math.max(1, BELL.turns);
-    if (u < 0 || u > life) return;
-    const env = u > life - BELL.outMs ? Math.max(0, (life - u)/Math.max(1, BELL.outMs)) : 1;
-    if (env <= 0.01) return;
-    const C = ROAR_KIND.pulse, MID = rgbOf(C.mid), RIM = rgbOf(C.rim);
+    const env = roarFade(R); if (env <= 0.01) return;
+    const col = charmCol("pulse"), RGB = hexRGB(col);
     const p = visualAt(state.runIdx + state.runT);
     const rad = BELL.radius*cell, hole = BELL.hole*cell;
     const n = Math.max(1, Math.round(BELL.grid)), q = cell/n;
-    const turn = u / Math.max(1, BELL.sweepMs);          // where the hand has got to
+    // THE RING, opening away from him: its edge runs from the quiet he stands in out to the reach over the `out` beat,
+    // stands there for the hold, and fades where it is. Behind the edge the circle is filled in at the body's weight, so
+    // what travels is a strong coloured rim with its own wake rather than a wash growing outward.
+    const edge = hole + (rad - hole)*roarFront(R);
     const c0 = Math.max(0, Math.floor((p.x - rad)/cell)), c1 = Math.min(COLS-1, Math.floor((p.x + rad)/cell));
     const r0 = Math.max(0, Math.floor((p.y - rad)/cell)), r1 = Math.min(ROWS-1, Math.floor((p.y + rad)/cell));
-    const spanR = Math.max(1e-3, rad - hole);
-    // The hue walks with the hand, so the halo turns with the sweep rather than sitting still
-    // under something that is plainly moving.
-    charmGlowRainbow(p.x, p.y, rad*CHARM_GLOW.bellReach, CHARM_GLOW.bellA*env,
-                     BELL.hue0, BELL.hueSpan, turn*0.35);
     ctx.save();
     for (let cc = c0; cc <= c1; cc++) for (let rr = r0; rr <= r1; rr++) {
       if (state.walls.has(key(cc, rr))) continue;        // it does not ring through rock
@@ -11194,28 +11240,23 @@
       for (let gy = 0; gy < n; gy++) for (let gx = 0; gx < n; gx++) {
         const sx = x + (gx + 0.5)*q - p.x, sy = y + (gy + 0.5)*q - p.y;
         const d = Math.hypot(sx, sy);
-        if (d > rad || d < hole) continue;               // the reach, and the quiet he stands in
-        // where this square sits on the circle, measured from the top and going clockwise, and
-        // how long ago the hand went past it
-        const f = ((Math.atan2(sy, sx) + Math.PI/2)/(Math.PI*2) % 1 + 1) % 1;
-        const since = ((turn - f) % 1 + 1) % 1;
-        const k = Math.pow(Math.max(0, 1 - since/Math.max(0.01, BELL.tail)), BELL.ease);
-        const rd = clamp((d - hole)/spanR, 0, 1);        // 0 at the quiet, 1 at the rim
-        // The front of the wave is ROUNDED: along the leading edge — the squares within one
-        // square's width of the hand, measured round the arc — the ones at the rim and the ones
-        // against the quiet are left out, so the arm comes to a point instead of arriving as a
-        // flat spoke with square shoulders.
-        if (BELL.point >= 0.5 && since*Math.PI*2*d < q && (d > rad - q || d < hole + q)) continue;
-        const band = BELL.innerA + (BELL.rimA - BELL.innerA)*rd;
-        const a = env * (BELL.low + (band - BELL.low)*k);
+        if (d > edge || d < hole) continue;              // as far as it has opened, and the quiet at the middle
+        const back = edge - d;                           // how far behind the rim this square is
+        const lead = Math.max(0, 1 - back/Math.max(0.01, BELL.edge*cell));
+        const k = lead*lead;
+        if (!fxHere(env, (d - hole)/Math.max(1e-3, edge - hole), cc, rr, gx, gy, n)) continue;   // ...a square at a time, from him outward
+        const a = BELL.bodyA + (BELL.rimA - BELL.bodyA)*k;
         if (a <= 0.01) continue;
-        const chq = BELL.chequer >= 0.5 && ((gx + gy) & 1);
+        ctx.globalCompositeOperation = "source-over";
         ctx.globalAlpha = a;
-        // The hue runs ROUND the circle rather than along it, so the tail behind the hand carries
-        // a drift of colour with it instead of the whole ring being one shade at a time.
-        ctx.fillStyle = charmTone(chq ? MID : RIM, chq ? 0.92 : 0.96, f,
-                                  BELL.rainbow, BELL.hue0, BELL.hueSpan);
+        ctx.fillStyle = col;
         ctx.fillRect(x + gx*q, y + gy*q, q + 0.5, q + 0.5);
+        if (k > 0.02 && BELL.glowA > 0) {          // ...and the light, hugging the inside of the rim and going no further
+          ctx.globalCompositeOperation = "lighter";
+          ctx.globalAlpha = BELL.glowA * k;
+          ctx.fillRect(x + gx*q, y + gy*q, q + 0.5, q + 0.5);
+          ctx.globalCompositeOperation = "source-over";
+        }
       }
     }
     ctx.restore();
@@ -11591,6 +11632,7 @@
   function grabHeart(c, r, col, flew) {
     const s = state;
     s.heartsGot = (s.heartsGot || 0) + 1;
+    (s.heartCols || (s.heartCols = [])).push(col);
     const rp = (flew && s.status === "play" && s.path && s.path.length) ? visualAt(s.runIdx + s.runT) : null;
     (s.heartRun || (s.heartRun = [])).push({ wx: rp ? rp.x : (c + 0.5)*cell, wy: rp ? rp.y - cell*0.3 : (r + 0.5)*cell,
       w0: cell*HEART.size, col, t: 0, done: false, delay: Math.min(5, s.heartRun.length) * COINRUN.stagger });
@@ -12562,6 +12604,7 @@
     const purseWas = wallet.tiles, purseGain = state.purse || 0;
     wallet.tiles += purseGain;
     state.purse = 0;
+    wallet.hearts = (wallet.hearts || 0) + (state.heartsGot || 0);   // ...and the hearts, banked the same way
     saveWallet();
     // Asked BEFORE the line below writes the clear down. On a REPLAY the next chapter has been
     // in colour on the map for as long as you have had it, and greying it out so the sequence
@@ -16432,7 +16475,6 @@
       const ob = 1.2, e = k >= 1 ? 1 : 1 + (ob + 1)*Math.pow(k - 1, 3) + ob*Math.pow(k - 1, 2);
       drawHeart((c+0.5)*cell, (r+0.5)*cell, ts, h.col, e, c*7 + r*3);
     }
-    drawMagnetField(ts);
     for (const f of state.coinFly) {                 // reeled in: coin -> runner, over its own time (see COIN_FLY_PER_TILE)
       const rp = visualAt(state.runIdx + state.runT);
       const u = Math.min(1, f.t / (f.dur || COIN_FLY_MS)), e = u*u*(3 - 2*u);   // ease so it accelerates in
@@ -16932,9 +16974,10 @@
     const x = C ? C.x + C.w + Math.round(P.fs2*HEART_HUD.gap) : Math.round((viewW - w)/2);
     return { x, y: P.top, w, h: P.h, midY: P.top + P.h/2, iconX: x + padX, iconW: cw, textX: x + padX + cw + gap, num, font };
   }
-  // A heart as the HUD draws one, `w` across, centred on (x, y).
+  // A heart as the HUD draws one, `w` across, centred on (x, y): its silhouette in one flat colour, as the shop's is —
+  // no facets, no outline. (The ones flying up to the counter are drawn with it too, so they land as what they become.)
   function hudHeart(x, y, w, col) {
-    ctx.save(); ctx.translate(x, y); paintHeart(w, col, 1, Math.max(1, w*0.05)); ctx.restore();
+    ctx.save(); ctx.translate(x, y); flatHeart(w, col); ctx.restore();
   }
   function drawHeartHud() {
     const B = heartHudBox(); if (!B) return;
@@ -17114,11 +17157,11 @@
     const px = rp.x, py = rp.y - cell*0.3;
     const R = MAGNET.radius*cell, hole = MAGNET.hole*cell;
     const n = Math.max(1, Math.round(MAGNET.grid)), q = cell/n;
-    const MID = rgbOf(MAGNET_TONE.mid), RIM = rgbOf(MAGNET_TONE.rim);
+    const col = charmCol("magnet"), RGB = hexRGB(col);
     // Half strength, and only this one. Every other charm effect is a bang — a second or two
     // and gone — but the Lodestone burns for three whole seconds centred on the runner, and at
     // full strength its light washed out the track he is running along while he needs to see it.
-    charmGlow(px, py, R*CHARM_GLOW.reach, RIM, CHARM_GLOW.a*0.5);
+
     const rings = Math.max(1, Math.round(MAGNET.rings)), band = Math.max(1e-3, MAGNET.band*R);
     // Where each ring has got to, worked out once rather than per square: they are the same
     // few radii for the whole field, and a square only has to ask how near it is to one.
@@ -17145,15 +17188,25 @@
         let a = MAGNET.wash;
         for (const g of at) {
           if (g.rad < hole) continue;             // it has arrived; it is not a ring any more
-          const k = 1 - Math.abs(d - g.rad)/band;
-          if (k > 0) a = Math.max(a, MAGNET.wash + (MAGNET.ringA - MAGNET.wash)*k*g.life);
+          const off = d - g.rad;                  // negative: inside the ring, where it is going
+          const k = 1 - Math.abs(off)/band;
+          if (k <= 0) continue;
+          // the inner side of the band is the LEADING edge of a ring coming in, so that is where the colour is strongest
+          const lead = Math.max(0, 1 - Math.max(0, off)/band);
+          const w = MAGNET.bodyA + (MAGNET.leadA - MAGNET.bodyA)*lead*lead;
+          a = Math.max(a, MAGNET.wash + (w - MAGNET.wash)*k*g.life);
         }
         if (a <= 0.01) continue;
-        const chq = MAGNET.chequer >= 0.5 && ((gx + gy) & 1);
-        const base = chq ? MID : RIM;
+        ctx.globalCompositeOperation = "source-over";
         ctx.globalAlpha = a;
-        ctx.fillStyle = "rgba(" + base[0] + "," + base[1] + "," + base[2] + ",0.94)";
+        ctx.fillStyle = col;
         ctx.fillRect(x + gx*q, y + gy*q, q + 0.5, q + 0.5);
+        if (MAGNET.glowA > 0 && a > MAGNET.bodyA) {    // the light inside a ring's leading edge, and nowhere else
+          ctx.globalCompositeOperation = "lighter";
+          ctx.globalAlpha = MAGNET.glowA * (a - MAGNET.bodyA)/Math.max(0.01, MAGNET.leadA - MAGNET.bodyA);
+          ctx.fillRect(x + gx*q, y + gy*q, q + 0.5, q + 0.5);
+          ctx.globalCompositeOperation = "source-over";
+        }
       }
     }
     ctx.restore();
@@ -17774,10 +17827,10 @@
     drop:    0.14,   // ...how far below it falls, in tiles
     alpha:   0.42,   // ...and how dark
     rim:     0.016,  // the white inside the top edge: how far in it reaches, in tiles
-    rimSoft: 0.45,   // ...how soft, as a share of that reach. 1 is a blur as wide as the light, which is a glow with
-                     // no edge to it; well under 1 is a LINE with a definite inside.
-    rimA:    0.78,   // ...and how strong where it meets the edge. A line this thin needs to be brighter than a wide
-                     // one did, or thinning it just fades it out.
+    rimSoft: 1.00,   // ...how soft, as a share of that reach. 1 is a blur as wide as the light, which is a glow with
+                     // no hard inside edge to it; well under 1 is a LINE with a definite inside. (It was 0.45, a line.)
+    rimA:    0.60,   // ...and how strong where it meets the edge — down from 0.78 with the softening, so the wider glow
+                     // does not come out brighter overall than the line it replaced.
   };
   // The shadow a monster throws. `paint` lays the silhouette down; it is drawn a long way off so only the shadow
   // comes back, carried through whatever transform the animal is under. The DROP is added in device pixels, which
@@ -18312,10 +18365,30 @@
     if (K.split === "v") ctx.rotate(Math.PI/2);
     ctx.scale(face, 1);                                           // face the way it travels
 
-    // ONE shadow for the whole animal, thrown before the jaws are drawn and from the whole tile rather than from
-    // each half. Two halves each casting their own would put a shadow in the gap between them as they open, and a
-    // mouth is one thing opening, not two things standing apart.
-    monsterShadow(() => { rrect(-h, -h, S, S, R); ctx.fill(); });
+    // A SHADOW FOR EACH JAW, moving with it: each half of the tile throws its own, lifted and swung exactly as that half
+    // is drawn, so as the mouth opens the shadow parts too and the board shows through between them. Both are cast
+    // before either jaw is drawn, so the lower jaw's soft dark never lands on the upper jaw's cut edge. Each is the
+    // half's own shape — rounded on its outside corners, square along the cut — rather than the tile clipped, because
+    // a clip would cut the blur off at the cut as well.
+    const jawPath = (j) => {
+      const y0 = j < 0 ? -h : 0, y1 = j < 0 ? 0 : h, r = Math.max(0, Math.min(R, h));
+      ctx.beginPath();
+      if (j < 0) {                                                // rounded along the top
+        ctx.moveTo(-h, y1); ctx.lineTo(-h, y0 + r); ctx.arcTo(-h, y0, -h + r, y0, r);
+        ctx.lineTo(h - r, y0); ctx.arcTo(h, y0, h, y0 + r, r); ctx.lineTo(h, y1);
+      } else {                                                    // ...and along the bottom
+        ctx.moveTo(-h, y0); ctx.lineTo(h, y0); ctx.lineTo(h, y1 - r); ctx.arcTo(h, y1, h - r, y1, r);
+        ctx.lineTo(-h + r, y1); ctx.arcTo(-h, y1, -h, y1 - r, r);
+      }
+      ctx.closePath();
+    };
+    for (const j of [-1, 1]) {
+      ctx.save();
+      ctx.translate(0, j*lift);
+      ctx.rotate(j*tilt*face);
+      monsterShadow(() => { jawPath(j); ctx.fill(); });
+      ctx.restore();
+    }
 
     // No dark backing behind the gap: when he opens, you see the board straight through him,
     // which is what makes the split read as a split rather than a painted-on mouth.
@@ -19738,6 +19811,7 @@
   // ...and a second, for the junction's three-way mask. The options are stacked into it rather
   // than unioned, so the shared trunk builds up and the arms only one route reaches stay faint.
   const jMask = document.createElement("canvas");
+  const jUnion = document.createElement("canvas");     // the three routes' shapes together, for cutting a GLASS earth
   const jEdge = document.createElement("canvas");      // ...and each route's edges, faded along their contour, laid on from
   // THE SPARK RACE as a junction is laid (drawJunctionRace): one spark off the join down each option, across the tile and
   // straight on to the CENTRE of the hotspot past its end, drawing the blue lead behind it once it is off the tile. There
@@ -19855,13 +19929,48 @@
       if (jMask.width !== px) { jMask.width = jMask.height = px; }
       const mg = jMask.getContext("2d");
       const mix = [JUNCTION.left, JUNCTION.ahead, JUNCTION.right];   // same order as `exits`
-      // EACH ROUTE A LAYER OF ITS OWN — its earth and its contour together — laid down in the order RIGHT, STRAIGHT, LEFT,
-      // each over the one before, so where two run together the later one's earth and contour lie over the earlier's. The
-      // earth fades along the way he is travelling: full where the tile meets the one he is coming off, nothing at its leading
-      // edge. The contour — shading and lip, at a laid tile's strength — fades to nothing along its own route (contourFade).
-      // All of it is cut to the route's own shape before it is laid on. (The routes' weights only say which routes are there.)
+      // THE EARTH IN ONE SWEEP. It is the same for every route — the ground, the worn skin, the grain, faded along the way he
+      // is travelling (full where the tile meets the one he is coming off, nothing at its leading edge) — so it is painted
+      // ONCE, next door, rather than once per route. Stacked three times at that fade it built up wherever two routes ran
+      // together, and the junction read as three sheets of earth laid on each other rather than as one tile of ground.
       if (jEdge.width !== px) { jEdge.width = jEdge.height = px; }
       const eg = jEdge.getContext("2d");
+      mg.setTransform(1, 0, 0, 1, 0, 0); mg.clearRect(0, 0, px, px);
+      mg.setTransform(dpr, 0, 0, dpr, -DX, -DY);
+      { const was = ctx; ctx = mg;
+        if (!earthGlass()) {                                          // (a glass earth has no ground under it)
+          ctx.fillStyle = groundColour(track);
+          ctx.fillRect(X, Y, cell, cell);                             // the ground...
+        }
+        drawGround(X, Y, cell, n.c, n.r);                             // ...and the worn skin on it
+        if (!earthGlass()) grainFill(X, Y, cell, cell, JUNCTION.grain);   // (no paper grain on glass)
+        ctx.globalCompositeOperation = "destination-in";
+        const gd = ctx.createLinearGradient(C.x - din.x*cell/2, C.y - din.y*cell/2, C.x + din.x*cell/2, C.y + din.y*cell/2);
+        gd.addColorStop(0, "rgba(255,255,255,1)"); gd.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = gd; ctx.fillRect(X, Y, cell, cell);           // ...faded to its leading edge
+        ctx.globalCompositeOperation = "source-over";
+        ctx = was; }
+      // A GLASS earth does not go in the stack at all. Glass LIGHTS what is under it (drawGroundQuilt screens it), and in
+      // here there is nothing under it — so pasted back over the board it came out as flat colour laid ON the level, a
+      // different, heavier thing from the glass on the tiles either side of it. It is cut to the three routes' shapes
+      // together and SCREENED onto the board below the rest of the junction (see the foot of this function), which is
+      // exactly what painting it there directly would have done.
+      const glassEarth = earthGlass() > 0;
+      if (glassEarth) {
+        if (jUnion.width !== px) { jUnion.width = jUnion.height = px; }
+        const ug = jUnion.getContext("2d");
+        ug.setTransform(1, 0, 0, 1, 0, 0); ug.clearRect(0, 0, px, px);
+        ug.setTransform(dpr, 0, 0, dpr, -DX, -DY);
+        ug.fillStyle = "#ffffff";
+        for (let i = 0; i < 3; i++) if (mix[i] > 0) { ug.beginPath(); { const was = ctx; ctx = ug; bodyPath(surfaces[i], C); ctx = was; } ug.fill(); }
+        mg.setTransform(1, 0, 0, 1, 0, 0);
+        mg.globalCompositeOperation = "destination-in"; mg.drawImage(jUnion, 0, 0);
+        mg.globalCompositeOperation = "source-over";
+      }
+      // ...and then EACH ROUTE, in the order RIGHT, STRAIGHT, LEFT: the part of the tile its shape covers is cleared and laid
+      // again — that one earth, and this route's contour over it — so a later route's contour lies over an earlier one's
+      // where they run together, and the earth under both is still the single sheet, never a second coat of it. The contour
+      // (shading and lip, at a laid tile's strength) fades to nothing along its own route (contourFade).
       for (const i of [2, 1, 0]) {
         if (!(mix[i] > 0)) continue;
         const S = surfaces[i];
@@ -19882,27 +19991,13 @@
           ctx.fillStyle = contourFade(S, C); ctx.fillRect(X, Y, cell, cell);
           ctx.globalCompositeOperation = "source-over";
           ctx = was; }
-        // the layer: its earth faded to the leading edge, the contour over it, all of it cut to this route
-        mg.setTransform(1, 0, 0, 1, 0, 0); mg.clearRect(0, 0, px, px);
-        mg.setTransform(dpr, 0, 0, dpr, -DX, -DY);
-        { const was = ctx; ctx = mg;
-          if (!earthGlass()) {                                          // (a glass earth has no ground under it)
-            ctx.fillStyle = groundColour(track);
-            ctx.fillRect(X, Y, cell, cell);                             // the ground...
-          }
-            drawGround(X, Y, cell, n.c, n.r);                             // ...and the worn skin on it
-          if (!earthGlass()) grainFill(X, Y, cell, cell, JUNCTION.grain);   // (no paper grain on glass)
-          ctx.globalCompositeOperation = "destination-in";
-          const gd = ctx.createLinearGradient(C.x - din.x*cell/2, C.y - din.y*cell/2, C.x + din.x*cell/2, C.y + din.y*cell/2);
-          gd.addColorStop(0, "rgba(255,255,255,1)"); gd.addColorStop(1, "rgba(255,255,255,0)");
-          ctx.fillStyle = gd; ctx.fillRect(X, Y, cell, cell);           // ...faded to its leading edge
-          ctx.globalCompositeOperation = "source-over";
-          ctx.drawImage(jEdge, DX/dpr, DY/dpr, px/dpr, px/dpr);         // ...with its contour on it
-          ctx.globalCompositeOperation = "destination-in";
-          ctx.fillStyle = "#ffffff"; ctx.beginPath(); bodyPath(S, C); ctx.fill();   // ...cut to this route
-          ctx.globalCompositeOperation = "source-over";
-          ctx = was; }
-        ctx.drawImage(jMask, DX/dpr, DY/dpr, px/dpr, px/dpr);           // ...and laid over the ones before it
+        // the route's shape: cleared, then the earth and its contour laid in it
+        ctx.save();
+        ctx.beginPath(); bodyPath(S, C); ctx.clip();
+        ctx.clearRect(X - 1, Y - 1, cell + 2, cell + 2);
+        if (!glassEarth) ctx.drawImage(jMask, DX/dpr, DY/dpr, px/dpr, px/dpr);
+        ctx.drawImage(jEdge, DX/dpr, DY/dpr, px/dpr, px/dpr);
+        ctx.restore();
       }
       // No back-to-front fade any more. It was doing the same job the weighted stack does —
       // saying "this ground has not settled" — and doing it along a different axis, so the two
@@ -19921,6 +20016,11 @@
       ctx.restore();
       ctx.restore();
     } finally { ctx = main; }
+    if (earthGlass() > 0) {                                           // the glass earth, screened onto the board first
+      ctx.save(); ctx.globalCompositeOperation = "screen";
+      ctx.drawImage(jMask, DX/dpr, DY/dpr, px/dpr, px/dpr);
+      ctx.restore();
+    }
     ctx.drawImage(jScratch, DX/dpr, DY/dpr, px/dpr, px/dpr);
   }
 
@@ -20353,7 +20453,10 @@
     const shut = bt < EYES.blinkMs*0.04 || (bt > EYES.blinkMs*0.058 && bt < EYES.blinkMs*0.085);
     return { gx, gy, shut };
   }
-  function drawEyes(g, cx0, cy0, s, col, face, t, off, nx, ny) {
+  // `square` draws each open eye as a SQUARE of the same weight as the round one — its side is chosen so the two cover the
+  // same area (a circle's, πR², as a square: R·√π across) — rather than a dot. The runner wears it (RUNNER_SQUARE_EYES);
+  // everything else with a face keeps the round pair.
+  function drawEyes(g, cx0, cy0, s, col, face, t, off, nx, ny, square) {
     const R = s*EYES.r, gap = s*EYES.gap, bias = s*EYES.bias*(face || 0);
     const { gx, gy, shut } = eyeGlance(s, t, off);
     const x1 = cx0 + bias - gap/2, x2 = cx0 + bias + gap/2;
@@ -20366,10 +20469,17 @@
     } else {
       g.fillStyle = col;
       const px = gx + (nx || 0), py = gy + (ny || 0);
-      g.beginPath(); g.arc(x1 + px, cy0 + py, R, 0, Math.PI*2); g.fill();
-      g.beginPath(); g.arc(x2 + px, cy0 + py, R, 0, Math.PI*2); g.fill();
+      if (square) {
+        const a = R*Math.sqrt(Math.PI), h = a/2;
+        g.fillRect(x1 + px - h, cy0 + py - h, a, a);
+        g.fillRect(x2 + px - h, cy0 + py - h, a, a);
+      } else {
+        g.beginPath(); g.arc(x1 + px, cy0 + py, R, 0, Math.PI*2); g.fill();
+        g.beginPath(); g.arc(x2 + px, cy0 + py, R, 0, Math.PI*2); g.fill();
+      }
     }
   }
+  const RUNNER_SQUARE_EYES = true;   // the runner's eyes as squares rather than dots (see drawEyes)
   const RUNNER = {
     stepMs:   110,     // ms per radian of stride phase — lower = faster legs. On the board the
                        // phase comes off the TRACK (STRIDES_PER_TILE) rather than the clock, so
@@ -20644,13 +20754,20 @@
     let   bob   = moving ? Math.abs(Math.sin(phase)) * s*RUNNER.bob * mul(w.bob, 1) : 0;
     if (w.hop && moving) bob += Math.max(0, Math.sin(phase)) * s*w.hop;   // one big bounce a stride
     // a hover sits him off the track and breathes, whether or not he is running
-    const hover = (w.hover ? s*w.hover * (1 + 0.14*Math.sin(phase*0.256)) : 0)
+    // (A rolling swagger's hover is a plain offset, no breathing: its height off the track is decided by the shape of the
+    // ball as it turns — see the roll below — and a breath on top of that would be a second bounce out of step with it.)
+    const hover = (w.hover ? s*w.hover * (w.spin ? 1 : 1 + 0.14*Math.sin(phase*0.256)) : 0)
                 + (_leapLift ? s*(w.leapH || 0.22)*_leapLift : 0);
     // Sitting settles him toward the track. It goes on HERE rather than being added to sx/sy by
     // the caller, so that it lands in the runner's own rotated frame — down the tile's normal on
     // a corner, not down the screen — and so the shadow below can undo it the same way it undoes
     // the hover. Moving him from outside took his shadow with him, and it slid under the rail.
     const sink = s * REST_SINK * _restFold;
+    // ON the platform, not in it. His local y = 0 is the track's surface, and his feet end there — but a leg is stroked with
+    // a round cap, and every kick's sole is drawn on the line that cap reaches (KICK_SOLE), so the bottom of him was half a
+    // leg's width INTO the platform. He is lifted by exactly that, and his underside sits on its top edge. (Not on a roll,
+    // which already puts its own lowest point, leg widths and all, on the surface.)
+    const sole = w.spin ? 0 : s * KICK_SOLE;
     // The frame he is being drawn INTO, before any of his own transforms go on. The shadow's
     // clip is built in it and the runner's frame is rebuilt on top of it, which is what lets the
     // same routine serve the board — where this is the camera — and the title screen and the
@@ -20658,6 +20775,7 @@
     const base = ctx.getTransform();
     ctx.save();
     ctx.translate(sx, sy); ctx.rotate(angle);
+    if (sole)  ctx.translate(0, -sole);
     if (hover) ctx.translate(0, -hover);
     if (sink)  ctx.translate(0, sink);
     // MOONWALKING, he faces the way he came. In his local frame +x IS travel, so mirroring x
@@ -20724,6 +20842,7 @@
         ctx.beginPath(); clip(); ctx.clip();
         ctx.setTransform(base);
         ctx.translate(sx, sy); ctx.rotate(angle);
+        if (sole)  ctx.translate(0, -sole);
         if (hover) ctx.translate(0, -hover);
         if (sink)  ctx.translate(0, sink);
         if (w.lean) ctx.rotate(w.lean);
@@ -20734,6 +20853,7 @@
       if (w.lean) ctx.rotate(-w.lean);
       if (hover) ctx.translate(0, hover);
       if (sink)  ctx.translate(0, -sink);      // he sits down; the shadow he casts does not
+      if (sole)  ctx.translate(0, sole);       // ...and the lift onto the platform's top is his, not the shadow's
       // A radial falloff, not a flat disc. Big and flat reads as a sticker cut to shape; big
       // and graded reads as light being blocked. Full opacity is HELD to half the radius and
       // all of the fade happens in the outer half, so it keeps a solid core and only its rim
@@ -20760,11 +20880,58 @@
     // legs there is no ground to stand on and the anchor becomes the body's own middle — which
     // is what lets the heap turn one on the spot instead of swinging it round a point below it.
     const byTop = (_bodyOnly ? -bodyH/2 : -(legL + bodyH)) - bob;
+    // The legs' own measures — where the hips are, how long a bone is — worked out here, ahead of the roll, which needs
+    // them to know the shape it is turning.
+    const hipY = -legL - bob - bodyH*(RUNNER.hipRise||0), kneeLead = s*RUNNER.kneeLead*_formLeg;
+    const backHip = -bodyW*RUNNER.legSplay, frontHip = bodyW*RUNNER.legSplay;
+    // seg is one bone, drawn a shade longer than the standing leg is: at this size a properly
+    // foreshortened tuck just reads as a stump, and nobody measures a bent leg.
+    const seg = (legL + bodyH*(RUNNER.hipRise||0)) * 0.88;
     // A rolling swagger tumbles the whole body about its own centre. It happens before the
     // legs because a curled-up runner rolls WITH his legs; the ground shadow is already down.
+    //
+    // ...and it ROLLS ON ITS SHAPE. Whatever is lowest once he is turned — a corner of the body, a knee, a foot — is put
+    // on the track, so he rides up onto each corner as it comes round and drops back onto a flat side: the bump of a
+    // square thing rolling, not a square spinning over a fixed point. The silhouette is the body (its corners, rounded
+    // by its own radius) and, curled, the two legs' hip, knee and foot with half a leg's width round each.
+    // THE CURLED LEGS, one hip's worth: [hip x, knee x, knee y, foot x, foot y]. On a roll they OPEN as they come up over the
+    // top — the ball tucked tight while the legs are underneath him and going round the bottom, and the legs stretching
+    // straight out from the hips (away from the body, which by then is up into the air) as they pass over the top, curling
+    // back in on the way down. `open` is 0 tucked to 1 straight: how far over the top the legs are, eased.
+    let rollOpen = 0;
+    const fetalLeg = (hx, reach) => {
+      const P = POSES.fetal, kx = hx + seg*reach, ky = hipY - seg*P.kneeUp;
+      const tuck = [hx, kx, ky, kx - seg*P.footBack, ky + seg*P.footDrop];
+      // how far toward straight THIS leg goes at the top: the front one further than the back, so the two come apart
+      const amt = hx === frontHip ? (P.rollOpenFront == null ? 1 : P.rollOpenFront) : (P.rollOpen == null ? 1 : P.rollOpen);
+      const open = rollOpen * amt;
+      if (!(open > 0)) return tuck;
+      const L = (legL + bodyH*(RUNNER.hipRise||0)) * (P.rollStretch || 1.15);   // a straight leg, a touch past standing
+      const straight = [hx, hx, hipY + L/2, hx, hipY + L];
+      return tuck.map((v, n) => v + (straight[n] - v) * open);
+    };
     if (w.spin) {
-      const bcy = byTop + bodyH/2;
-      ctx.translate(0, bcy); ctx.rotate(rollAngle(phase, w.spin)); ctx.translate(0, -bcy);
+      const bcy = byTop + bodyH/2, a = rollAngle(phase, w.spin), ca = Math.cos(a), sa = Math.sin(a);
+      // the legs point along the body's own down, which the roll turns: straight down at a = 0, straight up at a = π
+      // ...over the WHOLE turn rather than only its top half, so they come out and go back in slowly — and only part of the
+      // way to straight (POSES.fetal.rollOpen), a loosening of the tuck rather than a kick
+      // (the amount is per leg — see fetalLeg — so this is only how far round the turn he is)
+      if (w.pose === "fetal") { const u = (1 - ca) / 2; rollOpen = u*u*(3 - 2*u); }
+      const low = (x, y, pad) => sa*x + ca*(y - bcy) + bcy + pad;    // y of (x, y) turned about (0, bcy), plus a margin
+      const r = Math.max(0, Math.min(s*(RUNNER.bodyR || 0)*Math.min(_formW, _formH), bodyW/2, bodyH/2));
+      let bottom = -Infinity;
+      for (const [x, y] of [[-bodyW/2 + r, byTop + r], [bodyW/2 - r, byTop + r],
+                            [-bodyW/2 + r, byTop + bodyH - r], [bodyW/2 - r, byTop + bodyH - r]])
+        bottom = Math.max(bottom, low(x, y, r));
+      if (w.pose === "fetal" && !_bodyOnly) {
+        const F = POSES.fetal, half = Math.max(3, s*RUNNER.legWidth) / 2;
+        for (const [hx, reach] of [[backHip, F.backReach], [frontHip, F.frontReach]]) {
+          const [, kx, ky, fx, fy] = fetalLeg(hx, reach);
+          for (const [x, y] of [[hx, hipY], [kx, ky], [fx, fy]]) bottom = Math.max(bottom, low(x, y, half));
+        }
+      }
+      if (isFinite(bottom)) ctx.translate(0, -bottom);              // the lowest point of him, on the track (y = 0)
+      ctx.translate(0, bcy); ctx.rotate(a); ctx.translate(0, -bcy);
     }
     // A somersault is one whole turn spent entirely in the AIR: the angle is a function of how
     // far through the flight he is, not of the clock, so he leaves the ground upright, goes all
@@ -20781,7 +20948,9 @@
     // The middle of his face, for a finish that splits on it: where drawEyes (or the crosses, for
     // somebody who is not getting up) will put the pair below, on the same clock it will use.
     const deadFace = (as && as.dead) || _deadEyes;
-    const eyeG = eyeGlance(s, (_restFold > 0.5 || _shutEyes) ? EYES.blinkMs*0.02 : ts, 0);
+    // Eyes SHUT while he sits cross-legged — the Millstone's sit, and the Floating swagger, which is the same lotus in the air.
+    const eyesShut = _restFold > 0.5 || _shutEyes || w.pose === "lotus";
+    const eyeG = eyeGlance(s, eyesShut ? EYES.blinkMs*0.02 : ts, 0);
     const eyeMid = deadFace ? s*EYES.bias*2.2 : s*EYES.bias + (eyeG.shut ? 0 : eyeG.gx);
     const finish = (!golden && !stepC && skin.paint) ? skin.paint(ctx, -bodyW/2, byTop, bodyW, bodyH, ts, eyeMid) : pale;
     // A finish with `legs` colours each leg outright, back then front, instead of with the finish.
@@ -20798,8 +20967,6 @@
     }
     // legs — same colour as body, no outline
     ctx.strokeStyle = finish; ctx.lineWidth = Math.max(3, s*RUNNER.legWidth); ctx.lineCap = "round"; ctx.lineJoin = "round";
-    const hipY = -legL - bob - bodyH*(RUNNER.hipRise||0), kneeLead = s*RUNNER.kneeLead*_formLeg;
-    const backHip = -bodyW*RUNNER.legSplay, frontHip = bodyW*RUNNER.legSplay;
     const feet = [];
     // A foot lifts while it is travelling FORWARD and is planted while it is travelling back —
     // that is what separates a run from a skate. Foot x is sin(phase), so its direction of
@@ -20810,7 +20977,9 @@
     // true for every stride but the Moonwalk, whose negative swing left the airborne foot
     // sweeping backward and the planted one carrying him: feet that never took a step.
     // Now the one that is up is the one going forward, whichever way round the stride runs.
-    const swingSgn = mul(w.swing, 1) < 0 ? -1 : 1;
+    // (...unless he is running BACKWARDS, `backward`: turned round as the moonwalk is, but lifting the foot that travels
+    // the way he is actually going, which is what makes it a run the other way rather than a slide.)
+    const swingSgn = mul(w.swing, 1) < 0 && !w.backward ? -1 : 1;
     // ...and `liftLead` turns the hump EARLIER in the cycle. Without it the peak lands with the
     // foot at mid-swing, which is a run; a step picks the foot up first and then carries it.
     // Zero everywhere but the Moonwalk, so every other stride is the one it always was.
@@ -20820,9 +20989,7 @@
     // Every limb is hip → knee → foot. The stock stride works its knee out with IK from where
     // the foot landed; a folded pose places knee AND foot by hand, because a folded knee is
     // nowhere near the hip-to-foot line and there is no talking IK into putting it there.
-    // seg is one bone, drawn a shade longer than the standing leg is: at this size a properly
-    // foreshortened tuck just reads as a stump, and nobody measures a bent leg.
-    const seg = (legL + bodyH*(RUNNER.hipRise||0)) * 0.88;
+    // (`seg`, one bone, is worked out above the roll.)
     const limbs = [];                                   // [hipX, kneeX, kneeY, footX, footY]
     if (w.pose === "lotus") {
       // Sitting cross-legged, seen side-on: one knee forward, one back, the feet tucked in
@@ -20833,16 +21000,18 @@
       const P = POSES.lotus, br = 1 + P.breathe*Math.sin(ts/Math.max(1, P.breatheMs));
       for (const d of [1, -1]) {
         const kx = d*(frontHip + seg*P.knee), ky = hipY + seg*P.kneeDrop*br;
-        limbs.push([d*frontHip, kx, ky, kx - d*seg*P.foot, ky + seg*P.footDrop*br]);
+        const fx = kx - d*seg*P.foot, fy = ky + seg*P.footDrop*br;
+        // ...and the toe off the tucked foot, pointing down and on across, so the foot reads as tucked rather than as a stump
+        const tl = seg*(P.toe || 0), ta = P.toeDown || 0;
+        limbs.push([d*frontHip, kx, ky, fx, fy,
+                    tl > 0 ? fx - d*Math.cos(ta)*tl : null, tl > 0 ? fy + Math.sin(ta)*tl : null]);
       }
     } else if (w.pose === "fetal") {
       // Curled into a ball: knees up in front of the chest, feet tucked back underneath.
       // The near leg reaches further so its knee clears the body and the pair reads as two.
       const P = POSES.fetal;                            // the shape: see POSES
-      for (const [hx, reach] of [[backHip, P.backReach], [frontHip, P.frontReach]]) {
-        const kx = hx + seg*reach, ky = hipY - seg*P.kneeUp;
-        limbs.push([hx, kx, ky, kx - seg*P.footBack, ky + seg*P.footDrop]);
-      }
+      for (const [hx, reach] of [[backHip, P.backReach], [frontHip, P.frontReach]])
+        limbs.push(fetalLeg(hx, reach));                // (opening out over the top of a roll: see fetalLeg)
     } else if (w.pose === "onefoot") {
       // Hopping on the one leg. The foot leaves the track at the top of the hop rather than
       // staying pinned to it — otherwise the leg has to stretch to the full height of the hop.
@@ -20884,8 +21053,17 @@
       // the turn the eye actually reads.
       const air = Math.max(0, _leapPose), sp = s*(w.leapSplit || 0.06);
       for (const [hx, side] of [[backHip, -1], [frontHip, 1]]) {
-        const gkx = hx + side*sp*0.5, gky = hipY + seg*0.55;      // planted: straight down,
+        let   gkx = hx + side*sp*0.5, gky = hipY + seg*0.55;      // planted: straight down,
         const gfx = hx + side*sp,     gfy = 0;                    // feet a little apart
+        // ...or, with `kneesBend`, planted on BENT knees, both forward — the Pogo's rule (see the stride below): the leg
+        // keeps its standing length, so the crouch into the take-off and out of the landing goes into the knee.
+        if (w.kneesBend) {
+          const stand = s*RUNNER.legLen*_formLeg + bodyH*(RUNNER.hipRise||0);
+          const d = Math.hypot(gfx - hx, gfy - hipY) || 1e-4;
+          const k = solveKnee(hx, hipY, gfx, gfy, Math.max(RUNNER.kneeBend, stand*(1 + RUNNER.kneeBend)/d - 1),
+                              RUNNER.kneeSplit, kneeLead);
+          gkx = k.x; gky = k.y;
+        }
         const tkx = hx + seg*0.62,    tky = hipY + seg*0.10;      // tucked: knee up in front,
         const tfx = hx + seg*0.10,    tfy = hipY + seg*0.62;      // foot drawn in under the hip
         limbs.push([hx, gkx + (tkx-gkx)*air, gky + (tky-gky)*air,
@@ -20906,7 +21084,9 @@
       // through the landing, so there is always a lead foot to come down on, and flips its sign
       // every leap — which is the whole of "he lands on them in turn".
       const open = w.leapAlt ? 0.45 + 0.55*Math.max(0, _leapPose) : Math.max(0, _leapPose);
-      const sp = w.leapSplit ? s*w.leapSplit*open*(w.leapAlt ? _leapFoot : 1) : 0;
+      // `splitAlt` swaps which foot goes forward every leap — the straddle alternates, where a plain one always threw the
+      // same leg out in front. (leapAlt does that too, but it also holds a lead foot through the landing.)
+      const sp = w.leapSplit ? s*w.leapSplit*open*(w.leapAlt || w.splitAlt ? _leapFoot : 1) : 0;
       // ...and one more case: lying in the heap, where the legs are thrown WIDE. It is the whole
       // of what says he landed head first rather than merely stopped — a pair of legs in the air
       // at the top of a pile of bodies. It goes in as extra stride reach, the same arithmetic
@@ -20921,13 +21101,25 @@
       const toeL = s*(w.toe || 0), toeD = w.toeDrop == null ? 1.25 : w.toeDrop;
       for (const [hx, fx, ph] of [[backHip, reach, phase], [frontHip, -reach, phase + Math.PI]]) {
         const fy = (lift(ph) - fx*sinL) / cosL;
-        const k = RUNNER.knees ? solveKnee(hx, hipY, fx, fy, RUNNER.kneeBend, RUNNER.kneeSplit, kneeLead) : null;
+        // BENT KNEES on a crouch (`kneesBend`). A leap's crouch shortens the leg (legK), and IK on a shorter leg only
+        // makes a shorter straight leg — he sank like a piston. With this the leg keeps its STANDING length, so when the
+        // hip comes down toward the foot the slack goes into the knee, and the knee goes out FORWARD (the solver's side
+        // for a foot below the hip), both legs alike: a landing that absorbs and a take-off that loads. Stretched past
+        // standing in the air, it is simply straight.
+        let bend = RUNNER.kneeBend;
+        if (w.kneesBend) {
+          const stand = s*RUNNER.legLen*_formLeg + bodyH*(RUNNER.hipRise||0);
+          const d = Math.hypot(fx - hx, fy - hipY) || 1e-4;
+          bend = Math.max(RUNNER.kneeBend, stand*(1 + RUNNER.kneeBend)/d - 1);
+        }
+        const k = RUNNER.knees ? solveKnee(hx, hipY, fx, fy, bend, RUNNER.kneeSplit, kneeLead) : null;
         let tx = null, ty = null;
         if (toeL > 0) {
           const a = -L + toeD*liftU(ph);
           tx = fx + Math.cos(a)*toeL; ty = fy + Math.sin(a)*toeL;
         }
-        limbs.push([hx, k && k.x, k && k.y, fx, fy, tx, ty]);
+        // (the 8th: how far up this foot is on its step, 0..1 — lifted only while it is travelling forward — for the shoe)
+        limbs.push([hx, k && k.x, k && k.y, fx, fy, tx, ty, toeL > 0 ? 0 : liftU(ph)]);
       }
     }
     if (_bodyOnly) limbs.length = 0;   // ...and with it the kicks, which read limbs
@@ -20980,7 +21172,7 @@
       limbs.slice(0, 2).forEach((lb, j) => { for (let n = 0; n < 5; n++) lb[n] += (T[j][n] - lb[n]) * k; });
     }
     limbs.sort((p, q) => q[0] - p[0]);                  // by hip: front (+x) first, back last
-    for (const [hx, kx, ky, fx, fy, tx, ty] of limbs) {
+    for (const [hx, kx, ky, fx, fy, tx, ty, up] of limbs) {
       ctx.strokeStyle = legInk(hx);
       ctx.beginPath(); ctx.moveTo(hx, hipY);
       if (kx != null) ctx.lineTo(kx, ky);
@@ -21011,11 +21203,19 @@
       if (shoe.draw) {
         ctx.save(); ctx.translate(fx, fy);
         if (moving && w.lean) ctx.rotate(-w.lean);
+        // CROSS-LEGGED, the shoe follows the FOOT, not the floor: each foot is tucked across under the other knee with its
+        // toe pointing down and on (the lotus's toe bone), so the shoe is turned to lie along that toe — mirrored for the
+        // foot that tucks toward the back — instead of standing flat and facing forward on a floor that is not there.
+        if (w.pose === "lotus" && tx != null) {
+          const dx = tx - fx, dy = ty - fy;
+          if (dx < 0) ctx.scale(-1, 1);
+          ctx.rotate(Math.atan2(dy, Math.abs(dx)));
+        }
         // ...except once he is lying in the heap, where the ankles GIVE. A foot held flat while the
         // rest of him is upside down on a mound of bodies is the one part of him still standing to
         // attention. Each foot has its OWN angle and each turns AWAY from the middle, so the sign
         // means the same thing on both sides: positive opens the pair out, negative folds it in.
-        if (_deadSplay) {
+        else if (_deadSplay) {
           const away = fx >= 0 ? 1 : -1;
           ctx.rotate((fx >= 0 ? PILE.bendFore : PILE.bendAft) * away);
         }
@@ -21030,6 +21230,9 @@
           ctx.rotate(flip * (Math.PI/2 * (w.toesDown || 0) * (1 - spl) - POSES.splay.toeUp * spl));
           if (flip < 0) ctx.scale(-1, 1);
         }
+        // ...and ON THE STEP: a foot up off the track and swinging forward tips its toe UP a little, by how far up it is —
+        // a step reaching for the ground ahead rather than a flat plate carried along. Level again as it comes down.
+        else if (up > 0) ctx.rotate(-STEP_TOE_UP * up);
         shoe.draw(ctx, s, shoe.col || legInk(hx), legInk(hx));   // a bare foot is its own leg's colour
         ctx.restore();
       }
@@ -21086,8 +21289,9 @@
     _xEyes = ((as && as.dead) || _deadEyes) ? 1 : 0;     // ...and the hat below reads this
     if (_xEyes) drawDeadEyes(ctx, 0, byTop + bodyH*RUNNER.eyeY, s, inkCol);
     else drawEyes(ctx, 0, byTop + bodyH*RUNNER.eyeY, s, inkCol, 1,
-                  (_restFold > 0.5 || _shutEyes) ? EYES.blinkMs*0.02 : ts, 0,
-                  0, _floatPose ? -EYES.glanceY*2.4*_floatPose : 0);   // ...gazing up at it
+                  eyesShut ? EYES.blinkMs*0.02 : ts, 0,
+                  0, _floatPose ? -EYES.glanceY*2.4*_floatPose : 0,    // ...gazing up at it
+                  RUNNER_SQUARE_EYES);
     // last, so it sits on top of everything. Scaled up about the crown of his head — at the
     // shipped size the hats were a few pixels of trim on a small character and read as noise.
     // No scale-up any more. Hats are cut to the HEAD — every measurement in them is a fraction
@@ -22350,6 +22554,30 @@
   // clock the way the shop's figure is, so a leaping swagger still leaps. `W`/`H` are the canvas's
   // own units (the caller sets its scale); opts: `cell` (his size), `footY` (share of H), `speed`
   // (stride rate), `moving` (false holds him still).
+  // THE SWAGGER'S CARD: the real runner, shrunk to the card, in the starting kit (every rack's free item — the classic drip,
+  // no hat, bare feet) and in THIS swagger, running on the spot at his own pace. Drawn into the card's 96-unit square, his
+  // feet near its foot; the card's pad above leaves the leaps their headroom. Nothing worn is touched: the look is put on
+  // for the length of the drawing (_lookOver) and taken off again.
+  const SWAGGER_ICON = { size: 0.95, footY: 0.86 };   // his tile size, and where his feet are, as shares of the card
+  // How fast the runner goes IN THE SHOP — the figure at the top, his trail, and the swagger cards — in tiles a second. It
+  // used to be whatever RUNNER.stepMs made of the clock (about 0.72), which ran him faster than a buyer can read a stride.
+  const SHOP_RUN_CPS = 0.5;
+  function swaggerIcon(g, SW, ts, it) {
+    const rs = SW * SWAGGER_ICON.size, fx = SW/2, fy = SW * SWAGGER_ICON.footY;
+    const outfit = {};
+    for (const c of LOOK) outfit[c.key] = lookDefault(c);
+    outfit.swagger = it;
+    const wasLook = _lookOver;
+    _lookOver = outfit;
+    try {
+      withCanvas(g, rs, 0, 0, () => {
+        const tiles = ts * SHOP_RUN_CPS / 1000;
+        const param = applyLeap(tiles, true);
+        try { paintRunner(fx, fy, rs, param * Math.PI*2*STRIDES_PER_TILE, 0, true, ts, 0, true); }
+        finally { resetLeap(); }
+      });
+    } finally { _lookOver = wasLook; }
+  }
   function drawRunnerFigure(g, W, H, ts, o) {
     const rs = o.cell || Math.min(W, H) * 0.40;
     const foot = { x: W/2, y: H * (o.footY || 0.68) };
@@ -23257,7 +23485,11 @@
       else if (state.status === "squash") tickSquash(dt);
       else if (state.status === "crunched") tickCrunch(dt);
       update(dt);                          // returns early unless he is running, so he is already still
-      if (state.status !== "crunched") updateHazards(dt);   // ...and nothing else moves either
+      // THE HAMMER'S AND THE BELL'S FREEZE (startRoar): for its three beats the monsters hold where they are and the beat
+      // stops counting with them, so a jaw caught open stays open. Everything the charm itself is doing goes on: its shout,
+      // its circle, the rock coming apart, the butterflies leaving.
+      if (state.freeze > 0) state.freeze = Math.max(0, state.freeze - dt);
+      else if (state.status !== "crunched") updateHazards(dt);   // ...and nothing else moves either
       tickLover(dt);
       tickEaten(dt);
       tickCeremony(dt);
@@ -24772,17 +25004,41 @@
     });
     return c;
   }
+  // ...and the HEART as a chip, for the racks priced in hearts: the heart's silhouette in ONE flat colour — the rainbow's
+  // red, or `ink` (the tag's black on yellow). No facets: it is a mark for the currency, as the flat coin is.
+  const HEART_CHIP_COL = "#f1645f";
+  function flatHeart(s2, col) {             // at the origin, `s2` across
+    const R = _heartGeom.rim;
+    ctx.beginPath(); R.forEach((p, i) => i ? ctx.lineTo(p[0]*s2, p[1]*s2) : ctx.moveTo(p[0]*s2, p[1]*s2)); ctx.closePath();
+    ctx.fillStyle = col; ctx.fill();
+  }
+  function heartChip(px, ink){
+    const c = document.createElement("canvas");
+    c.className = "wallet";
+    c.width = c.height = Math.round(px * 1.32 * ICON_SCALE);
+    withCanvas(c.getContext("2d"), c.width, 0, 0, () => {
+      const m = c.width/2, s2 = px * ICON_SCALE * 1.1;
+      ctx.translate(m, m);
+      flatHeart(s2, ink || HEART_CHIP_COL);
+    });
+    return c;
+  }
   // THE PURSE: the flat coin and the count beside it, at the size the Tile Shop shows it (.shop-purse). Built
   // here once for the shop's own screen and the shop's introduction card alike.
   // `size` (CSS px) draws it bigger than the shop's 26 — the coin cut sharp at that size, the count, the gap and
   // the tracking all scaled with it; the digits' nudge onto the coin's middle is in ems, so it follows.
-  function shopPurse(size){
-    const S = size || 26, B = Math.round(S*34/26);
+  // `cat`, when it is a rack priced in hearts, makes it the HEART purse: the heart and what you hold of them.
+  function shopPurse(size, cat){
+    const S = size || 26, B = Math.round(S*34/26), hearts = payIn(cat) === "hearts";
     const purse = document.createElement("div"); purse.className = "shop-purse";
     const pc = document.createElement("canvas"); pc.width = B; pc.height = B;
-    withCanvas(pc.getContext("2d"), B, 0, 0, () => coinFlatGlyph(B/2, B/2, B*26/34));
+    withCanvas(pc.getContext("2d"), B, 0, 0, () => {
+      if (hearts) { ctx.translate(B/2, B/2); flatHeart(B*26/34*1.05, HEART_CHIP_COL); }
+      else coinFlatGlyph(B/2, B/2, B*26/34);
+    });
     purse.appendChild(pc);
-    const pv = document.createElement("span"); pv.textContent = wallet.tiles;
+    const pv = document.createElement("span"); pv.textContent = hearts ? (wallet.hearts || 0) : wallet.tiles;
+    if (hearts) pv.style.color = HEART_CHIP_COL;            // the count in the heart's own colour, as the coin's is in gold
     purse.appendChild(pv);
     if (size) {
       purse.style.fontSize = S + "px"; purse.style.gap = (S*4/26).toFixed(1) + "px";
@@ -24915,9 +25171,11 @@
     // be doing behind them. Toggled with the screen rather than added once — every other menu
     // turns it back off, and the win UI owns the same element when no menu is up at all.
     {
+      // ...but on a FALL, not yet: the screen opens on the heading and its line alone, and the wash only arrives with the
+      // buttons it is the ground for (see the fall's `begin`, which lays it down on their cue).
       const foot = !!fell || held;
       const fd = document.getElementById("winfade");
-      if (fd) { fd.classList.toggle("show", foot); fd.classList.toggle("under", foot); }
+      if (fd) { fd.classList.toggle("show", held); fd.classList.toggle("under", foot); }
     }
     // the map is a map: it wants the screen, the same as the shop's shelves do
     menuEl.classList.toggle("wide",
@@ -24994,7 +25252,7 @@
       // THE PURSE GOES FIRST, centred ABOVE the preview tile rather than under it — and it rides the
       // tile's slide (see the translate below), so it stays centred over the tile when a price tag
       // pushes the tile left.
-      const purse = shopPurse(), pv = purse.querySelector("span");
+      const purse = shopPurse(0, LOOK.find(l => l.key === shopTab)), pv = purse.querySelector("span");
       menuBody.appendChild(purse);
       const fig = document.createElement("div"); fig.className = "shop-fig";
       // No width on the BOX. It is the stage now, and the stage is the card — see .shop-fig,
@@ -25095,7 +25353,7 @@
       const kS = cvR.width / S || 1;                                         // CSS px per picture px
       const over = tr.cols ? Math.max(0, Math.ceil(cvR.left)) : 0;          // screen left of the picture
       if (tr.cols) {
-        const SPT = Math.PI*2*STRIDES_PER_TILE, speed = 1 / (RUNNER.stepMs * SPT);   // tiles per ms
+        const SPT = Math.PI*2*STRIDES_PER_TILE, speed = SHOP_RUN_CPS / 1000;   // tiles per ms
         const at = (t) => { const p = applyLeap(t * speed, true); return { x: foot.x + p*rs, ph: p*SPT }; };
         // From his heels to the screen's edge, in picture px, and a half-tile past it so the tail
         // fades off the screen rather than on it.
@@ -25160,7 +25418,7 @@
       // the tile count climbs — and the phase is read back off the leap-adjusted param, exactly
       // as the title screen's runner does it, so his legs stay geared to the jump.
       withCanvas(g, rs, 0, 0, () => {
-        const tiles = (ts/RUNNER.stepMs) / (Math.PI*2*STRIDES_PER_TILE);
+        const tiles = ts * SHOP_RUN_CPS / 1000;
         const param = applyLeap(tiles, true);
         const n0 = { c:0, r:0 };
         // His shadow lands on the tile and nowhere else — the same clip the board uses, in this
@@ -25191,7 +25449,7 @@
         // animate is brand new and has nowhere to come from.
         cv.style.translate = _shopSlide + "px 0"; purse.style.translate = _shopSlide + "px 0";
         if (wantTag) {
-          const afford = wallet.tiles >= pvIt.cost;
+          const afford = balanceOf(pvCat) >= pvIt.cost;
           const GAP = uiGrid();                  // ...the shop's own spacing, one grid square
           const tileTop = foot.y - rs*0.5, tileBot = foot.y + rs*0.5;
           // ONE eyelet, two places: the tag's is a mask on the plate, the tile's is punched out
@@ -25200,7 +25458,7 @@
           const HOLE = 13, HOLE_R = 4, STR_BOX = 320;
           const TAG_OUT = Math.round(rs*0.05);   // how far the tag stands off the tile's edge
           const tag = document.createElement("div");
-          tag.className = "shop-tag" + (afford ? "" : " poor");
+          tag.className = "shop-tag" + (afford ? "" : " poor") + (payIn(pvCat) === "hearts" ? " heart" : "");
           tag.style.setProperty("--hole-x", HOLE + "px");
           tag.style.setProperty("--hole-r", HOLE_R + "px");
           tag.style.top = Math.round(tileTop - rs*0.13) + "px";
@@ -25224,8 +25482,9 @@
           };
           const back = strand("back"), front = strand("front");
           const t = document.createElement("div"); t.className = "st-tag";
-          t.appendChild(coinChip(15, afford ? "#000" : null));   // black on the yellow tag
+          t.appendChild(payChip(pvCat, 15, afford ? "#000" : null));   // black on the yellow tag
           const tn = document.createElement("span"); tn.textContent = pvIt.cost;
+          if (!afford && payIn(pvCat) === "hearts") tn.style.color = "#ffffff";   // white on the lead tag, beside the red heart (on the red tag both are black)
           t.appendChild(tn);
           tag.appendChild(t);
           const offer = document.createElement("div");
@@ -25293,8 +25552,9 @@
             buy.appendChild(tickChip(11, "#ffffff"));
             buy.onclick = (e) => {
               e.stopPropagation(); Sound.unlock();
-              if (wallet.tiles < pvIt.cost) { Sound.tap(); return; }
-              wallet.tiles -= pvIt.cost; wallet.owned.add(pvIt.id); saveWallet();
+              if (balanceOf(pvCat) < pvIt.cost) { Sound.tap(); return; }
+              if (payIn(pvCat) === "hearts") wallet.hearts -= pvIt.cost; else wallet.tiles -= pvIt.cost;
+              wallet.owned.add(pvIt.id); saveWallet();
               shopPreview = null; wearLook(pvCat.key, pvIt.id); Sound.tapBig(); Sound.coin();
               buildMenu("shop:" + pvCat.key);
             };
@@ -25303,7 +25563,7 @@
             // Three short lines, under the tag rather than beside the tile: the tag is narrow,
             // and a single long line would have been wider than the thing it belongs to.
             const no = document.createElement("div");
-            no.className = "st-no"; no.textContent = "Need\nmore\ntile";
+            no.className = "st-no"; no.textContent = payIn(pvCat) === "hearts" ? "Need\nmore\nheart" : "Need\nmore\ntile";
             tag.appendChild(no);
           }
           fig.appendChild(back.el);
@@ -25387,7 +25647,7 @@
         const have = owns(it), on = wornId === it.id;
         const trying = !!shopPreview && shopPreview.key === cat.key && shopPreview.id === it.id;
         const el = document.createElement("button");
-        const afford = wallet.tiles >= it.cost;
+        const afford = balanceOf(cat) >= it.cost;
         el.className = "tal" + (on ? " on" : "") + (have ? "" : " locked")
                              + (trying ? " preview" : "") + (trying && !afford ? " poor" : "");
         // Locked stock is shown in full — its real colours and its real name. Greying it to a
@@ -25401,8 +25661,9 @@
         // PURCHASE in front of its number, which was the offer said a third time — the tag says
         // it, the tag's button does it, and the cell only ever had to say what it costs.
         const pr = document.createElement("span"); pr.className = "price";
-        pr.appendChild(coinChip(11));
+        pr.appendChild(payChip(cat, 11));
         const pn = document.createElement("span"); pn.textContent = it.cost;
+        if (payIn(cat) === "hearts") pn.style.color = HEART_CHIP_COL;
         pr.appendChild(pn);
         // The worn item says so where its price used to be — same slot, so nothing moves.
         if (on) { pr.textContent = "EQUIPPED"; pr.classList.add("equipped"); }
@@ -25425,7 +25686,17 @@
         // the icon has always been and hangs the pad off the outside of it.
         if (px) sc.style.setProperty("--sx", px);
         if (pt) sc.style.setProperty("--sy", pt);
-        if (it.swatch) {
+        if (cat.key === "swagger") {
+          // ...a swagger's card RUNS: redrawn every frame on the shop's animation loop (the talisman shelf's, relicPainters)
+          const sg = sc.getContext("2d");
+          relicPainters.push((ts) => {
+            if (!sc.isConnected) return;
+            sg.setTransform(1, 0, 0, 1, 0, 0); sg.clearRect(0, 0, sc.width, sc.height);
+            sg.setTransform(ICON_SCALE, 0, 0, ICON_SCALE, px*ICON_SCALE, pt*ICON_SCALE);
+            swaggerIcon(sg, SW, ts, it);
+          });
+          startRelics();
+        } else if (it.swatch) {
           const sg = sc.getContext("2d");
           sg.setTransform(ICON_SCALE, 0, 0, ICON_SCALE, 0, 0);
           sg.translate(px, pt);
@@ -25434,7 +25705,7 @@
         // ...and no name under it either. A shelf of hats does not need every hat labelled:
         // the picture IS the thing, at two thirds of a cell, and the name was a line of 10px
         // type saying what you can already see. It stays on the button for a screen reader.
-        el.setAttribute("aria-label", it.name + (have ? "" : ", " + it.cost + " tiles"));
+        el.setAttribute("aria-label", it.name + (have ? "" : ", " + it.cost + (payIn(cat) === "hearts" ? " hearts" : " tiles")));
         el.appendChild(sc); el.appendChild(pr);
         el.onclick = () => {
           Sound.unlock();
@@ -25819,9 +26090,13 @@
       // you earn. They stand in the same column as the real settings because that is where they
       // are useful, but they are drawn grey so the two kinds of switch never read as one kind.
       const dbg = (b) => { b.classList.add("dbg"); menuBody.appendChild(b); return b; };
-      dbg(btn("Give 100 tiles", () => {
+      dbg(btn("Give 100 tile", () => {
         Sound.unlock(); Sound.coin();
         wallet.tiles += 100; saveWallet();
+      }));
+      dbg(btn("Give 10 heart", () => {
+        Sound.unlock(); Sound.coin();
+        wallet.hearts = (wallet.hearts || 0) + 10; saveWallet();
       }));
       dbg(btn("Unlock all talismans", (e) => {
         Sound.unlock(); Sound.tapBig();
@@ -26100,6 +26375,12 @@
         const after = typing.total + FELL_STEP;
         cue(row, after);
         cue(back, after + FELL_STEP);
+        // ...and the wash under the buttons, arriving WITH them rather than with the screen
+        setTimeout(() => {
+          if (!head.isConnected) return;                 // the screen went before its buttons came
+          const fd = document.getElementById("winfade");
+          if (fd) fd.classList.add("show", "under");
+        }, after);
       };
       setTimeout(begin, 0);                              // ...after openMenu has shown the screen
       return;
