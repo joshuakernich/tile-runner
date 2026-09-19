@@ -647,9 +647,17 @@ function toWorking(o){
 // the six legal platform shapes: two connectors each, in the order the surface is drawn
 // The monster family, mirrored from index.html's MONSTER_KINDS — the editor has to draw and
 // place all six, and the colours are how you tell them apart on the board.
-const MON_KINDS = ["hrail","vrail","patrol","square","hunter","trap","stealth","golem"];
+// ...and the four BOSSES, which are the same animals at twice the size: each stands on FOUR cells — its own and the
+// three down and right of it — so placing one needs the room, and the map draws the square it claims.
+const MON_KINDS = ["hrail","vrail","patrol","square","hunter","trap","stealth","golem",
+                   "warden","leviathan","maw","colossus"];
 const MON_COL = { hrail:"#c37ef1", vrail:"#4baff1", patrol:"#49d47c",      // the rainbow's colours, as the game's
-                  square:"#f7933b", hunter:"#6b7192", trap:"#f1645f", stealth:"#cfd8ff", golem:"#b3a582" };
+                  square:"#f7933b", hunter:"#6b7192", trap:"#f1645f", stealth:"#cfd8ff", golem:"#b3a582",
+                  warden:"#f7933b", leviathan:"#4baff1", maw:"#f1645f", colossus:"#b3a582" };
+// how many cells across a kind is — a boss is two, everything else one
+const MON_BIG = { warden:2, leviathan:2, maw:2, colossus:2 };
+const monBig = v => MON_BIG[v] || 1;
+const monIsBoss = v => monBig(v) > 1;
 const monVariant = h => h.variant || (h.path ? "patrol" : (h.axis||"h")==="v" ? "vrail" : "hrail");
 const TAL_IDS = ["clock","magnet","star","finger","mush","rewind","pulse","spur","brake","ankh","lode"];
 const TAL_COL = {clock:"#8fd8ff", magnet:"#ff6d6d", star:"#ffd24a", finger:"#ffe9a8", mush:"#ff8fc8",
@@ -825,6 +833,13 @@ function monCells(h){
   if (v==="hrail" || v==="vrail"){
     const hz = (h.axis||"h")==="h", out=[];
     for(let i=h.lo;i<=h.hi;i++) out.push(hz?[i,h.r]:[h.c,i]);
+    return out;
+  }
+  // A BOSS stands on four: its own cell and the three down and right of it. Without this it fell through to the path
+  // branch and came back EMPTY, which made it unhittable — you could neither move one nor erase it.
+  if (monIsBoss(v)) {
+    const out = [], b = monBig(v);
+    for (let dr = 0; dr < b; dr++) for (let dc = 0; dc < b; dc++) out.push([h.c + dc, h.r + dr]);
     return out;
   }
   if (v==="hunter" || v==="stealth" || v==="golem" || v==="trap") return [[h.c,h.r]];
@@ -1243,6 +1258,20 @@ function draw(){
     } else if (v==="square"){
       const w=h.w||2, hh=h.h||2;
       drawPatrol([[h.c,h.r],[h.c+w,h.r],[h.c+w,h.r+hh],[h.c,h.r+hh]], true, col, "#12102a");
+    } else if (monIsBoss(v)){
+      // A boss is drawn as the SQUARE IT STANDS ON — four cells, ringed — with its mark in the middle of them, so the
+      // room it takes is the thing you see when you place it.
+      const b = monBig(v), [x0,y0] = centerOf(h.c, h.r), x = x0 + CELL*(b-1)/2, y = y0 + CELL*(b-1)/2;
+      ctx.save();
+      ctx.strokeStyle = col; ctx.lineWidth = 3;
+      ctx.strokeRect(x - CELL*b/2 + 3, y - CELL*b/2 + 3, CELL*b - 6, CELL*b - 6);
+      if (v !== "maw") {                                   // the hunters' reach, as the small ones show it
+        ctx.globalAlpha = 0.5; ctx.setLineDash([4,4]);
+        ctx.beginPath(); ctx.arc(x, y, CELL*0.42*b, 0, 7); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.restore();
+      monsterIcon(x, y, col, "#12102a");
     } else if (v==="hunter" || v==="stealth" || v==="golem" || v==="trap"){
       const [x,y]=centerOf(h.c,h.r);
       if (v==="hunter" || v==="stealth" || v==="golem"){   // it goes wherever the runner is

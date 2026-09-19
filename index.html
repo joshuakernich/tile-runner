@@ -290,7 +290,7 @@
     transform-origin:50% calc(50% + var(--pw-reach, 0px) / 2);
     pointer-events:auto;
   }
-  #power .pw.smash::after, #power .pw.gone::after { pointer-events:none; }
+  #power .pw.spent::after { pointer-events:none; }
   #power .pw:active { transform:rotate(var(--tilt, 0deg)) translateY(2px); }
   /* running: the charm's own frame going out, drawn on a canvas over the badge — see
      drawPwRing. It replaces a three-pixel bar along the foot of the button, which is a loading
@@ -326,24 +326,13 @@
      spent and still running — the Millstone, mid-sit — and what it is doing beats what it has
      left. */
   #power .pw.live { opacity:1; --dip:calc(var(--chq) * -0.6); }
-  /* Spent. It shudders where it hangs and then breaks up — the pieces are drawn on its own
-     canvas, see smashCharm; this is only the shake before them. `rotate` and `scale` are the
-     independent properties, which compose with the `transform` carrying its tilt instead of
-     replacing it. The duration is set inline from SMASH.shake so there is one number. */
-  @keyframes pw-shudder {
-    0%   { rotate:0deg;    scale:1; }
-    18%  { rotate:-5deg;   scale:1.05; }
-    34%  { rotate:6deg;    scale:1.04; }
-    50%  { rotate:-7deg;   scale:1.07; }
-    66%  { rotate:6deg;    scale:1.05; }
-    82%  { rotate:-5deg;   scale:1.09; }
-    100% { rotate:2deg;    scale:1.12; }
-  }
-  #power .pw.smash { animation:pw-shudder 260ms ease-in both; pointer-events:none; }
-  /* ...and once it has broken, the box stays where it is until the last piece is gone. Taking
-     it out of the row at the moment of the break would slide the others sideways THROUGH the
-     pieces still flying off it. */
-  #power .pw.gone { pointer-events:none; }
+  /* SPENT. It goes GREY — two standard greys, drawn from its own art, see smashCharm — and TUCKS BACK DOWN into the
+     footer on the dim state's own dip, so the rack goes on saying what you started the level with and what is left of
+     it without a dead charm hanging over the board. Nothing shudders, nothing breaks and nothing slides; and every
+     glow it had is off, since a spent charm giving off light is the one thing it cannot be doing. */
+  #power .pw.spent { pointer-events:none; cursor:default; opacity:1;
+    --dip:calc(50% + var(--lift) - var(--hang)); }
+  #power .pw.spent canvas { animation:none !important; filter:none !important; }
   /* armed and waiting to be aimed (the Hammer) */
   #power .pw.armed canvas:not(.pw-spark) { filter:drop-shadow(0 0 6px var(--goal)); }
   /* ...and a charm AT WORK burns, in its own colour. --tal-col is set on the button from the
@@ -3973,6 +3962,49 @@
         src.start(t); src.stop(t + 0.22 + kk*0.12);
       }
     }
+    // A CHARM SPENT: a POWER GOING OUT, said the way the death sting is — a run of separate tones walking DOWN, each one
+    // a little quieter and a little longer than the last, and the final one drooping as it fades. It is the same shape as
+    // the fall's four notes and deliberately so: both are a thing you had and no longer have. Under them a bed of air
+    // falls away, and a filter closes over the lot, so the run reads as something winding down rather than a tune.
+    const POWER_DOWN = [4, 0, -5, -12];        // the steps it walks down, in semitones off the key
+    function powerDown() {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime, dry = ac.createGain(), wet = ac.createGain();
+      dry.gain.value = 0.8; wet.gain.value = 0.7;
+      dry.connect(master); wet.connect(sendBus);
+      const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.Q.value = 1.6;
+      lp.frequency.setValueAtTime(3000, t0);
+      lp.frequency.exponentialRampToValueAtTime(420, t0 + 1.05);
+      lp.connect(dry); lp.connect(wet);
+      POWER_DOWN.forEach((semi, i) => {
+        const t = t0 + i*0.145 + i*i*0.012;                     // ...and it drags: every step is later than the last
+        const freq = BASE * Math.pow(2, semi/12), last = i === POWER_DOWN.length - 1;
+        const lvl = 0.26 * Math.pow(0.82, i);
+        for (const [mul, k, wave] of [[1, 1, "triangle"], [0.5, 0.55, "sine"]]) {   // the note, and an octave under it for weight
+          const o = ac.createOscillator(), g = ac.createGain();
+          o.type = wave;
+          o.frequency.setValueAtTime(freq*mul, t);
+          if (last) o.frequency.exponentialRampToValueAtTime(freq*mul*0.80, t + 0.70);   // the last one droops away
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(lvl*k, t + 0.015);
+          g.gain.exponentialRampToValueAtTime(0.0004, t + (last ? 0.85 : 0.34 + i*0.05));
+          o.connect(g); g.connect(lp);
+          o.start(t); o.stop(t + (last ? 0.95 : 0.5));
+        }
+      });
+      if (noiseBuf) {                                      // ...the air going out of it, under the whole run
+        const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+        const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 1.4;
+        bp.frequency.setValueAtTime(1600, t0);
+        bp.frequency.exponentialRampToValueAtTime(220, t0 + 1.00);
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.040, t0 + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.0002, t0 + 1.10);
+        src.connect(bp); bp.connect(g); g.connect(dry); g.connect(wet);
+        src.start(t0); src.stop(t0 + 1.15);
+      }
+    }
   // A CIRCUIT CLOSED — the loud one. The track has just shut on itself, which is the biggest thing a player can build,
     // and it gets a fanfare to match, in four layers over about three seconds, most of it into the room:
     //   · a rush of air sweeping up under a sub drop — the thing taking off;
@@ -5166,7 +5198,7 @@
              slide, clack, tap, tapBig, swish, airSwish, flyWhoosh, tabClick, power, warp, vortex, thrum, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck, choir,
              ambient,
-             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, charmReveal, tallyRing, boom, twinkle, holeChime, infinityRing, loopClosed, crack, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
+             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, charmReveal, tallyRing, boom, twinkle, holeChime, infinityRing, loopClosed, crack, powerDown, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
              levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, talismanTheme, choirLift, setMusicGate,
              musicNow: () => ({ ...MU }) };
   })();
@@ -5202,7 +5234,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.76";                    // shown on the title & pause screens
+  const VERSION = "v10.77";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -23980,96 +24012,82 @@
   // the buttons meet edge to edge with no gap and no overlap however much the charms themselves overlap
   // (they are PW_PX, and hang over their neighbours), and it reaches PW_REACH above the charm's top.
   const PW_PITCH = 62, PW_REACH = 14;
-  // SPENDING A CHARM. It shudders where it hangs, breaks into pieces off the game's own
-  // quarter-tile grid, and the pieces are thrown clear — and only when the last of them has
-  // gone does the button leave the row and the rest close up over the gap. A charm that simply
-  // greys out is still there, and the rack goes on telling you about something you cannot have
-  // for the rest of the level; a charm that breaks is spent, which is what it is.
-  const SMASH = {
-    shake: 260,   // ms of shudder before it goes — the CSS animation is set from this number
-    fly:   460,   // ...and how long the pieces take to leave
-    grid:  5,     // how many pieces across the badge is cut into
-    out:   0.95,  // how hard they are thrown, in canvas widths per second
-    drop:  2.60,  // ...and what gravity does to them, in canvas widths per second squared
-    spin:  0.55,  // ...and how far they turn on the way, in turns per second at most
+  // SPENDING A CHARM. It does not break any more — it GOES OUT. The badge is flattened to ONE grey, every part of it the
+  // same tone, and it stays where it hangs for the rest of the level with a power-down sounding under it. A charm that
+  // shattered was the rack announcing the loss; a charm gone grey is the rack showing you what you have left, which is
+  // what you are reading it for — and the row no longer shuffles under your thumb as one goes.
+  const SPENT = {
+    // TWO TONES, not one: a flat grey threw the charm's own drawing away with its colour, and what was left was a
+    // silhouette you could not tell from any other. Every pixel goes to the lighter grey or the darker one by how
+    // bright it was, so the badge, its loop and the mark cut into it all keep their shapes — it is the same object,
+    // with the life gone out of it.
+    lit:  "#808080",   // what the light parts of it become — a standard grey...
+    dark: "#404040",   // ...and the dark parts, a dark grey
+    // Where the two part is worked out PER CHARM, from its own pixels (Otsu's method: the brightness that best separates
+    // what it is made of into two groups). A fixed cut put some charms — the pale ones and the dark ones alike — entirely
+    // on one side of it, and they came out as flat grey shapes with no mark on them at all.
+    cut:  0.46,        // ...and this is only the fallback, for a badge with nothing to separate
+    ms:   300,         // how long it takes to go out
   };
-  // The rack closes its gap by FLIP: measure where everything is, do the thing that moves it,
-  // then put each survivor back where it was and let the transition carry it to its new place.
-  // Laying the row out by hand would mean owning the flexbox's arithmetic as well as its own.
-  function flipRack(fn) {
-    const kids = [...powerEl.children];
-    const was = kids.map(k => k.getBoundingClientRect().left);
-    fn();
-    for (const k of [...powerEl.children]) {
-      const i = kids.indexOf(k); if (i < 0) continue;
-      const dx = was[i] - k.getBoundingClientRect().left;
-      if (!dx) continue;
-      k.style.transition = "none";
-      k.style.setProperty("--slide", dx + "px");
-      void k.offsetWidth;                    // ...so the two writes land in two frames, not one
-      k.style.transition = "";
-      k.style.setProperty("--slide", "0px");
-    }
-  }
   function smashCharm(b) {
     if (b._smash) return;
     b._smash = true;
-    Sound.charmBreak(); haptic([10, 24, 8]);
-    // THE TIMER GOES FIRST. The countdown is drawn on a canvas of its own laid over the badge,
-    // and the break cuts up the BADGE — so a ring left standing would hang in the air over the
-    // pieces, a frame around a charm that is no longer inside it. It is removed rather than
-    // cleared: updatePowerBtn steps over anything mid-break, so nothing will ever paint it
-    // again and an empty canvas would only be a box left lying about.
+    Sound.powerDown && Sound.powerDown(); haptic([8, 30, 8]);
+    // The countdown goes with it: a clock drawn round a charm that has stopped is a clock on nothing.
     const ring = b.querySelector(".pw-ring");
     if (ring) ring.remove();
-    const c = b.querySelector("canvas");
-    if (!c) { flipRack(() => b.remove()); return; }
-    const g = c.getContext("2d"), S = c.width;
-    // A copy of the charm exactly as it stands, to be cut up. Redrawing each piece from the
-    // charm's own routine would mean drawing it twenty-five times a frame.
-    const pad = document.createElement("canvas"); pad.width = pad.height = S;
-    pad.getContext("2d").drawImage(c, 0, 0);
-    const N = SMASH.grid, q = S/N, cx = S/2, cy = S*PW_CY;
-    const bits = [];
-    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-      // Thrown away from the middle of the BADGE, not of the canvas — the hook stands above it,
-      // so the canvas's own centre is off the object and everything would leave to one side.
-      let dx = (i + 0.5)*q - cx, dy = (j + 0.5)*q - cy;
-      const d = Math.hypot(dx, dy) || 1;
-      bits.push({ i, j,
-                  vx: dx/d * (0.55 + Math.random()*0.85),
-                  vy: dy/d * (0.55 + Math.random()*0.85) - 0.85,   // ...and up, first
-                  sp: Math.random()*2 - 1 });
-    }
-    b.classList.add("smash");
-    b.style.animationDuration = SMASH.shake + "ms";
-    Sound.smash();
-    const t0 = performance.now();
     const spk = b.querySelector(".pw-spark");
+    if (spk) { const sg = spk.getContext("2d"); if (sg) sg.clearRect(0, 0, spk.width, spk.height); }
+    b.classList.add("spent");
+    const c = b.querySelector("canvas");
+    if (!c) return;
+    const g = c.getContext("2d"), S = c.width;
+    // THE TWO GREYS, in the charm's own shape. The badge as it stands is read back pixel by pixel and each one is put
+    // to the lighter grey or the darker by its brightness (SPENT.cut) — so the drawing survives and only the colour
+    // goes. Crossfaded from the colour it was, so it is SEEN to go out rather than swapped.
+    const was = document.createElement("canvas"); was.width = was.height = S;
+    was.getContext("2d").drawImage(c, 0, 0);
+    const grey = document.createElement("canvas"); grey.width = grey.height = S;
+    const gg = grey.getContext("2d");
+    gg.drawImage(c, 0, 0);
+    const img = gg.getImageData(0, 0, S, S), d = img.data;
+    const L = hexRGB(SPENT.lit), D = hexRGB(SPENT.dark);
+    // ...the histogram of what it is actually made of, and the brightness that best splits it in two (Otsu)
+    const hist = new Float64Array(256);
+    let n = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      const a = d[i + 3]; if (a < 8) continue;
+      const lum = 0.2126*d[i] + 0.7152*d[i + 1] + 0.0722*d[i + 2];
+      hist[Math.max(0, Math.min(255, Math.round(lum)))] += a/255; n += a/255;
+    }
+    let cut = SPENT.cut*255;
+    if (n > 0) {
+      let sum = 0; for (let v = 0; v < 256; v++) sum += v*hist[v];
+      let wB = 0, sumB = 0, best = -1;
+      for (let v = 0; v < 256; v++) {
+        wB += hist[v]; if (wB <= 0) continue;
+        const wF = n - wB; if (wF <= 0) break;
+        sumB += v*hist[v];
+        const mB = sumB/wB, mF = (sum - sumB)/wF, between = wB*wF*(mB - mF)*(mB - mF);
+        if (between > best) { best = between; cut = v + 0.5; }
+      }
+    }
+    for (let i = 0; i < d.length; i += 4) {
+      if (!d[i + 3]) continue;
+      const lum = 0.2126*d[i] + 0.7152*d[i + 1] + 0.0722*d[i + 2];
+      const t = lum >= cut ? L : D;
+      d[i] = t[0]; d[i + 1] = t[1]; d[i + 2] = t[2];
+    }
+    gg.putImageData(img, 0, 0);
+    const t0 = performance.now();
     const step = (ts) => {
       if (!b.isConnected) return;
-      const t = ts - t0;
-      // ...and the spark goes out WITH the pieces. Full through the shudder, then down over the
-      // flight. A charm that does its work on the spot (the Rewind) is never `live`, so this
-      // flare is the only spark it gets — which is exactly the moment it was fired.
-      if (spk) paintPwSpark(spk, 1 - clamp((t - SMASH.shake) / SMASH.fly, 0, 1));
-      if (t < SMASH.shake) { requestAnimationFrame(step); return; }
-      if (!b.classList.contains("gone")) { b.classList.remove("smash"); b.classList.add("gone"); }
-      const u = (t - SMASH.shake)/1000, k = Math.min(1, (t - SMASH.shake)/SMASH.fly);
+      const k = Math.min(1, (ts - t0) / SPENT.ms), e = k*k*(3 - 2*k);
       g.clearRect(0, 0, S, S);
-      for (const bt of bits) {
-        const sx = bt.i*q, sy = bt.j*q;
-        const X = bt.vx*SMASH.out*S*u;
-        const Y = (bt.vy*SMASH.out*u + 0.5*SMASH.drop*u*u)*S;
-        g.save();
-        g.globalAlpha = 1 - k*k;
-        g.translate(sx + q/2 + X, sy + q/2 + Y);
-        g.rotate(bt.sp*SMASH.spin*Math.PI*2*u);
-        g.drawImage(pad, sx, sy, q, q, -q/2, -q/2, q, q);
-        g.restore();
-      }
-      if (k < 1) { requestAnimationFrame(step); return; }
-      flipRack(() => b.remove());
+      g.globalAlpha = 1 - e; g.drawImage(was, 0, 0);
+      g.globalAlpha = e;     g.drawImage(grey, 0, 0);
+      g.globalAlpha = 1;
+      if (k < 1) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
   }
