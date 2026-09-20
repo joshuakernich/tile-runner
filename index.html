@@ -5258,7 +5258,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.79";                    // shown on the title & pause screens
+  const VERSION = "v10.80";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -9605,6 +9605,69 @@
       drawSpark(ctx, 0, 0, rsz, now, { alpha: 1, col: blue, seed: 0.21 });
       ctx.restore();
     }
+  }
+  // THE ACTIVE TRACK, LIT. A blue line along the running surface of every piece of track still standing — from the tile
+  // he is on to the front of what has been laid — following tileSurface round every curve rather than cutting across it.
+  // It is the same line the junction throws ahead of him (junctionTileLine) and the same line a shut circuit wears
+  // (drawLoopLine): the Tileverse's blue, at the same weight. What was already true of a closed loop and of the next
+  // square is now true of the whole of it — the track he is on is one continuous thing, and it says so.
+  // NOT while a circuit is shut: that ring is already lit along its whole length by drawLoopLine, and two lines on one
+  // surface is one line drawn twice, slightly out of register.
+  // ...and a spark travels it, the way one goes round a shut circuit — the same size and the same unhurried pace, well
+  // behind his. It runs the way he is running: up out of the tile he is on and away toward the front, over and over.
+  const PATH_LINE = { cellMs: 1500, spark: 0.12 };   // the spark's time per cell, and its size in tiles (LOOP_LINE's)
+  function drawPathLine() {
+    const s = state;
+    if (!s || !s.path || s.vortex) return;
+    if (s.loop && s.loop.closed) return;
+    const p = s.path;
+    // WHERE IT STOPS: short of the leading tile. That tile is the junction, and the junction draws its own lines across
+    // itself — one down each option, out to the squares (junctionTileLine) — so carrying this one over it too laid a
+    // line along the route the race had not chosen yet.
+    let lead = -1;
+    for (let i = 0; i < p.length; i++) if (!p[i].exited) lead = i;
+    const runs = [];                                 // contiguous stretches of live track, each its own polyline
+    let cur = null, prev = -2;
+    for (let i = 0; i < p.length; i++) {
+      if (p[i].exited || i === lead) continue;       // gone, or the junction's own to draw
+      const S = tileSurface(p[i], p[i-1], nextNode(i));
+      if (!S || S.length < 2) continue;
+      if (prev !== i - 1 || !cur) { cur = S.slice(); runs.push(cur); }
+      else for (let j = 1; j < S.length; j++) cur.push(S[j]);
+      prev = i;
+    }
+    if (!runs.length) return;
+    const blue = tvBlueHex();
+    ctx.save();
+    ctx.strokeStyle = blue; ctx.lineWidth = FOOTER.rim + 1; ctx.lineCap = "butt"; ctx.lineJoin = "round";
+    ctx.beginPath();
+    for (const q of runs) {
+      ctx.moveTo(q[0].x, q[0].y);
+      for (let j = 1; j < q.length; j++) ctx.lineTo(q[j].x, q[j].y);
+    }
+    ctx.stroke();
+    ctx.restore();
+    // THE SPARK, on the stretch that reaches the front. Its pace is in PIXELS, off the cell, so it travels at the same
+    // speed however long the track behind it happens to be — a lap that got longer would otherwise speed it up.
+    const R = runs[runs.length - 1], seg = []; let tot = 0;
+    for (let j = 1; j < R.length; j++) { const l = Math.hypot(R[j].x - R[j-1].x, R[j].y - R[j-1].y); seg.push(l); tot += l; }
+    if (!(tot > 0)) return;
+    const now = performance.now();
+    let d = ((now / PATH_LINE.cellMs * cell) % tot + tot) % tot, run = d;
+    let q = R[R.length - 1];
+    for (let j = 0; j < seg.length; j++) {
+      if (d <= seg[j] || j === seg.length - 1) {
+        const t = seg[j] ? Math.min(1, d / seg[j]) : 0;
+        q = { x: R[j].x + (R[j+1].x - R[j].x)*t, y: R[j].y + (R[j+1].y - R[j].y)*t };
+        break;
+      }
+      d -= seg[j];
+    }
+    const rsz = cell * PATH_LINE.spark;
+    ctx.save();
+    ctx.translate(q.x, q.y); ctx.rotate(run / (rsz * TAB_SPARK_ROLL));
+    drawSpark(ctx, 0, 0, rsz, now, { alpha: 1, col: blue, seed: 0.43 });
+    ctx.restore();
   }
   function noticeLoop() {
     const s = state;
@@ -16808,7 +16871,8 @@
     drawManualDoors(ts);
     drawHazardPaths(ts);      // ground markings — under the track and the tiles standing on it
     drawTrack(ts);
-    if (!win) drawLoopLine();                     // a closed circuit, lit along its length
+    if (!win) drawPathLine();                     // the live track, lit end to end...
+    if (!win) drawLoopLine();                     // ...and a closed circuit, lit along its length
     if (state.drag) drawTargets(ts);
     // The loose tiles are OFF during the victory replay. They are lying on the very cells the
     // route is being rebuilt across — they are the same three tiles, recycled — so leaving them
@@ -17757,6 +17821,8 @@
     planted: 0.40,   // how much of the ripple is left once it is planted
     shade:   0.22,   // how dark the cloth goes where it turns away
     inset:   0.10,   // ...and the whole flag's nearest approach to its cell's edge, in tiles
+    shadow:  0.55,   // the pool at its foot, as a share of the RUNNER'S (groundShadow draws both). A pole is a thinner
+                     // thing than he is, so it casts a tighter pool — the same shadow, not the same size.
   };
   function drawFlag(c, r, ts, locked) {
     const x = (c+0.5)*cell, cy0 = (r+0.5)*cell, s = cell;
@@ -17817,7 +17883,8 @@
       ctx.translate(fx, fy + s*RUNNER.shadowY);
       ctx.rotate(ang);
       ctx.globalAlpha = pt;                               // ...in with the plant, the way his shrinks with the bob
-      groundShadow(s*RUNNER.bodyW*RUNNER.shadowW*pt, s*RUNNER.shadow*pt, RUNNER.shadowA);
+      const sk = FLAG_CLOTH.shadow * pt;
+      groundShadow(s*RUNNER.bodyW*RUNNER.shadowW*sk, s*RUNNER.shadow*sk, RUNNER.shadowA);
       ctx.restore();
     }
     ctx.translate(fx, fy);
@@ -20861,9 +20928,10 @@
   // square, so the square is plainly where that way goes. Nothing once the square has opened to the whole cell and the
   // two edges meet.
   // ...and before the lead, the OPTION'S OWN LINE across the junction tile: its running surface from the join to the
-  // tile's edge, at the same weight, FADED — nothing where the track comes in, the full colour at the exit, where the lead
-  // carries it on to the hotspot. `u` is how much of it is drawn (0..1), for the race; the fade always spans the whole
-  // route, so a line still being drawn is as faint at the join as a finished one. `alpha` fades the lot, for a spark
+  // tile's edge, at the same weight and at FULL STRENGTH the whole way. It used to fade in from the join — nothing where
+  // the track comes in, the full colour at the exit — which was a lovely thing on its own and wrong beside the line that
+  // now runs up the track behind it: the two met at the join, one of them at nothing, and the track read as broken there
+  // rather than continuous. `u` is how much of it is drawn (0..1), for the race; `alpha` fades the lot, for a spark
   // going out against a wall. Nothing on a rail at the front: its own line is already blue.
   function junctionTileLine(lead, d, col, u, alpha) {
     if (!lead || lead.n.kind === "platform") return;
@@ -20873,13 +20941,10 @@
     for (let j = 1; j < S.length; j++) { const l = Math.hypot(S[j].x - S[j-1].x, S[j].y - S[j-1].y); seg.push(l); L += l; }
     let want = Math.max(0, Math.min(1, u == null ? 1 : u)) * L;
     if (!(want > 0.25)) return;
-    const a0 = S[0], a1 = S[S.length - 1];
-    const gd = ctx.createLinearGradient(a0.x, a0.y, a1.x, a1.y);        // join to exit (corner to corner on a turn)
-    gd.addColorStop(0, hexA(col, 0));
-    gd.addColorStop(1, hexA(col, 1));
+    const a0 = S[0];
     ctx.save();
     if (alpha != null) ctx.globalAlpha *= Math.max(0, Math.min(1, alpha));
-    ctx.strokeStyle = gd; ctx.lineWidth = FOOTER.rim + 1; ctx.lineCap = "butt"; ctx.lineJoin = "round";
+    ctx.strokeStyle = col; ctx.lineWidth = FOOTER.rim + 1; ctx.lineCap = "butt"; ctx.lineJoin = "round";
     ctx.beginPath(); ctx.moveTo(a0.x, a0.y);
     for (let j = 1; j < S.length && want > 0; j++) {
       const l = seg[j-1];
