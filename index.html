@@ -5266,7 +5266,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.83";                    // shown on the title & pause screens
+  const VERSION = "v10.84";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -19009,11 +19009,52 @@
   // THE GOLEM'S BODY, centred on the origin, `S` across: the stone tile as a stone on the board is drawn — its baked face
   // and carved cracks (stoneBitmap, the very bitmap a cell-sized stone uses, scaled to the body), on the surround's colour
   // so a crack shows the surround through it — then its fresh-hit flash and its "tappable" shimmer, on the face alone.
-  function drawGolemBody(h, S, R, K, ts) {
+  // THE STONE'S OWN COLOURS, in a coarse grid — so a golem's oars can be cut from the rock they grow out of rather than
+  // framed in one flat surround, which on a faceted body read as a mount round a picture. ONE read of the bitmap per
+  // stone: the bitmaps are cached and shared between every golem wearing that variant, so a whole level of them costs a
+  // handful of reads, and every oar after that is a lookup.
+  const STONE_GRID = 8;
+  const _stoneGrid = new WeakMap();
+  function stoneFacets(bm, cs) {
+    let g = _stoneGrid.get(bm);
+    if (g) return g;
+    g = [];
+    try {
+      const d = bm.getContext("2d").getImageData(0, 0, cs, cs).data, n = STONE_GRID;
+      for (let gy = 0; gy < n; gy++) for (let gx = 0; gx < n; gx++) {
+        const x0 = Math.floor(gx*cs/n), x1 = Math.max(x0 + 1, Math.floor((gx + 1)*cs/n));
+        const y0 = Math.floor(gy*cs/n), y1 = Math.max(y0 + 1, Math.floor((gy + 1)*cs/n));
+        let r = 0, gg = 0, b = 0, m = 0;
+        for (let y = y0; y < y1; y += 2) for (let x = x0; x < x1; x += 2) {
+          const i = (y*cs + x)*4;
+          if (d[i + 3] < 40) continue;                       // outside the tile's own corner: not rock
+          r += d[i]; gg += d[i + 1]; b += d[i + 2]; m++;
+        }
+        g.push(m ? [r/m, gg/m, b/m] : null);            // kept as numbers: the pellet's whitening works on them
+      }
+    } catch (_) { g = []; }
+    _stoneGrid.set(bm, g);
+    return g;
+  }
+  function drawGolemBody(h, S, R, K, ts, white) {
     const cs = Math.ceil(cell), taps = Math.max(1, Math.min(3, K.hp || 1));
     const bm = stoneBitmap(cs, cell, tileR(cell), K.vi || 0, K.gi || 0, taps);
-    rrect(-h, -h, S, S, R); ctx.fillStyle = STONE_EDGE; ctx.fill();
+    rrect(-h, -h, S, S, R); ctx.fillStyle = white ? "#ffffff" : STONE_EDGE; ctx.fill();
     ctx.drawImage(bm, 0, 0, cs, cs, -h, -h, S, S);
+    // WHITE, BUT STILL FACETED, while a pellet is up. Painting it flat would have thrown away the one thing that says
+    // this animal is made of rock — so the rock is drawn as it always is and then has its COLOUR taken out of it
+    // (`color` against white leaves the backdrop's light and shade and removes its hue), and the greys that leaves are
+    // lifted toward white. Every facet, every crack and every chip it has taken survives as a step of light.
+    if (white) {
+      ctx.save();
+      rrect(-h, -h, S, S, R); ctx.clip();
+      ctx.globalCompositeOperation = "color";
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(-h, -h, S, S);
+      ctx.globalCompositeOperation = "source-atop";
+      ctx.globalAlpha = PELLET.stone;
+      ctx.fillRect(-h, -h, S, S);
+      ctx.restore();
+    }
     const p2 = S*stoneFaceInset(), r3 = Math.max(0, R - p2*0.6);
     ctx.save();
     rrect(-h + p2, -h + p2, S - 2*p2, S - 2*p2, r3); ctx.clip();
@@ -19109,7 +19150,9 @@
     // The oars as SUBPATHS: added to whatever path is already open, never beginning one and never filling. That is
     // what lets the one outline be used twice — to fill the bank, and as part of the silhouette the top light is cut
     // from. Filled one at a time, as they were, there was no outline of the ANIMAL anywhere, only of each spike.
-    const bankPath = (downY, sl) => {
+    // `each` turns it inside out: with one, the oar is closed and handed to the caller to fill on its own (a golem's
+    // are each a different colour); without, they pile up as subpaths of whatever is already open, as before.
+    const bankPath = (downY, sl, each) => {
       for (const side of [-1, 1]) {
         for (let k = 0; k < per; k++) {
           // The half-square, stood on its diagonal: the base lies along the edge and the point stands off it by
@@ -19117,6 +19160,7 @@
           // the whole oar.
           const tip = rad(k) * oarScale;
           const c = cen[k] + sl, w = tip*2;
+          if (each) ctx.beginPath();
           if (downY) {
             ctx.moveTo(side*h, c - w/2);
             ctx.lineTo(side*h, c + w/2);
@@ -19127,12 +19171,39 @@
             ctx.lineTo(c, side*(h + tip));
           }
           ctx.closePath();
+          if (each) each(downY ? side*h : c, downY ? c : side*h);   // ...where its base sits, in the animal's own frame
         }
       }
     };
     // One fill for a whole bank rather than one per oar. They never overlap — each is held inside its own share of
     // the edge — so a single non-zero fill draws exactly what a dozen separate ones did.
-    const bank = (downY, sl) => { ctx.beginPath(); bankPath(downY, sl); ctx.fill(); };
+    // A GOLEM'S oars are cut from the stone itself: each takes the colour of the facet it grows out of, sampled off the
+    // very bitmap its body is drawn from. A spike standing on a lit facet is lit and one in shadow is dark, which is
+    // what makes the whole animal read as one rock rather than as a stone tile with a frame round it.
+    // ...and that holds while a PELLET is up too: the facets are put through the same whitening the body gets —
+    // greyed to their own luminosity and lifted toward white by PELLET.stone — so the spikes step with the rock rather
+    // than ringing a faceted white body with a band of flat white.
+    const golemInk = K.stone ? (() => {
+      const cs2 = Math.ceil(cell), n = STONE_GRID;
+      const grid = stoneFacets(stoneBitmap(cs2, cell, tileR(cell), K.vi || 0, K.gi || 0,
+                                           Math.max(1, Math.min(3, K.hp || 1))), cs2);
+      if (!grid.length) return null;
+      const a = PELLET.stone;
+      const ink = skin
+        ? (c) => { const l = 0.3*c[0] + 0.59*c[1] + 0.11*c[2], v = Math.round(l*(1 - a) + 255*a);
+                   return "rgb(" + v + "," + v + "," + v + ")"; }
+        : (c) => "rgb(" + Math.round(c[0]) + "," + Math.round(c[1]) + "," + Math.round(c[2]) + ")";
+      return (lx, ly) => {
+        const gx = Math.max(0, Math.min(n - 1, Math.floor(((lx + h)/S) * n)));
+        const gy = Math.max(0, Math.min(n - 1, Math.floor(((ly + h)/S) * n)));
+        const c = grid[gy*n + gx];
+        return c ? ink(c) : body;
+      };
+    })() : null;
+    const bank = (downY, sl) => {
+      if (golemInk) return bankPath(downY, sl, (lx, ly) => { ctx.fillStyle = golemInk(lx, ly); ctx.fill(); });
+      ctx.beginPath(); bankPath(downY, sl); ctx.fill();
+    };
     // ...and the animal's whole outline, the oars it actually has out at this moment: a feathered oar is drawn
     // smaller, so its outline comes in with it and the light never runs on past where the spike now ends.
     const oarOutline = () => { bankPath(vert, slide); if (K.banks === "all") bankPath(!vert, 0); };
@@ -19142,7 +19213,7 @@
     // sideways — so they just shrink and grow with the rest.
     bank(vert, slide);
     if (K.banks === "all") bank(!vert, 0);
-    if (K.stone) drawGolemBody(h, S, R, K, ts);                    // a golem: the stone tile, over the tooth roots
+    if (K.stone) drawGolemBody(h, S, R, K, ts, !!skin);            // a golem: the stone tile, over the tooth roots
     else {
     // ...and the head over the tooth roots. A WALL monster takes the wall's own steel plate here instead of a flat
     // colour — the same plateGrad paintWallInto lays down — and the family's grain and panel below do the rest.
@@ -19154,20 +19225,17 @@
     // an inscribed panel, a shade darker than the body — the same trick the walls use to
     // stop a plain coloured square reading as a flat sticker
     const ip = S*MONSTER.panelPad;
-    ctx.fillStyle = "rgba(9,6,20," + MONSTER.panelA + ")";
-    rrect(-h + ip, -h + ip, S - 2*ip, S - 2*ip, Math.max(0, R - ip*0.6)); ctx.fill();
+    // ...and with a pellet up it is either the animal's own colour at full strength — the only colour left on it, and
+    // what its white eyes read against — or, on the two that HUNT, NOTHING AT ALL. They are a white square and nothing
+    // else, and that blankness is how you pick them out of a board of animals wearing their colours in their middles.
+    if (!monNoPanel(K) && (!skin || skin.panel)) {
+      ctx.fillStyle = skin ? skin.panel : "rgba(9,6,20," + MONSTER.panelA + ")";
+      rrect(-h + ip, -h + ip, S - 2*ip, S - 2*ip, Math.max(0, R - ip*0.6)); ctx.fill();
+    }
     }
     // The lit edge, over body and panel alike — it belongs to the OUTLINE, not to anything painted inside it — and
     // the outline is the body AND the oars, so the light runs along the top of the spikes too.
     monsterRim(() => { rrectSub(-h, -h, S, S, R); oarOutline(); });
-    // THE OUTLINE, while a pellet is up: the same silhouette the light is cut from — head and oars as one shape —
-    // stroked in the animal's own colour inverted. It is the only thing left saying which animal this is.
-    if (skin) {
-      ctx.save();
-      ctx.strokeStyle = skin.line; ctx.lineWidth = Math.max(2, s*0.022); ctx.lineJoin = "round";
-      ctx.beginPath(); rrectSub(-h, -h, S, S, R); oarOutline(); ctx.stroke();
-      ctx.restore();
-    }
     // The eyes LEAD: they sit toward whichever end he is heading for, so his direction reads
     // off the face alone rather than off watching him move. `dir` is +1 down the rail, which
     // is rightward for a horizontal mover and downward for a vertical one — the same sign
@@ -19283,8 +19351,10 @@
       // clip, so it is cut by the same straight edge the body is and splits with the jaws
       // rather than bridging the gap between them.
       const ip = S*MONSTER.panelPad;
-      ctx.fillStyle = "rgba(9,6,20," + MONSTER.panelA + ")";
-      rrect(-h + ip, -h + ip, S - 2*ip, S - 2*ip, Math.max(0, R - ip*0.6)); ctx.fill();
+      if (!monNoPanel(K) && (!jawSkin || jawSkin.panel)) {
+        ctx.fillStyle = jawSkin ? jawSkin.panel : "rgba(9,6,20," + MONSTER.panelA + ")";
+        rrect(-h + ip, -h + ip, S - 2*ip, S - 2*ip, Math.max(0, R - ip*0.6)); ctx.fill();
+      }
       // ...and the lit edge, inside this half's own clip, so the cut face stays dark and only the tile's real
       // outside edge catches the light. The TEETH are left out of it on purpose: they stand past the jaw's own cut
       // and so cannot share its clip, and their tops are where they meet the jaw — against the body, with nothing
@@ -19926,6 +19996,7 @@
                    spark: "#f1645f",   // ...the catch of light on it, in the rainbow's own red
                    quilt: 0.13,   // how much of the level's own colour its quilt keeps while a pellet is up
                    glow:  1.05,   // the light coming off HIM, in cells
+                   stone: 0.62,   // ...and how far a golem's facets are lifted toward white (0 = grey, 1 = gone)
                    eye:   "#ff3a2f",   // ...and what he looks out of
                    col:  "#ffffff" };  // ...and the white it is TAKEN with: the pop and the burst of light
   const pelletOn = () => !!(state && state.pellet);
@@ -19935,13 +20006,6 @@
   // nothing in them, and every monster goes white with its own colour turned inside out for the line round it and for
   // its eyes — so the things that were hunting you are suddenly the brightest objects on a black floor. Everything
   // else — him, the track, the sky, the coins, the HUD — is left exactly as it was.
-  const invHex = (hex) => { const c = hexRGB(hex); return "rgb(" + (255-c[0]) + "," + (255-c[1]) + "," + (255-c[2]) + ")"; };
-  const _invCache = new Map();
-  function pelletInv(hex) {
-    let v = _invCache.get(hex);
-    if (!v) { try { v = invHex(hex); } catch (_) { v = "#000000"; } _invCache.set(hex, v); }
-    return v;
-  }
   // `null` when no pellet is up, so every caller is one falsy test away from its ordinary colours.
   // The level's own quilt with every patch taken down towards black: the SAME theme, so the piecing, the patch size and
   // the transparency are untouched and the sky still carries on behind it — only the colour is gone out of it. Derived
@@ -19969,10 +20033,25 @@
     });
     return gd;
   }
+  // WHAT EACH ANIMAL BECOMES. The two that HUNT go white all through and are told apart by their eyes alone — red for
+  // the Hunter, purple for the Stalker — because those are the two you are looking for, and a body full of detail is
+  // detail you have to read before you know which one is which. Everything else keeps its shape and loses its colour
+  // to the edge: white head, white oars, white eyes, and the one square inset into its face left in the animal's own
+  // colour, which is then the whole of what tells a rail from a walker from a thing in the wall.
+  // `null` when no pellet is up, so every caller is one falsy test away from its ordinary colours.
+  // NO INSCRIBED SQUARE ON THE ONES THAT HUNT, pellet or no pellet. The panel is there to stop a plain coloured square
+  // reading as a flat sticker — and these two are not a plain colour: the Hunter is black with the only colour on him
+  // in his eyes, and the Stalker is a pale ghost you are meant to lose track of. A darker square inside either of them
+  // was detail on the two animals whose whole job is to be recognised at a glance and from the corner of your eye.
+  // (The Warden goes with them: it is the Hunter at twice the size. A golem hunts too, but draws itself out of stone.)
+  const monNoPanel = (K) => !!K && K.move === "hunt" && !K.stone;
+  const PELLET_EYES = { hunt: "#ff3a2f", ghost: "#c37ef1" };
   function pelletSkin(K) {
     if (!state || !state.pellet || !K) return null;
-    const native = K.body || K.eye || "#c37ef1";
-    return { body: "#ffffff", eye: pelletInv(K.eye || native), line: pelletInv(native) };
+    // A GOLEM hunts, but it is made of stone and draws itself out of the stone's own art — it belongs with the others.
+    if (K.move === "hunt" && !K.stone)
+      return { body: "#ffffff", eye: K.ghost ? PELLET_EYES.ghost : PELLET_EYES.hunt, panel: null };
+    return { body: "#ffffff", eye: "#ffffff", panel: K.body || K.eye || "#c37ef1" };
   }
   // ...and the pips, in fractions of the berry's width from its middle — five of them, no two in a row, so the face
   // reads as scattered rather than as a pattern.
