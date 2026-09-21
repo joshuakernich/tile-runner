@@ -319,6 +319,9 @@
         chosen in the dropdown, click again to cycle, right-click to remove. It does <i>not</i> block
         track — put it somewhere the runner can flow <i>through</i>, never at the end of a spur, or it
         can't be collected.</div>
+      <div class="tip" data-for="pellet"><b>Power pellet</b>: eat one and for ten beats nothing can touch him —
+        what he touches comes apart, the hunters turn and run, and the screen goes inside out. Click to place, click
+        again to take away.</div>
       <div class="tip" data-for="coin"><b>Coin</b>: a golden tile worth one tile of shop money. Click to
         drop one, click again to remove.</div>
       <div class="tip" data-for="key"><b>Key</b>: pick a colour swatch first — a key opens the door of the
@@ -367,6 +370,7 @@
       <div class="tool" data-tool="platform">Rail</div>
       <div class="tool" data-tool="talisman">Talisman</div>
       <div class="tool" data-tool="coin">Coin</div>
+      <div class="tool" data-tool="pellet">Pellet</div>
       <div class="tool" data-tool="singularity">Crumble</div>
       <div class="tool" data-tool="key">Key</div>
       <div class="tool" data-tool="door">Door</div>
@@ -704,6 +708,7 @@ function toStored(w){
   if((w.platforms||[]).length) o.platforms = w.platforms.map(p=>p.slice());
   if((w.talismans||[]).length) o.talismans = w.talismans.map(t=>t.slice());
   if((w.coins||[]).length) o.coins = w.coins.map(c=>c.slice());
+  if((w.pellets||[]).length) o.pellets = w.pellets.map(c=>c.slice());
   if((w.singularity||[]).length) o.singularity = w.singularity.map(c=>c.slice());
   return o;
 }
@@ -748,7 +753,7 @@ function shiftAll(dc, dr){
   mv(L.start); (L.init||[]).forEach(mv); if(L.goal) mv(L.goal);
   L.walls = new Set([...L.walls].map(s=>{ const [c,r]=s.split(",").map(Number); return keyOf(c+dc, r+dr); }));
   L.holes = new Set([...(L.holes||[])].map(s=>{ const [c,r]=s.split(",").map(Number); return keyOf(c+dc, r+dr); }));
-  [L.coins, L.stone, L.platforms, L.talismans, L.doors, L.keys].forEach(a=>(a||[]).forEach(mv));
+  [L.coins, L.pellets, L.stone, L.platforms, L.talismans, L.doors, L.keys].forEach(a=>(a||[]).forEach(mv));
   // a block or a rail names ONE fixed axis and a lo..hi span on the other, so which delta
   // applies to which field depends on the axis
   (L.blocks||[]).forEach(b=>{ if((b.axis||"h")==="h"){ b.r+=dr; b.lo+=dc; b.hi+=dc; b.pos0+=dc; }
@@ -767,7 +772,7 @@ function cropToBoard(){
   const keep=a=>(a||[]).filter(p=>inB(p[0],p[1]));
   L.walls = new Set([...L.walls].filter(s=>{ const [c,r]=s.split(",").map(Number); return inB(c,r); }));
   L.holes = new Set([...(L.holes||[])].filter(s=>{ const [c,r]=s.split(",").map(Number); return inB(c,r); }));
-  L.coins=keep(L.coins); L.stone=keep(L.stone); L.platforms=keep(L.platforms);
+  L.coins=keep(L.coins); L.pellets=keep(L.pellets); L.stone=keep(L.stone); L.platforms=keep(L.platforms);
   L.talismans=keep(L.talismans); L.doors=keep(L.doors); L.keys=keep(L.keys);
   L.init = keep(L.init);
   L.start = [clamp(L.start[0],0,L.cols-1), clamp(L.start[1],0,L.rows-1)];
@@ -801,6 +806,7 @@ function eraseAt(c,r){
   const pB=(L.platforms||[]).length; L.platforms = (L.platforms||[]).filter(x=>!(x[0]===c&&x[1]===r)); if(L.platforms.length!==pB)hit=true;
   const tB=(L.talismans||[]).length; L.talismans = (L.talismans||[]).filter(x=>!(x[0]===c&&x[1]===r)); if(L.talismans.length!==tB)hit=true;
   const cB=(L.coins||[]).length; L.coins = (L.coins||[]).filter(x=>!(x[0]===c&&x[1]===r)); if(L.coins.length!==cB)hit=true;
+  const peB=(L.pellets||[]).length; L.pellets = (L.pellets||[]).filter(x=>!(x[0]===c&&x[1]===r)); if(L.pellets.length!==peB)hit=true;
   const gB=(L.singularity||[]).length; L.singularity = (L.singularity||[]).filter(x=>!(x[0]===c&&x[1]===r)); if(L.singularity.length!==gB)hit=true;
   // ...and the level's own pre-laid TILES. The eraser used to walk straight past them, so the
   // only way to take one off was to pick the Tile tool and click it a second time — and the
@@ -991,6 +997,7 @@ function applyTool(c,r,isDrag){
     case "platform": pushUndo(); paintPlatform(c,r); break;
     case "talisman": pushUndo(); paintTalisman(c,r); break;
     case "coin":     pushUndo(); paintCoin(c,r); break;
+    case "pellet":   pushUndo(); paintPellet(c,r); break;
     case "singularity": pushUndo(); paintSingularity(c,r); break;
     case "block": pushUndo(); placeBlock(c,r); break;
     case "monster": placeMonster(c,r); break;   // pushes its own undo when it finishes
@@ -998,6 +1005,13 @@ function applyTool(c,r,isDrag){
   commit(); draw(); refreshOut();
 }
 // a coin is a floor pickup too: click to drop one, click again to take it away
+// THE POWER PELLET, placed exactly as a coin is: one per cell, and clicking it again takes it away.
+function paintPellet(c,r){
+  L.pellets = L.pellets || [];
+  const i = L.pellets.findIndex(t=>t[0]===c&&t[1]===r);
+  if(i>=0){ L.pellets.splice(i,1); setStatus("pellet removed"); return; }
+  L.pellets.push([c,r]); setStatus("pellet placed");
+}
 function paintCoin(c,r){
   L.coins = L.coins || [];
   const i = L.coins.findIndex(t=>t[0]===c&&t[1]===r);
@@ -1043,6 +1057,7 @@ function eraseNonWallAt(c,r){ // walls take over a cell — clear conflicting ma
   L.platforms=(L.platforms||[]).filter(p=>!(p[0]===c&&p[1]===r));
   L.talismans=(L.talismans||[]).filter(t=>!(t[0]===c&&t[1]===r));
   L.coins=(L.coins||[]).filter(t=>!(t[0]===c&&t[1]===r));
+  L.pellets=(L.pellets||[]).filter(t=>!(t[0]===c&&t[1]===r));
   L.singularity=(L.singularity||[]).filter(t=>!(t[0]===c&&t[1]===r));
 }
 function hasStone(c,r){ return (L.stone||[]).some(s=>s[0]===c&&s[1]===r); }
@@ -1335,6 +1350,13 @@ function draw(){
     ctx.globalAlpha=1;
     ctx.restore();
   });
+  // the strawberry, as the game draws it: a red tile, a green one across its top, a pip or two
+  (L.pellets||[]).forEach(([c,r])=>{ const [x,y]=cellXY(c,r); const s2=CELL*0.42, mx=x+CELL/2, my=y+CELL/2;
+    ctx.fillStyle="rgba(0,0,0,0.45)"; ctx.fillRect(mx-s2/2+2, my-s2/2+2, s2, s2);
+    ctx.fillStyle="#49d47c"; ctx.fillRect(mx-s2*0.43, my-s2*0.60, s2*0.86, s2*0.26);
+    ctx.fillStyle="#e4453f"; ctx.fillRect(mx-s2/2, my-s2/2, s2, s2);
+    ctx.fillStyle="#ffd24a";
+    for(const [px,py] of [[-0.24,-0.12],[0.20,0.12]]) ctx.fillRect(mx+px*s2-s2*0.06, my+py*s2-s2*0.06, s2*0.12, s2*0.12); });
   (L.coins||[]).forEach(([c,r])=>{ const [x,y]=cellXY(c,r); const s2=CELL*0.34;
     ctx.fillStyle="#c78b16"; ctx.fillRect(x+CELL/2-s2/2+2, y+CELL/2-s2/2+2, s2, s2);
     ctx.fillStyle="#ffd24a"; ctx.fillRect(x+CELL/2-s2/2, y+CELL/2-s2/2, s2, s2);
@@ -1557,7 +1579,7 @@ function draggableAt(c,r){                        // topmost movable element und
   const d=L.doors.find(x=>x[0]===c&&x[1]===r); if(d) return {type:'door',ref:d};
   // The single-cell items, topmost first: the two floor pickups are drawn over everything,
   // so they are what you get when one shares a square with the plate beneath it.
-  for(const [list,what] of [[L.talismans,'talisman'],[L.coins,'coin'],
+  for(const [list,what] of [[L.talismans,'talisman'],[L.pellets,'pellet'],[L.coins,'coin'],
                             [L.stone,'stone'],[L.platforms,'platform'],
                             [L.singularity,'singularity']]){
     const hit=(list||[]).find(x=>x[0]===c&&x[1]===r);
@@ -1869,7 +1891,7 @@ function selAlive(){
   if (sel.type === "goal")  return !!L.goal;
   if (sel.type === "init")  return sel.i >= 0 && sel.i < L.init.length;
   const lists = [L.keys, L.doors, L.stone||[], L.platforms||[], L.talismans||[],
-                 L.coins||[], L.singularity||[], L.blocks, L.hazards];
+                 L.coins||[], L.pellets||[], L.singularity||[], L.blocks, L.hazards];
   return lists.some(a => a.indexOf(sel.ref) >= 0);
 }
 function selectAt(hit){ sel = hit || null; buildInspector(); draw(); }
@@ -1949,7 +1971,7 @@ function buildInspector(){
     if (sel.what === "talisman")
       opts.appendChild(inspRow("charm", inspSel(TAL_IDS.map(i => [i, i]), ref[2] || TAL_IDS[0],
         v => ref[2] = v)));
-    if (sel.what === "coin" || sel.what === "singularity")
+    if (sel.what === "coin" || sel.what === "pellet" || sel.what === "singularity")
       opts.appendChild(Object.assign(document.createElement("div"),
         { className:"hint", textContent:"Nothing to set — drag it to move it." }));
   }
@@ -2127,6 +2149,8 @@ cv.addEventListener("mousedown", e=>{
   // platform: left-click places / cycles the shape, right-click removes
   if(tool==="platform"){ pushUndo(); if(e.button===2) eraseAt(c.c,c.r); else paintPlatform(c.c,c.r);
     lastCell=c; commit(); draw(); refreshOut(); return; }
+  if(tool==="pellet"){ pushUndo(); if(e.button===2) eraseAt(c.c,c.r); else paintPellet(c.c,c.r);
+    commit(); draw(); refreshOut(); return; }
   if(tool==="coin"){ pushUndo(); if(e.button===2) eraseAt(c.c,c.r); else paintCoin(c.c,c.r);
     lastCell=c; commit(); draw(); refreshOut(); return; }
   if(tool==="singularity"){ pushUndo(); if(e.button===2) eraseAt(c.c,c.r); else paintSingularity(c.c,c.r);
@@ -2226,6 +2250,7 @@ function toolIcon(g, t, S){
                      box(S*.32,S*.38,S*.36,S*.36,S*.06,"#a8781a");
                      g.strokeStyle="#ffd24a"; g.lineWidth=S*.07; g.lineCap="round";
                      g.beginPath(); g.arc(S/2,S*.22,S*.10,Math.PI*0.15,Math.PI*0.85,true); g.stroke(); break;
+    case "pellet":   box(S*.20,S*.16,S*.60,S*.14,S*.06,"#49d47c"); box(S*.22,S*.30,S*.56,S*.50,S*.12,"#e4453f"); break;
     case "coin":     box(S*.18,S*.18,S*.64,S*.64,S*.12,"#c78b16");
                      box(S*.25,S*.25,S*.50,S*.50,S*.09,"#ffd24a"); break;
     case "singularity": {                                          // crumbling ground: solid, cracked in single blue lines

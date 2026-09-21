@@ -5266,7 +5266,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.81";                    // shown on the title & pause screens
+  const VERSION = "v10.82";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -7336,6 +7336,10 @@
         switches: (g.switches||[]).map(s=>({ c:s[0], r:s[1], used:false })),
         openT: 0, color: GATE_COLORS[i % GATE_COLORS.length],
       })),
+      // THE POWER PELLET: eat one and, for PELLET.beats, the things that were hunting you are running from you and
+      // anything you touch comes apart. `pellet` is the beat it runs out on, or null.
+      pellets: new Set((L.pellets||[]).map(c=>key(c[0],c[1]))),
+      pellet: null,
       boost: new Set((L.boost||[]).map(c=>key(c[0],c[1]))),
       slow:  new Set((L.slow ||[]).map(c=>key(c[0],c[1]))),
       speedFx: { kind: null, t: 0 },        // active timed speed effect from a collected pickup
@@ -9456,7 +9460,16 @@
     const comboSpeed = 1;
     factor *= comboSpeed;
     s.speedMult = comboSpeed;                 // for the live speed readout
-    s.liveFactor = factor;                     // includes boost/slow zone + combo, for the readout
+    // WHAT THE BOARD RUNS AT — everything that shapes his pace, and then the pellet's own arithmetic on top. Ordinarily
+    // it is simply his: a boost, a slow zone or the Hands of Time all reach the monsters too, because those are the
+    // world changing pace rather than him outrunning it.
+    s.beatFactor = factor;
+    // A PELLET in him puts his foot down AND takes theirs off. He goes to PELLET.speed of his own pace; they go to
+    // PELLET.monK of HIS — half, so whatever he is doing they are doing exactly half of it, and the gap is the same
+    // gap however he is retuned later. Two cells of his to every one of theirs, which is what being the dangerous one
+    // in the room feels like from the inside.
+    if (s.pellet) { factor *= PELLET.speed; s.beatFactor = factor * PELLET.monK; }
+    s.liveFactor = factor;                     // HIS pace: his step, the camera that keeps up with him, and the plate
     s.runT += (dt / s.msPerCell) * factor;
     while (s.runT >= 1 && s.runIdx + 1 < s.path.length) {
       s.runT -= 1;
@@ -11899,6 +11912,18 @@
       if (fresh) flashTalisman(def);
       else { s.purse += COIN_TILES*2; showTally(t.c, t.r);
              s.score = computeScore(); updateScoreHud(); }
+    }
+    // THE PELLET, taken the way a boost is. It runs on BEATS rather than milliseconds — ten of them — so it lasts the
+    // same amount of GAME however fast he happens to be running by then, which is the unit the monsters move in too.
+    if (s.pellet && beatNow() >= s.pellet.until) { s.pellet = null; Sound.thrum && Sound.thrum(); }
+    for (const bk of Array.from(s.pellets)) {
+      const [c, r] = bk.split(",").map(Number);
+      if (nearTight(c, r)) {
+        s.pellets.delete(bk);
+        s.pellet = { until: beatNow() + PELLET.beats };
+        spawnPop(c, r, PELLET.col); spawnLight(c, r);
+        (Sound.power || Sound.coin)(); haptic([14, 30, 14]);
+      }
     }
     // boost / slow pickups: grabbed by passing over them → a time-limited speed effect
     for (const bk of Array.from(s.boost)) {
@@ -15890,6 +15915,7 @@
     const pop = 0.80 + 0.20*easeOutBack(e), rise = (1 - easeOut(e)) * h * 0.5;
     ctx.globalAlpha = k;
     ctx.translate(viewW/2, y + rise); ctx.scale(pop, pop); ctx.translate(-viewW/2, -y);
+    linePad(viewW/2, y, Math.max(lineW*1.9, viewW*0.34), h*2.4, k);    // ...its own ground, under it and nothing else
     const mark = (col) => {
       if (row.kind === "heart") { ctx.save(); ctx.translate(mx + cw/2, y); flatHeart(cw, col); ctx.restore(); }
       else hudFly(mx + cw/2, y, cw, col);
@@ -15935,6 +15961,7 @@
     const pop = 0.80 + 0.20*easeOutBack(e), rise = (1 - easeOut(e)) * h * 0.5;
     ctx.globalAlpha = k;
     ctx.translate(viewW/2, y + rise); ctx.scale(pop, pop); ctx.translate(-viewW/2, -y);
+    linePad(viewW/2, y, Math.max(lineW*1.5, viewW*0.40), h*2.4, k);    // ...and this one's
     const px = x0, bx0 = x0 + pw + pg, nx = bx0 + ids.length*(bw + gap);
     ctx.fillStyle = "#ffffff";
     ctx.fillText(plus, px, yy);
@@ -16037,6 +16064,11 @@
     ctx.textAlign = "left"; ctx.textBaseline = "middle";
     ctx.letterSpacing = "1px";                 // ...and the tracking the Tileverse gives it
     const numF = "900 " + h + "px " + UI_FONT;
+    // THE GROUND UNDER THE MONEY: one pad on the purse, one on the takings hanging above it, each on that line's own
+    // clock so neither is a dark blot over a place nothing has arrived at yet.
+    linePad(viewW/2, y, viewW*0.44, h*2.6, alpha * (gain > 0 ? clamp((t - (PAYOUT.in + PAYOUT.purse))/260, 0, 1) : 1));
+    if (gain > 0 && t >= PAYOUT.in && t < land)
+      linePad(viewW/2, y - h*PAYOUT.rise, viewW*0.50, h*2.6, alpha * Math.min(1, (t - PAYOUT.in)/180));
     // ---- the purse ----------------------------------------------------------------------
     // It arrives AFTER the takings, not with them. The "+n" turning up over an empty space and
     // the purse rising to meet it says the two are separate things about to become one; both
@@ -17094,6 +17126,17 @@
     drawTalismanFlash(16, ts);
     drawVortex(ts);                     // ...and the whirlpool, over the top of everything
     drawRestore(ts);                    // ...or the restoration, which is over even that
+    // THE WORLD INSIDE OUT. The finished frame, every pixel of it, subtracted from white — board, runner, monsters, HUD
+    // and all. Not a wash over the top: a wash leaves the picture underneath legible and merely tinted, and the whole
+    // point of the pellet is that for ten beats this is not the same game. `difference` against white is an exact
+    // invert and costs one fill, which is what lets it sit over everything already drawn.
+    if (state.pellet) {
+      ctx.save();
+      ctx.globalCompositeOperation = "difference";
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, viewW, viewH);
+      ctx.restore();
+    }
   }
 
   // The Mushroom's visuals. Rather than warping every drawing routine, the finished frame is
@@ -17211,16 +17254,34 @@
   // `deep` is how far down it reaches, in canvas px. The ceremony leaves it out and gets the fifteen squares its two
   // lines and its purse need; the map asks for exactly the heading and the tally, because everything below that is
   // the campaign, and darkening it is what had this wash turned off in the first place.
-  function drawHeadFade(a, deep) {
-    const h = deep > 0 ? deep : uiGrid() * 15;
-    const g = ctx.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0,    "rgba(5,4,13,0.72)");
-    g.addColorStop(0.30, "rgba(5,4,13,0.58)");
-    g.addColorStop(0.64, "rgba(5,4,13,0.28)");
-    g.addColorStop(1,    "rgba(5,4,13,0)");
-    ctx.save(); ctx.globalAlpha = a == null ? 1 : a;
-    ctx.fillStyle = g; ctx.fillRect(0, 0, viewW, h);
+  // THE GROUND UNDER ONE LINE, and only under it. A radial pad centred on the reading rather than one bar of gradient
+  // laid across the top of the screen: a bar darkens the whole width of the map, including the stretches either side of
+  // the words where there is nothing to hold off anything, and it has a bottom edge you can watch travelling as the map
+  // scrolls under it. A pad per line has neither — it is where the reading is, and it comes to nothing in every
+  // direction at once. `mx`,`my` are the line's middle; `w`,`h` its own extent.
+  const HEAD_PAD = { a: 0.76, grow: 1.55, flat: 0.34 };
+  function linePad(mx, my, w, h, a) {
+    if (!(w > 0) || !(h > 0) || !(a > 0.004)) return;
+    const rx = w*HEAD_PAD.grow/2, ry = h*HEAD_PAD.grow/2;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, a);
+    ctx.translate(mx, my); ctx.scale(1, ry/rx);
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+    g.addColorStop(0,             "rgba(5,4,13," + HEAD_PAD.a + ")");
+    g.addColorStop(HEAD_PAD.flat, "rgba(5,4,13," + HEAD_PAD.a + ")");   // flat through the middle, all the fade outside
+    g.addColorStop(1,             "rgba(5,4,13,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, rx, 0, Math.PI*2); ctx.fill();
     ctx.restore();
+  }
+  // The heading's own pad — two lines deep on CHAPTER COMPLETE, one on the map — plus the purse standing under it on
+  // the MAP, which is drawn by the shared drawWalletTally and so has no pad of its own to bring.
+  function drawHeadFade(a, deep) {
+    const A = a == null ? 1 : a;
+    if (!(A > 0.004)) return;
+    const size = Math.min(46, viewW*0.11), hy = headTextY(size), map = deep > 0;
+    linePad(viewW/2, hy + (map ? 0 : size*0.575), Math.max(viewW*0.60, size*7), size*(map ? 1.8 : 3.0), A);
+    if (map) linePad(viewW/2, hy + size*1.15 + PURSE_PX/2 + uiGrid()*2, viewW*0.44, PURSE_PX*2.6, A);
   }
   let _uiGrid = 0;
   function uiGrid() {
@@ -18077,6 +18138,7 @@
     const s = state;
     for (const ck of s.singularity) if (!s.collapsed.has(ck)) { const [c,r]=ck.split(",").map(Number); drawSingularity(c,r,false,ts); }
     for (const ck of s.collapsed) { const [c,r]=ck.split(",").map(Number); drawSingularity(c,r,true,ts); }
+    for (const pk of s.pellets) { const [c,r]=pk.split(",").map(Number); drawPellet(c,r,ts); }
     for (const bk of s.boost) { const [c,r]=bk.split(",").map(Number); drawFxPickup(c,r,ts,"boost"); }
     for (const bk of s.slow)  { const [c,r]=bk.split(",").map(Number); drawFxPickup(c,r,ts,"slow"); }
     for (const d of s.doors) {
@@ -18783,7 +18845,11 @@
   // (safe to run through), closing for ½. Each move is triggered half a beat early and LANDS exactly on the beat — wide
   // open on one, shut on another. Five beats in all, the same bite every chomper takes (chompPhase). It SHUDDERS for the
   // last `warn` of a beat before it moves either way: before it opens, and before it shuts.
-  const TRAP = { rest: 1.5, open: 0.50, hold: 2.50, snap: 0.50, warn: 0.50 };
+  // `rest` is the SHUT beat — jaws closed and winding up. It was 1.5 and is 2.5: a whole extra beat clamped shut before
+  // it yawns again, which lengthens the cycle rather than eating into the open window, so what changes is how long you
+  // wait for a mouth rather than how long you have once you get one. Drives the Trap's jaws AND every biter's chomp
+  // (chompPhase reads the same clock), so the two can never fall out of step.
+  const TRAP = { rest: 2.5, open: 0.50, hold: 2.50, snap: 0.50, warn: 0.50 };
   function trapPhase(t) {
     const T = TRAP, a = T.rest, b = a + T.open, c = b + T.hold, d = c + T.snap;
     const u = t % d;
@@ -19800,6 +19866,57 @@
   }
 
 
+  // THE POWER PELLET. A fat white square on the floor: eat it and for ten beats nothing on the board can touch you —
+  // what you touch is unmade instead — the hunters turn and run, and the whole screen goes inside out so there is no
+  // mistaking whose game it is for those ten beats.
+  const PELLET = { beats: 10, reach: 0.80,
+                   speed: 1.5,   // his pace while it lasts, against his own
+                   monK:  0.5,   // ...and the board's, against HIS — so they run at exactly half whatever he is doing
+                   // A STRAWBERRY, built the way everything here is built: out of tiles. ONE red tile for the berry —
+                   // not a body and a tip, which was a shape trying to taper in a game that does not taper — a green
+                   // one laid across its shoulders, and five yellow pips on the face.
+                   // IT IS A COIN IN EVERY RESPECT BUT ITS COLOUR: the coin's size, the coin's extruded edge, the
+                   // coin's shadow, its float and its lazy rock (COIN, drawCoin, paintCoin). The two are the same
+                   // offer lying on the same floor, and anything the coin is tuned to, this is tuned to with it.
+                   body: "#e4453f", edge: "#8e2320",   // ...the berry, and the depth it sits on
+                   seed: "#ffd24a", leaf: "#49d47c", leafEdge: "#2b8a4f",
+                   spark: "#f1645f",   // ...the catch of light on it, in the rainbow's own red
+                   col:  "#ffffff" };  // ...and the white it is TAKEN with: the pop and the burst of light
+  const pelletOn = () => !!(state && state.pellet);
+  // ...and the pips, in fractions of the berry's width from its middle — five of them, no two in a row, so the face
+  // reads as scattered rather than as a pattern.
+  const PELLET_PIPS = [[-0.26, -0.15], [0.22, -0.20], [0.02, 0.03], [-0.20, 0.21], [0.24, 0.17]];
+  function drawPellet(c, r, ts) {
+    // Everything about how it LIES here is the coin's, read straight off COIN and worked out the way drawCoin works it
+    // out: the same width, the same float on the same clock, the same lazy rock, and the same stamped shadow held
+    // steady on the ground beneath it while it rises.
+    const x = (c + 0.5)*cell, y = (r + 0.5)*cell, w = cell*COIN.size, R = tileR(w), h = w/2;
+    const t = ts / COIN.floatMs;
+    const lift = (0.5 + 0.5*Math.sin(t)) * cell * COIN.float;
+    const tilt = Math.sin(t*0.8) * COIN.rock;
+    const ss = w * COIN.shadowK;
+    stampShadow(x, y + cell*COIN.shadowY, ss, COIN.shadowA, tileR(ss));
+    ctx.save();
+    ctx.translate(x, y - lift); ctx.rotate(tilt);
+    // THE TOP: a green tile across its shoulders, on its own edge, drawn first so the berry stands in front of it.
+    const lw = w*0.84, lh = w*0.30, ly = -h - lh*0.34;
+    extrude(ctx, lh, PELLET.leafEdge, (dx, dy) => { rrect(-lw/2 + dx, ly + dy, lw, lh, tileR(lh)); ctx.fill(); });
+    ctx.fillStyle = PELLET.leaf;
+    rrect(-lw/2, ly, lw, lh, tileR(lh)); ctx.fill();
+    // THE BERRY: one square red tile on the edge it sits on — the coin's own extrusion, in the berry's darker red.
+    extrude(ctx, w, PELLET.edge, (dx, dy) => { rrect(-h + dx, -h + dy, w, w, R); ctx.fill(); });
+    ctx.fillStyle = PELLET.body;
+    rrect(-h, -h, w, w, R); ctx.fill();
+    ctx.save();
+    rrect(-h, -h, w, w, R); ctx.clip();                            // ...the PIPS, kept on the face
+    ctx.fillStyle = PELLET.seed;
+    const sd = Math.max(1, w*0.13);
+    for (const [px, py] of PELLET_PIPS) { rrect(px*w - sd/2, py*w - sd/2, sd, sd, tileR(sd)); ctx.fill(); }
+    ctx.restore();
+    ctx.restore();
+    // ...and the catch of light, upright whatever the berry is doing, as the coin's is.
+    drawSpark(ctx, x, y - lift - h*0.9, w*0.72, ts, { col: PELLET.spark, seed: ((c*7 + r*3) % 97)/97 });
+  }
   // a collectible boost / slow token that bobs on its cell (grab it for a timed speed effect)
   function drawFxPickup(c, r, ts, kind) {
     const col = kind === "boost" ? pal("boost") : pal("slow");
@@ -24354,6 +24471,12 @@
       tickRestore(dt);
       tickPower(dt);
     }
+    // A POWER DIES WITH HIM. Any way the run stops being a run — caught by something, fallen off the end, swallowed by
+    // the ground — the pellet goes with it THAT FRAME: the screen comes back the right way round, his pace drops and
+    // the board picks its own up again. Tested on the status rather than hooked into each of the ways he can die, so
+    // there is no death left to forget about; a pause keeps it, because `paused` is not a status and he is still in the
+    // middle of his run. It sits here, before the frame is painted, so the fall is never drawn inside out.
+    if (state.pellet && state.status !== "play") state.pellet = null;
     updateCamera(dt);
     draw(state.crunch ? state.crunch.ts : ts);   // a caught board is a still frame, bobs and all
     if (paused) drawPausedOverlay();
@@ -24728,10 +24851,17 @@
     if (s.beat == null) s.beat = 0;
     let adv = dt / pace;
     if (s.status === "play" && s.begun && (s.liveFactor || 0) > 0 && s.path && s.path.length) {
-      adv *= s.liveFactor;                                   // his own step this frame (update: runT += dt/msPerCell*factor)
-      let err = (s.runIdx + s.runT - 0.5 - (s.beat + adv)) % 1;   // ...and how far off his clearing it still is
-      if (err > 0.5) err -= 1; else if (err <= -0.5) err += 1;
-      adv += Math.abs(err) < 0.002 ? err : err * Math.min(1, dt / (pace * 0.25));   // most of it inside a beat; the last hair closed outright: exact
+      // The BOARD'S factor, not his — see beatFactor. With a pellet in him the two are deliberately different.
+      adv *= (s.beatFactor != null ? s.beatFactor : s.liveFactor);
+      // ...and the beat is otherwise LOCKED to his tile clearing. Not while a pellet is up: the lock exists to keep the
+      // monsters stepping as he clears, and holding it while he is running at twice their pace would drag the whole
+      // board up to him — which is the one thing the pellet is not meant to do. It re-locks when the pellet goes,
+      // easing in over a quarter beat exactly as it always has.
+      if (!s.pellet) {
+        let err = (s.runIdx + s.runT - 0.5 - (s.beat + adv)) % 1;   // ...and how far off his clearing it still is
+        if (err > 0.5) err -= 1; else if (err <= -0.5) err += 1;
+        adv += Math.abs(err) < 0.002 ? err : err * Math.min(1, dt / (pace * 0.25));   // most of it inside a beat; the last hair closed outright: exact
+      }
     }
     s.beat += Math.max(0, adv);
   }
@@ -25046,7 +25176,7 @@
       const rp = visualAt(s.runIdx + s.runT);
       const rcx = Math.floor(rp.x/cell), rcy = Math.floor(rp.y/cell);
       const runCX = rp.x/cell, runCY = rp.y/cell;                   // runner centre in cell units
-      let struck = false, prox = 0;
+      let struck = false, eaten = false, prox = 0;
       const shielded = powerActive("star");                        // the Star: hazards can't touch him
       // Contact is BOX against BOX, at the positions the two are actually DRAWN — see HITBOX,
       // which defines both and is tuned in hitbox-lab.html. It used to ask only whether the two
@@ -25065,8 +25195,12 @@
         const mb = monsterBox(h);
         // Saws, and anything else with no drawn centre, keep the cell test they always had.
         const hit = mb ? boxHit(rb, mb) : (h.cc === rcx && h.cr === rcy);
-        if (hit) struck = true;
+        // ...and with a pellet in him the same touch means the opposite thing: it is the MONSTER that comes apart.
+        // Collected rather than acted on here, so one call unmakes everything he is touching at once — the Bell's own
+        // routine, which already knows about bosses, hearts, butterflies and the tally.
+        if (hit) { if (pelletOn()) eaten = true; else struck = true; }
       }
+      if (eaten) unmakeMonsters(PELLET.reach, PELLET.col);
       if (struck) startCrunch();                    // struck — the board stops, then he goes down
     }
   }
@@ -25123,14 +25257,19 @@
     }
     // Ties are broken at random rather than by the order of DIRS, or a monster coming at him
     // diagonally would spend its whole approach on one axis before turning.
-    let best = [], bd = Infinity;
+    // ...and while a PELLET is up the whole sum runs the other way: the same flood, the same distances, and it takes the
+    // neighbour FURTHEST from him instead of the nearest. Nothing else about the chase changes — it is one comparison —
+    // which is why a fleeing hunter still rows, still turns corners, and still has to get round a wall to do it.
+    const flee = pelletOn();
+    let best = [], bd = flee ? -Infinity : Infinity;
     for (const [dc, dr] of DIRS) {
       const c = from[0] + dc, r = from[1] + dr;
       if (!open(c, r)) continue;
       if (taken && taken.has(key(c, r))) continue;      // another hunter has that square
       const d = dist.get(key(c, r));
-      if (d == null || d > bd) continue;
-      if (d < bd) { bd = d; best = []; }
+      if (d == null) continue;
+      if (flee ? d < bd : d > bd) continue;
+      if (flee ? d > bd : d < bd) { bd = d; best = []; }
       best.push([c, r]);
     }
     return best.length ? best[Math.floor(Math.random() * best.length)] : null;
