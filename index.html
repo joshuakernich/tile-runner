@@ -335,6 +335,14 @@
   #power .pw.spent canvas { animation:none !important; filter:none !important; }
   /* armed and waiting to be aimed (the Hammer) */
   #power .pw.armed canvas:not(.pw-spark) { filter:drop-shadow(0 0 6px var(--goal)); }
+  /* ...and POINTED AT, while the Lodestone's guide is up: the guide's own green, pulsing, so the charm the words are
+     about is the one thing on the screen moving while everything else is held. Its own class rather than .armed's glow:
+     armed means "aim me", and this means "here I am". */
+  #power .pw.point canvas:not(.pw-spark) {
+    animation:pw-point 760ms ease-in-out infinite alternate; }
+  @keyframes pw-point {
+    from { filter:drop-shadow(0 0 3px #49d47c) drop-shadow(0 0  8px #49d47c); }
+    to   { filter:drop-shadow(0 0 8px #49d47c) drop-shadow(0 0 20px #49d47c); } }
   /* ...and a charm AT WORK burns, in its own colour. --tal-col is set on the button from the
      same talFace the badge is painted with, so a charm cannot glow a colour it is not. After
      .armed on purpose: a Hammer that has been thrown is working, not waiting.
@@ -5258,7 +5266,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.80";                    // shown on the title & pause screens
+  const VERSION = "v10.81";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -7335,6 +7343,8 @@
       guides: (L.guides || []).slice(),     // the instructions this level writes on the board — see GUIDE
       guide: null, guideClears: 0,          // ...the one up now, and how many tiles have cleared so far
       guidesOff: false,                     // ...and whether they have been waved off for this attempt (guideOnDrop)
+      lodeShown: false,                     // the Lodestone's guide: whether it has been offered this attempt...
+      lodeUsedShown: false,                 // ...and whether the word about a spent one has been said
       // The Ankh used to have to be pressed BEFORE you fell, which meant arming it on the off
       // chance and spending it on a level you would have cleared anyway. It is a second chance,
       // so it is offered at the moment you need one: fall with an unspent Ankh and the rack
@@ -7409,6 +7419,12 @@
           }
           if (K.move === "trap") {
             return { ...base, c:h.c, r:h.r, cc:h.c, cr:h.r, trapOff: Math.round((h.phase||0)*TRAP_CYCLE) % TRAP_CYCLE, trapT: Math.round((h.phase||0)*TRAP_CYCLE) % TRAP_CYCLE,
+                     wx:(h.c+0.5)*CW, wy:(h.r+0.5)*CW };
+          }
+          // Still: it has a cell and nothing else. No rail to ping-pong along, no path to walk, no chase — the branch
+          // exists so it does not fall through to the path builder below and get given a route it will never take.
+          if (K.move === "still") {
+            return { ...base, c:h.c, r:h.r, cc:h.c, cr:h.r, rowT:0, rowP:0,
                      wx:(h.c+0.5)*CW, wy:(h.r+0.5)*CW };
           }
           if (K.move === "hunt") {
@@ -7980,7 +7996,10 @@
     // EVERY KIND OF MONSTER gets its card the first time it turns up, whatever the level's own list says — the seen set
     // is what keeps it to once. The rail pair (and the walker) share the flying menace's card.
     const MON_CARD = { hrail: "monster", vrail: "monster", patrol: "monster", square: "square",
-                       hunter: "hunter", wander: "hunter", stealth: "stealth", golem: "golem", trap: "trap" };
+                       hunter: "hunter", wander: "hunter", stealth: "stealth", golem: "golem", trap: "trap",
+                       // ...and the still one gets a card of its own. NOT "wall", which is the wall TILE's card and a
+                       // different object entirely — one gets in your way, the other kills you for touching it.
+                       wall: "wallmon" };
     const monCards = [...new Set(mons.map(h => MON_CARD[h.variant] || "monster"))];
     // A prompt for something MECHS no longer explains is DROPPED here rather than handed to
     // showNextMech, which would read .name off undefined. Level 17's data still asks for a
@@ -8222,6 +8241,8 @@
     if (type==="hunter")   { demo(MONSTER_KINDS.hunter, rowP); return; }
     if (type==="golem")    { demo({ ...MONSTER_KINDS.golem, hp: 2, vi: 0, gi: 0 }, rowP); return; }   // tapped once already
     if (type==="square")   { demo(MONSTER_KINDS.square, rowP); return; }
+    if (type==="wallmon")  { demo(MONSTER_KINDS.wall, 0); return; }   // still: its stroke held at the catch, spikes out
+
     if (type==="stealth")  {                  // seen on the thrust and gone by the recovery, as on the board (never quite gone here)
       const dv = SWIM.swim / swimCycle();
       const a = rowP < dv ? 0.60 - 0.22*(rowP/dv) : 0.02 + 0.36*Math.pow(1 - (rowP - dv)/(1 - dv), 3);
@@ -8853,8 +8874,13 @@
     flyMs:   1300,    // ...and away
     small:   0.25,    // its size once shrunk, in tiles across both wings
     flapMs:   200,    // one beat of the wings
-    travel:   3.2,    // how far away from him it gets, in tiles...
-    climb:    2.2,    // ...and how far up
+    travel:   1.4,    // how far its drift carries it from him, in tiles...
+    climb:    1.1,    // ...and how far up. EASED OUT, so it settles into its flit rather than escaping: it used to
+                      //    accelerate off over three tiles and be gone, which is a thing leaving rather than a thing
+                      //    set free — and half the time it left the screen before you had seen what it was.
+    roam:     0.90,   // ...and the wander it flits through on top of that, in tiles
+    roamMs: [760, 520], // ...its two periods, across and up — different, so the path never closes on itself
+    edge:     0.60,   // how near the edge of the view it is allowed, in tiles
     wobble:   0.35,   // the flit's side to side, radians
     fade:     0.35,   // the last share of the flight it fades over
     trail:    0.50,   // its glitter trail, as a share of the talismans' length
@@ -8865,11 +8891,21 @@
   function butterflyAt(f, t) {
     const B = BUTTERFLY, t1 = B.flashMs, t2 = t1 + B.shrinkMs, t3 = t2 + B.pauseMs, big = f.size || MONSTER.size;
     const ks = t < t1 ? 0 : Math.min(1, (t - t1) / B.shrinkMs), es = 1 - Math.pow(1 - ks, 3);   // the shrink, fast off
-    const kf = t < t3 ? 0 : Math.min(1, (t - t3) / B.flyMs), ef = kf*kf;                      // the flight, eased in
-    const wob = Math.sin(t/140 + (f.seed || 0)) * B.wobble * kf;
-    return { x: f.x + Math.cos(f.ang + wob) * cell * B.travel * ef,
-             y: f.y + Math.sin(f.ang + wob) * cell * B.travel * ef - cell * B.climb * ef,
-             W: cell * (big + (B.small - big) * es), ks, kf,
+    const kf = t < t3 ? 0 : Math.min(1, (t - t3) / B.flyMs), ef = 1 - (1 - kf)*(1 - kf);      // the drift, eased OUT
+    const wob = Math.sin(t/140 + (f.seed || 0)) * B.wobble * kf, sd = f.seed || 0;
+    let x = f.x + Math.cos(f.ang + wob) * cell * B.travel * ef + Math.sin(t/B.roamMs[0] + sd*3) * cell * B.roam * kf;
+    let y = f.y + Math.sin(f.ang + wob) * cell * B.travel * ef - cell * B.climb * ef
+                + Math.cos(t/B.roamMs[1] + sd*5) * cell * B.roam * 0.6 * kf;
+    // ...AND IT STAYS ON SCREEN. Held inside the view it was freed in — caught once, at the moment the Bell took it
+    // (f.view) — rather than the view the camera has now: this is a pure function of t, and its glitter trail asks it
+    // where the butterfly WAS, so a bound that moved with the camera would drag the whole trail along with it.
+    const V = f.view;
+    if (V) {
+      const m = cell * B.edge;
+      x = Math.max(V.x + m, Math.min(V.x + V.w - m, x));
+      y = Math.max(V.y + m, Math.min(V.y + V.h - m, y));
+    }
+    return { x, y, W: cell * (big + (B.small - big) * es), ks, kf,
              A: kf < 1 - B.fade ? 1 : Math.max(0, (1 - kf) / B.fade) };
   }
   let _butterflySang = -1e9;
@@ -11613,7 +11649,8 @@
       const dark = (0.2126*rgb[0] + 0.7152*rgb[1] + 0.0722*rgb[2]) / 255 < 0.12;
       s.butterflies.push({ x: h.wx, y: h.wy, t: 0, col: dark ? (K.eye || col) : (K.body || col),
                            size: (K.move === "rail" || K.look === "rail") ? SWIM.size : MONSTER.size,   // his own size
-                           ang: Math.atan2(h.wy - rp.y, h.wx - rp.x), seed: Math.random() * 1000 });
+                           ang: Math.atan2(h.wy - rp.y, h.wx - rp.x), seed: Math.random() * 1000,
+                           view: { x: camX, y: camY, w: viewW, h: viewH } });   // ...the screen it must stay inside
     }
     s.hazards = s.hazards.filter(h => !doomed.includes(h));
     markOccDirty();                     // a blocking monster gone means the cell opens up
@@ -11923,10 +11960,21 @@
     tapRow: 0.125,  // ...and TAP ME in the square after it: centred on the middle of its top quarter, down from its top
     ink:    "#49d47c",  // the arrow, the ghost tile and the words: the rainbow's green (DONE_GREEN)
     bow:    0.28,   // how far the arrow bows off the straight line, as a share of its length
+    // THE LODESTONE'S OWN. This one does not point at the board at all: it points at the charm down in the footer, which
+    // is a button in the DOM rather than anything drawn — so the highlight is a class on it and the words are painted on
+    // the canvas over where it stands (see drawGuideLode).
+    lodeNear: 2,      // how near a coin has to be before the charm is worth offering, in tiles
+    lodeHold: 2000,   // ...and how long the word about a spent one stands before play resumes
+    lodeRise: 0.55,   // how far above the charm the words sit, in tiles
   };
   // Where the tile has to go: the flag, or the cell straight on from the front of the track (a turn if that is shut).
+  const lodeBtn = () => (typeof powerEl !== "undefined" && powerEl) ? powerEl.querySelector('.pw[data-tal="magnet"]') : null;
+  const lodeKey = (g) => !!g && (g.key === "lode" || g.key === "lode2");
   function guideTarget(g) {
     const s = state;
+    // The Lodestone's guide is about a button, not a square. It has somewhere to be for as long as that button is on the
+    // rack, which is what the caller is really asking.
+    if (lodeKey(g)) return lodeBtn();
     if (g.key === "tap" || g.key === "tap2") {     // the square it picked, for as long as that is still a way on
       const lead = leadNode();
       return g.at && lead && junctionExits(lead.n, lead.prev).some(e => e.c === g.at.c && e.r === g.at.r) ? g.at : null;
@@ -11964,6 +12012,7 @@
     // the whole case this has to answer: it used to return here, so going your own way was the one thing the guide
     // could not see.
     const g = state.guide; if (!g || g.done) return;
+    if (lodeKey(g)) return;      // it is not about a square, and laying a tile is not ignoring it
     // WENT THEIR OWN WAY. A tile put down somewhere other than the square being pointed at is an answer: they have
     // seen it and they are playing their own game. So the guide lets go of this one AND stops offering more for the
     // rest of the attempt — being shown the same thing a third time after ignoring it twice is nagging, not
@@ -11975,9 +12024,44 @@
     if (want && !(pos.c === want.c && pos.r === want.r)) state.guidesOff = true;
   }
   // His pace, and the guide's own clocks. Called from update(), so it all holds still under a pause.
+  // THE LODESTONE, OFFERED. A level that lists it waits until there is a coin close enough to be worth pulling in —
+  // GUIDE.lodeNear tiles — and then holds everything and points at the charm in the footer. Once it has been spent and
+  // gone grey it holds everything once more to say the one thing about it that matters, and lets go on its own.
+  // Both phases are per ATTEMPT, like the rest of the guides: a retry teaches again.
+  function guideLodeCheck() {
+    const s = state;
+    if (s.status !== "play" || s.guidesOff || !s.guides || !s.guides.includes("lodestone")) return;
+    if (s.guide && !s.guide.done) return;
+    const b = lodeBtn(); if (!b) return;
+    const spent = b.classList.contains("spent");
+    const raise = (key) => { s.guide = { key, t: 0, k: s.guide ? s.guide.k : 0, done: false, doneT: 0 }; };
+    if (!s.lodeShown) {
+      if (spent) { s.lodeShown = true; return; }            // used before we ever got to offer it: say nothing
+      const rp = visualAt(s.runIdx + s.runT);
+      let near = false;
+      for (const ck of s.coinCells) {
+        const i = ck.indexOf(","), c = +ck.slice(0, i), r = +ck.slice(i + 1);
+        if (Math.hypot(rp.x - (c + 0.5)*cell, rp.y - (r + 0.5)*cell) <= cell*GUIDE.lodeNear) { near = true; break; }
+      }
+      if (!near) return;
+      s.lodeShown = true; raise("lode");
+    } else if (!s.lodeUsedShown && spent) {
+      s.lodeUsedShown = true; raise("lode2");
+    }
+  }
   function guidePace(dt) {
-    const g = state.guide; if (!g) return 1;
+    guideLodeCheck();
+    const g = state.guide;
+    // The charm itself is lit while either of its two phases is up, and only then — a class on the button, because the
+    // rack is DOM and nothing on the canvas can reach it.
+    const lb = lodeBtn();
+    if (lb) lb.classList.toggle("point", !!(g && !g.done && lodeKey(g)));
+    if (!g) return 1;
     g.t += dt;
+    // The invitation is ANSWERED by the charm going grey — that is what a tap on it does. The word about a spent one
+    // answers to nothing but the clock: it stands its two seconds and lets play resume.
+    if (!g.done && g.key === "lode" && lodeBtn() && lodeBtn().classList.contains("spent")) g.done = true;
+    if (!g.done && g.key === "lode2" && g.t >= GUIDE.lodeHold) g.done = true;
     if (!g.done && !guideTarget(g)) g.done = true;          // nowhere left to go (the track closed, say): let it go
     if (!g.done && g.key === "tap2" && g.at && state.queued &&  // ...and a tap on the second square with no tile free yet
         state.queued.c === g.at.c && state.queued.r === g.at.r) g.done = true;   //    is the answer: the tile comes when one frees
@@ -12064,11 +12148,40 @@
     }
     ctx.restore();
   }
+  // THE WORDS OVER THE CHARM. The rack is DOM and sits over the canvas, so where to put them is asked of the button
+  // itself (its rect against the canvas's) and then carried into the board's own frame — the camera's translate is in
+  // force here, so a screen point is a world point plus the camera. The charm's highlight is a class (see guidePace);
+  // this is only the writing, in the guide's green, in the same body type every other guide uses.
+  function drawGuideLode(A, key, ts) {
+    const b = lodeBtn(); if (!b) return;
+    const cr = canvas.getBoundingClientRect(), br = b.getBoundingClientRect();
+    if (!(br.width > 0)) return;
+    const sx = br.left + br.width/2 - cr.left, sy = br.top - cr.top;
+    const x = sx + Math.round(camX), y = sy + Math.round(camY) - cell*GUIDE.lodeRise;
+    const word = String((key === "lode2" ? COPY.guideLodeUsed : COPY.guideTapMe) || "");
+    if (!word) return;
+    const bt = bylineType();
+    let fp = bt.px, ls = parseFloat(bt.ls) || 0;
+    const setType = () => { ctx.font = bt.weight + " " + fp + "px " + UI_FONT; ctx.letterSpacing = ls + "px"; };
+    ctx.save();
+    ctx.globalAlpha = A;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = GUIDE.ink;
+    setType();
+    const maxW = cell*2.6;                                  // ...never wider than the rack it stands over
+    if (ctx.measureText(word).width > maxW) { ls = Math.min(ls, 1); setType(); }
+    const ww = ctx.measureText(word).width;
+    if (ww > maxW) { fp = Math.max(7, Math.floor(fp * maxW / ww)); setType(); }
+    headGlowUnder(() => { ctx.fillStyle = "#000"; ctx.fillText(word, x + ls/2, y + inkNudge(ctx.font)); });
+    ctx.fillStyle = GUIDE.ink;
+    ctx.fillText(word, x + ls/2, y + inkNudge(ctx.font));
+    ctx.restore();
+  }
   function drawGuide(ts) {
     const g = state.guide; if (!g || win) return;
     const to = (g.key === "tap" || g.key === "tap2") ? g.at : guideTarget(g); if (!to) return;
     const A = Math.min(1, g.t / GUIDE.inMs) * (g.done ? Math.max(0, 1 - g.doneT / GUIDE.outMs) : 1);
     if (A <= 0.01) return;
+    if (lodeKey(g)) { drawGuideLode(A, g.key, ts); return; }
     if (g.key === "tap" || g.key === "tap2") { drawGuideTap(to, A, g.key, ts); return; }
     const t = g.tile;
     // IT STAYS UP WHILE YOU CARRY IT. Vanishing the moment the tile left its square took the instruction away at the
@@ -17474,11 +17587,15 @@
     return { x, y: P.top, w, h: P.h, midY: P.top + P.h/2, iconX: x + padX, iconW: cw, textX: x + padX + cw + gap, num, font };
   }
   // One butterfly as the HUD draws it: its two half-tiles, open, in its own colour — the same body drawButterflies flies.
+  // ONE PHASE OF THE FLAP, not the wings laid flat. Two full half-tiles side by side is a tile with a line down it; the
+  // same two squeezed toward the hinge is a butterfly, and it is the shape the board's own butterflies pass through on
+  // every beat (see drawButterflies, whose `open` this is a fixed value of).
+  const FLY_ICON_OPEN = 0.55;
   function hudFly(x, y, w, col) {
     ctx.save(); ctx.translate(x, y);
     ctx.fillStyle = col;
     for (const side of [-1, 1]) {
-      ctx.save(); ctx.scale(side, 1);
+      ctx.save(); ctx.scale(side * FLY_ICON_OPEN, 1);
       ctx.beginPath(); ctx.rect(0, -w/2, w/2 + 1, w); ctx.clip();
       rrect(-w/2, -w/2, w, w, tileR(w)); ctx.fill();
       ctx.restore();
@@ -17920,15 +18037,26 @@
     ctx.restore();
   }
 
+  // Its SHADOW and its SPARK are the coin's: the same stamped square silhouette at the coin's opacity and its offset
+  // below the middle (COIN.shadowA / shadowY), and the game's standard spark on the bow's top corner in the key's own
+  // colour. A key lying on the board is the same kind of object as a coin lying on it, and it was the one pickup with
+  // nothing under it and no catch of light on it.
+  const KEY_SHADOW = 0.44;    // the shadow's width, against the key's own
+  const KEY_SPARK  = 0.34;    // ...and the spark's
   function drawKey(x, y, ts, color) {
     color = color || "#ffd24a";
     const s = cell*0.85, bob = Math.sin(ts/300)*s*0.05;   // a little smaller
+    const gy = y;                                         // the ground it floats over, before the bob
     y += bob;
+    // THE POOL IT FLOATS OVER, the coin's own (stampShadow, at COIN.shadowA and its offset). It used to sit on a soft
+    // square of its own colour — a box behind it, the width of the cell, which was doing the work of saying "a thing is
+    // here" and doing it by putting a lid on the ground. The shadow says the same thing by lifting the key off it.
+    // Held STEADY through the bob, like the coin's: the float is told by the key rising, and a shadow breathing under it
+    // as well is two ways of saying one thing.
+    const ss = s*KEY_SHADOW;
+    stampShadow(x, gy + cell*COIN.shadowY, ss, COIN.shadowA, tileR(ss));
     ctx.save();
-    // SQUARE, every corner of it — no circles: the glow, the bow and its hole are squares like everything else here.
-    ctx.globalAlpha = 0.28; ctx.fillStyle = color;                                   // soft glow
-    ctx.fillRect(x - s*0.4, y - s*0.4, s*0.8, s*0.8);
-    ctx.globalAlpha = 1;
+    // SQUARE, every corner of it — no circles: the bow and its hole are squares like everything else here.
     const R = s*0.12, bx = x - s*0.10, hr = R*0.46;
     ctx.fillStyle = color;                                                           // bow drawn as a true ring:
     ctx.beginPath();
@@ -17940,6 +18068,7 @@
     ctx.fillRect(sx0, y - s*0.028, sl, s*0.056);                                     // shaft
     ctx.fillRect(tipX - tw, y + s*0.012, tw, th);                                     // teeth — near the tip
     ctx.fillRect(tipX - tw - s*0.07, y + s*0.012, tw, th);
+    drawSpark(ctx, bx + R, y - R, s*KEY_SPARK, ts, { col: color, seed: 0.37 });        // ...and the catch of light on its bow
     ctx.restore();
   }
 
@@ -18167,7 +18296,22 @@
           : chompPhase();                               // open on one beat, shut on the next
         // A roamer's banks and eyes follow whichever way it is currently swimming, so its
         // kind's fixed `split` is overridden with the heading it last actually moved on.
-        const KD0 = (K.look === "rail" && h.headSplit) ? { ...K, split: h.headSplit } : K;
+        // The plain rails carry `move:"rail"` and no `look`, so a test on `look` alone never reached them — which is why
+        // they were the one family whose eyes never looked ahead however carefully the mover set them.
+        // Where the eyes are ACTUALLY looking, eased toward where they have been told to look (EYE_GLIDE_MS). Kept as a
+        // little vector on the hazard rather than as an axis and a sign, because the whole point is the ground between
+        // the two — a pair of eyes halfway round to a corner is not facing either way.
+        if (K.look === "rail" || K.move === "rail") {
+          const es = h.eyeSplit || h.headSplit || K.split;
+          const ed = h.eyeDir != null ? h.eyeDir : (h.headDir || h.faceX || 1), sg = ed < 0 ? -1 : 1;
+          const tx = es === "v" ? 0 : sg, ty = es === "v" ? sg : 0;
+          if (h.eyeX == null) { h.eyeX = tx; h.eyeY = ty; }
+          const k = Math.min(1, Math.max(0, ts - (h._eyeTs == null ? ts : h._eyeTs)) / EYE_GLIDE_MS);
+          h._eyeTs = ts;
+          h.eyeX += (tx - h.eyeX) * k; h.eyeY += (ty - h.eyeY) * k;
+        }
+        const KD0 = ((K.look === "rail" || K.move === "rail") && (h.headSplit || h.eyeSplit))
+          ? { ...K, split: h.headSplit || K.split, eyeX: h.eyeX, eyeY: h.eyeY } : K;
         const KD = K.stone ? { ...KD0, hp: h.hp, hit: h.hit || 0, vi: h.vi, gi: h.gi } : KD0;   // a golem's cracks are its own
         const dirN = (K.look === "rail" && h.headDir) ? h.headDir : h.faceX;
         // The trap's tremble. Two sines well apart in frequency and neither a factor of the
@@ -18370,6 +18514,14 @@
   // every other shadow on this board falls and a monster lit from a different sun than the wall beside it reads as
   // a mistake. The rim is the one thing it does differently: a white inside its TOP edge — the whole animal's top
   // edge, oars and all — so it has a lit side and a dark side rather than being a flat sticker.
+  // HOW FAR OUT a path walker looks round its corner, in TILES of the leg it is on. A whole tile was still too much:
+  // a leg is several tiles and the corner is a moment, so a tile of warning had it facing the turn for a good part of
+  // the run up to it. Half a tile is a glance, which is what anticipation looks like.
+  const PATH_EYE_LEAD = 0.5;
+  // ...and how long the eyes take to GET there. eyeSplit/eyeDir name the direction they are meant to be looking; the
+  // pair themselves are eased toward it rather than cut to it, so a change of mind reads as a look rather than as a
+  // jump. Short enough to still land before the turn it is anticipating.
+  const EYE_GLIDE_MS = 240;
   const MONSTER_LIGHT = {
     ambBlur: 0.10,   // the soft dark all round, blur in tiles     (WALL_SHADOW.around)
     ambA:    0.20,   // ...and how dark
@@ -18379,8 +18531,9 @@
     rim:     0.016,  // the white inside the top edge: how far in it reaches, in tiles
     rimSoft: 1.00,   // ...how soft, as a share of that reach. 1 is a blur as wide as the light, which is a glow with
                      // no hard inside edge to it; well under 1 is a LINE with a definite inside. (It was 0.45, a line.)
-    rimA:    0.60,   // ...and how strong where it meets the edge — down from 0.78 with the softening, so the wider glow
-                     // does not come out brighter overall than the line it replaced.
+    rimA:    0.38,   // ...and how strong where it meets the edge. 0.78 when it was a hard line, 0.60 when it first went
+                     // soft, and this: at a full-width blur the old figures still read as a lit rim drawn ON the animal
+                     // rather than as light falling across it, which is what a highlight is meant to be.
   };
   // The shadow a monster throws. `paint` lays the silhouette down; it is drawn a long way off so only the shadow
   // comes back, carried through whatever transform the animal is under. The DROP is added in device pixels, which
@@ -18565,6 +18718,14 @@
               body:"#574d38", eye:"#574d38", stone:true },
     trap:   { move:"trap",   split:"h", body:"#f1645f",                   // sits still and waits
               gap: 1.30 },                                               // ...yawning a tile wide
+    // THE WALL THAT BITES. The same animal as the rail pair — the same head, the same banks of oars on every face
+    // (`banks:"all"`) — and it never rows: `move:"still"` keeps it where the level put it and its stroke at the catch,
+    // so the spikes stand out all round and stay there. It is painted as the level's masonry is painted (`wall:true`:
+    // the steel plate's own gradient under the family's grain and inscribed panel — see paintWallInto), in the wall's
+    // own ink, so at a glance it is a piece of the wall. The eyes are the only thing that says otherwise, and they are
+    // in the fall's own red because a face in this body's colour would not be a face at all.
+    wall:   { move:"still", look:"rail", banks:"all", split:"h",
+              body:"#3a2a55", wall:true },     // ...and no `eye`: it takes the plate's own face, as a wall's do
     // ---- THE BOSSES ---------------------------------------------------------------------------------------------
     // Four tiles of animal. `big` is how many cells it covers each way, and it is the whole of what makes one: a boss is
     // drawn at that many cells across, its body sits on the CORNER between its cells rather than in the middle of one (so
@@ -18807,7 +18968,10 @@
     // ...and what it throws on the quilt, under everything it is about to draw of itself. The body alone: the oars
     // are spikes a few pixels across and a shadow that tried to follow them reads as a smudge, not as an animal.
     monsterShadow(() => { rrect(-h, -h, S, S, R); ctx.fill(); });
-    ctx.fillStyle = body;                  // teeth in his own colour: oars, not a cog
+    // Teeth in his own colour: oars, not a cog. ...and a WALL monster's are cut from the same sheet its head is — the
+    // plate's own gradient, laid out on the head's box so the shading runs straight on through them. Its ink alone left
+    // a ring of flat purple spikes round a grey plate, which read as two objects stuck together.
+    ctx.fillStyle = K.wall ? plateGrad(ctx, -h, -h, S) : body;
     // Two banks of oars, stroking together. Only the AXIS differs between the two kinds: a
     // vertical mover carries its banks down the left and right sides and strokes them up and
     // down, a horizontal one carries them along the top and bottom and strokes them side to
@@ -18880,7 +19044,10 @@
     if (K.banks === "all") bank(!vert, 0);
     if (K.stone) drawGolemBody(h, S, R, K, ts);                    // a golem: the stone tile, over the tooth roots
     else {
-    ctx.fillStyle = body; rrect(-h, -h, S, S, R); ctx.fill();     // the tile, over the tooth roots
+    // ...and the head over the tooth roots. A WALL monster takes the wall's own steel plate here instead of a flat
+    // colour — the same plateGrad paintWallInto lays down — and the family's grain and panel below do the rest.
+    ctx.fillStyle = K.wall ? plateGrad(ctx, -h, -h, S) : body;
+    rrect(-h, -h, S, S, R); ctx.fill();
     ctx.save(); rrect(-h, -h, S, S, R); ctx.clip();
     grainFill(-h, -h, S, S, MONSTER.grain);
     ctx.restore();
@@ -18902,7 +19069,19 @@
     // runs along x, which is his line of travel but not the vertical mover's, so a vertical
     // one is given no bias and simply carries its eyes up or down the panel.
     const lead = S * MONSTER.railEyeLead * sgn;
-    drawEyes(ctx, vert ? 0 : lead, vert ? lead : 0, s, eye, vert ? 0 : sgn, ts, 0);
+    // ...and they look ONE MOVE FURTHER than the body is going. While a stroke is carrying it into the next tile, the
+    // eyes are already on the tile after that (eyeSplit / eyeDir, set where each mover works out its route) — so the
+    // animal reads as heading somewhere rather than as facing the square it has already decided on. Falls back to the
+    // body's own heading for anything that has not said otherwise.
+    // ...as a VECTOR, so it can sit anywhere between two headings while it glides (drawHazards eases it). Anything that
+    // has not been given one falls back to the body's own heading, cut to the axis as before.
+    const ex = K.eyeX != null ? K.eyeX : (vert ? 0 : sgn);
+    const ey = K.eyeY != null ? K.eyeY : (vert ? sgn : 0);
+    // A WALL monster's eyes are a WALL'S eyes: no colour of their own, taking the plate's face at that height exactly
+    // as the rivets and the wall tile's own pair do (WALL_EYES, drawWallEyes). Built here rather than up top, in the
+    // frame it is actually filled in — a gradient is placed by the transform in force when it is used.
+    drawEyes(ctx, ex * S * MONSTER.railEyeLead, ey * S * MONSTER.railEyeLead, s,
+             K.wall ? plateGrad(ctx, -h, -h, S) : eye, ex, ts, 0);
     ctx.restore();
   }
   // A BOSS IS THE SAME ANIMAL, TWICE THE SIZE. Everything below draws one cell's worth; this stands it on the corner
@@ -19910,11 +20089,16 @@
     const x = cx(c)+cell*0.5, y = cy(r)+cell*0.5, s = cell*0.5;
     ctx.save();
     // striped, colour-matched barrier filling the tile while still locked; clears once the key is collected
+    // THE BARRIER BEHIND IT, on the cell's own EIGHTH GRID: the tile divided eight by eight, the outermost ring of
+    // squares left clear, and the six by six inside them carrying the stripes. It used to be a rounded plate very
+    // nearly the whole cell across — which read as a tile laid on the board rather than as something painted on the
+    // ground under the lock, and touched every neighbour it had. A ring of clear ground round it is what makes it
+    // ground: the hazard is INSIDE the square, and the square is inside the cell.
     if (!open) {
-      const tx = cx(c), ty = cy(r);
+      const tx = cx(c), ty = cy(r), q = cell/8, ix = tx + q, iy = ty + q, iw = cell - 2*q;
       ctx.save();
-      rrect(tx + cell*0.05, ty + cell*0.05, cell*0.90, cell*0.90, tileR(cell*0.90)); ctx.clip();
-      ctx.globalAlpha = 0.18; ctx.fillStyle = color; ctx.fillRect(tx, ty, cell, cell);            // soft wash of the hue
+      ctx.beginPath(); ctx.rect(ix, iy, iw, iw); ctx.clip();
+      ctx.globalAlpha = 0.18; ctx.fillStyle = color; ctx.fillRect(ix, iy, iw, iw);                 // soft wash of the hue
       ctx.globalAlpha = 0.5;  ctx.strokeStyle = color; ctx.lineWidth = cell*0.16; ctx.lineCap = "butt";
       const step = cell*0.34, drift = (ts/45) % step;                                             // slow barber-pole drift
       ctx.beginPath();
@@ -19922,9 +20106,17 @@
       ctx.stroke();
       ctx.restore();
     }
+    // ...and the LOCK ITSELF gets what every other object lying on a cell gets: the coin's stamped pool under it and the
+    // game's standard spark on its shackle, in the door's own colour. On the padlock, not on the striped barrier behind
+    // it — the barrier is the ground here, and a shadow cast by the ground is a shadow cast by nothing.
+    const ls = s*LOCK_SHADOW;
+    stampShadow(x, y + cell*COIN.shadowY, ls, COIN.shadowA, tileR(ls));
     drawPadlock(x, y, s, color, open);
+    drawSpark(ctx, x + s*0.30, y - s*0.34, s*LOCK_SPARK, ts, { col: color, seed: 0.61 });
     ctx.restore();
   }
+  const LOCK_SHADOW = 0.80;   // the pool under a padlock, against the lock's own width
+  const LOCK_SPARK  = 0.52;   // ...and the catch of light on its shackle
   // THE padlock. One object in one colour — the door's colour — and the only one in the game:
   // the victory replay used to mark an opened door with a different lock entirely (drawLock, a
   // pale body on a dark plate under a pulsing red shackle), so the thing you had just watched
@@ -20850,14 +21042,12 @@
                  : fly ? Math.min(1, a*1.7)
                        : Math.min(1, a*(1.5 + 0.5*Math.sin(ts/300)));
       const lit = mine ? a + (want - a)*markPick : want;
-      // The SQUARE shrinks as the pool empties — half a tile with something to send, a quarter
-      // with nothing — while the band stays an eighth of a tile throughout. At a quarter the two
-      // outlines meet and there is no middle left, so the hint closes up into a small solid mark
-      // rather than filling in at full size. A ring is a target; this is a note of where the
-      // track can go, which is all it can honestly be while you have nothing to put there.
+      // The SQUARE shrinks as the pool empties — half a tile with something to send, an EIGHTH of one with nothing.
+      // At that size it is a dot rather than a ring: a ring is a target, and this is a note of where the track can go,
+      // which is all it can honestly be while you have nothing to put there.
       // ...and the chosen one is a whole tile, not a fraction of one. The rest of the scale is
       // about how much you have to put there; this one is about the tile that is coming.
-      const base = cell*(0.125 + 0.125*markLive + 0.25*markGrow);
+      const base = cell*(0.0625 + 0.1875*markLive + 0.25*markGrow);
       const os = mine ? base + (cell*0.5 - base)*markPick : base;
       if (os <= 0) continue;
       // GROWING INTO PLACE after its spark: the square from nothing, and the lead — which the race drew to the centre —
@@ -24566,6 +24756,20 @@
     for (const h of s.hazards) {
       if (h.kind === "monster") {
         const K = monKind(h);
+        // STILL, but not blind. Nothing about where it IS can change — but its banks and its eyes turn to face the
+        // runner: whichever axis he is further off on, and which way along it. So the spikes pointing at you are the
+        // ones you are about to walk onto, and the thing in the wall is looking at you. It is the whole of its
+        // animation, and it is the only part of a swimmer's machinery this one uses (headSplit / headDir, read by
+        // drawHazards exactly as a hunter's heading is).
+        if (K.move === "still") {
+          if (s.status === "play" && s.path && s.path.length) {
+            const rp = visualAt(s.runIdx + s.runT);
+            const dx = rp.x - h.wx, dy = rp.y - h.wy;
+            if (Math.abs(dx) >= Math.abs(dy)) { h.headSplit = "h"; h.headDir = dx < 0 ? -1 : 1; }
+            else                              { h.headSplit = "v"; h.headDir = dy < 0 ? -1 : 1; }
+          }
+          continue;                                 // ...and nothing else here applies to it
+        }
         if (K.move === "rail") {                    // the saw motion it replaces, now rowed
           // The leg is POSITIONED from its own stroke clock rather than accumulated: whole
           // strokes plus the closed-form progress through the part-stroke. That is what makes
@@ -24606,6 +24810,15 @@
           h.pos = p;
           if (h.axis === "h") { h.cc = Math.round(p); h.cr = h.r; h.faceX = h.dir; }
           else                { h.cc = h.c; h.cr = Math.round(p); h.faceX = h.dir; }
+          // ...and the EYES on the thrust AFTER this one. A rail's next move is the same way as this one until the leg
+          // it is on runs out, and then it is back the other way — so it turns its eyes round BEFORE it turns, which is
+          // the one moment in a lane's whole length where a rail has anything to tell you.
+          // A leg is taken in thrusts of `stride` tiles, and only the LAST of them has the turn after it — everything
+          // before it is followed by another thrust the same way. Reading the leg's end instead had it looking back
+          // over its shoulder for the whole length of the lane.
+          const thrusts = Math.max(1, Math.ceil(h.legTiles / S));
+          h.eyeSplit = h.axis === "h" ? "h" : "v";
+          h.eyeDir = (done >= thrusts - 1) ? -h.dir : h.dir;
           h.wx = (h.axis === "h" ? p : h.c)*cell + cell/2;
           h.wy = (h.axis === "h" ? h.r : p)*cell + cell/2;
           // One swish per stroke, keyed off the stroke counter the motion already keeps, so the
@@ -24722,6 +24935,12 @@
           const hdx = RB[0] - RA[0], hdy = RB[1] - RA[1];
           if (hdy !== 0)      { h.headSplit = "v"; h.headDir = hdy < 0 ? -1 : 1; }
           else if (hdx !== 0) { h.headSplit = "h"; h.headDir = hdx < 0 ? -1 : 1; }
+          // The eyes go one further down the route it has already planned: the step AFTER this one, while this one is
+          // still being taken. With nothing after it they simply look where the body is going.
+          const RC = R[i + 2];
+          const ndx = RC ? RC[0] - RB[0] : hdx, ndy = RC ? RC[1] - RB[1] : hdy;
+          if (ndy !== 0)      { h.eyeSplit = "v"; h.eyeDir = ndy < 0 ? -1 : 1; }
+          else if (ndx !== 0) { h.eyeSplit = "h"; h.eyeDir = ndx < 0 ? -1 : 1; }
           if (hdx !== 0) h.faceX = hdx < 0 ? -1 : 1;
           monsterNoise(h, dt);
           continue;
@@ -24792,6 +25011,21 @@
         const pdx = B[0] - A[0], pdy = B[1] - A[1];
         if (pdy !== 0)      { h.headSplit = "v"; h.headDir = pdy < 0 ? -1 : 1; }
         else if (pdx !== 0) { h.headSplit = "h"; h.headDir = pdx < 0 ? -1 : 1; }
+        // ...and the EYES on the LEG AFTER this one, taken the same way this leg's next waypoint is — round the loop, or
+        // ping-ponged back off the end of an open path. A walker that turns a corner is looking round it before it gets
+        // there, which is the whole point: you can see where it is going while it is still coming.
+        // ...only on the LAST TILE of the leg. A leg of a square loop is several tiles long, and looking round its far
+        // corner from the moment it sets off is not anticipation — it is facing the wrong way for most of the run and
+        // happening to be right at the end of it. So the eyes hold the body's heading until there is one tile left.
+        const segN = Math.max(1, Math.abs(pdx) + Math.abs(pdy));
+        if (h.segT >= (segN - PATH_EYE_LEAD) / segN) {
+          const nj = h.loop ? (ni + h.mdir + h.path.length) % h.path.length
+                            : Math.max(0, Math.min(h.path.length - 1, ni + (ni >= h.path.length - 1 ? -1 : ni <= 0 ? 1 : h.mdir)));
+          const C2 = h.path[nj] || B;
+          const edx = C2[0] - B[0], edy = C2[1] - B[1];
+          if (edy !== 0)      { h.eyeSplit = "v"; h.eyeDir = edy < 0 ? -1 : 1; }
+          else if (edx !== 0) { h.eyeSplit = "h"; h.eyeDir = edx < 0 ? -1 : 1; }
+        } else { h.eyeSplit = h.headSplit; h.eyeDir = h.headDir; }
         if (pdx !== 0) h.faceX = pdx < 0 ? -1 : 1;
         // The bite runs on the hazard's own clock so the crunch lands exactly as the jaws
         // meet. Volume falls off with distance and is silent past MONSTER.hear tiles — near

@@ -386,6 +386,7 @@
           <option value="trap">Trap</option>
         <option value="stealth">Stealth hunter</option>
         <option value="golem">Stone golem</option>
+        <option value="wall">Wall (still, spiked)</option>
         <option value="warden">BOSS · Warden (hunts)</option>
         <option value="leviathan">BOSS · Leviathan (rail)</option>
         <option value="maw">BOSS · Maw (bites)</option>
@@ -649,10 +650,12 @@ function toWorking(o){
 // place all six, and the colours are how you tell them apart on the board.
 // ...and the four BOSSES, which are the same animals at twice the size: each stands on FOUR cells — its own and the
 // three down and right of it — so placing one needs the room, and the map draws the square it claims.
-const MON_KINDS = ["hrail","vrail","patrol","square","hunter","trap","stealth","golem",
+const MON_KINDS = ["hrail","vrail","patrol","square","hunter","trap","stealth","golem","wall",
                    "warden","leviathan","maw","colossus"];
 const MON_COL = { hrail:"#c37ef1", vrail:"#4baff1", patrol:"#49d47c",      // the rainbow's colours, as the game's
                   square:"#f7933b", hunter:"#6b7192", trap:"#f1645f", stealth:"#cfd8ff", golem:"#b3a582",
+                  wall:"#5b4780",                                          // the masonry one — the wall's ink, lifted to read on the map
+
                   warden:"#f7933b", leviathan:"#4baff1", maw:"#f1645f", colossus:"#b3a582" };
 // how many cells across a kind is — a boss is two, everything else one
 const MON_BIG = { warden:2, leviathan:2, maw:2, colossus:2 };
@@ -842,7 +845,7 @@ function monCells(h){
     for (let dr = 0; dr < b; dr++) for (let dc = 0; dc < b; dc++) out.push([h.c + dc, h.r + dr]);
     return out;
   }
-  if (v==="hunter" || v==="stealth" || v==="golem" || v==="trap") return [[h.c,h.r]];
+  if (v==="hunter" || v==="stealth" || v==="golem" || v==="trap" || v==="wall") return [[h.c,h.r]];
   // The square loop is a ring of four corners. It used to fall through to the path branch
   // and come back EMPTY, which made it unhittable: you could not erase one, and nothing
   // could tell it was in the way.
@@ -1272,9 +1275,15 @@ function draw(){
       }
       ctx.restore();
       monsterIcon(x, y, col, "#12102a");
-    } else if (v==="hunter" || v==="stealth" || v==="golem" || v==="trap"){
+    } else if (v==="hunter" || v==="stealth" || v==="golem" || v==="trap" || v==="wall"){
       const [x,y]=centerOf(h.c,h.r);
-      if (v==="hunter" || v==="stealth" || v==="golem"){   // it goes wherever the runner is
+      if (v==="wall"){
+        // It never leaves its cell, so it is drawn as the cell: a square round the one it fills, and no reach of any
+        // kind — a dashed circle would be promising it can come and get you.
+        ctx.save(); ctx.strokeStyle=col; ctx.lineWidth=3;
+        ctx.strokeRect(x - CELL/2 + 3, y - CELL/2 + 3, CELL - 6, CELL - 6);
+        ctx.restore();
+      } else if (v==="hunter" || v==="stealth" || v==="golem"){   // it goes wherever the runner is
         ctx.save(); ctx.strokeStyle=col; ctx.globalAlpha=0.5; ctx.lineWidth=2;
         ctx.setLineDash([4,4]); ctx.beginPath(); ctx.arc(x,y,CELL*0.42,0,7); ctx.stroke();
         ctx.setLineDash([]); ctx.restore();
@@ -2394,9 +2403,18 @@ function reorder(from, to){
   const arr=allLevels();
   if(from<0||from>=arr.length||to<0||to>=arr.length) return;
   const openPayload = L ? arr.find(l=>l.n===L.n) : null;
+  // THE MAP STAYS PUT. A chapter's square on the Tileverse (`tv`) belongs to its SLOT, not to the level sitting in it:
+  // the cloud's shape is a thing you have arranged by hand, and dragging a level up the running order should change
+  // which chapter a square OPENS, not pick the square up and carry it across the map — which is what it did, and which
+  // also recoloured the pair of them, because a chapter's nine colours are the nine pixels its square covers.
+  // So the whole column of `tv`s is read off in slot order before the move and written back in slot order after it.
+  // A slot that had none keeps none, and the level that lands there takes the generated square the game gives it.
+  const slots = arr.map(l => (l && l.tv) ? l.tv.slice() : null);
   const [moved]=arr.splice(from,1); arr.splice(to,0,moved);
   edited={};
-  arr.forEach((l,i)=>{ const c=cloneLvl(l); c.n=i+1; edited[i+1]=c; });
+  arr.forEach((l,i)=>{ const c=cloneLvl(l); c.n=i+1;
+                       if (slots[i]) c.tv = slots[i].slice(); else delete c.tv;
+                       edited[i+1]=c; });
   const nowN = openPayload ? (arr.indexOf(openPayload)+1) : 1;
   runLen = arr.length;
   saveAuto(); rebuildLevelList(); loadLevel(nowN);

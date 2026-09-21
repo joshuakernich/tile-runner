@@ -19,6 +19,8 @@ var COPY_DATA = {
               desc: "Lay a tile on the flag to finish the chapter." },
     "wall": { name: "Wall Entity",
               desc: "Passive entities whose noble purpose is simply to get in the way." },
+    "wallmon": { name: "Wall Entity",
+                 desc: "Malevolent entities with no capacity for mobility." },
     "stone": { name: "Stone Block",
                desc: "Tap to smash. Maybe twice. Maybe thrice." },
     "boost": { name: "Boost",
@@ -186,5 +188,8 @@ var COPY_DATA = {
   guideDrag: "Drag me",
   guideTap: "PRO TIP DON'T DRAG JUST TAP",
   guideTapMe: "Tap me",
+  // ...and the Lodestone's own, said on the charm down in the footer once it has been spent: the one thing you need to
+  // know about it, and the only chance there is to say it.
+  guideLodeUsed: "One use per level",
 };
 if (typeof module !== "undefined") module.exports = COPY_DATA;
