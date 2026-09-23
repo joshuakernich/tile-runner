@@ -3621,6 +3621,12 @@
       });
     }
     // Called once per cleared tile == one beat of the backing track.
+    // EPIC: the pellet is up. The lead goes an octave UP and is doubled an octave DOWN — the same tune in two places at
+    // once, which is the cheapest way there is to make a small melody sound like a big one — and every beat is given a
+    // tail to ring out on. Set from the game (Sound.setEpic) rather than read off the state, because the Sound module
+    // knows nothing about pellets and should not have to.
+    let epic = false;
+    function setEpic(on) { epic = !!on; }
     function clearTile() {
       if (muted || !ac || ac.state !== "running") return;        // silent until unlocked
       const now = ac.currentTime, s = step, bs = beatSec;
@@ -3631,9 +3637,18 @@
       const wave = s % 2 ? MU.waveB : MU.waveA;
       if (MU.leadOn) for (let k = 0; k < MU.beatsPerTile; k++) {
         const idx = (s * MU.beatsPerTile + k) % MELODY.length;
-        if (k === 0) mvoice(now, MELODY[idx] + MU.leadOct, wave, 0.9, MU.leadVel, "lead", true);
-        else mvoice(now + bs*(k/MU.beatsPerTile), MELODY[idx] + MU.leadOct, wave,
+        const up = MU.leadOct + (epic ? 12 : 0);
+        if (k === 0) mvoice(now, MELODY[idx] + up, wave, 0.9, MU.leadVel, "lead", true);
+        else mvoice(now + bs*(k/MU.beatsPerTile), MELODY[idx] + up, wave,
                     bs*(0.9/MU.beatsPerTile), MU.midVel, "lead", true, true);
+        // ...and the same note an octave under the lead's own, in a rounder voice, so the two read as one big sound
+        // rather than as a tune with a descant on it.
+        if (epic) {
+          const low = MELODY[idx] + MU.leadOct - 12;
+          if (k === 0) mvoice(now, low, "triangle", 0.9, MU.leadVel*0.72, "lead", true);
+          else mvoice(now + bs*(k/MU.beatsPerTile), low, "triangle",
+                      bs*(0.9/MU.beatsPerTile), MU.midVel*0.72, "lead", true, true);
+        }
       }
       const lowVoice = MU.bassStyle === "classic" ? mbass : bassHeavy;
       if (MU.subOn) {
@@ -4157,6 +4172,38 @@
         src.start(t0); src.stop(t0 + 1.5);
       }
     }
+    // A WHUMP, and the one low sound in the game that does not START. The boom is a kick — all of it inside the
+    // first eight milliseconds — and this is its opposite: two low sines and a band of dark noise that SWELL in
+    // over `WHUMP_RISE` of their length, sit, and fall away. It is what something arriving sounds like when it is
+    // already far too big to arrive suddenly. The shockwave does not strike the cube; it reaches it — so this is
+    // fired EARLY, by its own rise, and the top of the swell is the moment of the hit.
+    const WHUMP_RISE = 0.42;
+    function whump(ms) {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime, dur = Math.max(0.4, (ms || 1400)/1000), rise = dur*WHUMP_RISE;
+      for (const [f0, f1, amp] of [[62, 34, 0.42], [31, 18, 0.32]]) {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "sine"; o.frequency.setValueAtTime(f0, t0); o.frequency.exponentialRampToValueAtTime(f1, t0 + dur*1.3);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(amp, t0 + rise);
+        g.gain.exponentialRampToValueAtTime(0.0004, t0 + dur*1.5);
+        o.connect(g); g.connect(master); g.connect(sendBus);
+        o.start(t0); o.stop(t0 + dur*1.6);
+      }
+      if (noiseBuf) {
+        const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+        const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.Q.value = 0.9;
+        lp.frequency.setValueAtTime(110, t0);
+        lp.frequency.exponentialRampToValueAtTime(680, t0 + rise);      // ...the band opening as it comes
+        lp.frequency.exponentialRampToValueAtTime(70, t0 + dur*1.4);
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.30, t0 + rise);
+        g.gain.exponentialRampToValueAtTime(0.0004, t0 + dur*1.5);
+        src.connect(lp); lp.connect(g); g.connect(master); g.connect(sendBus);
+        src.start(t0); src.stop(t0 + dur*1.6);
+      }
+    }
     // THE TAKINGS GOING INTO THE PURSE, rung: over coinSlam's thud, a small glass bell struck high — G6 and the D over
     // it, a real bell's inharmonic partials, three voices a few cents apart so it beats as it rings — held long, and
     // mostly in the room. The slam says it landed; this says it counted.
@@ -4237,6 +4284,90 @@
           o.start(t0); o.stop(t0 + life + 0.05);
         }
       });
+    }
+    // THE PELLET'S BEAT: one solid kick per FOOTFALL — four to a tile, so at half again his pace it is a hard driving
+    // pulse — getting heavier as the ten tiles run down, with a snap over it that only really arrives once it is
+    // running out. `build` is null until the last tiles and then counts footfalls, and each one takes a tone a step
+    // higher: the run-out is something you can hear coming a good second before it lands.
+    function pelletStep(k, build) {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime, drive = 0.55 + 0.45*Math.max(0, Math.min(1, k));
+      const o = ac.createOscillator(), g = ac.createGain();               // the kick
+      o.type = "sine";
+      o.frequency.setValueAtTime(150, t0);
+      o.frequency.exponentialRampToValueAtTime(42, t0 + 0.10);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.42*drive, t0 + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0002, t0 + 0.22);
+      o.connect(g); g.connect(master);
+      o.start(t0); o.stop(t0 + 0.26);
+      if (noiseBuf) {                                                     // ...and the snap on top of it
+        const src = ac.createBufferSource(); src.buffer = noiseBuf;
+        const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 1.1;
+        bp.frequency.setValueAtTime(1800 + 1400*k, t0);
+        const ng = ac.createGain();
+        ng.gain.setValueAtTime(0.0001, t0);
+        ng.gain.exponentialRampToValueAtTime(0.04 + 0.11*k, t0 + 0.003);
+        ng.gain.exponentialRampToValueAtTime(0.0002, t0 + 0.09);
+        src.connect(bp); bp.connect(ng); ng.connect(master); ng.connect(sendBus);
+        src.start(t0); src.stop(t0 + 0.12);
+      }
+      // ...and the RING. A kick on its own is a thud and gone; this is the same hit given somewhere to go — two sines an
+      // octave apart, detuned against each other so they beat slowly, decaying over most of a second and most of it
+      // into the room. It is what turns four hits a tile into something that sounds like a hall rather than a drum.
+      for (const [mul, peak, life] of [[1, 0.085, 0.95], [2, 0.040, 0.70]]) {
+        for (const cents of [-7, 7]) {
+          const r = ac.createOscillator(), rg = ac.createGain();
+          r.type = "sine";
+          r.frequency.setValueAtTime(BASE * Math.pow(2, -12/12) * mul, t0);
+          r.detune.setValueAtTime(cents, t0);
+          rg.gain.setValueAtTime(0.0001, t0);
+          rg.gain.exponentialRampToValueAtTime(peak*drive, t0 + 0.012);
+          rg.gain.exponentialRampToValueAtTime(0.0002, t0 + life);
+          r.connect(rg); rg.connect(master); rg.connect(sendBus);
+          r.start(t0); r.stop(t0 + life + 0.05);
+        }
+      }
+      if (build != null && build >= 0) {                                  // THE BUILD, a step higher every footfall
+        const hz = BASE * Math.pow(2, (12 + build*2)/12);
+        for (const [mul, peak] of [[1, 0.085], [2, 0.034]]) {
+          const b = ac.createOscillator(), bg = ac.createGain();
+          b.type = "square"; b.frequency.setValueAtTime(hz*mul, t0);
+          bg.gain.setValueAtTime(0.0001, t0);
+          bg.gain.exponentialRampToValueAtTime(peak, t0 + 0.010);
+          bg.gain.exponentialRampToValueAtTime(0.0002, t0 + 0.30);
+          b.connect(bg); bg.connect(master); bg.connect(sendBus);
+          b.start(t0); b.stop(t0 + 0.34);
+        }
+      }
+    }
+    // ...and the RESET at the end of the build: everything that had been climbing falls away at once — a sweep down
+    // through the air and one low note under it, so the world coming back is an arrival rather than a thing stopping.
+    function pelletEnd() {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime;
+      for (const [semi, peak, life] of [[0, 0.14, 0.9], [-12, 0.10, 1.2]]) {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "triangle";
+        o.frequency.setValueAtTime(BASE * Math.pow(2, (semi + 12)/12), t0);
+        o.frequency.exponentialRampToValueAtTime(BASE * Math.pow(2, semi/12), t0 + 0.26);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(peak, t0 + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0002, t0 + life);
+        o.connect(g); g.connect(master); g.connect(sendBus);
+        o.start(t0); o.stop(t0 + life + 0.05);
+      }
+      if (noiseBuf) {
+        const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+        const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 0.9;
+        bp.frequency.setValueAtTime(6400, t0); bp.frequency.exponentialRampToValueAtTime(420, t0 + 0.55);
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.075, t0 + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.0002, t0 + 0.70);
+        src.connect(bp); bp.connect(g); g.connect(master); g.connect(sendBus);
+        src.start(t0); src.stop(t0 + 0.75);
+      }
     }
     // A TALISMAN COMING HOME, in the opening: it hits its chapter and the colour goes into the map.
     // Not a slam — a bloom. A deep swell under it, a sine falling an octave into the room; a bell of
@@ -4528,8 +4659,14 @@
         o2.connect(lp); lp.connect(tg); tg.connect(master);
         o2.start(at0); o2.stop(at0 + dur + 0.02);
       };
-      note(82.41, 0,         beat*1.05, 0.62);   // E2, ON the beat — the thrust itself, played out long
-      note(87.31, beat*0.50, beat*0.52, 0.52);   // F2, half a beat behind it, and half as long
+      // ...AND NOT WHILE A PELLET IS UP. These two sit in the same octave the pellet's own low voice has taken — the lead
+      // doubled an octave down, and a kick ringing under that — and a rank of monsters adding a semitone pair to it on
+      // every stroke turned the bottom of the mix into mud. The crack and the ring above stay: those are the animals
+      // moving, which you still want to hear. It is their NOTES that go, and only for the ten tiles.
+      if (!epic) {
+        note(82.41, 0,         beat*1.05, 0.62);   // E2, ON the beat — the thrust itself, played out long
+        note(87.31, beat*0.50, beat*0.52, 0.52);   // F2, half a beat behind it, and half as long
+      }
       // THE GRUNT IS PARKED. Set this to 1 and it is back exactly as it was — the voiced buzz, its two formants, its
       // catch and its heave are all still wired up below. It was the low end of this sound before the two notes took
       // that job, and the two of them in the same octave were one thing too many down there.
@@ -5230,7 +5367,7 @@
              slide, clack, tap, tapBig, swish, airSwish, flyWhoosh, tabClick, power, warp, vortex, thrum, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck, choir,
              ambient,
-             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, charmReveal, tallyRing, tallyStep, boom, twinkle, holeChime, infinityRing, loopClosed, crack, powerDown, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
+             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, charmReveal, tallyRing, tallyStep, pelletStep, pelletEnd, setEpic, boom, whump, twinkle, holeChime, infinityRing, loopClosed, crack, powerDown, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
              levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, talismanTheme, choirLift, setMusicGate,
              musicNow: () => ({ ...MU }) };
   })();
@@ -5266,7 +5403,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.84";                    // shown on the title & pause screens
+  const VERSION = "v10.85";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -7336,10 +7473,10 @@
         switches: (g.switches||[]).map(s=>({ c:s[0], r:s[1], used:false })),
         openT: 0, color: GATE_COLORS[i % GATE_COLORS.length],
       })),
-      // THE POWER PELLET: eat one and, for PELLET.beats, the things that were hunting you are running from you and
+      // THE POWER PELLET: eat one and, for PELLET.tiles of track, the things that were hunting you are running from you and
       // anything you touch comes apart. `pellet` is the beat it runs out on, or null.
       pellets: new Set((L.pellets||[]).map(c=>key(c[0],c[1]))),
-      pellet: null,
+      pellet: null,                         // ...{ from } — where along the path he took it, and the footfall last beaten
       boost: new Set((L.boost||[]).map(c=>key(c[0],c[1]))),
       slow:  new Set((L.slow ||[]).map(c=>key(c[0],c[1]))),
       speedFx: { kind: null, t: 0 },        // active timed speed effect from a collected pickup
@@ -8954,22 +9091,17 @@
       // flat as the monster's tile to begin with, beating once it starts to shrink
       const beat = 0.25 + 0.75 * Math.abs(Math.cos((t / B.flapMs) * Math.PI + (f.seed || 0)));
       const open = 1 + (beat - 1) * q.ks;
-      const wing = (fill, panel) => {
-        for (const side of [-1, 1]) {
-          ctx.save();
-          ctx.scale(side * open, 1);                                // this half, squeezed toward the hinge at x = 0
-          ctx.beginPath(); ctx.rect(0, -W/2 - 1, W/2 + 1, W + 2); ctx.clip();
-          ctx.fillStyle = fill; rrect(-W/2, -W/2, W, W, tileR(W)); ctx.fill();
-          if (panel) { const ip = W*0.26; ctx.fillStyle = panel; rrect(-W/2 + ip, -W/2 + ip, W - 2*ip, W - 2*ip, tileR(W - 2*ip)); ctx.fill(); }
-          ctx.restore();
-        }
-      };
+      // ONE PAIR OF WINGS in the game, drawn by one routine (flyWings): the thing flying off a monster and the little
+      // mark in the counter are the same object seen at two sizes, and they were being drawn by two different pieces
+      // of code — a squeeze here, a fold there. `open` runs from the monster's flat tile to the beat of a flying one,
+      // which is exactly the 1..0 the fold takes.
+      const wing = (fill) => flyWings(W, fill, open);
       ctx.save();
       ctx.globalAlpha = q.A;
       ctx.translate(q.x, q.y);
       ctx.rotate(Math.sin(t/260 + (f.seed || 0)) * 0.25 * q.kf);
-      wing(f.col, "rgba(0,0,0,0.22)");
-      if (t < B.flashMs) { ctx.globalAlpha = q.A * (1 - t / B.flashMs); wing("#ffffff", null); }   // the flash, hiding the change
+      wing(f.col);
+      if (t < B.flashMs) { ctx.globalAlpha = q.A * (1 - t / B.flashMs); wing("#ffffff"); }   // the flash, hiding the change
       ctx.restore();
     }
   }
@@ -9034,11 +9166,17 @@
       ctx.fillStyle = "rgba(255,236,190," + (0.085 * fade).toFixed(4) + ")";
       rrect(x - half, y - half, half*2, half*2, tileR(half*2)); ctx.fill();
     }
-    ctx.globalAlpha = 0.9 * fade;
-    ctx.strokeStyle = "#fff7d6"; ctx.lineWidth = lw;
-    const h2 = rad * 0.9;
-    rrect(x - h2, y - h2, h2*2, h2*2, tileR(h2*2)); ctx.stroke();
-    ctx.globalAlpha = 1;
+    // ...and the drawn edge on top of it, unless `lw` is nought. A pulse marking a thing that HAPPENED wants the
+    // line — it is the shape of the event, and it has to be findable on a busy board. A wave rolling through open
+    // space does not: an outline says "here is a square", and what is wanted is a front of light with nothing
+    // drawn round it (see the opening's shockwave).
+    if (lw > 0) {
+      ctx.globalAlpha = 0.9 * fade;
+      ctx.strokeStyle = "#fff7d6"; ctx.lineWidth = lw;
+      const h2 = rad * 0.9;
+      rrect(x - h2, y - h2, h2*2, h2*2, tileR(h2*2)); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     ctx.restore();
   }
   function drawLights() {
@@ -11072,6 +11210,11 @@
   const ROAR_PHASE = {
     finger: { out: 1, hold: 0.5, fade: 1, rest: 0.5 },   // (the line starts coming apart half a beat sooner, and takes a whole one over it)
     pulse:  { out: 1, hold: 1, fade: 0.5, rest: 0.5 },
+    // EATING A PELLET is the same MOMENT as the two shouting charms — he throws his weight back, the world stops, and
+    // then it all starts again — and none of the rest of it: nothing is thrown, nothing is unmade, nothing is drawn.
+    // Two beats, because what follows is ten tiles of him at half again his pace and the pause is there to let you see
+    // it coming rather than to be an event of its own.
+    pellet: { out: 0.5, hold: 1, fade: 0.5, rest: 0 },
   };
   const roarBeats = (kind) => { const P = ROAR_PHASE[kind] || ROAR_PHASE.finger; return P.out + P.hold + P.fade + (P.rest || 0); };
   function startRoar(kind, dir){
@@ -11089,11 +11232,12 @@
     R.t += dt;
     if (!R.fired && R.t >= ROAR.wind) {     // the shout, and whatever goes with it
       R.fired = true;
-      if (R.kind === "pulse") unmakeMonsters(BELL.radius, "#c9b6ff");
+      if (R.kind === "pellet") { /* the lean and the pause, and nothing else: the berry does its own work */ }
+      else if (R.kind === "pulse") unmakeMonsters(BELL.radius, "#c9b6ff");
       else {
         R.beam = hammerBeam(R.dir); R.hit = 0;     // ...and it is paced in BEATS now (ROAR_PHASE, roarFront)
       }
-      try { Sound.roar && Sound.roar(R.kind); } catch(_){}
+      if (R.kind !== "pellet") { try { Sound.roar && Sound.roar(R.kind); } catch(_){} }
       haptic([12, 26, 60]);
     }
     // Each tile of the beam hits as it ARRIVES, so what breaks the rock is the thing you can see
@@ -11913,14 +12057,35 @@
       else { s.purse += COIN_TILES*2; showTally(t.c, t.r);
              s.score = computeScore(); updateScoreHud(); }
     }
-    // THE PELLET, taken the way a boost is. It runs on BEATS rather than milliseconds — ten of them — so it lasts the
-    // same amount of GAME however fast he happens to be running by then, which is the unit the monsters move in too.
-    if (s.pellet && beatNow() >= s.pellet.until) { s.pellet = null; Sound.thrum && Sound.thrum(); }
+    // THE PELLET, taken the way a boost is, and measured in TRACK rather than in time: ten tiles of it, counted off his
+    // own position along the path, so it is the same ten tiles at any pace and on any level. Running faster does not
+    // spend it faster — it just gets you further through it.
+    const pParam = s.runIdx + s.runT;
+    if (s.pellet) {
+      const gone = pParam - s.pellet.from;
+      if (gone >= PELLET.tiles) { s.pellet = null; Sound.setEpic && Sound.setEpic(false); Sound.pelletEnd && Sound.pelletEnd(); }
+      else {
+        // ONE BEAT PER FOOTFALL, on his stride's own clock — the same half-turn of the phase a coat changes on, so the
+        // beat lands exactly when a foot does. It gets heavier as the ten tiles run down, and over the last of them
+        // (PELLET.build) every step takes a tone a step higher: a build you can hear coming before it arrives.
+        const idx = Math.floor((s.runPhase - Math.PI/2) / Math.PI);
+        if (s.pellet.step !== idx) {
+          s.pellet.step = idx;
+          const left = PELLET.tiles - gone, steps = STRIDES_PER_TILE * 2;
+          const build = left <= PELLET.build ? Math.max(0, Math.round((PELLET.build - left) * steps)) : null;
+          Sound.pelletStep && Sound.pelletStep(gone / PELLET.tiles, build);
+        }
+      }
+    }
     for (const bk of Array.from(s.pellets)) {
       const [c, r] = bk.split(",").map(Number);
       if (nearTight(c, r)) {
         s.pellets.delete(bk);
-        s.pellet = { until: beatNow() + PELLET.beats };
+        s.pellet = { from: pParam, step: -1 };
+        // ...and he takes the moment the two shouting charms take: thrown back from the waist, the whole board held
+        // still for two beats, and then everything at once (startRoar, ROAR_PHASE.pellet).
+        startRoar("pellet");
+        Sound.setEpic && Sound.setEpic(true);        // ...and the tune goes up an octave and doubles an octave down
         spawnPop(c, r, PELLET.col); spawnLight(c, r);
         (Sound.power || Sound.coin)(); haptic([14, 30, 14]);
       }
@@ -17025,6 +17190,11 @@
           // the border keeps the plate's own gradient — light across a metal face, in blue
           ctx.strokeStyle = grd; ctx.lineWidth = lw; ctx.lineJoin = "round";
           rrect(x + lw/2, y + lw/2, cell - lw, cell - lw, Math.max(0, rad - lw/2)); ctx.stroke();
+          // ...the inscribed square every plate in the game carries, where platePanel puts it — a light grey, because on
+          // a wall with nothing in it the panel is the only thing left saying the plate has a face at all.
+          const pd = cell*PLATE_PAD, pw = cell - 2*pd, pr = Math.max(0, rad - pd*0.6);
+          ctx.fillStyle = PELLET.panel;
+          rrect(x + pd, y + pd, pw, pw, pr); ctx.fill();
           // ...and its four bolts, in the same gradient, exactly where paintWallInto puts them
           const off = cell*PLATE_RIVET.inset, br = cell*PLATE_RIVET.r;
           ctx.fillStyle = grd;
@@ -17681,19 +17851,59 @@
     return { x, y: P.top, w, h: P.h, midY: P.top + P.h/2, iconX: x + padX, iconW: cw, textX: x + padX + cw + gap, num, font };
   }
   // One butterfly as the HUD draws it: its two half-tiles, open, in its own colour — the same body drawButterflies flies.
+  // THE BUTTERFLY'S TWO WINGS, FOLDED. Not a flat squeeze — that is what a fold about a vertical hinge looks like seen
+  // dead square-on, and it is why the icon came out as a rectangle getting narrower. This turns the wings in THREE
+  // dimensions and projects them: each wing is a quad hinged on the body, swung toward the viewer as it closes, and
+  // put through a weak perspective. Three things fall out of that, and between them they are the whole effect:
+  //   · the wing FORESHORTENS as it turns away from square-on (its width goes with the cosine of the fold);
+  //   · its outer edge comes TOWARD you, so it is drawn bigger than the hinge edge — the wing becomes a trapezoid
+  //     flaring outward, which is the single thing that reads as depth;
+  //   · and it takes LESS LIGHT as it turns, with the light a touch off to one side so the two are never quite equal.
+  // `k` is the beat: 1 is flat open, 0 is shut.
+  const FLY_MARK = {
+    fold:  1.35,   // how far they swing, in radians, from flat open to shut
+    body:  0.13,   // the body they are hinged on, in wing widths
+    depth: 2.10,   // the eye's distance, in wing widths — smaller is more perspective, and more of a fold
+    lift:  0.42,   // ...and how far each wing SWINGS about its hinge as it folds, in radians at full fold. The hinge is
+                   //    at the BOTTOM — the two wings meet low and open upward and outward, the way a butterfly at rest
+                   //    holds them — and the fold alone, with no swing, reads as a book opening rather than a creature.
+    lit:   0.34,   // how much darker a wing goes as it turns away
+    side:  0.10,   // ...and how far off centre the light is, so the pair is never flat-on symmetrical
+  };
+  function flyWings(w, col, k) {
+    const M = FLY_MARK, phi = (1 - Math.max(0, Math.min(1, k))) * M.fold;
+    const c = Math.cos(phi), sn = Math.sin(phi);
+    const tilt = M.lift * sn, cl = Math.cos(tilt), sl = Math.sin(tilt);
+    const f = M.depth * w, hw = w/2, gap = w * M.body / 2;
+    const rgb = hexRGB(col);
+    for (const side of [-1, 1]) {
+      // ...the far wing first, so the near one is drawn over it where they overlap at the hinge
+      const near = side > 0;
+      const lum = Math.max(0, Math.min(1, 1 - M.lit*(1 - c) + (near ? M.side : -M.side)*sn));
+      // ...worked out in the WING'S OWN frame, hinge at the origin, and only then swung out to the body and mirrored —
+      // so the tilt turns the wing about the hinge it is actually attached to rather than about the butterfly's middle.
+      const pt = (u, v) => {
+        const z = u * sn, sc = f / Math.max(1e-3, f - z);
+        const px = u * c, py = v;
+        const x = px*cl - py*sl, y = px*sl + py*cl;        // ...about a hinge at the BOTTOM: the wings open upward
+        return [ (side*(gap + x)) * sc, y * sc ];
+      };
+      const a = pt(0, -hw), b = pt(hw, -hw), d = pt(hw, hw), e = pt(0, hw);
+      ctx.fillStyle = "rgb(" + rgb.map(v => Math.round(v*lum)).join(",") + ")";
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(d[0], d[1]); ctx.lineTo(e[0], e[1]);
+      ctx.closePath(); ctx.fill();
+    }
+  }
   // ONE PHASE OF THE FLAP, not the wings laid flat. Two full half-tiles side by side is a tile with a line down it; the
   // same two squeezed toward the hinge is a butterfly, and it is the shape the board's own butterflies pass through on
   // every beat (see drawButterflies, whose `open` this is a fixed value of).
   const FLY_ICON_OPEN = 0.55;
-  function hudFly(x, y, w, col) {
+  // `open` is how far the wings are apart, 1 being flat out and 0 shut. Left off it takes the icon's own fixed phase —
+  // the parameter is there so a preview can walk the whole beat through the SHIPPED routine rather than a copy of it.
+  function hudFly(x, y, w, col, open) {
     ctx.save(); ctx.translate(x, y);
-    ctx.fillStyle = col;
-    for (const side of [-1, 1]) {
-      ctx.save(); ctx.scale(side * FLY_ICON_OPEN, 1);
-      ctx.beginPath(); ctx.rect(0, -w/2, w/2 + 1, w); ctx.clip();
-      rrect(-w/2, -w/2, w, w, tileR(w)); ctx.fill();
-      ctx.restore();
-    }
+    flyWings(w, col, open == null ? FLY_ICON_OPEN : open);
     ctx.restore();
   }
   function drawFlyHud() {
@@ -18781,6 +18991,8 @@
   // No monster blocks placement, so there is no flag for it: you may lay track through any of
   // their cells and time the run instead.
   // Every monster that HAS a colour wears one of the rainbow's six — the Rainbow trail's, the talismans' own.
+  // The four are one animal wearing four sets of eyes — see THE FOUR, below.
+  const GHOST = { move:"hunt", look:"rail", banks:"all", split:"h", body:"#100f18" };
   const MONSTER_KINDS = {
     hrail:  { move:"rail",   split:"h", body:"#c37ef1" },                 // was a horizontal saw
     vrail:  { move:"rail",   split:"v", body:"#4baff1" },                 // was a vertical saw
@@ -18821,6 +19033,20 @@
     // in the fall's own red because a face in this body's colour would not be a face at all.
     wall:   { move:"still", look:"rail", banks:"all", split:"h",
               body:"#3a2a55", wall:true },     // ...and no `eye`: it takes the plate's own face, as a wall's do
+    // ---- THE FOUR ----------------------------------------------------------------------------------------------
+    // The same animal as the Hunter, to the pixel: the same body, the same swim, the same chase. What differs is the
+    // colour of its EYES and where it is AIMING — `aim`, read by monsterHuntStep, which floods from a target rather
+    // than always from the runner. The four aims are the four the arcade used, and between them they are the reason a
+    // pack of them feels like an ambush rather than four copies of one animal:
+    //   chase  — straight at him. The one that never lets up.
+    //   ahead  — four tiles in front of him, so it cuts him off rather than following him round.
+    //   vector — the point two ahead of him, doubled away from the CHASER, which swings it wide when the two of them
+    //            are apart and pinches when they close. It is the one whose route makes no sense until it works.
+    //   shy    — straight at him while it is far off, and away to its own corner the moment it gets close.
+    blinky: { ...GHOST, eye:"#ff3b30", aim:"chase"  },
+    pinky:  { ...GHOST, eye:"#ffb8de", aim:"ahead"  },
+    inky:   { ...GHOST, eye:"#38e0e0", aim:"vector" },
+    clyde:  { ...GHOST, eye:"#ffa030", aim:"shy"    },
     // ---- THE BOSSES ---------------------------------------------------------------------------------------------
     // Four tiles of animal. `big` is how many cells it covers each way, and it is the whole of what makes one: a boss is
     // drawn at that many cells across, its body sits on the CORNER between its cells rather than in the middle of one (so
@@ -19982,7 +20208,10 @@
   // THE POWER PELLET. A fat white square on the floor: eat it and for ten beats nothing on the board can touch you —
   // what you touch is unmade instead — the hunters turn and run, and the whole screen goes inside out so there is no
   // mistaking whose game it is for those ten beats.
-  const PELLET = { beats: 10, reach: 0.80,
+  const PELLET = { tiles: 10,    // how far it carries him, in TILES OF TRACK — not beats and not seconds, so it is the
+                                 // same ten tiles whatever pace he has reached and whatever the level's own is
+                   build: 3,     // ...and over how many of the last of them the music climbs to the reset
+                   reach: 0.80,
                    speed: 1.5,   // his pace while it lasts, against his own
                    monK:  0.5,   // ...and the board's, against HIS — so they run at exactly half whatever he is doing
                    // A STRAWBERRY, built the way everything here is built: out of tiles. ONE red tile for the berry —
@@ -19997,6 +20226,7 @@
                    quilt: 0.13,   // how much of the level's own colour its quilt keeps while a pellet is up
                    glow:  1.05,   // the light coming off HIM, in cells
                    stone: 0.62,   // ...and how far a golem's facets are lifted toward white (0 = grey, 1 = gone)
+                   panel: "#b9bdcb",   // ...and the light grey inscribed in the face of every wall
                    eye:   "#ff3a2f",   // ...and what he looks out of
                    col:  "#ffffff" };  // ...and the white it is TAKEN with: the pop and the burst of light
   const pelletOn = () => !!(state && state.pellet);
@@ -24679,7 +24909,7 @@
     // the board picks its own up again. Tested on the status rather than hooked into each of the ways he can die, so
     // there is no death left to forget about; a pause keeps it, because `paused` is not a status and he is still in the
     // middle of his run. It sits here, before the frame is painted, so the fall is never drawn inside out.
-    if (state.pellet && state.status !== "play") state.pellet = null;
+    if (state.pellet && state.status !== "play") { state.pellet = null; Sound.setEpic && Sound.setEpic(false); }
     updateCamera(dt);
     draw(state.crunch ? state.crunch.ts : ts);   // a caught board is a still frame, bobs and all
     if (paused) drawPausedOverlay();
@@ -24944,7 +25174,13 @@
     const p = state.power;
     // A fresh level hands every charm back, and the set of ids has not changed — so the usual
     // rebuild test cannot see it. If nothing has been spent, the row must be whole.
-    if (!p.used.size && powerEl.children.length !== ids.length) buildPowerRack(ids);
+    // ...and WHOLE means unbroken, not merely the right length. A smashed charm is not taken out
+    // of the row — smashCharm greys the badge where it hangs and latches `_smash` on the button,
+    // and `.spent` is pointer-events:none — so counting children could never see it. Every
+    // attempt got a fresh `power.used`, pressed nothing, and stared at a rack of dead charms:
+    // one use per level had quietly become one use per unlock.
+    if (!p.used.size && (powerEl.children.length !== ids.length ||
+                         [...powerEl.children].some(b => b._smash))) buildPowerRack(ids);
     // The fall belongs to the ANKH. He is in the air with the offer open, and that is the one
     // moment the Ankh is worth anything and the one moment nothing else is — so the rack says
     // so: everything else dips out of reach and the Ankh, which has been sitting half-sunk all
@@ -25233,7 +25469,7 @@
             let came = h.came;
             for (let n = 0; n < Math.max(1, h.stride || 1); n++) {
               const cur = route[route.length - 1];
-              let next = monsterHuntStep(cur, taken);
+              let next = monsterHuntStep(cur, taken, K.aim);
               if (!next) {
                 const opts = [], back = [];
                 for (const [dc, dr] of DIRS) {
@@ -25438,16 +25674,64 @@
   // tile, which is a different game.
   const platformCell = (c, r) =>
     (state.platforms || []).some(p => p.c === c && p.r === r);
-  function monsterHuntStep(from, taken) {
+  // WHERE ONE OF THE FOUR IS AIMING, as a cell. The arcade's own four rules (see THE FOUR): straight at him; four
+  // tiles in front of him; the point two ahead of him doubled away from the chaser; or at him until it gets close and
+  // then away to its own corner. Anything without an `aim` — every other hunting animal in the game — simply aims at
+  // him, which is what they all did before there were four of anything.
+  const GHOST_CORNER = { shy: [0, 1] };        // Clyde's is the bottom-left of the board, as it is in the arcade
+  const GHOST_AHEAD = 4, GHOST_VECTOR = 2, GHOST_SHY = 8;
+  function ghostGoal(aim, from) {
+    const s = state, g = runnerCell();
+    if (!aim || aim === "chase") return g;
+    // His heading, in whole cells: the way the track goes from the node he is on to the one after it.
+    const i = Math.min(s.runIdx, s.path.length - 1), a = s.path[i], b = s.path[i + 1] || a;
+    const dx = Math.sign((b.c - a.c) || 0), dy = Math.sign((b.r - a.r) || 0);
+    if (aim === "ahead") return { c: g.c + dx*GHOST_AHEAD, r: g.r + dy*GHOST_AHEAD };
+    if (aim === "vector") {
+      // ...doubled away from whichever of them is the CHASER, so the two of them working together is the whole point.
+      const lead = (s.hazards || []).find(h => h.kind === "monster" && (monKind(h).aim === "chase"));
+      const p = { c: g.c + dx*GHOST_VECTOR, r: g.r + dy*GHOST_VECTOR };
+      if (!lead) return p;
+      return { c: p.c + (p.c - lead.cc), r: p.r + (p.r - lead.cr) };
+    }
+    if (aim === "shy" && from) {
+      // ...measured from where IT is, which is why it turns tail in the middle of a corridor rather than at a door.
+      const d = Math.abs(from[0] - g.c) + Math.abs(from[1] - g.r);
+      return d > GHOST_SHY ? g : { c: GHOST_CORNER.shy[0]*(COLS - 1), r: GHOST_CORNER.shy[1]*(ROWS - 1) };
+    }
+    return g;
+  }
+  function monsterHuntStep(from, taken, aim) {
     const s = state;
     if (s.status !== "play" || !s.path || !s.path.length) return null;
-    const g = runnerCell(), goal = key(g.c, g.r);
+    const rc = runnerCell();
+    const t = ghostGoal(aim, from);
+    // The target may be off the board or inside a wall — four tiles in front of a runner heading into one usually is.
+    // Walk it back toward him until it is somewhere the flood can actually start from.
+    let gc = Math.max(0, Math.min(COLS - 1, Math.round(t.c))), gr = Math.max(0, Math.min(ROWS - 1, Math.round(t.r)));
+    // The sliding wall BLOCKS are wall too, for as long as they sit where they sit — and ONLY the
+    // cell each one is on. The rest of its rail is bare floor and always was, so a hunter is free
+    // to cross the track in front of a block or behind it; what it may no longer do is walk
+    // through the block itself, which it did happily, because the flood below only ever knew
+    // about `walls` and a block is not one of those — it is a piece of level furniture the player
+    // pushes around, and the chase was reading straight past it.
+    const bks = new Set((s.blocks || []).map(b => b.axis === "h" ? key(Math.round(b.pos), b.r)
+                                                                : key(b.c, Math.round(b.pos))));
+    const blocked = (c, r) => !inBounds(c, r) || s.walls.has(key(c, r)) || s.stones.has(key(c, r)) ||
+                              bks.has(key(c, r)) || holeAt(c, r);
+    for (let n = 0; n < 8 && blocked(gc, gr); n++) {
+      gc += Math.sign(rc.c - gc); gr += Math.sign(rc.r - gr);
+      if (gc === rc.c && gr === rc.r) break;
+    }
+    if (blocked(gc, gr)) { gc = rc.c; gr = rc.r; }
+    const g = { c: gc, r: gr }, goal = key(g.c, g.r);
     // Built once and asked thousands of times: the flood below visits every open cell on the
     // board, and a linear scan of the platform list inside it would be the one expensive thing
     // in an otherwise cheap search.
     const pfs = new Set((s.platforms || []).map(p => key(p.c, p.r)));
     const open = (c, r) => inBounds(c, r) && !s.walls.has(key(c, r)) &&
-                           !s.stones.has(key(c, r)) && !pfs.has(key(c, r)) && !holeAt(c, r);
+                           !s.stones.has(key(c, r)) && !pfs.has(key(c, r)) &&
+                           !bks.has(key(c, r)) && !holeAt(c, r);
     const dist = new Map([[goal, 0]]);
     const q = [[g.c, g.r]];
     for (let i = 0; i < q.length; i++) {
@@ -27672,6 +27956,9 @@
     drop: (id, c, r) => dropTileOn(state.tiles[id], c, r),
     cam: () => ({ camX, camY, cell, viewW, viewH, worldW, worldH }),
     mechs: () => Object.keys(MECHS),
+    // The butterfly's mark, at any phase of its beat, drawn into the game's own canvas at screen coordinates: for
+    // looking at the icon without keeping a second copy of it anywhere.
+    fly: (x, y, w, col, open) => hudFly(x, y, w, col, open),
     mech: (type, g, S, ts) => drawMechIcon(g, type, S, ts),   // (ts: the moment of an animal's demo)
     // scrub the opening cinematic: cine() reads the clock, cine(ms) jumps to a beat.
     // Handy for retiming CINE without sitting through the whole thing.
@@ -29536,8 +29823,9 @@
     get ink()  { return angelRainbow(performance.now(), 3); },
     // A white light round him, breathing slowly — the talismans' own glow (charmGlow), in white.
     glow(g, cx, cy, s, ts) { charmGlow(cx, cy, s*0.95*(1 + 0.07*Math.sin(ts/1300)), [255,255,255], 0.34); } };
-  // ...and what is left of him when the talismans have burst out: the colour gone out of him and no light —
-  // just the plain coat every runner starts in, the rack's first and free one.
+  // ...and what he is once the shell is off him: the rainbow and its light gone, and just the plain coat
+  // every runner starts the game in — the rack's first and free one. He stops being the angel and becomes
+  // the thing the whole place was missing, which is the runner you are about to be.
   const drainedSkin = () => SKIN_COLOURS[0];
   // The angel he is on the title and through most of the opening: that white skin, his own bare feet
   // (Barefoot, off the rack), and the shop's poses — Floating's lotus to sit in, and Hop's one-legged
@@ -29547,8 +29835,17 @@
   const ANGEL_LOOK = (o) => {
     const pose = o.pose, float = SWAGGERS.find(x => x.id === "float") || {}, m = pose === "lotus" ? 1 : (o.fromLotus || 0);
     return { skin: o.drained ? drainedSkin() : ANGEL_SKIN, hat: { draw: null }, kicks: KICKS.find(k => k.id === "none"),
-             swagger: { pose, fromLotus: o.fromLotus, curl: o.curl, splay: o.splay, toesDown: 1 - m, swapLegs: 1,
-                        hover: (float.hover || 0) * m, swing: 0, lift: 0, bob: 0 } };
+             // `o.kick` sets his legs going — the stock stride's swing and foot-lift, at whatever share of them
+             // is asked for. Nought is a held pose, which is what everything but the opening's flight wants.
+             // `o.run` takes the flying dress OFF him: the legs are not traded any more, so what is left is the
+             // plain stride every runner in the game runs. Without it the Hop's stance stays on — one knee folded
+             // up in front, the other straight out behind — which is a man flying, and he is not flying, he is a
+             // runner with nothing under his feet. `o.toes` is the one piece of it worth keeping, in a smaller
+             // dose: a share of the full right-angle point, so his feet reach for the floor instead of hanging
+             // flat off the end of his shins.
+             swagger: { pose, fromLotus: o.fromLotus, curl: o.curl, splay: o.splay,
+                        toesDown: o.run ? (o.toes || 0) : 1 - m, swapLegs: o.run ? 0 : 1,
+                        hover: (float.hover || 0) * m, swing: o.kick || 0, lift: o.kick || 0, bob: 0 } };
   };
   // Where he is and how big, at time ts. He is FITTED into the room between the title lockup (the two
   // words and the byline under them) and the tap prompt at the foot — as big as TITLE_SCENE.size allows,
@@ -29664,7 +29961,8 @@
     }
   }
   // Him as the angel — the spark behind, the glitter falling off him, the runner — at P, faded by A.
-  // `o`: the look (ANGEL_LOOK — pose, fromLotus, curl, splay, drained), `shut` to hold his eyes closed,
+  // `o`: the look (ANGEL_LOOK — pose, fromLotus, curl, splay, drained, kick), `o.phase` for where in the
+  // stride his legs are (only read when `kick` is set), `shut` to hold his eyes closed,
   // `where` for his place at another time (the glitter; standing still at P if not given), and
   // `sparkA`, `sparkK` and `glitA` for how much spark there is, how big, and how much glitter.
   function drawAngel(P, ts, A, o) {
@@ -29681,7 +29979,7 @@
     }
     ctx.save(); ctx.globalAlpha = A;
     const wasShut = _shutEyes; _shutEyes = o.shut ? 1 : 0;
-    try { paintRunner(P.x, P.y, s, 0, 0, false, ts, 0, false, ANGEL_LOOK(o)); }
+    try { paintRunner(P.x, P.y, s, o.phase || 0, 0, !!o.kick, ts, 0, false, ANGEL_LOOK(o)); }
     finally { _shutEyes = wasShut; }
     ctx.restore();
   }
@@ -29898,49 +30196,117 @@
     drawCubeRun(V, performance.now(), ts, A);
   }
   // ---- THE OPENING ---------------------------------------------------------------------------------
-  // The glass cube, the angel asleep in it, floats to the middle of the room; he trembles as something builds, and
-  // on a BOOM wakes and goes up like a rocket as the cube bursts open — the Tileverse unfolding out of it square after
-  // square from the middle of its cloud, grey; the six talismans spiral in from off the screen and ring him; one by one they fly
-  // down and slam into the chapters they hide in, and each landing colours the pieces of the map that
-  // talisman's paint most colours; he flies to chapter one, the angel dissolves into what he wears, and
-  // he drops into it as the camera whips in to black — and chapter one comes up out of it.
-  // Built from the game's own parts throughout: the title tableau (drawAngel, drawCubeWire), the old
-  // film's unfolding solid (cineView, cineFoldFaces, cineGrowAt — on a remapped clock), the map itself
+  // NINE BEATS. He is sitting in lotus inside an empty glass cube, turning slowly in the middle of the room.
+  // The camera leaves him and travels forward through space to a STAR: six tiles, one for each colour of the
+  // rainbow, lying over each other and each turning at its own rate — so the middle, where all six meet, is
+  // white. They turn faster and faster and shake harder and harder until they slam square and are ONE perfect
+  // white tile. It explodes: a square shockwave, and the six Holy Talismans, flying at the camera. The
+  // shockwave is quicker than anything, and we whip back to the cube ahead of it — it hits, the cube goes
+  // spinning, unravels, and lies down as the Tileverse, with him thrown out of it tumbling. Then the talismans
+  // come back in, ring him, and drop into their chapters one at a time, each landing colouring the pieces of
+  // the map that talisman's paint most colours. He falls toward chapter one, and black.
+  //
+  // The white core is not painted white: the six tiles are drawn in the rainbow's own six hexes with `lighter`,
+  // and where all six overlap the channels are far past 255 — so the star's middle is white for the same reason
+  // the lock is, and the lock is nothing but the six angles coming to rest square on each other.
+  //
+  // Built from the game's own parts throughout: the title tableau (drawAngel, drawCubeWire), the old film's
+  // unfolding solid (cineView, cineFoldFaces, cineGrowAt — on a remapped clock), the map itself
   // (drawMap, lit a piece at a time), the talismans as the Holy Talismans page dresses them
   // (drawFeaturedCharm, shedGlitter), the square pulse, and the map's own fade out of black.
   const OPENING = {
-    drift:   [   0, 2600],   // the glass cube, him asleep in it, floats slowly from the title's spot to the middle of the room
-    tense:   [2600, 5600],   // ...where he begins to tremble, a thrum building under him and the screen starting to shake
-    boom:    5600,           // BOOM: he wakes and goes up like a rocket, and the cube bursts open under him
-    wake:    [5600, 5900],   // eyes open, and out of the lotus into flight
-    rise:    [5600, 6250],   // the rocket, up to float over the top of the Tileverse, where he stays until chapter one
-    unfold:  [5600, 7600],   // the cube opening flat...
-    grow:    [7600, 10800],  // ...and the Tileverse unfolding out of it, square after square from the middle outward —
-                             //   begun as the cube's sides land, and its last square down at the end of this (openDomino)
-    curl:    [11100, 11700], // the Tileverse lies there unfolded, and he curls up into a ball...
-    build:   [11700, 14200], // ...and something builds in him: a thrum, a tremble, the screen shaking harder
-    burst:   14200,          // ...until he flies open, his colour drained and his spark out...
-    splayMs:   160,          //    (how long the flinging open takes)
-    gather:  [14200, 15100], // ...and the six talismans burst out of him and ring him
-    slam0:   18400,          // the ring turns, slowing all the while to a crawl, and then the first flies down
-    slamEach:  760,          // ...and each after it this much later
-    slamFly:   430,          // the flight down, of that
-    toOne:   [23200, 24400], // he flies to float over chapter one, gathering his legs back under him
-    fall:    [24700, 25500], // he drops in, and the camera whips in after him to black
-    end:      25550,
-    spinMs:    2600,         // one turn of the ring, at the speed they come out of him at...
-    crawl:     0.04,         // ...and the share of that they have slowed to by the time the first flies
-    tenseShake:   0.05,      // how hard the screen is shaking by the end of the tension, in tiles
-    boomShake:    0.45,      // ...and the throw of the boom
-    tenseTremble: 0.07,      // how hard HE shakes by then, in his size
-    tenseSpark:   0.50,      // ...and how much bigger his spark has grown
-    shake:     0.18,         // how hard each landing throws the screen, in tiles (the game's own shake)
-    buildShake: 0.10,        // how hard the screen is shaking at the top of the build, in tiles
-    burstShake: 0.40,        // ...and the throw of the burst itself
-    tremble:   0.06,         // how hard HE shakes at the top of the build, in his size
-    buildSpark: 0.8,         // how much bigger his spark has grown by then
-    oneGap:    0.90,         // how far over chapter one's top edge his feet float at the end, in its squares...
-    oneSize:   0.50,         // ...and how big he has shrunk to by then, against his size the rest of the way
+    // 1. HIM, in lotus inside the empty glass cube, floating in the middle of the room
+    lotus:   [    0,  1800],
+    // 2. the camera leaves him and goes forward through space: the cube swells past us, and the star comes up
+    dive:    [ 1500,  4600],
+    // 3. the star turns — every layer at its own rate, all of them quickening, the whole thing shaking harder...
+    star:    [ 3200,  8000],
+    lock:    [ 8000,  8700],   // ...until they slam square on each other and are one white tile
+    // 4. which explodes
+    pop:      8700,
+    ripple:  [ 8700, 11700],   // the square shockwave: it crosses the gap at a constant rate, is AT the cube exactly
+                               //   on `hit`, and carries on past it out of the frame — and it is the only thing the
+                               //   explosion throws. The talismans are not in it; they are in HIM.
+    // 5. (the pull-back above is the way back: it puts the camera where it started, so the sun and the cube are
+    //     in one wide shot and the shockwave is SEEN to travel from the one to the other)
+    hit:      10900,           // ...where the wave reaches it
+    // 6. the cube goes spinning, unravels, and lies down as the Tileverse — and he is thrown out of it
+    unfold:  [11800, 13800],   // the cube opening flat...
+    grow:    [13800, 17000],   // ...and the Tileverse unfolding out of it, square after square from the middle outward —
+                               //   begun as the cube's sides land, and its last square down at the end of this (openDomino)
+    fling:   [10900, 12800],   // he is thrown out of the cube, tumbling, up to where he watches the rest from
+    // 7. the six talismans BURST OUT OF HIM as the wave lands, ride the orrery's own two crossed rings for as
+    //    long as the Tileverse takes to build, and then go down into their chapters one at a time
+    gather:  [10900, 11900],
+    slam0:    21000,           // the ring turns, slowing all the while to a crawl, and then the first flies down
+    slamEach:   760,           // ...and each after it this much later
+    slamFly:    430,           // the flight down, of that
+    // 8. / 9. he drops toward chapter one, and black
+    toOne:   [25800, 27000],   // he flies to float over chapter one, gathering his legs back under him
+    fall:    [27300, 28100],   // he drops in, and the camera whips in after him to black
+    end:      28150,
+    // ---- the star ----
+    starN:      6,           // one tile per colour of the rainbow — the Holy Talismans' own six, in shelf order
+    starSize:   0.30,        // how big each tile is, across the screen's short side
+    starTurn:   4200,        // ms the innermost layer would take over one turn at the speed it starts at...
+    starStep:   0.26,        // ...each layer above it turning this much faster than the one under it
+    starRamp:   11,          // how much faster than that they are ALL turning by the lock
+    starLean:   15,          // how far apart the layers sit to begin with, in degrees
+    starLockTurns: 1,        // the extra whole turn each layer takes as it snaps square, so the lock has travel in it
+    starGlow:   0.62,        // the light the star stands in, in its own size
+    starX:      0.28,        // how far RIGHT of the middle the star sits WHEN THE CAMERA IS BACK AT THE CUBE, in screen
+                             //   widths — so the line out to it goes past his side rather than straight through him, and
+                             //   so this is the gap the shockwave has to cross once the camera has fallen back again
+    pullBack:   0.16,        // how much of the star is left once the camera has fallen back off the lock to watch. It
+                             //   is a long way off by the time it goes: the six are seen to lock square while the
+                             //   camera is already running away from them, and what explodes is a distant thing
+    cubeIn:     0.42,        // how big the cube is when it first drifts back into shot, against its own size...
+    cubeInX:    0.60,        // ...and how far left of the middle it starts that drift, in screen widths. Just far
+                             //   enough to be off the edge and no further: every pixel of the drift beyond that is
+                             //   time spent travelling where nobody can see it
+    cubeHitX:   0.22,        // where the shockwave CATCHES it, left of the middle, in screen widths — the collision
+                             //   happens over there, and the blow is what carries it on to the middle afterwards
+    spinPow:    2.5,         // how hard the cube's tumble accelerates after the wave washes over it: the rate goes
+                             //   as k to this less one, so above one is a spin that is still getting faster when
+                             //   the unfold takes it
+    whumpMs:    1400,        // the low swell under that — fired early by its own rise, so it tops out ON the hit
+    backMs:     2000,        // ...and how long the camera then takes to come home to the cube, which it begins on the
+                             //   explosion and not a moment before it — the star gets the middle of the frame to
+                             //   itself for the whole of its turning, its lock and its going off. Slow, and eased at
+                             //   both ends: the cube is not whipped back into shot, it comes back into a widening one
+    starShake:  0.055,       // how hard the star itself is shaking by the lock, in its size
+    farZ:       0.035,       // how small the star is when the dive begins, against its full size. Not smaller: the
+                             //   cube goes past us halfway through the dive, and a star still at a hundredth of its
+                             //   size by then leaves most of a second with nothing on the screen at all
+    // ---- the explosion, and the way back ----
+    cubeGo:     6.5,         // how big the cube has swollen to by the time the camera is through it
+    cubeSide:   1.60,        // how far LEFT the cube slides as the camera goes past it, in SCREEN WIDTHS — well over
+                             //   one, so he is properly gone off the side rather than loitering at the edge of frame
+                             //   while the star does its work. It is the way back in, too: it is passed, not gone through
+    rippleTo:   3.2,         // how far the shockwave's square gets, in screen diagonals
+    shardTo:    1.1,         // how far the star's own six tiles are thrown, in screen diagonals
+    tumble:     3.0,         // turns HE takes as he is thrown out of the cube...
+    driftMs:    13000,       // ...and ms per turn of the slow one he keeps up all the while he is in the sky, on
+                             //   the average — a thrust of this size raises the mean rate, and this is the old
+                             //   9000 opened out to keep the turn he actually makes at about the pace it was
+    thrust:     0.90,        // how much harder he turns at the top of a push than while he is coasting: the rate
+                             //   swings between one and one-and-this, twice a stride
+    kick:       0.70,        // how far his legs go up there, as a share of the stock stride's swing. UNDER one: a
+                             //   man treading air takes short, quick steps at nothing, not the long reaching ones
+                             //   of a man with a floor to push off...
+    kickMs:     620,         // ...and ms for one of those — near enough the game's own cadence, two strides to a
+                             //   tile at eight tenths of a tile a second, so he runs at the pace he always runs at
+    toes:       0.40,        // ...with his feet pointed this far toward the floor that is not there, as a share of
+                             //   the flying stance's full right angle
+    // ---- the shakes (all in tiles, playCell) ----
+    starShakeScr: 0.10,      // the screen, by the lock
+    popShake:   0.70,        // the explosion
+    hitShake:   0.55,        // the shockwave arriving at the cube
+    shake:     0.18,         // how hard each talisman landing throws the screen, in tiles (the game's own shake)
+    // ---- everything after, as it was ----
+    spinAxis:  [0.45, 0.82, 0.35],   // the axis the cube tumbles about when the shockwave hits it...
+    spinTurns: 3,            // ...and how many whole turns it takes before the unfold has it (whole, so it lands square)
+    lotusSize: 1.15,         // how big he is sitting in the cube, against his size the rest of the way
     wireOutMs:  700,         // the wireframe fading off the finished, coloured Tileverse after the last landing
     domino:    { pop: 360, lead: 0.80, slow: 0.22, after: 0.40, floatAfter: 0.25 },   // the unfolding's wave (openDomino): one square's
                              //   swing near the start (ms, before it is fitted to `grow`), how far down the square it hangs off
@@ -29952,10 +30318,8 @@
                              //   between — and, while it is still unfolding, how long one takes over an edge
     charm:     0.065,        // each talisman's size in that ring, as a share of it...
     glow:      0.50,         // ...and the light each stands in, against the Holy Talismans page's
-    ringFlat:  0.35,         // how tall the ring is against how wide — it is seen from a low angle
     trail:     0.30,         // the talismans' glitter trails, as a share of the Holy Talismans page's
     orbit:     0.40,         // the ring's radius, as a share of that
-    depth:     0.40,         // how much bigger a talisman is at the front of the ring (and smaller at the back)
     mapDrop:   0.16,         // how far below the middle of the screen the Tileverse is centred, in screen heights
     ring:      0.45,         // the talismans' ring, and the talismans, sized off the screen's short side
                              //   rather than off him — he is only the size of a tile
@@ -30141,19 +30505,27 @@
       go: OPENING.slam0 + n*OPENING.slamEach, hit: OPENING.slam0 + n*OPENING.slamEach + OPENING.slamFly }));
   const OPEN_LIFT = 700;                             // cents: the shelf's own lift (see its tap handler)
   const OPEN_EVENTS = () => [
-    { at: OPENING.tense[0],     fn: () => { const ms = OPENING.boom - OPENING.tense[0];
+    // the star: a rumble the whole length of its turning, growing with it, and the charms' own swell under the lock
+    { at: OPENING.star[0],      fn: () => { const ms = OPENING.lock[1] - OPENING.star[0];
                                             Sound.rumble && Sound.rumble(ms); Sound.charmGrow && Sound.charmGrow(ms); } },
-    { at: OPENING.boom,         fn: () => { Sound.boom && Sound.boom(); Sound.introFlash && Sound.introFlash();
-                                            Sound.flyWhoosh && Sound.flyWhoosh(OPENING.rise[1] - OPENING.rise[0]);
-                                            haptic([30, 30, 50]); } },
-    { at: OPENING.curl[0],      fn: () => Sound.airSwish && Sound.airSwish() },
-    { at: OPENING.build[0],     fn: () => { const ms = OPENING.build[1] - OPENING.build[0];
-                                            Sound.rumble && Sound.rumble(ms); Sound.charmGrow && Sound.charmGrow(ms); } },
-    { at: OPENING.burst,        fn: () => { Sound.charmBreak && Sound.charmBreak(); Sound.introFlash && Sound.introFlash();
-                                            haptic([20, 40, 30]); } },
-    // ...and the choir goes up a fifth as the talismans come out, exactly as it does on the Holy
+    { at: OPENING.lock[0],      fn: () => { Sound.charmGrow && Sound.charmGrow(OPENING.lock[1] - OPENING.lock[0]);
+                                            Sound.airSwish && Sound.airSwish();      // ...the camera falling back off it
+                                            haptic([10, 24, 10]); } },
+    // ...and the explosion, which is the one loud moment in the film
+    { at: OPENING.pop,          fn: () => { Sound.boom && Sound.boom(); Sound.introFlash && Sound.introFlash();
+                                            Sound.charmBreak && Sound.charmBreak(); haptic([30, 30, 50]); } },
+    // THE SHOCKWAVE REACHING THE CUBE. The swell is fired EARLY, by its own rise (Sound.whump climbs over 0.42
+    // of its length), so the top of it is the moment of the hit and you hear the thing coming rather than
+    // arriving. The boom is not used here: a boom is a strike, and this is a wave closing on something.
+    { at: Math.round(OPENING.hit - OPENING.whumpMs*0.42),
+                                fn: () => Sound.whump && Sound.whump(OPENING.whumpMs) },
+    { at: OPENING.hit,          fn: () => { Sound.introFlash && Sound.introFlash();
+                                            Sound.flyWhoosh && Sound.flyWhoosh(OPENING.fling[1] - OPENING.fling[0]);
+                                            haptic([24, 30, 40]); } },
+    // ...and the choir goes up a fifth as the talismans come back in, exactly as it does on the Holy
     // Talismans page when one is brought out front, and back down once they are all home.
-    { at: OPENING.gather[0],    fn: () => Sound.choirLift && Sound.choirLift(OPEN_LIFT) },
+    { at: OPENING.gather[0],    fn: () => { Sound.choirLift && Sound.choirLift(OPEN_LIFT);
+                                            Sound.airSwish && Sound.airSwish(); } },
     { at: OPENING.toOne[0],     fn: () => Sound.choirLift && Sound.choirLift(0) },
     ...openSlams().map((o, n) => ({ at: o.hit, fn: () => { Sound.talismanLand && Sound.talismanLand(n); haptic([14, 30, 14]); } })),
     { at: OPENING.toOne[0],     fn: () => Sound.airSwish && Sound.airSwish() },
@@ -30199,37 +30571,193 @@
   function openHover(M){ const T0 = titleSceneAt(performance.now());
     const top = mapRectAt({ c: 0, r: 0 }, M.S, M.cx0, M.cy0).y;             // the cloud's top edge
     return { x: viewW/2, y: top/2 + T0.s*(RUNNER.legLen + RUNNER.bodyH*0.5), s: T0.s }; }   // his size all the way through
-  function openOverOne(M){
-    const r = mapRect(0, M.S, M.cx0, M.cy0);
-    return { x: r.x + r.w/2, y: r.y - M.S*OPENING.oneGap, s: titleSceneAt(performance.now()).s * OPENING.oneSize };
+  // HOW FAR THROUGH THE COMING BACK we are. The cube's return is NOT its going reversed, and this is the clock
+  // for the half that is its own: GOING, the camera passes it, so it swells, slides a screen and a half to the
+  // left and is gone — all off openJourney, which is the camera's own move. COMING BACK, it does not retrace
+  // that. Most of the way it went out by is off the frame, and a drift you cannot see is not a drift — so it
+  // comes back as a SMALL thing from just off the left edge and creeps in, which is also the better shot: a
+  // small cube arriving reads as distance, a big one shrinking at you reads as a camera.
+  // ...at a CONSTANT RATE, and over the whole of the time between the explosion and the blow landing. It is a thing
+  // drifting through space, not a thing being eased into a mark: smoothstepped, the ends were slow and the middle
+  // was quick, which is the one shape a drift is not.
+  const openBack  = (t) => cineC01((t - OPENING.pop) / Math.max(1, OPENING.hit - OPENING.pop));
+  // ...and how far the blow has SHOVED IT ON since: the wave catches it out on the left and carries it the rest of
+  // the way to the middle, which is where the unfold wants it standing.
+  const openShove = (t) => cineSmooth(cineC01((t - OPENING.hit) / Math.max(1, OPENING.unfold[0] - OPENING.hit)));
+  // ...and the glass cube with him in it. It does not travel of its own accord — the camera is what moves in
+  // this film — so left alone this is simply the middle of the screen, at the title's size.
+  function openCubeAt(t){ const T0 = titleSceneAt(performance.now());
+    const O = OPENING;
+    const left = cineMix(cineMix(O.cubeInX, O.cubeHitX, openBack(t)), 0, openShove(t));
+    const x = t < O.pop ? viewW/2 - viewW*O.cubeSide*openJourney(t) : viewW/2 - viewW*left;
+    return { x, y: viewH/2 + T0.s*(RUNNER.legLen + RUNNER.bodyH*0.5), s: T0.s, cube: T0.cube }; }
+  // HOW BIG THE CUBE IS ON THE SCREEN, and how much of it there is, as the camera leaves it and comes back.
+  // One number does both journeys: the dive swells it past us and takes it away; the whip brings it back from
+  // nothing. Written in LOG scale, because that is what travelling at a constant rate toward a thing does to
+  // its size on the screen — mixed linearly it crawls away and then bolts, which reads as the cube growing
+  // rather than as us moving.
+  // HOW FAR ALONG THE JOURNEY the camera is: 0 standing at the cube, 1 out at the star. Out over the dive,
+  // held while the star turns and goes off, and back over the whip. Everything that moves because the CAMERA
+  // moved and not because the thing did — the cube's slide across the frame, the sky's own drift — is read off
+  // this one number, so the way out and the way back can never disagree about which side of him we went.
+  // ...and it comes home ON THE EXPLOSION, not before it. The camera falls back off the star as the six lock
+  // square (openPull), but it stays POINTED AT IT: the star turns, quickens, locks and goes off alone in the
+  // middle of an otherwise empty frame, with the cube a screen and a half away off the left. Only when it blows
+  // does the camera swing home — quickly, under the flash — and the cube come back to the middle for the
+  // shockwave to cross to.
+  function openJourney(t){
+    const O = OPENING;
+    return easeIn(openK(O.dive, t)) * (1 - cineSmooth(cineC01((t - O.pop) / O.backMs)));
   }
-  // ...and the glass cube with him in it, floating from the title's spot to the middle of the room (OPENING.drift):
-  // the cube's middle, which is his, ends on the middle of the screen.
-  function openCubeAt(t){ const T0 = titleSceneAt(performance.now()), k = cineSmooth(openK(OPENING.drift, t));
-    const y1 = viewH/2 + T0.s*(RUNNER.legLen + RUNNER.bodyH*0.5);
-    return { x: cineMix(T0.x, viewW/2, k), y: cineMix(T0.y, y1, k), s: T0.s, cube: T0.cube }; }
-  // The cube's view before the boom: floating to the middle, turned by the camera following him round it, and handed
-  // over — a slerp, all of drift and tension long — to the pose the unfold opens from, which it holds exactly on the boom.
-  function openCubeView(t, M) {
+  // ...and HOW FAR BACK OFF THE STAR the camera has fallen. It sits right up against it while it is turning, and
+  // as the six lock square it pulls away — straight back, without turning off it, so the star is smaller but still
+  // alone in the middle of the frame. That is the shot the explosion happens in.
+  function openPull(t){ return cineMix(1, OPENING.pullBack, easeOut(openK(OPENING.lock, t))); }
+  // WHERE THE STAR IS on the screen — off the journey, like everything else the camera's own movement decides.
+  // It is off to the right at the top of the film, because that is what puts the line out to it past his side; the
+  // camera PANS ONTO IT as it goes, so by the time it is out there the star is in the middle of the frame and turns
+  // there, which is where a thing doing its work belongs. Falling back again takes it out to the right once more,
+  // and the cube back to the middle, so the two of them end up standing in the same relation they began in.
+  function openStarXY(t){ return { x: viewW/2 + viewW*OPENING.starX*(1 - openJourney(t)), y: viewH/2 }; }
+  function openCubeZ(t){
+    const O = OPENING;
+    if (t < O.pop) return Math.exp(Math.log(O.cubeGo) * openJourney(t));    // swelling as the camera goes by it
+    return Math.exp(cineMix(Math.log(O.cubeIn), 0, openBack(t)));           // ...and small again as it drifts back
+  }
+  // ...and how much of it you can see: gone by the time the camera is level with it, back as it drifts in.
+  function openCubeA(t){
+    const O = OPENING;
+    return t < O.pop ? 1 - cineC01((openJourney(t) - 0.58) / 0.30)
+                     : cineC01(openBack(t) / 0.12);
+  }
+  // WHICH WAY THE CUBE IS TURNED. Left alone it turns slowly on the title's own clock. When the shockwave hits it
+  // it goes tumbling — `spinTurns` WHOLE turns about an off-axis line, front-loaded so it is wildest at the moment
+  // of the hit and has wound down by the time the unfold takes over — and all the while it is slerping to the pose
+  // the old film's unfold opens from, which it holds exactly on OPENING.unfold[0]. Whole turns, so the tumble is
+  // the identity at the end of it and the unfold starts square whatever the spin did.
+  function openCubeQuat(t, M) {
+    const O = OPENING;
+    const rot = titleCubeRot(openRun0 + t);
+    const base = quatMul(cubeRoll(), quatEuler(rot.ry, rot.rx));
+    if (t < O.hit) return base;
     const Vt = cineView(CINE.unfold[0], M.cam);
     const qU = quatEuler(Math.atan2(Vt.sry, Vt.cry), Math.atan2(Vt.srx, Vt.crx));
-    const k = cineSmooth(cineC01(t / OPENING.unfold[0]));
-    const V = titleCubeView(openCubeAt(t), { ry: 0, rx: 0 });
-    V.m = quatMat(quatSlerp(quatMul(cubeRoll(), cubeCamQuat(performance.now(), openRun0 + t)), qU, k)); V.ortho = true;   // (the unfold takes perspective back on the boom)
+    const k = cineC01((t - O.hit) / Math.max(1, O.unfold[0] - O.hit));
+    const ax = O.spinAxis, al = Math.hypot(ax[0], ax[1], ax[2]) || 1;
+    // IT SPEEDS UP THE WHOLE WAY. The wave washes over it, it begins to turn, and it turns faster and faster
+    // from there — `k` to a power above one, so the angular rate is climbing at every instant and never settles.
+    // It used to be fastest at the moment of the hit and slow from there, which is a cube that was already
+    // turning before it was struck; then it wound up and held, which is a cube with a motor in it. Still a whole
+    // number of turns at the unfold, because f(1) is 1 whatever the power.
+    const wild = quatAxis(ax.map(v => v/al), O.spinTurns*Math.PI*2 * Math.pow(k, O.spinPow));
+    return quatMul(wild, quatSlerp(base, qU, cineSmooth(k)));
+  }
+  // The cube's view at time t: the middle of the screen, at openCubeZ's size, turned by openCubeQuat.
+  function openCubeView(t, M) {
+    const P = openCubeAt(t), V = titleCubeView(P, { ry: 0, rx: 0 });
+    V.S = P.cube * openCubeZ(t);
+    V.m = quatMat(openCubeQuat(t, M)); V.ortho = true;   // (the unfold takes perspective back as it opens)
     return V;
   }
-  // His place at time t: running round the cube as it floats to the middle, up like a rocket from wherever he is on it
-  // to the hover over the map on the boom, over to chapter one, and down into it.
+  // ---- THE STAR: six tiles, one per colour of the rainbow, turning over each other ---------------------
+  const RAINBOW_SIX = () => (TRAILS.find(x => x.id === "rainbow") || { cols: ["#ffffff"] }).cols;
+  // Layer j's turn at time t. It is the INTEGRAL of a speed that climbs through the beat — speed w0(1 + ramp·u³),
+  // so angle w0·span(u + ramp·u⁴/4) — rather than a speed applied to a frame's dt, so the star can be scrubbed to
+  // any moment and is at the angle it would have run to. Layers alternate direction and each turns a little faster
+  // than the one under it, which is what keeps the rosette moving instead of merely spinning.
+  function starAngle(j, t){
+    const O = OPENING, W = O.star, span = Math.max(1, W[1] - W[0]);
+    const w0 = (Math.PI*2 / O.starTurn) * (1 + j*O.starStep) * (j % 2 ? -1 : 1);
+    const spun = (tt) => { const u = cineC01((tt - W[0]) / span);
+                           return w0*span*(u + O.starRamp*u*u*u*u/4); };
+    const rest = j * O.starLean * Math.PI/180;              // where they sit before any of it starts
+    if (t < O.lock[0]) return rest + spun(t);
+    // THE LOCK is nothing but the angles coming to rest square on each other: each layer carries on to the next
+    // right angle in the direction it was already going (plus a whole turn, so the snap has travel in it), and
+    // there they all coincide — which is what makes one white tile out of six coloured ones, because six of the
+    // rainbow's hexes added together are past 255 in every channel.
+    const at = rest + spun(O.lock[0]), dir = w0 >= 0 ? 1 : -1;
+    const q = Math.PI/2, to = (dir > 0 ? Math.ceil(at/q) : Math.floor(at/q))*q + dir*O.starLockTurns*Math.PI*2;
+    return cineMix(at, to, 1 - Math.pow(1 - openK(O.lock, t), 5));   // fast, and settling
+  }
+  // How big the star is on the screen: up out of nothing as the camera travels to it, held while it turns, and
+  // blown out of the frame by the explosion. In log scale, for the same reason openCubeZ is.
+  function openStarZ(t){
+    const O = OPENING;
+    if (t < O.dive[0]) return 0;
+    if (t < O.pop) return Math.exp(cineMix(Math.log(O.farZ), 0, Math.pow(openK(O.dive, t), 2.2))) * openPull(t);
+    return 0;                                      // (past the explosion the shards and the charms carry it)
+  }
+  // ...and how hard it is shaking, in its own size: nothing at the start, everything at the lock — and NOTHING
+  // AGAIN once the map is down. It used to settle at 0.65 and stay there for ever, so a tremble belonging to a
+  // star that had already blown up was still running under the unfold, the talismans and the whole end of the
+  // film: the back half shook, quietly, for no reason anybody could have named. It now dies out across the
+  // unfolding and is gone with the last square of the Tileverse.
+  function openStarShake(t){
+    const O = OPENING, u = t < O.lock[0] ? openK(O.star, t) : 1;
+    const tail = 1 - cineC01((t - O.hit) / Math.max(1, O.grow[1] - O.hit));
+    return u*u*u * (1 - openK(O.lock, t)*0.35) * tail;
+  }
+  // The six tiles themselves, drawn ADDITIVELY about (x, y) at half-size `h`. Nothing here is painted white:
+  // the middle is white because all six are lying on it.
+  function drawStarTiles(x, y, h, t, A, spread){
+    const cols = RAINBOW_SIX(), n = OPENING.starN;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = A;
+    for (let j = 0; j < n; j++) {
+      const ang = starAngle(j, t);
+      let dx = 0, dy = 0;
+      if (spread > 0) { const a0 = j*(Math.PI*2/n) + 0.4; dx = Math.cos(a0)*spread; dy = Math.sin(a0)*spread; }
+      ctx.save();
+      ctx.translate(x + dx, y + dy);
+      ctx.rotate(ang);
+      ctx.fillStyle = cols[j % cols.length];
+      rrect(-h, -h, h*2, h*2, tileR(h*2)); ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+  // HIS PLACE at time t: sitting in the middle of the cube while the camera is away, thrown out of it when the
+  // shockwave hits, up to where he watches the Tileverse being made, over to chapter one, and down into it.
+  // THE END OF IT: he does NOT fly over to chapter one and drop into it. He stays where he has been floating all
+  // along — the middle of the screen, high up, over the top of the Tileverse — and the camera goes in without him
+  // while he hangs there kicking, until the black comes up over the lot.
   function openRunnerAt(t, M){
-    const H = openHover(M), O = openOverOne(M);
+    const O = OPENING, H = openHover(M), T0 = titleSceneAt(performance.now());
     const mix = (a, b, k) => ({ x: cineMix(a.x, b.x, k), y: cineMix(a.y, b.y, k), s: cineMix(a.s, b.s, k) });
-    const tc = Math.min(t, OPENING.boom);
-    let P = cubeRunnerAt(openCubeView(tc, M), openRun0 + tc);
-    const rk = openK(OPENING.rise, t);
-    if (rk > 0) P = mix(P, H, 1 - Math.pow(1 - rk, 3));        // all its speed at once, braking into the hover
-    if (t >= OPENING.toOne[0]) P = mix(P, O, cineSmooth(openK(OPENING.toOne, t)));
-    const bob = Math.sin(t / TITLE_SCENE.bobMs * Math.PI*2) * P.s * TITLE_SCENE.bob * (1 - openK(OPENING.fall, t));
+    // in the cube: its middle is his, and he is the cube's own size — carried by openCubeZ, so he goes with it
+    const Cb = openCubeAt(t), z = openCubeZ(t);
+    const sIn = T0.s*O.lotusSize*z;
+    let P = { x: Cb.x, y: viewH/2 + sIn*(RUNNER.legLen + RUNNER.bodyH*0.5), s: sIn };
+    const fk = openK(O.fling, t);
+    if (fk > 0) {
+      const e = 1 - Math.pow(1 - fk, 3);                     // all its speed at once, braking into the hover
+      P = mix(P, H, e);
+      P.y -= Math.sin(Math.PI*fk) * H.s * 2.2;               // ...thrown UP over the top of the arc on the way
+    }
+    const bob = Math.sin(t / TITLE_SCENE.bobMs * Math.PI*2) * P.s * TITLE_SCENE.bob * (1 - openK(O.fall, t));
     return { x: P.x, y: P.y + bob, s: P.s };
+  }
+  // HOW FAR ROUND HE HAS TUMBLED. Whole turns as he is flung out of the cube, front-loaded so it is wildest at
+  // the moment the shell goes — and then he keeps turning, slowly, for the whole of the time he is up there, and
+  // is still turning when the black takes him. It used to be wound on to the next whole turn over `toOne` so the
+  // last picture of him was square to the frame; that reads as a flick, which is a thing nothing in space does.
+  // He is adrift, so he stays adrift.
+  //
+  // He turns LEFT. `spun` counts whole turns; the sign is put on at the end, so the direction is one character
+  // rather than a minus buried in several places that all have to agree.
+  function openTumble(t){
+    const O = OPENING;
+    const fling = O.tumble*(1 - Math.pow(1 - openK(O.fling, t), 2));
+    // ...and after the throw he turns HIMSELF, a little harder on every footfall. His feet are the only thing out
+    // there to push against, so the turn should not be a constant rate handed to him — it steps forward as he
+    // kicks and coasts between. The rate is the slow drift plus a bump coming round twice a stride, once per
+    // foot; this is its INTEGRAL, so the angle is a function of the clock alone and no amount of scrubbing can
+    // make it jump. It never goes backwards: the bump is a half-cosine added to the drift, never taken off it.
+    const u = Math.max(0, t - O.fling[1]), A = O.thrust, w = Math.PI*4 / O.kickMs;
+    const drift = ((1 + A/2)*u - (A/2)*(Math.sin(w*t) - Math.sin(w*O.fling[1]))/w) / O.driftMs;
+    return -(fling + drift)*Math.PI*2;
   }
   // Which splash owns piece k of chapter i (cached): the talisman whose paint most colours it.
   function openOwnerOf(i, k){
@@ -30242,38 +30770,30 @@
   }
   function drawOpening(ts){
     const t = openT, M = openMapCam(), C = openCloud;
-    const fallK = openK(OPENING.fall, t), whip = easeIn(fallK);
-    // the camera whips in on chapter one at the end — the map's own move from its sequence
-    let S = M.S, cx0 = M.cx0, cy0 = M.cy0;
-    if (fallK > 0) {
-      // INTO chapter one, the way the map's own whip goes into a chapter (drawWin): the square grows on
-      // the same eased-in line — and slides to the middle of the screen as it does, so the camera goes
-      // straight in rather than sweeping past it. (Walking the camera's centre across on its own clock
-      // while the scale ran away exponentially flung the square off the screen halfway through.)
-      const one = mapCells()[0] || { c: 0, r: 0 }, r0 = mapRect(0, M.S, M.cx0, M.cy0), m = cineSmooth(fallK);
-      const px = cineMix(r0.x + r0.w/2, viewW/2, m), py = cineMix(r0.y + r0.h/2, viewH/2, m);
-      S = M.S + (Math.max(viewW, viewH)*2.4 - M.S) * whip;
-      cx0 = one.c - (px - viewW/2)/S; cy0 = one.r - (py - viewH/2)/S;
-    }
-    voidPar = { x: cx0 * S * VOID_PARALLAX, y: cy0 * S * VOID_PARALLAX };
+    const fallK = openK(OPENING.fall, t);
+    // NO MOVE AT THE END. The camera used to whip into chapter one over the last beat, the square growing on
+    // the map's own eased-in line until it filled the screen. It does not go anywhere now: the Tileverse is
+    // finished, he is floating over the top of it, and the film simply stops looking — the black comes up over
+    // the shot as it stands, which is the last thing that happens and needs nothing moving under it.
+    const S = M.S, cx0 = M.cx0, cy0 = M.cy0;
+    // ...and the TRAVEL, which the sky is what sells: the camera goes forward through the cosmos to the star
+    // and whips back again, so it slides one way and then the other under everything.
+    const trav = openJourney(t) * viewW*0.30;
+    voidPar = { x: cx0 * S * VOID_PARALLAX - trav, y: cy0 * S * VOID_PARALLAX };
     try { drawVoid(ts); } finally { voidPar = null; }
     if (!C || !openNet) { drawTitleScene(ts); return; }
     // Every landing SHAKES it: the game's own shake — a random throw decaying by 0.86 a frame — one for
     // each talisman that has hit, and the sky left still behind it.
     let shk = 0;
     for (const o of openSlams()) if (t >= o.hit) shk = Math.max(shk, playCell()*OPENING.shake * Math.pow(0.86, (t - o.hit)/16));
-    const tK = t < OPENING.boom ? openK(OPENING.tense, t) : 0;
-    shk = Math.max(shk, playCell()*OPENING.tenseShake * tK*tK);                        // the tension, creeping up...
-    if (t >= OPENING.boom)                                                              // ...and the boom
-      shk = Math.max(shk, playCell()*OPENING.boomShake * Math.pow(0.86, (t - OPENING.boom)/16));
-    const bK = t < OPENING.burst ? openK(OPENING.build, t) : 0;
-    shk = Math.max(shk, playCell()*OPENING.buildShake * bK*bK*bK);                  // the build, rising...
-    if (t >= OPENING.burst)                                                           // ...and the burst
-      shk = Math.max(shk, playCell()*OPENING.burstShake * Math.pow(0.86, (t - OPENING.burst)/16));
+    shk = Math.max(shk, playCell()*OPENING.starShakeScr * openStarShake(t));         // the star, winding up...
+    if (t >= OPENING.pop)                                                             // ...the explosion...
+      shk = Math.max(shk, playCell()*OPENING.popShake * Math.pow(0.86, (t - OPENING.pop)/16));
+    if (t >= OPENING.hit)                                                             // ...and the shockwave hitting the cube
+      shk = Math.max(shk, playCell()*OPENING.hitShake * Math.pow(0.86, (t - OPENING.hit)/16));
     ctx.save();
     if (shk > 0.3) ctx.translate((Math.random()*2 - 1)*shk, (Math.random()*2 - 1)*shk);
     const R = openRunnerAt(t, M);
-    const wakeK = cineSmooth(openK(OPENING.wake, t));
     const slams = openSlams();
     // ---- the Tileverse: the cube's net carries on unfolding a square at a time, on the old film's own
     // hinges, until the whole of it is lying there in white lines; each talisman's landing then fills
@@ -30340,15 +30860,69 @@
         subLit: (i, k) => { const o = openOwnerOf(i, k), at = o < 0 ? null : landAt.get(o);
                             return at != null && t >= at ? 1 : 0; } });   // there the instant it lands
     }
-    // ---- the cube, from the title's pose into the old film's unfold, as white edges ------------
+    // ---- THE STAR, and the explosion. Behind the cube, because that is where it is: the camera travelled
+    // out to it and comes back the same way, so all of this is drawn before the cube and before the talismans
+    // that pass in front of it. --------------------------------------------------------------------------
+    const starB = Math.min(viewW, viewH)*OPENING.starSize, starZ = openStarZ(t);
+    const sxy = openStarXY(t), scx = sxy.x, scy = sxy.y, diag = Math.hypot(viewW, viewH);
+    if (starZ > 0.0004) {
+      const h = starB*starZ/2, jj = starB*starZ*OPENING.starShake*openStarShake(t);
+      const x = scx + (Math.random()*2 - 1)*jj, y = scy + (Math.random()*2 - 1)*jj;
+      charmGlow(x, y, h*OPENING.starGlow*3, [255, 255, 255], 0.30*cineC01(starZ*4));
+      drawStarTiles(x, y, h, t, 1, 0);
+    }
+    if (t >= OPENING.pop) {
+      // the flash — a fifth of a second, and NOT to white. It is laid with `lighter` over a picture that already
+      // has a white star, a white shockwave and the bloom off both in it, so at full strength there was nothing
+      // left on the screen to see the explosion happen to.
+      const pk = cineC01((t - OPENING.pop) / 200);
+      if (pk < 1) { ctx.save(); ctx.globalCompositeOperation = "lighter";
+                    ctx.fillStyle = "rgba(255,255,255," + (0.45*(1 - pk)*(1 - pk)).toFixed(3) + ")";
+                    ctx.fillRect(0, 0, viewW, viewH); ctx.restore(); }
+      // ...the six tiles themselves thrown apart, held at the angle the lock left them square at
+      const sk = cineC01((t - OPENING.pop) / 620);
+      const pull = openPull(t);
+      if (sk < 1) drawStarTiles(scx, scy, starB*pull/2*(1 + sk*1.6), OPENING.lock[1], (1 - sk)*(1 - sk),
+                                diag*OPENING.shardTo*easeOut(sk));
+      // ...and THE SHOCKWAVE. It travels at a CONSTANT RATE, the way a shockwave does, set so that its leading
+      // edge is on the cube exactly at OPENING.hit — so the wave is seen to cross the gap between the two of them
+      // rather than merely to arrive, and is halfway across halfway through. It keeps going afterwards, out of
+      // the frame, rather than stopping on the thing it struck.
+      // Written as the radius it STARTS at and the radius it must be ON the hit, walked between at a constant
+      // rate and carried straight on past — rather than as a speed, which is the same thing said in a way that
+      // cannot be read off the picture. What the eye takes for the wave's edge is squarePulse's outermost bloom,
+      // which stands at the radius it is given (its stroke is inside that, at nine tenths), so the radius to be
+      // at is simply the gap: measured on the screen, the leading edge crosses the cube on the hit and not, as it
+      // once did, six tenths of a second early.
+      // ...and the gap is measured to THE CUBE, wherever the drift has it, rather than to the middle of the screen.
+      // The cube is not at the middle when the wave reaches it any more — it is still out on the left, which is
+      // where the collision belongs — and a wave aimed at the middle would go straight past it and hit nothing.
+      const r0 = starB*0.5*openPull(t), gap = Math.abs(scx - openCubeAt(t).x);
+      const rad = cineMix(r0, gap, (t - OPENING.pop) / (OPENING.hit - OPENING.pop));
+      if (rad < diag*OPENING.rippleTo) {
+        const out = cineC01((t - OPENING.hit) / 800);                  // full strength until it lands, then away
+        squarePulse(scx, scy, rad, (1 - out)*(1 - out), 0);   // no outline: a wash rolling out, not a drawn square
+      }
+    }
+    // ---- the cube, from the lotus into the old film's unfold, as white edges ------------
     if (unfoldK < 1) {
       if (t < OPENING.unfold[0]) {
-        // still whole, with him running round it: the camera following him, handed over to the pose the unfold opens from
-        const V = openCubeView(t, M);
-        const cubeSparks = 1 - cineC01((t - (OPENING.unfold[0] - 150)) / 150);   // ...handed to the faces as it opens
-        const jj = tK > 0 ? Tt.s * OPENING.tenseTremble * tK*tK : 0;             // ...and him trembling as the tension creeps up
-        drawCubeRun(V, openRun0 + t, ts, 1, { sparkA: cubeSparks,
-                    jitter: jj ? { x: (Math.random()*2 - 1)*jj, y: (Math.random()*2 - 1)*jj } : null });
+        // STILL WHOLE, and empty but for him: the far glass and edges, him sitting in the middle of it, then the
+        // near glass and edges over the top — so it reads as something he is inside rather than behind.
+        const V = openCubeView(t, M), cubeA = openCubeA(t);
+        if (cubeA > 0.004) {
+          const cubeSparks = 1 - cineC01((t - (OPENING.unfold[0] - 150)) / 150);   // ...handed to the faces as it opens
+          drawCubeWire(V, cubeA, true, cubeSparks);
+          // ...and NO GLITTER while the camera is travelling. shedGlitter asks where he was over a spread of
+          // frame times, and through the dive and the way back his size is running away exponentially — so what
+          // came out was a handful of white squares at wildly different sizes standing round the cube rather
+          // than a trail falling off him. He is only still enough for it at either end of the journey.
+          const still = t < OPENING.dive[0] || t >= OPENING.lock[1];
+          if (t < OPENING.hit)                                                     // (past the hit he is outside it — see below)
+            drawAngel(R, ts, cubeA, { pose: "onefoot", fromLotus: 1, shut: t < OPENING.pop, glitA: still ? 1 : 0,
+                                      where: still ? (b) => openRunnerAt(Math.max(0, t + (b - ts)), M) : null });
+          drawCubeWire(V, cubeA, false, cubeSparks);
+        }
       } else {
         // opening: the old film's own hinges, on its own clock remapped to ours, framed from the title
         // cube's size and place out to the map's
@@ -30397,38 +30971,42 @@
                        cineC01((t - OPENING.unfold[0]) / 150), 3.3);
       }
     }
-    // ---- the talismans: spiralling in, ringing him, flying down one by one ----------------------
+    // ---- the talismans: out of HIM as the wave lands, round him, then down one by one ------------
     const gK = openK(OPENING.gather, t);
     const charmsFront = [];                            // the near half of the ring, drawn after him (below)
     if (gK > 0) {
       const ringB = Math.min(viewW, viewH) * OPENING.ring;
       const orbitR = ringB*OPENING.orbit, charmR = ringB*OPENING.charm;
       const midY = R.y - R.s*(RUNNER.legLen + RUNNER.bodyH*0.5);
-      // The ring's angle: full speed as they come out of him, easing down to a crawl by the time the first
-      // one leaves (speed falls off as (1-u)^2 over to OPENING.crawl), and crawling on after that. The
-      // angle is the INTEGRAL of that speed, so nothing jumps however the clock is scrubbed.
-      const spin = (tt) => {
-        const w0 = Math.PI*2 / OPENING.spinMs, c = OPENING.crawl, a = OPENING.gather[0], D = Math.max(1, OPENING.slam0 - a);
-        if (tt <= a) return w0 * tt;
-        const u = Math.min(1, (tt - a) / D);
-        return w0 * (a + D*(c*u + (1 - c)*(1 - Math.pow(1 - u, 3))/3) + Math.max(0, tt - a - D)*c);
-      };
-      const n = Math.max(1, slams.length);
+      // THE SHELF'S OWN ORBIT, and the shelf's own numbers — ORRERY, read from where it lives rather than
+      // copied here. Three mutually perpendicular axes turned together as one rigid frame, about the up axis
+      // on one slow clock and about the across axis on another; one ring is drawn round the first and second
+      // of them, the other round the first and third. They therefore share an axis and their normals stay
+      // perpendicular at every instant, so one can be seen edge-on while the other is wide open. `z` is how
+      // near a charm is and does the sizing and the sorting, exactly as it does on the page.
+      //
+      // Written as a function of the TIME rather than of this frame, because the glitter behind a charm is the
+      // same question asked about a second ago — one routine, so a grain can never fall off the path it took.
       const orbitAt = (o, n0, tt) => {
-        // OUT OF HIM: flung from his middle all at once, slowing as they reach the ring
-        const k = cineC01((tt - OPENING.gather[0] - n0*35) / (OPENING.gather[1] - OPENING.gather[0] - n0*35));
-        const e = 1 - Math.pow(1 - k, 3);
-        const ang = spin(tt) + n0*(Math.PI*2/n) - (1 - e)*1.4;     // unwinding as they go
-        const rr = cineMix(0, orbitR, e);
-        // ...nearer the front of the ring (the lower half of the ellipse) bigger, further back smaller
-        const dep = Math.sin(ang) * e;
-        return { x: R.x + Math.cos(ang)*rr, y: midY + Math.sin(ang)*rr*OPENING.ringFlat,
-                 r: cineMix(charmR*0.2, charmR, e) * (1 + OPENING.depth*dep), e, dep };
+        // OUT OF HIM, as the shockwave lands: flung from his middle, slowing onto the orbit
+        const span = Math.max(1, OPENING.gather[1] - OPENING.gather[0] - n0*35);
+        const e = 1 - Math.pow(1 - cineC01((tt - OPENING.gather[0] - n0*35) / span), 3);
+        const al = tt/ORRERY.planeMs*Math.PI*2, be = tt/ORRERY.tipMs*Math.PI*2;
+        const ca = Math.cos(al), sa = Math.sin(al), cb = Math.cos(be), sb = Math.sin(be);
+        const u = [ ca, sa*sb, -sa*cb ];
+        const ring = n0 % 2, kk = (n0 - ring)/2;
+        const w = ring ? [ sa, -ca*sb, ca*cb ] : [ 0, cb, sb ];
+        const th = ((tt % ORRERY.ms)/ORRERY.ms)*Math.PI*2 + kk*(Math.PI*2/3) + ring*(Math.PI/3);
+        const cs = Math.cos(th), sn = Math.sin(th), rr = orbitR*e;
+        const z = u[2]*cs + w[2]*sn;
+        return { x: R.x  + rr*(u[0]*cs + w[0]*sn),
+                 y: midY + rr*(u[1]*cs + w[1]*sn), z, e,
+                 r: cineMix(charmR*0.2, charmR, e) * ((1 - ORRERY.near) + ORRERY.near*(z*0.5 + 0.5)) };
       };
       slams.forEach((o, n0) => {
         if (t >= o.hit) return;                                        // it is in its chapter now
-        let q = orbitAt(o, n0, t), A = cineC01(q.e * 3);
-        const flying = t >= o.go, near = flying || q.dep > 0;
+        let q = orbitAt(o, n0, t), A = cineC01(q.e * 4);
+        const flying = t >= o.go, near = flying || q.z > 0;
         if (flying) {                                                  // ...on its way down to it
           const from = orbitAt(o, n0, o.go), rr = mapRect(o.sp.idx, S, cx0, cy0);
           const k = cineC01((t - o.go) / OPENING.slamFly), e = k*k*k;  // accelerating into it
@@ -30442,8 +31020,8 @@
           ctx.restore();
           drawFeaturedCharm(ctx, o.sp.def, q.x, q.y, q.r, ts, A, { k: n0, noSpark: true, noShimmer: true, glowK: OPENING.glow });
         };
-        // The far half of the ring goes round BEHIND him and the near half in FRONT — and one on its way down
-        // to its chapter is in front of everything.
+        // The far half of the orbit goes round BEHIND him and the near half in FRONT — off the same `z` the
+        // sizing reads — and one on its way down to its chapter is in front of everything.
         if (near) charmsFront.push(paint); else paint();
       });
       // ...and where each one hits, a pulse of its own light
@@ -30454,37 +31032,38 @@
       }
     }
     // ---- him: waking, rising, flying to chapter one, and the drop in ------------------------------
-    const dropK = easeIn(fallK);
-    let P = R;
-    if (fallK > 0) {                                                   // down into chapter one, wherever the whip has it
-      const r1 = mapRect(0, S, cx0, cy0);
-      // ...growing back to his full size as the camera goes in after him
-      P = { x: r1.x + r1.w/2, y: cineMix(R.y, r1.y + r1.h*0.62, dropK), s: cineMix(R.s, Tt.s, cineSmooth(fallK)) };
+    // HE STAYS PUT, and so does everything else: the shot does not move at the end at all. He holds the place he
+    // has floated in the whole way through — the middle of the screen, high up, over the finished Tileverse —
+    // and he is still there, still kicking, when the black closes over him. Nor is he faded out first; the black
+    // is what takes him, along with the map and the sky and the lot.
+    const P = R, A = 1;
+    // ONCE THE CUBE HAS THROWN HIM OUT. He unfolds from the lotus into the flying stance on the way, and he
+    // TUMBLES — turned about his own middle, so it is him going over and over rather than him swung round a
+    // point. Whole turns, wound on to an upright one before the end.
+    // (Before the hit he is inside the cube, and the cube's own block above draws him there, under its near glass.)
+    const flingK = openK(OPENING.fling, t);
+    if (t >= OPENING.hit) {
+      const spun = openTumble(t), my = P.y - P.s*(RUNNER.legLen + RUNNER.bodyH*0.5);
+      // ...and HIS LEGS GOING, the whole time he is floating — not pedalling to a rhythm but scrabbling, the way
+      // anything does when it is in the air and would rather not be. He is a runner with nothing under him, and
+      // that is the one thing he is for; he looks for something to run on until there is something to run on.
+      // NO SPARK AND NO GLITTER out here. Both belong to the angel, and the angel is what the cube was holding —
+      // once the shell is off him he is a plain runner in the plain coat, with nothing coming off him at all.
+      ctx.save();
+      if (spun) { ctx.translate(P.x, my); ctx.rotate(spun); ctx.translate(-P.x, -my); }
+      // NO NAMED POSE out here: the stock stride, which is running. `fromLotus` still walks him out of the sit
+      // as he is flung, so he unfolds from the lotus straight into a run rather than into a flying stance.
+      drawAngel(P, ts, A, { run: true, toes: OPENING.toes, fromLotus: 1 - easeOut(flingK), shut: false,
+                            drained: true, sparkA: 0, glitA: 0,
+                            kick: OPENING.kick, phase: t / OPENING.kickMs * Math.PI*2 });
+      ctx.restore();
     }
-    const A = 1 - cineC01((fallK - 0.55) / 0.45);
-    const where = (b) => openRunnerAt(Math.max(0, Math.min(t, t + (b - ts))), M);   // shedGlitter asks in frame time
-    // the ball, the build in it, and the burst — then his legs gathered back under him on the way to one
-    const burst = OPENING.burst, burstK = t >= burst ? cineC01((t - burst) / OPENING.splayMs) : 0;
-    const curlK = t < burst ? cineSmooth(openK(OPENING.curl, t)) : 0;
-    const splayK = t < burst ? 0 : (1 - Math.pow(1 - burstK, 3)) * (1 - cineSmooth(openK(OPENING.toOne, t)));
-    const buildK = t < burst ? openK(OPENING.build, t) : 0;
-    if (tK > 0) {                                                      // ...trembling in the cube as the tension creeps up
-      const j = P.s * OPENING.tenseTremble * tK*tK;
-      P = { x: P.x + (Math.random()*2 - 1)*j, y: P.y + (Math.random()*2 - 1)*j, s: P.s };
-    }
-    if (buildK > 0) {                                                  // ...trembling harder as it builds
-      const j = P.s * OPENING.tremble * buildK*buildK;
-      P = { x: P.x + (Math.random()*2 - 1)*j, y: P.y + (Math.random()*2 - 1)*j, s: P.s };
-    }
-    // (before the boom he is on the cube — drawCubeRun has him — and he comes off it running, not out of a lotus)
-    if (t >= OPENING.boom) drawAngel(P, ts, A, {
-      pose: "onefoot", fromLotus: 0, shut: false, where, curl: curlK, splay: splayK,
-      drained: t >= burst, sparkA: t < burst ? 1 : 0, sparkK: 1 + OPENING.buildSpark*buildK*buildK + OPENING.tenseSpark*tK*tK,
-      glitA: t < burst ? 1 : 0 });
     for (const paint of charmsFront) paint();                          // ...and the near talismans over him
     ctx.restore();                                                     // (the shake)
     // ...and black, as the camera arrives inside chapter one
-    if (fallK > 0) { ctx.fillStyle = "rgba(5,4,13," + cineC01((fallK - 0.35) / 0.65).toFixed(3) + ")"; ctx.fillRect(0, 0, viewW, viewH); }
+    // ...and the black, over the whole of the last beat. It used to wait out the first third of it while the
+    // camera was still travelling; there is nothing to wait for any more, so the fade IS the beat.
+    if (fallK > 0) { ctx.fillStyle = "rgba(5,4,13," + cineC01(fallK).toFixed(3) + ")"; ctx.fillRect(0, 0, viewW, viewH); }
   }
   function drawTitle(ts){
     const first = firstLaunch();

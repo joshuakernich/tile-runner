@@ -391,6 +391,10 @@
         <option value="stealth">Stealth hunter</option>
         <option value="golem">Stone golem</option>
         <option value="wall">Wall (still, spiked)</option>
+        <option value="blinky">Ghost · Blinky (chases)</option>
+        <option value="pinky">Ghost · Pinky (cuts ahead)</option>
+        <option value="inky">Ghost · Inky (flanks)</option>
+        <option value="clyde">Ghost · Clyde (shy)</option>
         <option value="warden">BOSS · Warden (hunts)</option>
         <option value="leviathan">BOSS · Leviathan (rail)</option>
         <option value="maw">BOSS · Maw (bites)</option>
@@ -655,10 +659,12 @@ function toWorking(o){
 // ...and the four BOSSES, which are the same animals at twice the size: each stands on FOUR cells — its own and the
 // three down and right of it — so placing one needs the room, and the map draws the square it claims.
 const MON_KINDS = ["hrail","vrail","patrol","square","hunter","trap","stealth","golem","wall",
+                   "blinky","pinky","inky","clyde",
                    "warden","leviathan","maw","colossus"];
 const MON_COL = { hrail:"#c37ef1", vrail:"#4baff1", patrol:"#49d47c",      // the rainbow's colours, as the game's
                   square:"#f7933b", hunter:"#6b7192", trap:"#f1645f", stealth:"#cfd8ff", golem:"#b3a582",
                   wall:"#5b4780",                                          // the masonry one — the wall's ink, lifted to read on the map
+                  blinky:"#ff3b30", pinky:"#ffb8de", inky:"#38e0e0", clyde:"#ffa030",   // the four, told apart by their eyes
 
                   warden:"#f7933b", leviathan:"#4baff1", maw:"#f1645f", colossus:"#b3a582" };
 // how many cells across a kind is — a boss is two, everything else one
@@ -753,7 +759,11 @@ function shiftAll(dc, dr){
   mv(L.start); (L.init||[]).forEach(mv); if(L.goal) mv(L.goal);
   L.walls = new Set([...L.walls].map(s=>{ const [c,r]=s.split(",").map(Number); return keyOf(c+dc, r+dr); }));
   L.holes = new Set([...(L.holes||[])].map(s=>{ const [c,r]=s.split(",").map(Number); return keyOf(c+dc, r+dr); }));
-  [L.coins, L.pellets, L.stone, L.platforms, L.talismans, L.doors, L.keys].forEach(a=>(a||[]).forEach(mv));
+  // EVERY list of cells the level carries, singularity included. The crumbles were the one thing left out of this, so
+  // growing the board from the left or the top pushed the whole level across and left them sitting where they were —
+  // the hole in the floor ending up under a different tile from the one it was cut for.
+  [L.coins, L.pellets, L.stone, L.platforms, L.talismans, L.doors, L.keys,
+   L.singularity].forEach(a=>(a||[]).forEach(mv));
   // a block or a rail names ONE fixed axis and a lo..hi span on the other, so which delta
   // applies to which field depends on the axis
   (L.blocks||[]).forEach(b=>{ if((b.axis||"h")==="h"){ b.r+=dr; b.lo+=dc; b.hi+=dc; b.pos0+=dc; }
@@ -774,6 +784,7 @@ function cropToBoard(){
   L.holes = new Set([...(L.holes||[])].filter(s=>{ const [c,r]=s.split(",").map(Number); return inB(c,r); }));
   L.coins=keep(L.coins); L.pellets=keep(L.pellets); L.stone=keep(L.stone); L.platforms=keep(L.platforms);
   L.talismans=keep(L.talismans); L.doors=keep(L.doors); L.keys=keep(L.keys);
+  L.singularity=keep(L.singularity);       // ...left out of this too, so a shrunk board kept crumbles off its own edge
   L.init = keep(L.init);
   L.start = [clamp(L.start[0],0,L.cols-1), clamp(L.start[1],0,L.rows-1)];
   if(L.goal && !inB(L.goal[0],L.goal[1])) L.goal=[clamp(L.goal[0],0,L.cols-1), clamp(L.goal[1],0,L.rows-1)];
@@ -839,9 +850,12 @@ function phaseForCell(h,p){
 function isMon(h){ return (h.kind||'saw')==='monster'; }
 function monCells(h){
   const v = monVariant(h);
-  if (v==="hrail" || v==="vrail"){
-    const hz = (h.axis||"h")==="h", out=[];
-    for(let i=h.lo;i<=h.hi;i++) out.push(hz?[i,h.r]:[h.c,i]);
+  // THE LANE, for anything that runs on one — and a BOSS on a rail covers `big` of them side by side. This ran on the
+  // variant's name before, so the Leviathan fell through to the boss branch below and was asked for an `h.c` it has
+  // never had: its cells came back as NaN, and a thing whose cells are NaN cannot be clicked, dragged or erased.
+  if (v==="hrail" || v==="vrail" || (monIsBoss(v) && h.lo != null)){
+    const hz = (h.axis||"h")==="h", b = monIsBoss(v) ? monBig(v) : 1, out=[];
+    for(let i=h.lo;i<=h.hi;i++) for(let k=0;k<b;k++) out.push(hz?[i, h.r+k]:[h.c+k, i]);
     return out;
   }
   // A BOSS stands on four: its own cell and the three down and right of it. Without this it fell through to the path
@@ -851,7 +865,8 @@ function monCells(h){
     for (let dr = 0; dr < b; dr++) for (let dc = 0; dc < b; dc++) out.push([h.c + dc, h.r + dr]);
     return out;
   }
-  if (v==="hunter" || v==="stealth" || v==="golem" || v==="trap" || v==="wall") return [[h.c,h.r]];
+  if (v==="hunter" || v==="stealth" || v==="golem" || v==="trap" || v==="wall" ||
+      v==="blinky" || v==="pinky" || v==="inky" || v==="clyde") return [[h.c,h.r]];
   // The square loop is a ring of four corners. It used to fall through to the path branch
   // and come back EMPTY, which made it unhittable: you could not erase one, and nothing
   // could tell it was in the way.
@@ -1266,13 +1281,20 @@ function draw(){
   // and the creature itself sitting on the one it starts from
   L.hazards.filter(isMon).forEach(h=>{
     const v = monVariant(h), col = MON_COL[v] || "#c37ef1";
-    if (v==="hrail" || v==="vrail"){
-      const hz=(h.axis||"h")==="h";
-      const [x1,y1]=centerOf(hz?h.lo:h.c, hz?h.r:h.lo), [x2,y2]=centerOf(hz?h.hi:h.c, hz?h.r:h.hi);
-      line(x1,y1,x2,y2,col,4,1);
+    // A LANE, and a boss on one gets the same lane drawn `big` cells thick — it was being sent to the boss branch
+    // below and asked for an `h.c` it has never had, so it came out at NaN and drew nothing at all.
+    if (monIsRail(h)){
+      const hz=(h.axis||"h")==="h", b = monIsBoss(v) ? monBig(v) : 1;
+      for (let k = 0; k < b; k++) {
+        const [x1,y1]=centerOf(hz?h.lo:(h.c+k), hz?(h.r+k):h.lo), [x2,y2]=centerOf(hz?h.hi:(h.c+k), hz?(h.r+k):h.hi);
+        line(x1,y1,x2,y2,col,b>1?6:4,1);
+      }
       for(const e of sawEnds(h)){ const [ex,ey]=centerOf(e.c,e.r);
         ctx.fillStyle="#12102a"; dot(ex,ey,7);
         ctx.strokeStyle=col; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(ex,ey,7,0,7); ctx.stroke(); }
+      if (b > 1) { const sp = monStartPos(h);                       // ...and the animal itself, where it sets off
+                   if (sp) { const [mx,my] = centerOf(Math.round(sp.c) + (hz?0:(b-1)/2), Math.round(sp.r) + (hz?(b-1)/2:0));
+                             monsterIcon(mx, my, col, "#12102a"); } }
     } else if (v==="square"){
       const w=h.w||2, hh=h.h||2;
       drawPatrol([[h.c,h.r],[h.c+w,h.r],[h.c+w,h.r+hh],[h.c,h.r+hh]], true, col, "#12102a");
@@ -1290,7 +1312,8 @@ function draw(){
       }
       ctx.restore();
       monsterIcon(x, y, col, "#12102a");
-    } else if (v==="hunter" || v==="stealth" || v==="golem" || v==="trap" || v==="wall"){
+    } else if (v==="hunter" || v==="stealth" || v==="golem" || v==="trap" || v==="wall" ||
+               v==="blinky" || v==="pinky" || v==="inky" || v==="clyde"){
       const [x,y]=centerOf(h.c,h.r);
       if (v==="wall"){
         // It never leaves its cell, so it is drawn as the cell: a square round the one it fills, and no reach of any
@@ -1298,7 +1321,8 @@ function draw(){
         ctx.save(); ctx.strokeStyle=col; ctx.lineWidth=3;
         ctx.strokeRect(x - CELL/2 + 3, y - CELL/2 + 3, CELL - 6, CELL - 6);
         ctx.restore();
-      } else if (v==="hunter" || v==="stealth" || v==="golem"){   // it goes wherever the runner is
+      } else if (v==="hunter" || v==="stealth" || v==="golem" ||
+                 v==="blinky" || v==="pinky" || v==="inky" || v==="clyde"){   // it goes wherever the runner is
         ctx.save(); ctx.strokeStyle=col; ctx.globalAlpha=0.5; ctx.lineWidth=2;
         ctx.setLineDash([4,4]); ctx.beginPath(); ctx.arc(x,y,CELL*0.42,0,7); ctx.stroke();
         ctx.setLineDash([]); ctx.restore();
@@ -1577,6 +1601,21 @@ function draggableAt(c,r){                        // topmost movable element und
   if(L.goal && eq(L.goal)) return {type:'goal'};
   const k=L.keys.find(x=>x[0]===c&&x[1]===r);  if(k) return {type:'key',ref:k};
   const d=L.doors.find(x=>x[0]===c&&x[1]===r); if(d) return {type:'door',ref:d};
+  // A MONSTER STANDING HERE WINS THE GRAB. It is drawn over the pickups and it is the bigger thing, so a press on the
+  // square it stands on should pick IT up rather than the coin under its feet — which is how a monster placed on a coin
+  // became a monster you could not move at all. Only the square it actually STANDS on: a rail's lane, a ring's ring and
+  // a patrol's route all stay below the pickups, or every coin strung along a route would become one you could not
+  // reach. A boss counts: its four cells are its body, not a road it walks.
+  const MON_BODY = new Set(["hunter", "wander", "stealth", "golem", "trap", "wall",
+                            "blinky", "pinky", "inky", "clyde"]);
+  for (const h of L.hazards) {
+    if (!isMon(h)) continue;
+    const v = monVariant(h), sp = monStartPos(h);
+    if (sp && Math.round(sp.c) === c && Math.round(sp.r) === r)
+      return { type:'monStart', ref:h, orig: JSON.parse(JSON.stringify(h)) };
+    if ((MON_BODY.has(v) || monIsBoss(v)) && monCells(h).some(p => p[0]===c && p[1]===r))
+      return { type:'mon', ref:h, orig: JSON.parse(JSON.stringify(h)) };
+  }
   // The single-cell items, topmost first: the two floor pickups are drawn over everything,
   // so they are what you get when one shares a square with the plate beneath it.
   for(const [list,what] of [[L.talismans,'talisman'],[L.pellets,'pellet'],[L.coins,'coin'],
@@ -1797,7 +1836,7 @@ function applyDrag(c,r){
 // not a pair of numbers you work out.
 function monPath(h){
   const v = monVariant(h);
-  if (v === "hrail" || v === "vrail")
+  if (v === "hrail" || v === "vrail" || (monIsBoss(v) && h.lo != null))
     return (h.axis||"h") === "h" ? [[h.lo,h.r],[h.hi,h.r]] : [[h.c,h.lo],[h.c,h.hi]];
   if (v === "square") { const w=h.w||2, hh=h.h||2;
     return [[h.c,h.r],[h.c+w,h.r],[h.c+w,h.r+hh],[h.c,h.r+hh]]; }
@@ -1808,7 +1847,10 @@ const monLoops = h => monVariant(h) === "square" ? true : !!h.loop;
 // the WHOLE there-and-back cycle, so it carries the direction as well as the position: 0 is at
 // `lo` heading for `hi`, 0.5 is at `hi` heading back. Writing seg0/segT0 at one would have been
 // a second mechanism the game never reads.
-const monIsRail = h => { const v = monVariant(h); return v === "hrail" || v === "vrail"; };
+// A RAIL is a thing with a lane: an axis, a low end and a high one. Read off the data rather than off a list of names,
+// because the LEVIATHAN is a boss AND a rail — placed exactly as a rail is — and every list of names left it out.
+const monIsRail = h => { const v = monVariant(h);
+                         return v === "hrail" || v === "vrail" || (monIsBoss(v) && h && h.lo != null); };
 // how far along lo->hi it stands, 0..1, whichever way it happens to be going
 function railT(h){
   const ph = (((+h.phase || 0) % 1) + 1) % 1, u = ph*2;
@@ -2156,6 +2198,12 @@ cv.addEventListener("mousedown", e=>{
   if(tool==="singularity"){ pushUndo(); if(e.button===2) eraseAt(c.c,c.r); else paintSingularity(c.c,c.r);
     lastCell=c; commit(); draw(); refreshOut(); return; }
   if(tool==="talisman"){ pushUndo(); if(e.button===2) eraseAt(c.c,c.r); else paintTalisman(c.c,c.r);
+    lastCell=c; commit(); draw(); refreshOut(); return; }
+  // ...and the MONSTER tool erases on a right-click like every other tool that puts something down. It was the one
+  // that did not: a right-click fell through to placeMonster, which on an occupied square simply re-applied the kind —
+  // so with the Monster tool in your hand there was no way at all to take one off the board, and the only route to it
+  // was to know that the Erase tool exists. A tool that can put a thing somewhere should be able to take it away.
+  if(tool==="monster" && e.button===2){ pushUndo(); eraseAt(c.c,c.r);
     lastCell=c; commit(); draw(); refreshOut(); return; }
   lastCell=c; applyTool(c.c,c.r,false);
 });
