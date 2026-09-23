@@ -5415,7 +5415,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.91";                    // shown on the title & pause screens
+  const VERSION = "v10.92";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -27989,7 +27989,8 @@
                              if (ms === "play") openHold = false;
                              else if (ms != null) { openSeek(ms); openHold = true; drawOpening(performance.now()); }
                              return openT; },
-    openingMarks: () => ({ ...OPENING, flaps: openFlaps ? openFlaps.map(Math.round) : [], slams: openSlams().map(o => ({ chapter: o.sp.idx, id: o.sp.def.id, go: o.go, hit: o.hit })) }),
+    openingMarks: () => ({ ...OPENING, foldMs: openFoldMs(), spinWin: openSpinWin(),
+                           flaps: openFlaps ? openFlaps.map(Math.round) : [], slams: openSlams().map(o => ({ chapter: o.sp.idx, id: o.sp.def.id, go: o.go, hit: o.hit })) }),
     runner: () => runnerInfo(),
     // Corner radius, live. Every tile-shaped thing in the game takes its corners from
     // tileR() = s * TILE.radius, so this one number is the whole knob — but two caches bake
@@ -30308,7 +30309,13 @@
                                //   so does a talisman, which is sized off HIM rather than off a number of its own
                                //   (see the charm's radius below: his body's width, and talBadge's own 1.9)
     // ...and THE CAMERA goes right in on him as it opens, follows him exactly, and steps back out
-    camIn:    7.0,             // how far in it is at the launch, against the framing that holds the whole map
+    camIn:    7.0,             // how far in it is once it has rushed in, against the framing that holds the whole map
+    camRushFrom: 3.0,          // ...and how far in it is at the launch ITSELF, in the same units, so the rush is
+                               //   this to camIn. NOT the wide shot: everything thrown out of the cube is sized off
+                               //   the camera, and starting at the framing that holds the whole map threw out six
+                               //   specks that then grew, when what leaves the cube should leave it the size it is
+    camRushMs: 380,            // ...and how long it takes to close that. Quick — it is the camera reacting to
+                               //   something going off, and a slow push would read as a decision
     camSteps: 5,               // ...and it comes out in this many jumps, each the same size to the eye...
     camStepMs: 2000,           // ...this far apart...
     camSnap:  0.34,            // ...each taken over this share of the gap, so it is a step and not a slide
@@ -30348,6 +30355,9 @@
                              //   time spent travelling where nobody can see it
     cubeHitX:   0.22,        // where the shockwave CATCHES it, left of the middle, in screen widths — the collision
                              //   happens over there, and the blow is what carries it on to the middle afterwards
+    spinOut:    0.28,        // how far the camera has BACKED OFF the cube by the time the turn is done, against its
+                             //   own size — read off the share of the turn rather than off a clock, so the pull
+                             //   away and the winding up are one movement
     spinPow:    2.5,         // how hard the cube's tumble accelerates after the wave washes over it: the rate goes
                              //   as k to this less one, so above one is a spin that is still getting faster when
                              //   the unfold takes it
@@ -30398,7 +30408,10 @@
     starShakeScr: 0.10,      // the screen, by the lock
     popShake:   0.70,        // the explosion
     hitShake:   0.55,        // the shockwave arriving at the cube...
-    spinShake:  0.34,        // ...and how hard it is shaking by the time the cube's wind-up hands over to the unfold
+    spinShake:  0.08,        // ...and how hard it is shaking at the top of the cube's turn (openSpinRate). LOW —
+                             //   a quarter of what it was. The turn is the thing to look at there, and a frame
+                             //   thrown about as hard as the explosion threw it only smears the one solid the
+                             //   whole beat is about. This is a tremble under it, not a second blow
     // ---- which way the cube opens (cineBuildNet's `lean`) ----
     netAcross:  14,          // how much the unfold prefers a net that lies ACROSS to one that stands up and down...
     netLeft:    10,          // ...and how much it prefers one that reaches LEFT of the face it is standing on. Both
@@ -30407,9 +30420,20 @@
     shake:     0.18,         // how hard each talisman landing throws the screen, in tiles (the game's own shake)
     // ---- everything after, as it was ----
     spinAxis:  [0.45, 0.82, 0.35],   // the axis the cube tumbles about when the shockwave hits it...
-    spinTurns: 5,            // ...and how many whole turns it takes before the unfold has it (whole, so it lands
-                             //   square). Five across four seconds at spinPow: the first second is a sixth of a turn
-                             //   and the last is two and a half, which is what winding up looks like
+    spinTurns: 3,            // ...and how many whole turns it takes from the blow to the halt. WHOLE, so whatever
+                             //   the tumble did the net is square again by the time it comes to rest and the six
+                             //   sides lie down on the map rather than near it. Three rather than five: at five it
+                             //   was a blur by the end, and a solid turning too fast to follow is a smear and not
+                             //   a thing being thrown about
+    spinEase:  2.2,          // HOW IT STOPS. Over the final spin the rate goes as (1 - v) to this, so most of the
+                             //   speed goes at once and the last of it takes the whole rest of the window to creep
+                             //   away — a heavy thing settling, not a thing switched off
+    spinEaseFolds: 1.0,      // ...and how long that final spin lasts, measured in FIRST FOLDS (openFoldMs) and
+                             //   CENTRED on the moment the cube opens. One, which is to say: the wind-up tops out
+                             //   half a fold BEFORE the unfold begins, so the cube is still turning as it starts to
+                             //   come apart; everything in it is thrown out at the middle of that spin, which is
+                             //   exactly `launch` and exactly `unfold[0]`; and the turn is at rest by the time the
+                             //   first side is halfway down
     wireOutMs:  700,         // the wireframe fading off the finished, coloured Tileverse after the last landing
     domino:    { pop: 360, lead: 0.80, slow: 0.22, after: 0.40, floatAfter: 0.25 },   // the unfolding's wave (openDomino): one square's
                              //   swing near the start (ms, before it is fitted to `grow`), how far down the square it hangs off
@@ -30422,6 +30446,16 @@
     glow:      0.50,         // ...and the light each stands in, against the Holy Talismans page's
     trail:     0.30,         // the talismans' glitter trails, as a share of the Holy Talismans page's
     mapDrop:   0.16,         // how far below the middle of the screen the Tileverse is centred, in screen heights
+    // ---- the flash the cube opens inside (openFlash) ----
+    flashMs:   700,          // the whole of it, from the launch...
+    flashUp:   0.07,         // ...of which this is the rise. A couple of frames: a flash that can be watched
+                             //   coming on is not covering anything
+    flashFall: 2.4,          // ...and the fall out of it, as a power — above one is a bloom that dies away
+    flashA:    1.00,         // how bright the white core is at the top of it
+    flashR:    0.95,         // how far it reaches at the end, in screen diagonals — right across the frame
+    flashFrom: 0.30,         // ...against where it starts, so it is a thing opening out and not a thing appearing
+    flashCore: 0.16,         // how much of that radius is the white core, before the colours begin
+    flashBow:  0.85,         // ...and how strong those colours are against it
   };
   let openActive = false, openT = 0, openNext = "level", openFired = 0, openHold = false;
   let openCloud = null, openNet = null, openRot0 = null, openOwner = null, openRun0 = 0;
@@ -30639,7 +30673,11 @@
                                             // charmGrow is NOT here: it is a pair of triangles sweeping two octaves
                                             // up through a filter at Q 6, which is a whistle, and a whistle over a
                                             // turning solid is a kettle. The star's wind-up keeps it; this one is low.
-                                            Sound.rumble && Sound.rumble(OPENING.unfold[0] - OPENING.hit); } },
+                                            // ...and it is handed THE SPIN'S OWN LENGTH — right through to the halt
+                                            // (openSpinWin), not just as far as the cube opening. rumble tops out at
+                                            // `rumblePeak` of what it is given, which puts its loudest moment under
+                                            // the fastest of the turn rather than under the settle.
+                                            Sound.rumble && Sound.rumble(openSpinWin()[2] - OPENING.hit); } },
     // A WHUMP PER WAVE, as each goes over the cube — the same spacious swell the first one used to land with on
     // its own, not a click on top of it. A boom would be wrong for all of them: a boom is a strike, and these are
     // walls of pressure closing on something. Each is fired EARLY by its own rise (Sound.whumpRise), so the top of
@@ -30727,6 +30765,33 @@
     return { c: cineMix(from.c, to.c, e),
              r: cineMix(from.r, to.r, k) - OPENING.arcApex*4*k*(1 - k) };
   }
+  // THE FLASH THE CUBE OPENS INSIDE. Everything in this film changes on one frame at the launch: he goes from
+  // folded in the lotus under the cube's glass to flung out and running, the six appear out of nothing having
+  // never been anywhere, and the shell stops being a solid and becomes a net lying down. A change that big wants
+  // COVERING, not showing — the same trick as the white flash over the butterfly and over a tile as it is laid,
+  // several hundred times the size. A rainbow bloom off the cube: a white core going up in a couple of frames
+  // and a long fall out of it, with the Holy Talismans' own six colours ringed out of that core, so what the
+  // cube lets go of is the rainbow the whole film is made of rather than a white bang.
+  function openFlash(t){
+    const O = OPENING, k = (t - O.launch)/Math.max(1, O.flashMs);
+    if (!(k >= 0) || k >= 1) return;
+    const up = Math.max(0.01, O.flashUp);
+    const a = O.flashA * (k < up ? k/up : Math.pow(1 - (k - up)/(1 - up), O.flashFall));
+    if (!(a > 0.004)) return;
+    const P = openCubeAt(t), diag = Math.hypot(viewW, viewH);
+    const R = Math.max(2, diag*O.flashR*(O.flashFrom + (1 - O.flashFrom)*easeOut(k)));
+    const cols = RAINBOW_SIX();
+    const g = ctx.createRadialGradient(P.x, P.y, 0, P.x, P.y, R);
+    g.addColorStop(0, "rgba(255,255,255," + a.toFixed(3) + ")");
+    g.addColorStop(O.flashCore, "rgba(255,255,255," + (a*0.70).toFixed(3) + ")");
+    for (let i = 0; i < cols.length; i++) {
+      const u = O.flashCore + (1 - O.flashCore)*(i + 0.5)/cols.length;
+      g.addColorStop(Math.min(0.999, u), hexA(cols[i], +(a*O.flashBow*(1 - u*0.55)).toFixed(3)));
+    }
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = g; ctx.fillRect(0, 0, viewW, viewH); ctx.restore();
+  }
   // ...and HIS place on the map: in the cube until it opens, then on his own long arc into chapter one.
   function openRunnerCell(t){
     const O = OPENING, seat = openSeat(), one = mapCells()[0] || seat;
@@ -30761,6 +30826,13 @@
     // following was off the top of it. Cubed, it holds him near enough dead centre for four of the five steps and
     // hands over to the map's own framing on the last — which is where the whole scene is meant to be in shot.
     let w = e*e*e;
+    // ...and it RUSHES IN AS HE IS THROWN. It used to simply BE at camIn on the instant of the launch, which is a
+    // cut and not a move: the one moment in the film with something to chase, and the camera was already sitting
+    // on top of it. It now starts at `camRushFrom` and closes on camIn over camRushMs — a hard push in on the
+    // thing that has just gone off, arriving well before his arc does anything. Quick: this is the camera
+    // reacting, not deciding.
+    const rk = cineSmooth(cineC01((t - OPENING.launch) / Math.max(1, OPENING.camRushMs)));
+    if (rk < 1) zoom = Math.exp(cineMix(Math.log(OPENING.camRushFrom), Math.log(zoom), rk));
     // ...and then BACK IN on him, slowly, from the moment the last talisman splashes: the zoom walks to `camClose`
     // and the centre walks back onto him, so the film ends the way it began — one man, close to — except that this
     // time there is a whole Tileverse under him and the black takes it before he lands.
@@ -30817,7 +30889,14 @@
   function openCubeZ(t){
     const O = OPENING;
     if (t < O.pop) return Math.exp(Math.log(O.cubeGo) * openJourney(t));    // swelling as the camera goes by it
-    return Math.exp(cineMix(Math.log(O.cubeIn), 0, openBack(t)));           // ...and small again as it drifts back
+    const back = Math.exp(cineMix(Math.log(O.cubeIn), 0, openBack(t)));     // ...and small again as it drifts back
+    if (t < O.hit) return back;
+    // ...and AWAY AGAIN once the blow lands. The camera does not close on the tumble, it BACKS OFF from it — and
+    // it backs off exactly as fast as the cube gathers speed, because the pull is read off the share of the turn
+    // that has been done (openSpinAngle) rather than off a clock of its own. So the two are one gesture: the
+    // faster it goes the further away it gets, and the frame opens out around a thing running away with itself
+    // instead of crowding in on it. In log scale, like every other travel in this film.
+    return back * Math.exp(Math.log(O.spinOut) * openSpinAngle(t)/Math.max(1e-6, O.spinTurns*Math.PI*2));
   }
   // ...and how much of it you can see: gone by the time the camera is level with it, back as it drifts in.
   function openCubeA(t){
@@ -30825,11 +30904,57 @@
     return t < O.pop ? 1 - cineC01((openJourney(t) - 0.58) / 0.30)
                      : cineC01(openBack(t) / 0.12);
   }
-  // WHICH WAY THE CUBE IS TURNED. Left alone it turns slowly on the title's own clock. When the shockwave hits it
-  // it goes tumbling — `spinTurns` WHOLE turns about an off-axis line, front-loaded so it is wildest at the moment
-  // of the hit and has wound down by the time the unfold takes over — and all the while it is slerping to the pose
-  // the old film's unfold opens from, which it holds exactly on OPENING.unfold[0]. Whole turns, so the tumble is
-  // the identity at the end of it and the unfold starts square whatever the spin did.
+  // HOW LONG ONE OF THE CUBE'S SIX SIDES TAKES TO FALL, on this film's clock. cineFoldFaces hangs each face off
+  // its parent and sizes the hinge so the DEEPEST one finishes exactly at the end of the window — each = span /
+  // (0.85*maxDepth + 0.15) — and the opening hands it its own span through unfoldK, so the same formula in OUR
+  // milliseconds is the length of the first fold. Asked of the net rather than written down, because the net is
+  // searched for every time (cineBuildNet) and a chapter moved on the map can change how deep it goes.
+  const openFoldMs = () => (OPENING.unfold[1] - OPENING.unfold[0]) /
+                           (0.85*((cineNet && cineNet.maxDepth) || 4) + 0.15);
+  // THE CUBE'S TUMBLE, AS ONE RATE FROM THE BLOW TO THE HALT — three windows, [hit, top, stop]:
+  //   hit → top:   winding up. Rate ∝ u^(spinPow-1), so it is still gathering speed at every instant of it.
+  //   top → stop:  the settle. Rate ∝ (1-v)^spinEase: the speed mostly goes at once and the last of it creeps
+  //                away over the whole rest of the window, which is what a heavy thing coming to rest looks like.
+  // The settle is `spinEaseFolds` first folds long and CENTRED ON THE MOMENT THE CUBE OPENS, which buys all
+  // three things at once: the unfold begins in the last of the spin, everything is thrown out of the cube at the
+  // middle of that final spin (`launch`, which is `unfold[0]`), and the turn is at rest exactly as the first side
+  // reaches halfway down. The turn is the INTEGRAL of that rate rather than a rate applied to a frame's dt, so it
+  // scrubs like the rest of the film — and the peak rate is SOLVED, not chosen, so that the whole of it comes to
+  // exactly `spinTurns` turns however the three windows are retuned.
+  function openSpinWin(){
+    const h = openFoldMs() * OPENING.spinEaseFolds / 2;
+    return [OPENING.hit, OPENING.unfold[0] - h, OPENING.unfold[0] + h];
+  }
+  const openSpinPeak = (TA, TB) =>
+    OPENING.spinTurns*Math.PI*2 / (TA/OPENING.spinPow + TB/(OPENING.spinEase + 1));
+  function openSpinAngle(t){
+    const O = OPENING, W = openSpinWin(), TA = Math.max(1, W[1] - W[0]), TB = Math.max(1, W[2] - W[1]);
+    if (t <= W[0]) return 0;
+    if (t >= W[2]) return O.spinTurns*Math.PI*2;              // ...and whole turns, so this is the identity
+    const a = openSpinPeak(TA, TB);
+    if (t <= W[1]) return a*TA*Math.pow((t - W[0])/TA, O.spinPow)/O.spinPow;
+    const v = (t - W[1])/TB;
+    return a*TA/O.spinPow + a*TB*(1 - Math.pow(1 - v, O.spinEase + 1))/(O.spinEase + 1);
+  }
+  // ...and the same curve's RATE, normalised to 1 at the top. The screen's shake is off this, so the vibration
+  // and the turn are one curve and not two that have to be kept in step — including through the settle, where
+  // the shaking now dies away with the spin instead of being cut off at the unfold.
+  function openSpinRate(t){
+    const W = openSpinWin();
+    if (t <= W[0] || t >= W[2]) return 0;
+    if (t <= W[1]) return Math.pow((t - W[0])/Math.max(1, W[1] - W[0]), OPENING.spinPow - 1);
+    return Math.pow(1 - (t - W[1])/Math.max(1, W[2] - W[1]), OPENING.spinEase);
+  }
+  // ...as a quaternion about the off-axis line it tumbles on. Identity before the blow and identity again once
+  // it has stopped, which is what lets the unfold simply multiply by it and land square anyway.
+  function openSpinQ(t){
+    const ax = OPENING.spinAxis, al = Math.hypot(ax[0], ax[1], ax[2]) || 1;
+    return quatAxis(ax.map(v => v/al), openSpinAngle(t));
+  }
+  // WHICH WAY THE CUBE IS TURNED, while it is still a cube. Left alone it turns slowly on the title's own clock.
+  // When the shockwave hits it it goes tumbling (openSpinQ), and all the while it is slerping to the pose the old
+  // film's unfold opens from, which it holds exactly on OPENING.unfold[0] — so the tumble carries straight on
+  // into the unfold's own frame rather than stopping dead at the boundary between the two.
   function openCubeQuat(t, M) {
     const O = OPENING;
     const rot = titleCubeRot(openRun0 + t);
@@ -30838,14 +30963,7 @@
     const Vt = cineView(CINE.unfold[0], M.cam);
     const qU = quatEuler(Math.atan2(Vt.sry, Vt.cry), Math.atan2(Vt.srx, Vt.crx));
     const k = cineC01((t - O.hit) / Math.max(1, O.unfold[0] - O.hit));
-    const ax = O.spinAxis, al = Math.hypot(ax[0], ax[1], ax[2]) || 1;
-    // IT SPEEDS UP THE WHOLE WAY. The wave washes over it, it begins to turn, and it turns faster and faster
-    // from there — `k` to a power above one, so the angular rate is climbing at every instant and never settles.
-    // It used to be fastest at the moment of the hit and slow from there, which is a cube that was already
-    // turning before it was struck; then it wound up and held, which is a cube with a motor in it. Still a whole
-    // number of turns at the unfold, because f(1) is 1 whatever the power.
-    const wild = quatAxis(ax.map(v => v/al), O.spinTurns*Math.PI*2 * Math.pow(k, O.spinPow));
-    return quatMul(wild, quatSlerp(base, qU, cineSmooth(k)));
+    return quatMul(openSpinQ(t), quatSlerp(base, qU, cineSmooth(k)));
   }
   // The cube's view at time t: the middle of the screen, at openCubeZ's size, turned by openCubeQuat.
   function openCubeView(t, M) {
@@ -31050,13 +31168,11 @@
       shk = Math.max(shk, playCell()*OPENING.popShake * Math.pow(0.86, (t - OPENING.pop)/16));
     if (t >= OPENING.hit)                                                             // ...the shockwave hitting the cube...
       shk = Math.max(shk, playCell()*OPENING.hitShake * Math.pow(0.86, (t - OPENING.hit)/16));
-    // ...and the WIND-UP: the screen shakes harder the faster the cube is turning — off the angular RATE rather
-    // than the angle, which for an angle going as k^spinPow is k^(spinPow-1), normalised to 1 where the unfold
-    // takes over. The vibration and the rotation are therefore one curve and not two that have to be kept in step.
-    if (t >= OPENING.hit && t < OPENING.unfold[0]) {
-      const wK = cineC01((t - OPENING.hit) / Math.max(1, OPENING.unfold[0] - OPENING.hit));
-      shk = Math.max(shk, playCell()*OPENING.spinShake * Math.pow(wK, OPENING.spinPow - 1));
-    }
+    // ...and the TUMBLE: the screen shakes harder the faster the cube is turning — off the angular RATE and not
+    // the angle (openSpinRate), so the vibration and the rotation are one curve and not two that have to be kept
+    // in step. It used to be cut off at the unfold; it now dies away WITH the spin, over the settle, so the
+    // shaking stops when the turning does rather than when the cube starts to come apart.
+    shk = Math.max(shk, playCell()*OPENING.spinShake * openSpinRate(t));
     ctx.save();
     if (shk > 0.3) ctx.translate((Math.random()*2 - 1)*shk, (Math.random()*2 - 1)*shk);
     const R = openRunnerAt(t, M);
@@ -31200,11 +31316,23 @@
         // cube's size and place out to the map's
         const tOld = CINE.unfold[0] + (CINE.unfold[1] - CINE.unfold[0]) * unfoldK;
         const Vc = cineView(tOld, V.cam);
+        // THE UNFOLD INHERITS THE SPIN. The unfold used to begin with the cube dead still: openCubeQuat carried
+        // the tumble right up to this boundary and the net took over square, which meant the turn could only ever
+        // stop at the instant the cube started to come apart. The spin now runs ON through the first of the fold
+        // and settles inside it (openSpinWin), so what is left of it is multiplied onto cineView's own two turns
+        // and handed to cineProj as a whole rotation. openSpinQ is the identity once the spin is done, so from
+        // that moment this reduces EXACTLY to the view's own turns and the net still lands on the map.
+        const spinQ = openSpinQ(t);
+        if (t < openSpinWin()[2])
+          Vc.m = quatMat(quatMul(spinQ, quatEuler(Math.atan2(Vc.sry, Vc.cry), Math.atan2(Vc.srx, Vc.crx))));
         const T0 = openCubeAt(t);                              // where it floated to
         const t0y = T0.y - T0.s*(RUNNER.legLen + RUNNER.bodyH*0.5);
         const u = cineSmooth(unfoldK);
         const fin = { S: V.cam.tile, ox: V.cam.ox + Vc.px*V.cam.tile, oy: V.cam.oy + Vc.py*V.cam.tile };
-        Vc.S = Math.exp(cineMix(Math.log(cubePx), Math.log(fin.S), u));
+        // ...and it opens from WHEREVER THE CUBE HAD GOT TO. cubePx is the title's size; the tumble has been
+        // backing away from it the whole time (openCubeZ), so starting the mix at the full size put a jump in
+        // exactly where the film is least able to afford one — the frame the cube begins to come apart on.
+        Vc.S = Math.exp(cineMix(Math.log(cubePx*openCubeZ(t)), Math.log(fin.S), u));
         Vc.ox = cineMix(T0.x, fin.ox, u); Vc.oy = cineMix(t0y, fin.oy, u);
         const faces = cineFoldFaces(tOld, Vc), Pn = LEVEL_SWATCH + 1;
         // The net's pivot is the middle of the FLAT net, not of the folded solid, so left alone the
@@ -31309,6 +31437,10 @@
     }
     for (const paint of charmsFront) paint();                          // ...and the near talismans over him
     ctx.restore();                                                     // (the shake)
+    // ...and OVER THE LOT OF IT, the flash the cube opens inside — the last thing drawn before the black, because
+    // the whole point of it is that it is in front of everything that changes underneath it. Outside the shake: a
+    // bloom this soft and this wide has nothing to gain from being jittered, and plenty to lose.
+    openFlash(t);
     // ...and black, as the camera arrives inside chapter one
     // ...and the black, over the whole of the last beat. It used to wait out the first third of it while the
     // camera was still travelling; there is nothing to wait for any more, so the fade IS the beat.
