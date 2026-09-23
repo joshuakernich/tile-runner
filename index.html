@@ -5403,7 +5403,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.86";                    // shown on the title & pause screens
+  const VERSION = "v10.87";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -31507,6 +31507,33 @@
   //
   // `viewW`/`viewH` go with the canvas: the cosmos is painted across the WHOLE view, so without
   // that it would lay a 1024-square icon's worth of quilt into the top corner of a phone screen.
+  // THE ICON'S OWN KIT. Not whatever is worn — an app icon has to be the same picture on every phone — and not
+  // the stock runner either: it is one thing the game can do, dressed to say so. Polychrome (the hue wheel under
+  // a lacquer sheen), the Angelic trail (white, and glittering), and the Rainbow track, whose quilt is what makes
+  // the tile a piece of the world rather than a coloured square. Every one of them is a real item off the shop's
+  // racks, read through `_lookOver` so the game's own painters dress it — nothing here draws a copy of anything.
+  const ICON = {
+    edge:  0.055,   // the blue outline round the tile, in tiles...
+    spark: 0.34,    // ...and the blue spark on its leading corner, likewise
+    trailN:   26,   // points in the wake behind him...
+    trailLen: 0.85, // ...how far back it reaches, in tiles. SHORT: it is the only other thing in the picture, and
+                    //   any longer than this it stops being his wake and becomes the subject — and with the tile
+                    //   filling three quarters of the icon, a tile of wake is most of the width...
+    trailBow: 0.16, // ...and how far it bows up on the way, likewise. A wake laid down a straight line reads as a
+                    //   ruler; a wake with a bend in it reads as something that came from somewhere
+    runX:     0.10, // him, nudged a little along the way he is going, so the wake crosses the tile rather than all
+                    //   of it hanging off the back
+    runScale: 1.00, // ...at the size he stands in a level: with the tile this big he is already the subject
+    tile:     0.75, // THE TILE, across the icon. Three quarters of it: the tile and the sky are the whole
+                    //   composition, so the tile takes the room and the sky is a margin, not a scene
+  };
+  const iconLook = () => ({
+    drip:  SKIN_COLOURS.find(x => x.id === "polychrome"),
+    trail: TRAILS.find(x => x.id === "angelic"),
+    track: TRACKS.find(x => x.id === "patchwork"),   // the QUILT: the six pieced, not the six in stripes
+    hat:   HATS.find(x => x.id === "none"),
+    kicks: KICKS.find(x => x.id === "none"),
+  });
   function drawIconInto(g, S, o) {
     o = o || {};
     const oldCtx = ctx, oldCell = cell, oldVW = viewW, oldVH = viewH;
@@ -31520,41 +31547,71 @@
       // scale-free and this is the only knob that decides how big its squares read.
       cell = S * (o.voidCell != null ? o.voidCell : 0.28);
       drawBackground(0, VOID_THEME, o.stars !== false, "drift", cell);
-      // Two tiles: the one he is on and the one ahead of him, laid edge to edge as they are on
-      // the board. Everything is placed off the tile size, so the composition holds at any S.
-      const cp = S * (o.tile != null ? o.tile : 0.30);
-      const dx = (o.x != null ? o.x : 0.50), dy = (o.y != null ? o.y : 0.60);
-      const ox = S*dx - cp, oy = S*dy - cp/2;      // tile A's corner: two tiles centred on dx
-      const a = { c: 0, r: 0 }, b = { c: 1, r: 0 };
-      const before = { c: -1, r: 0 }, after = { c: 2, r: 0 };
-      const track = o.track || TRACK_DEFAULT.earth[0];
+      // ONE TILE, centred — not the two it used to lay edge to edge. A single square is the game's own unit and
+      // the shape of the icon it is going in; two read as a fragment of a level. Everything is placed off the tile
+      // size, so the composition holds at any S.
+      const cp = S * (o.tile != null ? o.tile : ICON.tile);
+      // PERFECTLY CENTRED: the cell's own box on the middle of the icon, both ways.
+      const dx = (o.x != null ? o.x : 0.50), dy = (o.y != null ? o.y : 0.50);
+      const ox = S*dx - cp/2, oy = S*dy - cp/2;
+      const a = { c: 0, r: 0 };
+      const before = { c: -1, r: 0 }, after = { c: 1, r: 0 };
+      const look = o.worn ? null : iconLook();
+      const track = o.track || (look ? look.track.earth[1] : TRACK_DEFAULT.earth[0]);
+      const wasLook = _lookOver;
+      if (look) _lookOver = look;                  // (the quilt, the coat and the trail all read this)
+      try {
       withCanvas(g, cp, ox, oy, () => {
         drawGlass(cx(a.c), cy(a.r), cell);
-        drawPlatformSurface(a, tileSurface(a, before, b), track);
-        drawGlass(cx(b.c), cy(b.r), cell);
-        drawPlatformSurface(b, tileSurface(b, a, after), track);
-        // ...and him, on the first one, in full stride. The shadow is cut to the two tiles by
-        // the same clip the board uses — it takes the frame it is handed, so it lands here too.
+        drawPlatformSurface(a, tileSurface(a, before, after), track);
+        // THE BLUE OUTLINE, on the tile's own edge — the Tileverse's blue, which is what the game outlines a
+        // square of itself in (tvBlueHex, and see wireQuads). It goes on over the surface and under him.
+        ctx.save();
+        ctx.strokeStyle = tvBlueHex(); ctx.lineWidth = Math.max(1, cell*ICON.edge); ctx.lineJoin = "round";
+        rrect(cx(a.c), cy(a.r), cell, cell, tileR(cell)); ctx.stroke();
+        ctx.restore();
+        // ...and him, on it, in full stride. The shadow is cut to the tile by the same clip the board uses — it
+        // takes the frame it is handed, so it lands here too.
         if (o.runner !== false) {
-          runnerShadowClip = () => {
-            bodyPath(tileSurface(a, before, b), nodeCenter(a));
-            bodyPath(tileSurface(b, a, after), nodeCenter(b));
-          };
+          runnerShadowClip = () => bodyPath(tileSurface(a, before, after), nodeCenter(a));
           const C0 = nodeCenter(a);
-          const as = o.worn ? null : { skin: { body: RUNNER.body, ink: RUNNER.ink }, swagger: {} };
+          const as = null;                         // dressed through _lookOver, so the shop's own items draw him
           // EYES OPEN. drawEyes blinks off whatever clock it is handed, and a clock of zero is
           // the top of the cycle — which is the middle of the first blink. The icon was catching
           // him with his eyes shut every single time. Half a cycle is clear of both shutters,
           // and it is the same time the shop and the talisman previews pose him at, so he looks
           // the same in a still wherever a still is taken.
           const EYES_OPEN = EYES.blinkMs*0.5;
-          paintRunner(C0.x + cell*(o.runX || 0), C0.y + cell*(o.runY || 0),
-                      cell*(o.runScale != null ? o.runScale : 1),
-                      (o.stride != null ? o.stride : 0.9) * Math.PI,
-                      0, true, EYES_OPEN, 0, true, as);
+          const rx = C0.x + cell*(o.runX != null ? o.runX : ICON.runX), ry = C0.y + cell*(o.runY || 0);
+          const rs = cell*(o.runScale != null ? o.runScale : ICON.runScale);
+          const phase = (o.stride != null ? o.stride : 0.9) * Math.PI;
+          // THE TRAIL, from the game's own painter. There is no wake in a still — a wake is a record of having
+          // moved — so one is laid: a straight run of points back from where the ribbon leaves his body
+          // (trailAnchor, as the board finds it), aged tail-first so it fades out exactly as it does in play.
+          // Before him, so his body covers the join.
+          const tr = lookItem("trail");
+          if (tr && tr.cols && o.trail !== false) {
+            const A = trailAnchor(EYES_OPEN, phase, true);
+            const ax = rx + rs*A.x, ay = ry + rs*A.y, back = cell*ICON.trailLen;
+            const hh = (n) => { const v = Math.sin(n*127.1 + 311.7)*43758.5453; return (v - Math.floor(v))*2 - 1; };
+            const pts = [];
+            for (let k = 0; k < ICON.trailN; k++) {
+              const u = k/(ICON.trailN - 1);                       // 0 at the tail, 1 at his heels
+              pts.push({ x: ax - back*(1 - u),
+                         y: ay - cell*ICON.trailBow*Math.sin(Math.PI*(1 - u)*0.85),
+                         life: TRAIL_MS*(1 - u)*0.92, w: hh(k) });
+            }
+            paintTrail(tr, pts, rs*RUNNER.bodyH, EYES_OPEN);
+          }
+          paintRunner(rx, ry, rs, phase, 0, true, EYES_OPEN, 0, true, as);
           runnerShadowClip = null;
         }
+        // THE BLUE SPARK, on the corner the tile leads with — over everything, because a spark is light and
+        // light is not behind things.
+        drawSpark(ctx, cx(a.c) + cell, cy(a.r), cell*ICON.spark, EYES.blinkMs*0.5,
+                  { col: tvBlueHex(), seed: 0.37 });
       });
+      } finally { _lookOver = wasLook; }
       g.restore();
     } finally {
       ctx = oldCtx; cell = oldCell; viewW = oldVW; viewH = oldVH;
