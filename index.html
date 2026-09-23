@@ -3238,17 +3238,21 @@
     // noise and then a separate noise. Two detuned voices sweeping up through a filter that
     // opens with them — the swell is as much the filter as the pitch, which is what stops it
     // sounding like a slide whistle.
-    function charmGrow(ms) {
+    // `semis` drops the whole thing — the pair of oscillators AND the filter they are swept through — by that many
+    // semitones, so it is the same sound lower rather than the same sweep behind a filter that no longer fits it.
+    // The Mushroom asks for none and is untouched; the opening's star asks for an octave.
+    function charmGrow(ms, semis) {
       if (muted || !ac || ac.state !== "running") return;
       const t0 = ac.currentTime, T = Math.max(0.2, (ms || 1000)/1000);
+      const oct = Math.pow(2, (semis || 0)/12);
       // IT IS THERE FROM THE FIRST FRAME. Both of these used to start at nothing and arrive —
       // the gain crept up from silence and the filter from 320Hz — so the first half of the
       // second was a sound you could only just hear under a tile you could plainly see. It is
       // struck now, at three-fifths of its final level in thirty-five milliseconds, and swells
       // from there; the rise is the last two-fifths and the filter opening, not the whole of it.
       const lp = ac.createBiquadFilter(); lp.type = "lowpass";
-      lp.frequency.setValueAtTime(900, t0);
-      lp.frequency.exponentialRampToValueAtTime(5200, t0 + T);
+      lp.frequency.setValueAtTime(900*oct, t0);
+      lp.frequency.exponentialRampToValueAtTime(5200*oct, t0 + T);
       lp.Q.value = 6;
       const bus = ac.createGain();
       bus.gain.setValueAtTime(0.0001, t0);
@@ -3260,8 +3264,8 @@
         const o = ac.createOscillator();
         o.type = "triangle";
         o.detune.setValueAtTime(det, t0);
-        o.frequency.setValueAtTime(BASE * Math.pow(2, 24/12), t0);
-        o.frequency.exponentialRampToValueAtTime(BASE * Math.pow(2, 43/12), t0 + T);
+        o.frequency.setValueAtTime(BASE * Math.pow(2, 24/12) * oct, t0);
+        o.frequency.exponentialRampToValueAtTime(BASE * Math.pow(2, 43/12) * oct, t0 + T);
         o.connect(lp); o.start(t0); o.stop(t0 + T + 0.2);
       }
       // ...and a shimmer arriving over the last third, so the top of the rise has somewhere to
@@ -3492,12 +3496,17 @@
     // Intro: the low roll of something enormous arriving. Two detuned sub-oscillators under a
     // bed of noise, all of it swelling rather than striking — nothing has HIT, it is simply
     // becoming present, and it should be felt before it is heard.
+    // WHERE ITS SWELL TOPS OUT, as a share of the length it is given. Written down and handed out (Sound.rumblePeak)
+    // rather than left as a number in here, because a caller that wants the swell to PEAK on a particular moment —
+    // the opening's star does — has to divide by it, and a caller doing that against a number it cannot see is a
+    // caller that will be wrong the first time this is touched.
+    const RUMBLE_PEAK = 0.82;
     function rumble(ms) {
       if (muted || !ac || ac.state !== "running") return;
       const t = ac.currentTime, dur = (ms || 2400)/1000;
       const g = ac.createGain();
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.30, t + dur*0.82);   // the swell IS the whole gesture
+      g.gain.exponentialRampToValueAtTime(0.30, t + dur*RUMBLE_PEAK);   // the swell IS the whole gesture
       g.gain.exponentialRampToValueAtTime(0.0004, t + dur);
       g.connect(master);
       [27.5, 28.4].forEach((hz, i) => {                          // a beat frequency, so it wavers
@@ -4177,6 +4186,9 @@
     // over `WHUMP_RISE` of their length, sit, and fall away. It is what something arriving sounds like when it is
     // already far too big to arrive suddenly. The shockwave does not strike the cube; it reaches it — so this is
     // fired EARLY, by its own rise, and the top of the swell is the moment of the hit.
+    // ...and, like rumble's peak, this is handed out (Sound.whumpRise) rather than kept in here: a caller that
+    // wants a whump to TOP OUT on a particular moment has to fire it early by exactly this, and a caller doing
+    // that against a number it cannot see is a caller that goes wrong the first time the sound is touched.
     const WHUMP_RISE = 0.42;
     function whump(ms) {
       if (muted || !ac || ac.state !== "running") return;
@@ -5367,7 +5379,7 @@
              slide, clack, tap, tapBig, swish, airSwish, flyWhoosh, tabClick, power, warp, vortex, thrum, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck, choir,
              ambient,
-             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, charmReveal, tallyRing, tallyStep, pelletStep, pelletEnd, setEpic, boom, whump, twinkle, holeChime, infinityRing, loopClosed, crack, powerDown, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
+             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, charmReveal, tallyRing, tallyStep, pelletStep, pelletEnd, setEpic, boom, whump, rumblePeak: RUMBLE_PEAK, whumpRise: WHUMP_RISE, twinkle, holeChime, infinityRing, loopClosed, crack, powerDown, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
              levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, talismanTheme, choirLift, setMusicGate,
              musicNow: () => ({ ...MU }) };
   })();
@@ -5403,7 +5415,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.90";                    // shown on the title & pause screens
+  const VERSION = "v10.91";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -7777,10 +7789,15 @@
                 : (verse.match(/[^.!?]+[.!?]*/g) || [verse]).map(t => t.trim()).filter(Boolean);
     const nEl = document.getElementById("poem-n"), txt = document.getElementById("poem-text");
     const byEl = document.getElementById("poem-by"), tapEl = document.getElementById("poem-tap");
-    // THE CARD TYPES ITSELF OUT — its number, then the verse — a letter at a time with a blip for each, breathing
-    // where the writing does (see typeOut). Whoever said it does NOT type: it lands whole, on one blip.
+    // THE CARD TYPES ITSELF OUT — the verse, a letter at a time with a blip for each, breathing where the writing
+    // does (see typeOut). Whoever said it does NOT type: it lands whole, on one blip.
+    // ...and NEITHER DOES THE NUMBER. It used to be the first thing typed, so the card opened by spelling out which
+    // chapter you had just chosen — which you knew, because you chose it. It is a heading, not a line of the poem:
+    // set straight into its element, it is on the screen from the card's first frame, and the typing starts with
+    // the writing. (typeOut clears each part's element itself; this one is no longer a part, so it is set here.)
+    nEl.textContent = "Chapter " + label;
     txt.textContent = "";
-    const parts = [{ el: nEl, text: "Chapter " + label, gap: TYPE.section }];
+    const parts = [];
     lines.forEach((ln, i) => {
       const q = document.createElement("p"); q.className = "ln"; txt.appendChild(q);
       parts.push({ el: q, text: ln, gap: i === lines.length - 1 ? TYPE.section : TYPE.line });
@@ -30276,21 +30293,33 @@
                                //   the spin has to wind up in (openCubeQuat)...
     grow:    [19900, 23100],   // ...and the Tileverse unfolding out of it, square after square from the middle outward —
                                //   begun as the cube's sides land, and its last square down at the end of this (openDomino)
-    fling:   [17900, 19800],   // he is thrown out of the cube, tumbling, up to where he watches the rest from. NOT
-                               //   on the hit: he rides the whole wind-up inside it, and the cube OPENING is what
-                               //   lets him out — which is the only moment it can be, because until then he is in a
-                               //   sealed box and there is nowhere for him to have gone
-    // 7. the six talismans SPRING OUT OF HIM as the cube opens and throws him out — not while he is still sealed
-    //    inside it — then ride the orrery's own two crossed rings for as long as the Tileverse takes to build, and
-    //    go down into their chapters one at a time
-    gather:  [17900, 18900],
-    slam0:    27100,           // the ring turns, slowing all the while to a crawl, and then the first flies down
-    slamEach:   760,           // ...and each after it this much later
-    slamFly:    430,           // the flight down, of that
-    // 8. / 9. he drops toward chapter one, and black
-    toOne:   [31900, 33100],   // he flies to float over chapter one, gathering his legs back under him
-    fall:    [33400, 34200],   // he drops in, and the camera whips in after him to black
-    end:      34250,
+    // 7. THE CUBE OPENS AND THROWS EVERYTHING IN IT STRAIGHT UP — him and the six talismans, each on its own
+    //    long arc: up out of the cube, over, and down onto the chapter it is going to occupy. The talismans land
+    //    one after another, each flight a second longer than the one before; he lands last of all.
+    launch:   17900,           // ...all of them leaving on the same instant the cube opens
+    arcMs:    10000,           // the first talisman's whole flight, launch to landing...
+    arcStep:  1000,            // ...and each one after it this much longer again
+    runLag:   3000,            // ...and he comes down this long after the last of them
+    runLandY: -0.5,            // ...where he comes down, from the middle of chapter one, in map squares: its top
+    arcApex:  10.0,            // how far the arc rises above the straight line between its ends, in map squares.
+                               //   High: these are things flung out of an exploding box, not lobbed — most of the
+                               //   flight is spent well above the map, coming back down into it at the end
+    runCells: 0.52,            // how big he is drawn, in map squares — so he grows and shrinks with the camera, and
+                               //   so does a talisman, which is sized off HIM rather than off a number of its own
+                               //   (see the charm's radius below: his body's width, and talBadge's own 1.9)
+    // ...and THE CAMERA goes right in on him as it opens, follows him exactly, and steps back out
+    camIn:    7.0,             // how far in it is at the launch, against the framing that holds the whole map
+    camSteps: 5,               // ...and it comes out in this many jumps, each the same size to the eye...
+    camStepMs: 2000,           // ...this far apart...
+    camSnap:  0.34,            // ...each taken over this share of the gap, so it is a step and not a slide
+    // 8. ...and once the last talisman has splashed, the camera goes back IN on him — slowly, while he is still
+    //    falling — and the black closes over it all BEFORE he touches down. He is never seen to land: the film
+    //    leaves him in the air over the chapter he is about to be running.
+    closeIn: [32900, 35600],   // ([0] is the last talisman's landing; [1] is where the black is complete)
+    camClose: 2.6,             // how far in it has come by then, against the framing that holds the whole map
+    // 9. the black
+    fall:    [34400, 35600],
+    end:      35650,
     // ---- the star ----
     starN:      6,           // one tile per colour of the rainbow — the Holy Talismans' own six, in shelf order
     starSize:   0.30,        // how big each tile is, across the screen's short side
@@ -30302,6 +30331,8 @@
                              //   simply watching the thing turn before anything starts happening to it
     starThrumMs: 900,        // ...and across that stretch it swells in and out on this clock...
     starThrumAmp: 0.05,      // ...by this much of its own size, so the hold is a thing breathing, not a thing stopped
+    whistleLead: 1400,       // ...and how long before the lock the whistle comes in over the thrum — late, because
+                             //   it is the sound of the last of the tightening and not of the whole of it
     starLean:   15,          // how far apart the layers sit to begin with, in degrees
     starLockTurns: 1,        // the extra whole turn each layer takes as it snaps square, so the lock has travel in it
     starGlow:   0.62,        // the light the star stands in, in its own size
@@ -30342,7 +30373,8 @@
     waveA:      0.70,        // how bright the leading wave is...
     waveEcho:   0.66,        // ...and each behind it, against the one in front
     shardTo:    1.1,         // how far the star's own six tiles are thrown, in screen diagonals
-    tumble:     3.0,         // turns HE takes as he is thrown out of the cube...
+    tumble:     3.0,         // turns HE takes as the cube throws him out...
+    tumbleMs:   1900,        // ...over this long, after which his own kicks are all that turn him...
     turnPerKick: 0.10,       // ...and how far he turns per kick, in whole turns, on the average
     driftMs:    26000,       // ...over the top of a drift this slow — a turn every twenty-six seconds, which is
                              //   almost still and is meant to be: it is there so he is never entirely stopped
@@ -30387,13 +30419,9 @@
     sparks:    { n: 7, size: 0.42, msPerSquare: 400, gapMs: 500, edgeMs: 1500 },   // along the wireframe: how
                              //   many at once, how big (in its squares), how fast they chart a line, the rest
                              //   between — and, while it is still unfolding, how long one takes over an edge
-    charm:     0.065,        // each talisman's size in that ring, as a share of it...
     glow:      0.50,         // ...and the light each stands in, against the Holy Talismans page's
     trail:     0.30,         // the talismans' glitter trails, as a share of the Holy Talismans page's
-    orbit:     0.40,         // the ring's radius, as a share of that
     mapDrop:   0.16,         // how far below the middle of the screen the Tileverse is centred, in screen heights
-    ring:      0.45,         // the talismans' ring, and the talismans, sized off the screen's short side
-                             //   rather than off him — he is only the size of a tile
   };
   let openActive = false, openT = 0, openNext = "level", openFired = 0, openHold = false;
   let openCloud = null, openNet = null, openRot0 = null, openOwner = null, openRun0 = 0;
@@ -30571,29 +30599,35 @@
   }
   // A tap during it goes straight to the drop into chapter one.
   function skipOpening(){ if (openActive && openT < OPENING.fall[0]) openSeek(OPENING.fall[0]); }
-  // When each talisman lands, in the order they fly — the order their chapters come in the campaign.
+  // The six talismans, in the order their chapters come in the campaign, each with the LENGTH of its flight and
+  // the moment it comes down. They all leave together — the cube opening is what throws them — and it is the
+  // flights that differ: a second longer each, so they land one after another rather than in a heap.
   const openSlams = () => splashes().map((sp, j) => ({ j, sp }))
     .sort((a, b) => a.sp.idx - b.sp.idx).map((o, n) => Object.assign(o, {
-      go: OPENING.slam0 + n*OPENING.slamEach, hit: OPENING.slam0 + n*OPENING.slamEach + OPENING.slamFly }));
+      n, ms: OPENING.arcMs + n*OPENING.arcStep, hit: OPENING.launch + OPENING.arcMs + n*OPENING.arcStep }));
+  // ...and his own flight, which is the longest of them: he comes down `runLag` after the last talisman does.
+  const openRunMs = () => OPENING.arcMs + Math.max(0, openSlams().length - 1)*OPENING.arcStep + OPENING.runLag;
   const OPEN_LIFT = 700;                             // cents: the shelf's own lift (see its tap handler)
   const OPEN_EVENTS = () => [
-    // THE STAR'S WIND-UP: a rumble and a swell, running from where the quickening starts to where it locks. NOT
-    // from the top of the beat — through the thrum there is only the shelf's own held chord (talismanTheme), which
-    // is the point of the hold: nothing is happening yet, and nothing should sound as though it is.
-    { at: OPENING.star[0] + OPENING.starThrum,
-                                fn: () => { const ms = OPENING.lock[1] - (OPENING.star[0] + OPENING.starThrum);
-                                            Sound.rumble && Sound.rumble(ms); Sound.charmGrow && Sound.charmGrow(ms); } },
-    { at: OPENING.lock[0],      fn: () => { Sound.charmGrow && Sound.charmGrow(OPENING.lock[1] - OPENING.lock[0]);
-                                            Sound.airSwish && Sound.airSwish();      // ...the camera falling back off it
+    // THE STAR THRUMS FROM THE MOMENT THE CAMERA SETS OFF TOWARD IT — not from when it arrives. rumble's whole
+    // gesture is one long swell, and it is handed a length such that the swell TOPS OUT ON THE EXPLOSION: the span
+    // from the dive to the pop, divided by where rumble peaks in what it is given. So it is under the picture from
+    // the first frame of the journey, grows the whole way out and the whole time the star turns, is at its loudest
+    // exactly as the thing lets go, and falls away under the boom rather than before it.
+    { at: OPENING.dive[0],      fn: () => Sound.rumble &&
+                                          Sound.rumble((OPENING.pop - OPENING.dive[0]) / (Sound.rumblePeak || 0.82)) },
+    // ...and THE WHISTLE only at the end of it, an octave below where it sits everywhere else. charmGrow sweeps two
+    // octaves through a resonant filter; at its own pitch, over a beat this long, it is a kettle — down an octave
+    // and held back until the lock is nearly here, it is the last thing tightening before the thing lets go.
+    { at: OPENING.lock[0] - OPENING.whistleLead,
+                                fn: () => Sound.charmGrow &&
+                                          Sound.charmGrow(OPENING.lock[1] - (OPENING.lock[0] - OPENING.whistleLead), -12) },
+    { at: OPENING.lock[0],      fn: () => { Sound.airSwish && Sound.airSwish();      // ...the camera falling back off it
                                             haptic([10, 24, 10]); } },
     // ...and the explosion, which is the one loud moment in the film
     { at: OPENING.pop,          fn: () => { Sound.boom && Sound.boom(); Sound.introFlash && Sound.introFlash();
                                             Sound.charmBreak && Sound.charmBreak(); haptic([30, 30, 50]); } },
-    // THE SHOCKWAVE REACHING THE CUBE. The swell is fired EARLY, by its own rise (Sound.whump climbs over 0.42
-    // of its length), so the top of it is the moment of the hit and you hear the thing coming rather than
-    // arriving. The boom is not used here: a boom is a strike, and this is a wave closing on something.
-    { at: Math.round(OPENING.hit - OPENING.whumpMs*0.42),
-                                fn: () => Sound.whump && Sound.whump(OPENING.whumpMs) },
+
     // NO CHIME HERE. introFlash is four bright triangle tones sweeping up a major chord with a five-millisecond
     // attack — a sparkle, which is the wrong shape entirely for a wall of pressure arriving. What the landing has
     // is the whump swelling into it (fired early, above) and the hum coming up out of it; nothing rings.
@@ -30606,27 +30640,32 @@
                                             // up through a filter at Q 6, which is a whistle, and a whistle over a
                                             // turning solid is a kettle. The star's wind-up keeps it; this one is low.
                                             Sound.rumble && Sound.rumble(OPENING.unfold[0] - OPENING.hit); } },
-    // A WHOOSH PER WAVE, as each goes over the cube. The first crosses on the hit and the rest at `waveEvery`
-    // after it — which is exactly how their lives are solved, so these do not need their own timing and cannot
-    // drift out of step with what is on the screen.
+    // A WHUMP PER WAVE, as each goes over the cube — the same spacious swell the first one used to land with on
+    // its own, not a click on top of it. A boom would be wrong for all of them: a boom is a strike, and these are
+    // walls of pressure closing on something. Each is fired EARLY by its own rise (Sound.whumpRise), so the top of
+    // every swell is the moment that wave's edge is actually on the cube; the first crosses on the hit and the
+    // rest at `waveEvery` after it, which is exactly how their lives are solved, so these cannot drift out of step
+    // with what is on the screen. They overlap on purpose — four swells 520ms apart is one long roll with four
+    // surges in it, which is what a train of them passing over you sounds like.
     ...Array.from({ length: OPENING.waveN }, (_, i) => ({
-      at: OPENING.hit + i*OPENING.waveEvery, fn: () => Sound.airSwish && Sound.airSwish() })),
-    // ...and the whoosh that is HIS: he leaves when the cube opens, not when a wave lands
-    { at: OPENING.fling[0],     fn: () => Sound.flyWhoosh && Sound.flyWhoosh(OPENING.fling[1] - OPENING.fling[0]) },
-    // ...and the choir goes up a fifth as the talismans spring out of him, exactly as it does on the Holy
-    // Talismans page when one is brought out front, and back down once they are all home.
-    { at: OPENING.gather[0],    fn: () => { Sound.choirLift && Sound.choirLift(OPEN_LIFT);
-                                            Sound.airSwish && Sound.airSwish(); } },
-    { at: OPENING.toOne[0],     fn: () => Sound.choirLift && Sound.choirLift(0) },
+      at: Math.round(OPENING.hit + i*OPENING.waveEvery - OPENING.whumpMs*(Sound.whumpRise || 0.42)),
+      fn: () => Sound.whump && Sound.whump(OPENING.whumpMs) })),
+    // THE LAUNCH: everything the cube was holding goes up at once, him and the six. The choir goes up a fifth
+    // with them, exactly as it does on the Holy Talismans page when one is brought out front, and comes back down
+    // as the last of them lands.
+    { at: OPENING.launch,       fn: () => { Sound.choirLift && Sound.choirLift(OPEN_LIFT);
+                                            Sound.airSwish && Sound.airSwish();
+                                            Sound.flyWhoosh && Sound.flyWhoosh(1200); } },
     ...openSlams().map((o, n) => ({ at: o.hit, fn: () => { Sound.talismanLand && Sound.talismanLand(n); haptic([14, 30, 14]); } })),
-    { at: OPENING.toOne[0],     fn: () => Sound.airSwish && Sound.airSwish() },
+    { at: OPENING.launch + openRunMs(),
+                                fn: () => { Sound.choirLift && Sound.choirLift(0); Sound.airSwish && Sound.airSwish(); } },
     { at: OPENING.fall[0],      fn: () => Sound.airSwish && Sound.airSwish() },
   ];
   function openSeek(ms){
     openT = Math.max(0, ms);
     openFired = 0;
     OPEN_EVENTS().forEach((ev, n) => { if (ev.at <= openT) openFired |= (1 << n); });   // jumped over: not replayed
-    Sound.choirLift(openT >= OPENING.gather[0] && openT < OPENING.toOne[0] ? OPEN_LIFT : 0);   // ...but where the choir sits is
+    Sound.choirLift(openT >= OPENING.launch && openT < OPENING.launch + openRunMs() ? OPEN_LIFT : 0);   // ...but where the choir sits is
     openFlapI = 0;
     if (openFlaps) while (openFlapI < openFlaps.length && openFlaps[openFlapI] <= openT) openFlapI++;
   }
@@ -30656,12 +30695,6 @@
     const cx0 = (C.cols - 1)/2, cy0 = (C.rows - 1)/2 - (viewH*OPENING.mapDrop)/S;
     return { S, cx0, cy0, cam: { tile: S, ox: viewW/2 - cx0*S - S/2, oy: viewH/2 - cy0*S - S/2 } };
   }
-  // Where he floats while the Tileverse is made and coloured: over the top of it rather than on it, so
-  // none of it is under him — his middle in the middle of the empty space between the top of the screen
-  // and the Tileverse's top edge — and at chapter one, in screen terms (feet, and his size).
-  function openHover(M){ const T0 = titleSceneAt(performance.now());
-    const top = mapRectAt({ c: 0, r: 0 }, M.S, M.cx0, M.cy0).y;             // the cloud's top edge
-    return { x: viewW/2, y: top/2 + T0.s*(RUNNER.legLen + RUNNER.bodyH*0.5), s: T0.s }; }   // his size all the way through
   // HOW FAR THROUGH THE COMING BACK we are. The cube's return is NOT its going reversed, and this is the clock
   // for the half that is its own: GOING, the camera passes it, so it swells, slides a screen and a half to the
   // left and is gone — all off openJourney, which is the camera's own move. COMING BACK, it does not retrace
@@ -30675,6 +30708,69 @@
   // ...and how far the blow has SHOVED IT ON since: the wave catches it out on the left and carries it the rest of
   // the way to the middle, which is where the unfold wants it standing.
   const openShove = (t) => cineSmooth(cineC01((t - OPENING.hit) / Math.max(1, OPENING.unfold[0] - OPENING.hit)));
+  // WHERE THE CUBE STANDS ON THE MAP, in its squares: the seat of the net's root face — the one that stays flat
+  // while the other five fold off it. Everything the cube throws leaves from there, which is why it is wanted in
+  // the map's own coordinates and not on the screen: the camera moves after the launch, and a thing thrown has to
+  // land on a SQUARE, not on a place the screen happened to be looking at when it left.
+  function openSeat(){
+    const F = openNet && openNet.faces && openNet.faces[0];
+    const p = F && openCloud && openCloud.cells[F.cloud];
+    if (p) return p;
+    return openCloud ? { c: (openCloud.cols - 1)/2, r: (openCloud.rows - 1)/2 } : { c: 0, r: 0 };
+  }
+  // A THROWN THING, in map squares. `r` is a parabola about the straight line between the two ends — the arc
+  // proper — and `c` is smoothstepped rather than walked evenly, so it leaves going UP and arrives coming DOWN
+  // instead of sliding sideways the whole way across. Not what a stone does; what a stone thrown very high LOOKS
+  // like it does, which is the thing being drawn.
+  function openArcAt(from, to, u){
+    const k = cineC01(u), e = k*k*(3 - 2*k);
+    return { c: cineMix(from.c, to.c, e),
+             r: cineMix(from.r, to.r, k) - OPENING.arcApex*4*k*(1 - k) };
+  }
+  // ...and HIS place on the map: in the cube until it opens, then on his own long arc into chapter one.
+  function openRunnerCell(t){
+    const O = OPENING, seat = openSeat(), one = mapCells()[0] || seat;
+    if (t <= O.launch) return seat;
+    // ...onto the TOP of chapter one rather than into the middle of it. mapRectAt puts a cell's CENTRE at (c, r),
+    // so its top edge is half a square above that — and a man coming down on the lip of a square is arriving at
+    // it, where a man coming down on the middle of it has already landed and is standing there.
+    return openArcAt(seat, { c: one.c, r: one.r + O.runLandY },
+                     (t - O.launch)/Math.max(1, openRunMs()));
+  }
+  // HOW FAR THE CAMERA HAS COME BACK OUT since the launch: 0 right in on him, 1 holding the whole map. It STEPS
+  // rather than slides — `camSteps` jumps, each taken over `camSnap` of the gap between them — because a camera
+  // easing out continuously reads as one slow push, and this is meant to read as a series of decisions.
+  function openCamOut(t){
+    const O = OPENING, n = Math.max(1, O.camSteps);
+    const u = cineC01((t - O.launch) / Math.max(1, n*O.camStepMs));
+    if (u >= 1) return 1;
+    const i = Math.min(n - 1, Math.floor(u*n)), f = cineC01((u*n - i) / Math.max(0.05, O.camSnap));
+    return (i + cineSmooth(f)) / n;
+  }
+  // THE CAMERA ITSELF. Before the launch it is the framing that holds the whole map, which is what the cube
+  // unfolds into. After it, it is `camIn` times closer and centred exactly on him, opening back out to that same
+  // framing — the zoom in LOG scale so every step is the same size to the eye, and the centre walked back to the
+  // map's own as it goes, so it finishes looking at the map rather than at wherever he has got to.
+  function openCam(t){
+    const M = openMapCam();
+    if (t < OPENING.launch) return M;
+    const e = openCamOut(t), R = openRunnerCell(t);
+    let zoom = Math.exp(cineMix(Math.log(OPENING.camIn), 0, e));
+    // ...and the centre leaves him LATE. Walked across on the same `e` as the zoom, the frame was already most of
+    // the way onto the map by the time he was at the top of his arc, so the one thing it was supposed to be
+    // following was off the top of it. Cubed, it holds him near enough dead centre for four of the five steps and
+    // hands over to the map's own framing on the last — which is where the whole scene is meant to be in shot.
+    let w = e*e*e;
+    // ...and then BACK IN on him, slowly, from the moment the last talisman splashes: the zoom walks to `camClose`
+    // and the centre walks back onto him, so the film ends the way it began — one man, close to — except that this
+    // time there is a whole Tileverse under him and the black takes it before he lands.
+    const ck = cineSmooth(cineC01((t - OPENING.closeIn[0]) /
+                                  Math.max(1, OPENING.closeIn[1] - OPENING.closeIn[0])));
+    if (ck > 0) { zoom = cineMix(zoom, OPENING.camClose, ck); w = cineMix(w, 0, ck); }
+    const S = M.S * zoom;
+    const cx0 = cineMix(R.c, M.cx0, w), cy0 = cineMix(R.r, M.cy0, w);
+    return { S, cx0, cy0, cam: { tile: S, ox: viewW/2 - cx0*S - S/2, oy: viewH/2 - cy0*S - S/2 } };
+  }
   // ...and the glass cube with him in it. It does not travel of its own accord — the camera is what moves in
   // this film — so left alone this is simply the middle of the screen, at the title's size.
   function openCubeAt(t){ const T0 = titleSceneAt(performance.now());
@@ -30838,22 +30934,21 @@
   // THE END OF IT: he does NOT fly over to chapter one and drop into it. He stays where he has been floating all
   // along — the middle of the screen, high up, over the top of the Tileverse — and the camera goes in without him
   // while he hangs there kicking, until the black comes up over the lot.
+  // HIS PLACE ON THE SCREEN. Before the launch he is sitting in the cube, and the cube decides where that is;
+  // after it he is a point on the map like anything else, and the CAMERA decides — which is what lets the camera
+  // lock onto him without his drawing having to be told anything about it.
   function openRunnerAt(t, M){
-    const O = OPENING, H = openHover(M), T0 = titleSceneAt(performance.now());
-    const mix = (a, b, k) => ({ x: cineMix(a.x, b.x, k), y: cineMix(a.y, b.y, k), s: cineMix(a.s, b.s, k) });
-    // in the cube: its middle is his, and he is the cube's own size — carried by openCubeZ, so he goes with it
-    const Cb = openCubeAt(t), z = openCubeZ(t);
-    // ...at the cube's own middle, not at the middle of the screen. Those were the same point until the cube
-    // learned to float in from the title's spot; now only one of them is right.
-    let P = lotusRunnerAt(Cb.y - Cb.s*(RUNNER.legLen + RUNNER.bodyH*0.5), Cb.x, T0.s*z);
-    const fk = openK(O.fling, t);
-    if (fk > 0) {
-      const e = 1 - Math.pow(1 - fk, 3);                     // all its speed at once, braking into the hover
-      P = mix(P, H, e);
-      P.y -= Math.sin(Math.PI*fk) * H.s * 2.2;               // ...thrown UP over the top of the arc on the way
+    const O = OPENING;
+    if (t <= O.launch) {
+      // in the cube: its middle is his, and he is the cube's own size — carried by openCubeZ, so he goes with it
+      const Cb = openCubeAt(t), z = openCubeZ(t);
+      const P = lotusRunnerAt(Cb.y - Cb.s*(RUNNER.legLen + RUNNER.bodyH*0.5), Cb.x,
+                              titleSceneAt(performance.now()).s*z);
+      const bob = Math.sin(t / TITLE_SCENE.bobMs * Math.PI*2) * P.s * TITLE_SCENE.bob;
+      return { x: P.x, y: P.y + bob, s: P.s };
     }
-    const bob = Math.sin(t / TITLE_SCENE.bobMs * Math.PI*2) * P.s * TITLE_SCENE.bob * (1 - openK(O.fall, t));
-    return { x: P.x, y: P.y + bob, s: P.s };
+    const V = openCam(t), q = mapRectAt(openRunnerCell(t), V.S, V.cx0, V.cy0), s = V.S*O.runCells;
+    return { x: q.x + q.w/2, y: q.y + q.h/2 + s*(RUNNER.legLen + RUNNER.bodyH*0.5), s };
   }
   // HOW FAR ROUND HE HAS TUMBLED. Whole turns as he is flung out of the cube, front-loaded so it is wildest at
   // the moment the shell goes — and then he keeps turning, slowly, for the whole of the time he is up there, and
@@ -30911,14 +31006,14 @@
     return { stride: K.s0 + K.ds*e + Math.PI*t/OPENING.creepMs, turn: K.r0 + K.dr*e };
   }
   function openTumble(t){
-    const O = OPENING;
-    const fling = O.tumble*(1 - Math.pow(1 - openK(O.fling, t), 2));
+    const O = OPENING, thrown = [O.launch, O.launch + O.tumbleMs];
+    const fling = O.tumble*(1 - Math.pow(1 - openK(thrown, t), 2));
     // ...and after the throw he turns HIMSELF: a shove on every kick, and between them a drift so slow it is
     // barely a turn at all — but not nothing, because a thing that stops dead between shoves is a thing being
     // animated rather than one adrift. Measured from the end of the throw so the two do not double up, and never
     // backwards: both terms only ever climb.
-    const u = Math.max(0, t - O.fling[1]);
-    const spurts = u > 0 ? (openKickAt(t).turn - openKickAt(O.fling[1]).turn) + u/O.driftMs : 0;
+    const u = Math.max(0, t - thrown[1]);
+    const spurts = u > 0 ? (openKickAt(t).turn - openKickAt(thrown[1]).turn) + u/O.driftMs : 0;
     return -(fling + spurts)*Math.PI*2;
   }
   // Which splash owns piece k of chapter i (cached): the talisman whose paint most colours it.
@@ -30933,11 +31028,13 @@
   function drawOpening(ts){
     const t = openT, M = openMapCam(), C = openCloud;
     const fallK = openK(OPENING.fall, t);
-    // NO MOVE AT THE END. The camera used to whip into chapter one over the last beat, the square growing on
-    // the map's own eased-in line until it filled the screen. It does not go anywhere now: the Tileverse is
-    // finished, he is floating over the top of it, and the film simply stops looking — the black comes up over
-    // the shot as it stands, which is the last thing that happens and needs nothing moving under it.
-    const S = M.S, cx0 = M.cx0, cy0 = M.cy0;
+    // THE CAMERA. Before the cube opens it is the framing that holds the whole map; from the launch it is right
+    // in on him and follows him exactly, stepping back out until the map is all in shot again (openCam). Nothing
+    // below knows about that — the map, the wireframe, the arcs and he himself are all placed through the same
+    // S/cx0/cy0, so moving the camera moves the scene and not a list of things that have to agree about it.
+    // Nothing moves at the END, though: by then the camera is back where it started and the black simply comes
+    // up over the shot as it stands.
+    const V = openCam(t), S = V.S, cx0 = V.cx0, cy0 = V.cy0;
     // ...and the TRAVEL, which the sky is what sells: the camera goes forward through the cosmos to the star
     // and whips back again, so it slides one way and then the other under everything.
     const trav = openJourney(t) * viewW*0.30;
@@ -30977,7 +31074,7 @@
       const wireA = 1 - cineC01((t - lastHit) / OPENING.wireOutMs);
       if (wireA > 0.004) {
         const quads = [], quadOf = new Array(C.n).fill(null);
-        const Vg = cineView(CINE.unfold[1], M.cam);   // the net lying flat: exactly the map's own mapping
+        const Vg = cineView(CINE.unfold[1], V.cam);   // the net lying flat: exactly the map's own mapping
         for (let i = 0; i < C.n; i++) {
           const k = grownK(i); if (k <= 0) continue;
           const p = C.cells[i];
@@ -31085,7 +31182,7 @@
       if (t < OPENING.unfold[0]) {
         // STILL WHOLE, and empty but for him: the far glass and edges, him sitting in the middle of it, then the
         // near glass and edges over the top — so it reads as something he is inside rather than behind.
-        const V = openCubeView(t, M), cubeA = openCubeA(t);
+        const Vw = openCubeView(t, M), cubeA = openCubeA(t);
         if (cubeA > 0.004) {
           const cubeSparks = 1 - cineC01((t - (OPENING.unfold[0] - 150)) / 150);   // ...handed to the faces as it opens
           // ...and NO GLITTER while the camera is travelling. shedGlitter asks where he was over a spread of
@@ -31093,7 +31190,7 @@
           // came out was a handful of white squares at wildly different sizes standing round the cube rather
           // than a trail falling off him. He is only still enough for it at either end of the journey.
           const still = t < OPENING.dive[0] || t >= OPENING.lock[1];
-          drawLotusCube(V, t < OPENING.unfold[0] ? R : null, ts, cubeA,   // (once it opens he is out — see below)
+          drawLotusCube(Vw, t < OPENING.unfold[0] ? R : null, ts, cubeA,   // (once it opens he is out — see below)
             { sparkA: cubeSparks,
               angel: { shut: t < OPENING.pop, glitA: still ? 1 : 0,
                        where: still ? (b) => openRunnerAt(Math.max(0, t + (b - ts)), M) : null } });
@@ -31102,14 +31199,14 @@
         // opening: the old film's own hinges, on its own clock remapped to ours, framed from the title
         // cube's size and place out to the map's
         const tOld = CINE.unfold[0] + (CINE.unfold[1] - CINE.unfold[0]) * unfoldK;
-        const V = cineView(tOld, M.cam);
+        const Vc = cineView(tOld, V.cam);
         const T0 = openCubeAt(t);                              // where it floated to
         const t0y = T0.y - T0.s*(RUNNER.legLen + RUNNER.bodyH*0.5);
         const u = cineSmooth(unfoldK);
-        const fin = { S: M.cam.tile, ox: M.cam.ox + V.px*M.cam.tile, oy: M.cam.oy + V.py*M.cam.tile };
-        V.S = Math.exp(cineMix(Math.log(cubePx), Math.log(fin.S), u));
-        V.ox = cineMix(T0.x, fin.ox, u); V.oy = cineMix(t0y, fin.oy, u);
-        const faces = cineFoldFaces(tOld, V), Pn = LEVEL_SWATCH + 1;
+        const fin = { S: V.cam.tile, ox: V.cam.ox + Vc.px*V.cam.tile, oy: V.cam.oy + Vc.py*V.cam.tile };
+        Vc.S = Math.exp(cineMix(Math.log(cubePx), Math.log(fin.S), u));
+        Vc.ox = cineMix(T0.x, fin.ox, u); Vc.oy = cineMix(t0y, fin.oy, u);
+        const faces = cineFoldFaces(tOld, Vc), Pn = LEVEL_SWATCH + 1;
         // The net's pivot is the middle of the FLAT net, not of the folded solid, so left alone the
         // cube would open a cell or two away from where it sat. Its drawn middle is pulled onto the title
         // cube's, and let go of as it lies down onto the map.
@@ -31134,7 +31231,7 @@
             const hp = [pa.c + 0.5 + d[0]*0.5, pa.r + 0.5 + d[1]*0.5, 0], ha = [-d[1], d[0], 0];
             const th = Math.PI * (1 - cineSmooth(k));
             ringQuads.push([[0,0],[1,0],[1,1],[0,1]].map(([uu, vv]) => {
-              const sp = cineProj(cineRot([p.c + uu, p.r + vv, 0], hp, ha, th), V);
+              const sp = cineProj(cineRot([p.c + uu, p.r + vv, 0], hp, ha, th), Vc);
               return [sp[0] + dxC, sp[1] + dyC];
             }));
           }
@@ -31142,82 +31239,59 @@
         }
         // ...and the cube's two sparks carry on along the opening faces (keyed by face, not by depth order)
         const byFace = faces.map((f, j) => ({ key: f.idx, q: faceQuads[j] })).sort((a, b) => a.key - b.key).map(o => o.q);
-        openEdgeSparks(byFace.length, j => byFace[j], t, ts, 2, OPENING.sparks.edgeMs, V.S*CUBE_SPARK.size,
+        openEdgeSparks(byFace.length, j => byFace[j], t, ts, 2, OPENING.sparks.edgeMs, Vc.S*CUBE_SPARK.size,
                        cineC01((t - OPENING.unfold[0]) / 150), 3.3);
       }
     }
-    // ---- the talismans: out of HIM as the cube opens, round him, then down one by one -----------
-    const gK = openK(OPENING.gather, t);
-    const charmsFront = [];                            // the near half of the ring, drawn after him (below)
-    if (gK > 0) {
-      const ringB = Math.min(viewW, viewH) * OPENING.ring;
-      const orbitR = ringB*OPENING.orbit, charmR = ringB*OPENING.charm;
-      const midY = R.y - R.s*(RUNNER.legLen + RUNNER.bodyH*0.5);
-      // THE SHELF'S OWN ORBIT, and the shelf's own numbers — ORRERY, read from where it lives rather than
-      // copied here. Three mutually perpendicular axes turned together as one rigid frame, about the up axis
-      // on one slow clock and about the across axis on another; one ring is drawn round the first and second
-      // of them, the other round the first and third. They therefore share an axis and their normals stay
-      // perpendicular at every instant, so one can be seen edge-on while the other is wide open. `z` is how
-      // near a charm is and does the sizing and the sorting, exactly as it does on the page.
-      //
-      // Written as a function of the TIME rather than of this frame, because the glitter behind a charm is the
-      // same question asked about a second ago — one routine, so a grain can never fall off the path it took.
-      const orbitAt = (o, n0, tt) => {
-        // OUT OF HIM, as the cube opens: flung from his middle, slowing onto the orbit
-        const span = Math.max(1, OPENING.gather[1] - OPENING.gather[0] - n0*35);
-        const e = 1 - Math.pow(1 - cineC01((tt - OPENING.gather[0] - n0*35) / span), 3);
-        const al = tt/ORRERY.planeMs*Math.PI*2, be = tt/ORRERY.tipMs*Math.PI*2;
-        const ca = Math.cos(al), sa = Math.sin(al), cb = Math.cos(be), sb = Math.sin(be);
-        const u = [ ca, sa*sb, -sa*cb ];
-        const ring = n0 % 2, kk = (n0 - ring)/2;
-        const w = ring ? [ sa, -ca*sb, ca*cb ] : [ 0, cb, sb ];
-        const th = ((tt % ORRERY.ms)/ORRERY.ms)*Math.PI*2 + kk*(Math.PI*2/3) + ring*(Math.PI/3);
-        const cs = Math.cos(th), sn = Math.sin(th), rr = orbitR*e;
-        const z = u[2]*cs + w[2]*sn;
-        return { x: R.x  + rr*(u[0]*cs + w[0]*sn),
-                 y: midY + rr*(u[1]*cs + w[1]*sn), z, e,
-                 r: cineMix(charmR*0.2, charmR, e) * ((1 - ORRERY.near) + ORRERY.near*(z*0.5 + 0.5)) };
+    // ---- the talismans: thrown out of the cube with him, each onto its own chapter ---------------
+    // The SAME arc he is on (openArcAt), in the map's own squares, so the camera carries them exactly as it
+    // carries him and every one of them comes down on a SQUARE rather than on a screen position that happened to
+    // be right when it was worked out. They all leave together and land a second apart, longest flight last.
+    const charmsFront = [];
+    for (const o of slams) {
+      if (t < OPENING.launch || t >= o.hit) continue;                  // not thrown yet, or home
+      const u = (t - OPENING.launch) / Math.max(1, o.ms);
+      // ...and a talisman is exactly as big as HIS BODY. talBadge lays its plate at 1.9 times the radius it is
+      // handed, and his body is `bodyH` of his own size, so this is that width divided by that 1.9 — written out
+      // rather than measured once and written down, so it stays true if either of them is ever retuned.
+      const charmR = S*OPENING.runCells*RUNNER.bodyH / 1.9;
+      const where = (tt) => {
+        const q = mapRectAt(openArcAt(openSeat(), mapCells()[o.sp.idx] || openSeat(),
+                                      (tt - OPENING.launch)/Math.max(1, o.ms)), S, cx0, cy0);
+        return { x: q.x + q.w/2, y: q.y + q.h/2, r: charmR };
       };
-      slams.forEach((o, n0) => {
-        if (t >= o.hit) return;                                        // it is in its chapter now
-        let q = orbitAt(o, n0, t), A = cineC01(q.e * 4);
-        const flying = t >= o.go, near = flying || q.z > 0;
-        if (flying) {                                                  // ...on its way down to it
-          const from = orbitAt(o, n0, o.go), rr = mapRect(o.sp.idx, S, cx0, cy0);
-          const k = cineC01((t - o.go) / OPENING.slamFly), e = k*k*k;  // accelerating into it
-          q = { x: cineMix(from.x, rr.x + rr.w/2, e), y: cineMix(from.y, rr.y + rr.h/2, e),
-                r: cineMix(from.r, S*0.36, e) };
-        }
-        const paint = () => {
-          ctx.save(); ctx.globalCompositeOperation = "lighter";
-          shedGlitter(ctx, (b) => { const g = orbitAt(o, n0, Math.min(t + (b - ts), o.go)); return { x: g.x, y: g.y, r: g.r }; },
-                      ts, talFace(o.sp.def), A, 20 + n0, OPENING.trail);
-          ctx.restore();
-          drawFeaturedCharm(ctx, o.sp.def, q.x, q.y, q.r, ts, A, { k: n0, noSpark: true, noShimmer: true, glowK: OPENING.glow });
-        };
-        // The far half of the orbit goes round BEHIND him and the near half in FRONT — off the same `z` the
-        // sizing reads — and one on its way down to its chapter is in front of everything.
-        if (near) charmsFront.push(paint); else paint();
-      });
-      // ...and where each one hits, a pulse of its own light
-      for (const o of slams) {
-        const k = (t - o.hit) / 420;
-        if (k > 0 && k < 1) { const rr = mapRect(o.sp.idx, S, cx0, cy0);
-          squarePulse(rr.x + rr.w/2, rr.y + rr.h/2, S*(0.5 + k*1.6), (1 - k)*(1 - k), Math.max(1.5, S*0.06*(1 - k))); }
-      }
+      const q = where(t), A = cineC01((t - OPENING.launch)/220);
+      // HALF OF THEM PASS BEHIND HIM. There is no depth to sort by out here — they are all points on the same
+      // flat map — so it is taken by index, every other one, which gives three each way and never puts all six
+      // on the same side of him. What it buys is that the seven of them read as a volume of things in the air
+      // rather than as a runner with a sheet of badges pasted in front of him.
+      const paint = () => {
+        ctx.save(); ctx.globalCompositeOperation = "lighter";
+        // its own trail, sampled along the path it actually took — one routine for both, so a grain can never
+        // fall off it (the same reason the orbit did it this way)
+        shedGlitter(ctx, (b) => where(Math.max(OPENING.launch, Math.min(t, t + (b - ts)))),
+                    ts, talFace(o.sp.def), A, 20 + o.n, OPENING.trail);
+        ctx.restore();
+        drawFeaturedCharm(ctx, o.sp.def, q.x, q.y, q.r, ts, A,
+                          { k: o.n, noSpark: true, noShimmer: true, glowK: OPENING.glow });
+      };
+      if (o.n % 2) charmsFront.push(paint); else paint();       // ...odd in front of him, even behind
     }
-    // ---- him: waking, rising, flying to chapter one, and the drop in ------------------------------
-    // HE STAYS PUT, and so does everything else: the shot does not move at the end at all. He holds the place he
-    // has floated in the whole way through — the middle of the screen, high up, over the finished Tileverse —
-    // and he is still there, still kicking, when the black closes over him. Nor is he faded out first; the black
-    // is what takes him, along with the map and the sky and the lot.
+    // ...and where each one comes down, a pulse of its own light
+    for (const o of slams) {
+      const k = (t - o.hit) / 420;
+      if (k > 0 && k < 1) { const rr = mapRect(o.sp.idx, S, cx0, cy0);
+        squarePulse(rr.x + rr.w/2, rr.y + rr.h/2, S*(0.5 + k*1.6), (1 - k)*(1 - k), Math.max(1.5, S*0.06*(1 - k))); }
+    }
+    // ---- him: thrown out of the cube on the longest arc of the lot, down into chapter one ---------
+    // He is not faded out at the end; the black is what takes him, along with the map and the sky and the lot.
     const P = R, A = 1;
     // ONCE THE CUBE HAS THROWN HIM OUT. He unfolds from the lotus into the flying stance on the way, and he
     // TUMBLES — turned about his own middle, so it is him going over and over rather than him swung round a
     // point. Whole turns, wound on to an upright one before the end.
     // (Until the cube opens he is inside it, and the cube's own block above draws him there, under its near glass.)
-    const flingK = openK(OPENING.fling, t);
-    if (t >= OPENING.fling[0]) {
+    const flingK = cineC01((t - OPENING.launch) / 900);   // ...unfolding out of the sit over the first of it
+    if (t >= OPENING.launch) {
       const spun = openTumble(t), my = P.y - P.s*(RUNNER.legLen + RUNNER.bodyH*0.5);
       // ...and HIS LEGS GOING, the whole time he is floating — not pedalling to a rhythm but scrabbling, the way
       // anything does when it is in the air and would rather not be. He is a runner with nothing under him, and
