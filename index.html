@@ -5403,7 +5403,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.85";                    // shown on the title & pause screens
+  const VERSION = "v10.86";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -29806,6 +29806,7 @@
     bob:    0.045,   // how far he floats up and down, in his size
     bobMs:  3400,    // ...and one breath of it
     glitter: 0.20,   // the glitter's reach, in his size
+    lotus:   1.15,   // how big he is SITTING IN the cube, against his size standing on a tile — see drawLotusCube
   };
   // His skin and his eyes, while he is the angel: each walking round the six core colours without a
   // stop — the Rainbow trail's, which are the talismans' own in shelf order — blended one into the next.
@@ -30189,11 +30190,37 @@
     } finally { _lookOver = wasLook; ctx.restore(); }
     drawCubeWire(V, A, false, o.sparkA, 0);                   // (its glass is already down, under the tiles)
   }
+  // ---- THE CUBE WITH HIM IN IT ------------------------------------------------------------------------------
+  // The title's tableau and the opening's first beat are the same picture, so they are the same code. He used to
+  // be on the OUTSIDE of the title's cube, running a loop over its six sides (drawCubeRun, still below), which
+  // meant the film opened on a cut: you tapped a man running round a box and got a man sitting inside one.
+  //
+  // How it is drawn is the whole of it: the far glass and edges, him, then the NEAR glass and edges over the top.
+  // Draw him last and he is a man standing in front of a box; draw him in the middle and the glass closes over
+  // him, which is the only thing that says he is inside.
+  //
+  // Nothing follows him round it any more, so the camera does not chase: it is the title's own slow turn.
+  function lotusCubeQuat(ts) { const r = titleCubeRot(ts); return quatMul(cubeRoll(), quatEuler(r.ry, r.rx)); }
+  // Where he sits in it: his MIDDLE on the cube's middle — not his feet, which is what every other placing in the
+  // game means by a position — and a share of his own size, so there is glass all round him.
+  function lotusRunnerAt(midY, x, s0) {
+    const s = s0 * TITLE_SCENE.lotus;
+    return { x, y: midY + s*(RUNNER.legLen + RUNNER.bodyH*0.5), s };
+  }
+  // `o.sparkA` fades the edges' own sparks (the opening hands them to the faces as the cube opens); `o.angel` is
+  // passed through to drawAngel, for the opening's eyes-shut, its glitter and its fades.
+  function drawLotusCube(V, R, ts, A, o) {
+    o = o || {};
+    drawCubeWire(V, A, true, o.sparkA);
+    if (R) drawAngel(R, ts, A, Object.assign({ pose: "onefoot", fromLotus: 1, shut: true }, o.angel));
+    drawCubeWire(V, A, false, o.sparkA);
+  }
   function drawTitleScene(ts, alpha) {
     const A = alpha == null ? 1 : alpha, P = titleSceneAt(ts);
     const V = titleCubeView(P, { ry: 0, rx: 0 });
-    V.m = quatMat(quatMul(cubeRoll(), cubeCamQuat(ts, performance.now()))); V.ortho = true;
-    drawCubeRun(V, performance.now(), ts, A);
+    V.m = quatMat(lotusCubeQuat(ts)); V.ortho = true;
+    const mid = P.y - P.s*(RUNNER.legLen + RUNNER.bodyH*0.5);
+    drawLotusCube(V, lotusRunnerAt(mid, P.x, P.s), ts, A);
   }
   // ---- THE OPENING ---------------------------------------------------------------------------------
   // NINE BEATS. He is sitting in lotus inside an empty glass cube, turning slowly in the middle of the room.
@@ -30306,7 +30333,6 @@
     // ---- everything after, as it was ----
     spinAxis:  [0.45, 0.82, 0.35],   // the axis the cube tumbles about when the shockwave hits it...
     spinTurns: 3,            // ...and how many whole turns it takes before the unfold has it (whole, so it lands square)
-    lotusSize: 1.15,         // how big he is sitting in the cube, against his size the rest of the way
     wireOutMs:  700,         // the wireframe fading off the finished, coloured Tileverse after the last landing
     domino:    { pop: 360, lead: 0.80, slow: 0.22, after: 0.40, floatAfter: 0.25 },   // the unfolding's wave (openDomino): one square's
                              //   swing near the start (ms, before it is fitted to `grow`), how far down the square it hangs off
@@ -30589,8 +30615,16 @@
   function openCubeAt(t){ const T0 = titleSceneAt(performance.now());
     const O = OPENING;
     const left = cineMix(cineMix(O.cubeInX, O.cubeHitX, openBack(t)), 0, openShove(t));
-    const x = t < O.pop ? viewW/2 - viewW*O.cubeSide*openJourney(t) : viewW/2 - viewW*left;
-    return { x, y: viewH/2 + T0.s*(RUNNER.legLen + RUNNER.bodyH*0.5), s: T0.s, cube: T0.cube }; }
+    let x = t < O.pop ? viewW/2 - viewW*O.cubeSide*openJourney(t) : viewW/2 - viewW*left;
+    let y = viewH/2 + T0.s*(RUNNER.legLen + RUNNER.bodyH*0.5);
+    // THE DRIFT IN. The title fits the cube into the room between the lockup and the tap prompt, which is a long
+    // way down the screen; the film wants it in the middle. Left alone the tap was a jump of a fifth of the
+    // height — the one cut the whole shared tableau was there to get rid of — so the first beat floats it from
+    // exactly where the title had it to exactly where the film wants it, and nothing after `lotus` knows about
+    // it. Both ends come off titleSceneAt, breath and all, so the float carries the bob through unbroken.
+    const d = cineSmooth(openK(O.lotus, t));
+    if (d < 1) { x = cineMix(T0.x, x, d); y = cineMix(T0.y, y, d); }
+    return { x, y, s: T0.s, cube: T0.cube }; }
   // HOW BIG THE CUBE IS ON THE SCREEN, and how much of it there is, as the camera leaves it and comes back.
   // One number does both journeys: the dive swells it past us and takes it away; the whip brings it back from
   // nothing. Written in LOG scale, because that is what travelling at a constant rate toward a thing does to
@@ -30728,8 +30762,9 @@
     const mix = (a, b, k) => ({ x: cineMix(a.x, b.x, k), y: cineMix(a.y, b.y, k), s: cineMix(a.s, b.s, k) });
     // in the cube: its middle is his, and he is the cube's own size — carried by openCubeZ, so he goes with it
     const Cb = openCubeAt(t), z = openCubeZ(t);
-    const sIn = T0.s*O.lotusSize*z;
-    let P = { x: Cb.x, y: viewH/2 + sIn*(RUNNER.legLen + RUNNER.bodyH*0.5), s: sIn };
+    // ...at the cube's own middle, not at the middle of the screen. Those were the same point until the cube
+    // learned to float in from the title's spot; now only one of them is right.
+    let P = lotusRunnerAt(Cb.y - Cb.s*(RUNNER.legLen + RUNNER.bodyH*0.5), Cb.x, T0.s*z);
     const fk = openK(O.fling, t);
     if (fk > 0) {
       const e = 1 - Math.pow(1 - fk, 3);                     // all its speed at once, braking into the hover
@@ -30912,16 +30947,15 @@
         const V = openCubeView(t, M), cubeA = openCubeA(t);
         if (cubeA > 0.004) {
           const cubeSparks = 1 - cineC01((t - (OPENING.unfold[0] - 150)) / 150);   // ...handed to the faces as it opens
-          drawCubeWire(V, cubeA, true, cubeSparks);
           // ...and NO GLITTER while the camera is travelling. shedGlitter asks where he was over a spread of
           // frame times, and through the dive and the way back his size is running away exponentially — so what
           // came out was a handful of white squares at wildly different sizes standing round the cube rather
           // than a trail falling off him. He is only still enough for it at either end of the journey.
           const still = t < OPENING.dive[0] || t >= OPENING.lock[1];
-          if (t < OPENING.hit)                                                     // (past the hit he is outside it — see below)
-            drawAngel(R, ts, cubeA, { pose: "onefoot", fromLotus: 1, shut: t < OPENING.pop, glitA: still ? 1 : 0,
-                                      where: still ? (b) => openRunnerAt(Math.max(0, t + (b - ts)), M) : null });
-          drawCubeWire(V, cubeA, false, cubeSparks);
+          drawLotusCube(V, t < OPENING.hit ? R : null, ts, cubeA,   // (past the hit he is outside it — see below)
+            { sparkA: cubeSparks,
+              angel: { shut: t < OPENING.pop, glitA: still ? 1 : 0,
+                       where: still ? (b) => openRunnerAt(Math.max(0, t + (b - ts)), M) : null } });
         }
       } else {
         // opening: the old film's own hinges, on its own clock remapped to ours, framed from the title
