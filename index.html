@@ -5415,7 +5415,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.92";                    // shown on the title & pause screens
+  const VERSION = "v10.93";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -8056,8 +8056,99 @@
     // square of the ground and is him instead.
     return false;
   }
+  // ---------- CHAPTER ONE ARRIVES DIFFERENTLY: he falls out of the sky ----------------
+  // Every other chapter builds him out of its own ground (the motes above) — which is the right
+  // idea everywhere except the first time you ever see him, where there IS no ground yet and
+  // nothing has been established for it to be made of. The opening film leaves him falling
+  // toward chapter one and closes the black before he lands; this is the other half of that cut.
+  // He comes down head first out of an empty frame, the board arrives under him on the frame he
+  // hits it, and he stands on his head a moment before toppling onto his back and rolling up
+  // onto his legs.
+  //
+  // The whole of it is ONE rotation, from a headstand to standing, with the pivot moving from
+  // his head to his feet exactly halfway — at which point the two descriptions agree to the
+  // pixel, because his feet measured from his head are his feet. That is why the choreography
+  // is written as an angle and not as three separate poses.
+  const DROP = {
+    fallMs:  1200,   // out of the top of the frame and down onto the tile, head first
+    clear:   1.5,    // ...from just off the edge of the FRAME, by this much of his own height. Not a fixed
+                     //   distance: the camera on a chapter is wherever that chapter's board puts it, and a drop
+                     //   measured in screen heights spent most of itself above the top of one and was over in
+                     //   a blink once it arrived. Measured to the edge, he falls the whole way in shot
+    landX:   0.25,   // where across the start tile his head comes down: a quarter in from the near edge
+    headMs:  1600,   // ...and how long he is stood on it, dead still. A second and a half is long enough to
+                     //   read as a held pose and short enough not to be a wait
+    tipMs:   460,    // the topple FORWARD onto his back — eased IN, because a thing going over goes over
+    backMs:  700,    // ...how long he lies there
+    rollMs:  560,    // ...and the roll up onto his legs
+    shadowFade: 6,   // how far up his shadow is gone altogether, in tiles
+  };
+  // Only chapter one. It is the first thing anybody sees of him on a board, and it is the one
+  // chapter the opening film hands directly to.
+  const dropLevel = () => levelIdx === 0;
+  // How long he is stood there before the cue, in an ORDINARY intro: the tail, less the part of
+  // it the gather and the forming were already using. Written this way rather than as a number
+  // so that "pause the usual way" goes on meaning that if the intro is ever retuned.
+  const INTRO_STAND = INTRO_TAIL - INTRO_GATHER - INTRO_FORM;
+  const dropMs = () => DROP.fallMs + DROP.headMs + DROP.tipMs + DROP.backMs + DROP.rollMs;
+  // WHERE HE IS IN IT, as one angle and one pivot. `a` is measured from the headstand: 0 stood on
+  // his head, PI/2 flat on his back, PI upright. `head` is true while the pivot is the top of his
+  // head rather than his feet.
+  function dropAt(t) {
+    const D = DROP;
+    if (t < D.fallMs) {
+      // gravity: barely moving at the top of the frame, quickest just before it lands
+      const k = clamp(t/D.fallMs, 0, 1);
+      return { a: 0, head: true, drop: 1 - k*k, landed: false };
+    }
+    let u = t - D.fallMs;
+    if (u < D.headMs) return { a: 0, head: true, drop: 0, landed: true };
+    u -= D.headMs;
+    if (u < D.tipMs)  return { a: (Math.PI/2)*easeIn(u/D.tipMs), head: true, drop: 0, landed: true };
+    u -= D.tipMs;
+    if (u < D.backMs) return { a: Math.PI/2, head: false, drop: 0, landed: true };
+    u -= D.backMs;
+    if (u < D.rollMs) return { a: Math.PI/2 + (Math.PI/2)*cineSmooth(u/D.rollMs), head: false, drop: 0, landed: true };
+    return { a: Math.PI, head: false, drop: 0, landed: true, done: true };
+  }
+  // HIM, anywhere in that. The figure is drawn in the frame it always is — paintRunner takes the
+  // world angle and puts his FEET where it is told — so all this has to work out is where the feet
+  // are, which is the pivot swung round by the angle.
+  function drawDrop(ts) {
+    const s = state, D = s.drop, W = dropAt(s.introT);
+    const th = D.ang + Math.PI + W.a;                       // the headstand is his running angle turned over
+    // HOW FAR OFF THE FACE THE PIVOT SITS. Two things add up here, both measured along the face's own normal —
+    // which is what "above the tile" means on a board where a tile can be stood on from any of its four sides:
+    //   the fall, and
+    //   HALF HIS BODY, so his back lies FLUSH. The pivot is a point on his outline — the crown while he is going
+    //   over it, his heels once he is past flat — and a body is not a line: laid on the pivot alone, half of him
+    //   was inside the track. The lift is his half-width projected onto the normal, which is nothing stood on his
+    //   head, all of it flat on his back and nothing again upright: one sine, and continuous through the frame
+    //   the pivot changes ends on.
+    const off = W.drop*D.high + D.bw*0.5*Math.sin(W.a);
+    const px = (W.head ? D.hx : D.fx) + D.nx*off, py = (W.head ? D.hy : D.fy) + D.ny*off;
+    // ...and his feet, which is what paintRunner is handed: the pivot, plus his own height swung round
+    const fx = W.head ? px - D.H*Math.sin(th) : px, fy = W.head ? py + D.H*Math.cos(th) : py;
+    // HIS SHADOW STAYS ON THE GROUND. paintRunner casts it in HIS frame, which is right for a man the right way
+    // up and wrong for one going over: it swung round with him and spent the headstand above his head. Turned
+    // off there (`grounded` false) and laid here instead — under the middle of his body, dropped onto the face
+    // along the normal, and shrunk and faded by how far up he is, which is the whole of what a shadow does while
+    // something falls toward it.
+    const m = D.H - cell*RUNNER.bodyH*0.5;                  // his body's middle, up the axis from his feet
+    const bx = fx + m*Math.sin(th), by = fy - m*Math.cos(th);
+    const h = Math.max(0, (bx - D.hx)*D.nx + (by - D.hy)*D.ny);          // ...and how far that is off the face
+    const k = 1 - clamp(h/(cell*DROP.shadowFade), 0, 1);
+    const d = h + cell*RUNNER.shadowY;
+    ctx.save();
+    ctx.translate(bx - D.nx*d, by - D.ny*d); ctx.rotate(D.ang);
+    groundShadow(cell*RUNNER.bodyW*RUNNER.shadowW*(0.35 + 0.65*k), cell*RUNNER.shadow*(0.35 + 0.65*k),
+                 RUNNER.shadowA*(0.30 + 0.70*k));
+    ctx.restore();
+    resetLeap();                                            // he is not leaping, he is arriving
+    paintRunner(fx, fy, cell, 0, th, false, ts, 0, false, null);
+  }
   function startIntro() {
-    const s = state; s.status = "intro"; s.introT = 0; s.introSnd = { gather:false, flash:false };
+    const s = state; s.status = "intro"; s.introT = 0; s.introSnd = { gather:false, flash:false, drop:false };
     const w = patchW(), rnd = mulberry32((0x5eed ^ (levelIdx + 1) * 2654435761) >>> 0);
     const st0 = state.path[0] || { c:0, r:0 };
     // FOUR patches, not one: the half of the start tile he is STANDING ON, and the two squares
@@ -8087,9 +8178,54 @@
                    j1: Math.floor(Math.min(worldH, camY + viewH)/w) - 2 };
     s.introMotes = buildMotes(INTRO_MOTES, band, moteHome(s.introHome.gx, s.introHome.gy),
                               INTRO_TRAVEL, rnd);
+    // ...and CHAPTER ONE instead gets the fall. Everything it needs is fixed at the start — where his
+    // head comes down, where his feet finish, which way is up off the tile — so no frame of it has to
+    // ask the path anything, and the whole choreography is a function of the clock.
+    s.drop = null;
+    if (dropLevel()) {
+      s.introMotes = null;                                   // nothing gathers: he is not made here, he lands here
+      const C = nodeCenter(st0), H = cell*(RUNNER.legLen + RUNNER.bodyH);
+      // WHERE THE SURFACE IS, asked rather than assumed. A tile's running face is not its cell's edge — the
+      // track is a band laid through the cell and he stands on the line through it — so this takes the answer
+      // off runnerInfo, which is the one thing that already knows, by projecting where his feet WOULD be onto
+      // the face's own normal. Guessed at half a cell, he stood a cell's half above the track. resetLeap right
+      // after, because runnerInfo walks the leap machinery and this is not a frame that draws him.
+      const ri = runnerInfo(); resetLeap();
+      const surf = (ri.sx - C.x)*nrx + (ri.sy - C.y)*nry;
+      const hx = C.x + nrx*surf + dc*cell*(DROP.landX - 0.5);   // the surface, a quarter along it
+      const hy = C.y + nry*surf + dr*cell*(DROP.landX - 0.5);
+      // HOW FAR UP HE STARTS: to the edge of the frame he is falling INTO, measured along the face's own normal
+      // and out past it by `clear` of his own height. The four cases are the four sides a tile can be stood on.
+      const edge = nrx < 0 ? hx - camX : nrx > 0 ? (camX + viewW) - hx
+                 : nry < 0 ? hy - camY : (camY + viewH) - hy;
+      s.drop = { H, bw: cell*RUNNER.bodyW, ang: Math.atan2(dr, dc), nx: nrx, ny: nry,
+                 hx, hy,                                     // where the top of his head lands...
+                 fx: hx + dc*H, fy: hy + dr*H,               // ...and where his feet finish, one height along
+                 high: Math.max(cell*2, edge + H*DROP.clear), down: false };
+    }
   }
+  // While he is still in the air there is NO BOARD: the platforms, the track, the line along it and the
+  // three loose tiles are all held back and arrive on the frame he hits them. It is the one moment in the
+  // game where the ground is the event.
+  const dropHidesBoard = () => !!(state.drop && state.status === "intro" && !state.drop.down);
   function tickIntro(dt) {
     const s = state;
+    if (s.drop) {
+      // THE FALL'S OWN SOUND, which is the dying fall's: the same long whistle down, handed the same
+      // thing it is handed there — how long he will be falling — and stopped where he stops. Nothing
+      // gathers and nothing flashes, so neither of those is fired.
+      if (!s.introSnd.drop) { s.introSnd.drop = true; Sound.fall && Sound.fall(DROP.fallMs/1000); }
+      const was = s.introT; s.introT += dt;
+      if (was < DROP.fallMs && s.introT >= DROP.fallMs) {
+        s.drop.down = true;                                  // ...and the board arrives under him
+        Sound.fallStop && Sound.fallStop();                  // the whistle ends as he lands, as it does in a fall
+        haptic(30);
+      }
+      if (s.introT >= dropMs() + INTRO_STAND && s.status === "intro") {
+        s.status = "cue"; s.cueT = Sound.cueDelay ? Sound.cueDelay() : 0;
+      }
+      return;
+    }
     if (!s.introSnd.gather) { s.introSnd.gather = true; Sound.introGather(); }  // plays once the intro runs (audio unlocked)
     const before = s.introT; s.introT += dt;
     const flashAt = INTRO_TRAVEL + INTRO_GATHER;
@@ -8114,6 +8250,7 @@
   }
   function drawIntro(ts) {
     const s = state, t = s.introT, w = patchW(), H = s.introHome;
+    if (s.drop) { if (dropAt(t).done) drawRunner(ts); else drawDrop(ts); return; }
     if (!H || !s.introMotes) { drawRunner(ts); return; }
     // The walk and the gather are the shared build; what comes out of it is his.
     if (paintMotes(ctx, s.introMotes, H, t,
@@ -17225,7 +17362,12 @@
       const i = sk.indexOf(","), c = +sk.slice(0, i), r = +sk.slice(i + 1);
       if (onView(c, r)) drawStone(c, r, ts, st);                                 // ...the ones on screen
     }
-    drawPlatforms(ts, onView);
+    // NO PLATFORMS YET. Chapter one drops him onto a route that is ALREADY LAID — its glass, its line and its
+    // flag are all there from the first frame, so he is falling at something and not at nothing — but the solid
+    // he lands on arrives on the frame he hits it (dropHidesBoard). What is held back is the platform art and
+    // only that: the level's own platforms here, and every laid tile's slab inside drawTrack. Every other
+    // chapter answers false here on every frame.
+    if (!dropHidesBoard()) drawPlatforms(ts, onView);
 
     drawBarriers(ts);
     drawSliders(ts);
@@ -17270,6 +17412,12 @@
     // (the monsters and the instruction over them are drawn at the very end now — see the foot of this function)
     // Coins last of everything on the board. They hover off the surface, so a saw or a
     // block passing over one used to swallow it and the player would never know it was there.
+    // ...AND THE STRAWBERRY WITH THEM. It was drawn with the barriers, which is under the track, the tiles, him
+    // and the monsters — and it is a coin in every respect but its colour: the coin's width, the coin's float on
+    // the coin's clock, the coin's rock, the coin's stamped shadow. It hovers off the surface exactly as they do,
+    // so it had exactly their problem, and the one offer on the board worth crossing a level for was the one
+    // thing a block could pass over and hide.
+    for (const pk of state.pellets) { const [c, r] = pk.split(",").map(Number); drawPellet(c, r, ts); }
     for (const ck of state.coinCells) {
       const i = ck.indexOf(","), c = +ck.slice(0, i), r = +ck.slice(i + 1);
       if (!onView(c, r)) continue;                                                  // ...the ones on screen
@@ -18235,8 +18383,12 @@
           ctx.save();
           ctx.translate(mx, my); ctx.rotate(tl.ang); ctx.scale(k, k); ctx.translate(-mx, -my);
         }
-        if (i === p.length - 1 && leadNode()) drawJunction(p[i], p[i-1], ts);
-        else if (!drawRingMerge(i)) drawPlatformTile(p[i], p[i-1], nextNode(i));
+        // ...and on chapter one's arrival the SLAB waits: drawPathGlass above has already put the route on the
+        // board, so the tiles are in place and only the thing he lands ON is missing until he lands on it.
+        if (!dropHidesBoard()) {
+          if (i === p.length - 1 && leadNode()) drawJunction(p[i], p[i-1], ts);
+          else if (!drawRingMerge(i)) drawPlatformTile(p[i], p[i-1], nextNode(i));
+        }
         if (twist) ctx.restore();
       }
 
@@ -18398,7 +18550,6 @@
     const s = state;
     for (const ck of s.singularity) if (!s.collapsed.has(ck)) { const [c,r]=ck.split(",").map(Number); drawSingularity(c,r,false,ts); }
     for (const ck of s.collapsed) { const [c,r]=ck.split(",").map(Number); drawSingularity(c,r,true,ts); }
-    for (const pk of s.pellets) { const [c,r]=pk.split(",").map(Number); drawPellet(c,r,ts); }
     for (const bk of s.boost) { const [c,r]=bk.split(",").map(Number); drawFxPickup(c,r,ts,"boost"); }
     for (const bk of s.slow)  { const [c,r]=bk.split(",").map(Number); drawFxPickup(c,r,ts,"slow"); }
     for (const d of s.doors) {
@@ -30444,7 +30595,11 @@
                              //   many at once, how big (in its squares), how fast they chart a line, the rest
                              //   between — and, while it is still unfolding, how long one takes over an edge
     glow:      0.50,         // ...and the light each stands in, against the Holy Talismans page's
-    trail:     0.30,         // the talismans' glitter trails, as a share of the Holy Talismans page's
+    trail:     0.90,         // the talismans' glitter trails, as a share of the Holy Talismans page's (46 grains
+                             //   over 3.4s). Nearly the whole of it: these are on ten-second arcs across the sky,
+                             //   and at a third of the page's length what came off them was a few specks at the
+                             //   badge rather than a wake anything could be seen to be leaving
+    runTrail:  0.90,         // ...and HIS, the same length, in white — see below
     mapDrop:   0.16,         // how far below the middle of the screen the Tileverse is centred, in screen heights
     // ---- the flash the cube opens inside (openFlash) ----
     flashMs:   700,          // the whole of it, from the launch...
@@ -30626,10 +30781,13 @@
     Sound.talismanTheme(false);                        // ...a long way out, under the fade into chapter one
     Sound.levelMusicStop(true); Sound.warp(false); Sound.ambient(null);
     if (openNext === "menu") { openTileverse(); return; }
-    // The FIRST viewing ends on the title rather than in chapter one: the front page again, but now the one
-    // a player who has seen the opening gets — the byline, and him running his three tiles — coming up
-    // out of the black the camera dived into.
-    startTitle(); titleBlackAt = performance.now();
+    // ...and the FIRST viewing goes straight on into chapter one, out of the black the film ends in. It used to
+    // hand back to the title — the returning player's front page, with the byline and him running his three
+    // tiles — which meant the one person who had just sat through nine beats of being told where the Tileverse
+    // came from was then shown a menu. The film drops him onto chapter one; so does this.
+    // (the pause button is not touched here: updatePauseBtn owns it, every frame, off the level's own status —
+    //  and that routine's comment is explicit that the places setting this display directly are the bug)
+    levelIdx = 0; loadLevel(levelIdx);
   }
   // A tap during it goes straight to the drop into chapter one.
   function skipOpening(){ if (openActive && openT < OPENING.fall[0]) openSeek(OPENING.fall[0]); }
@@ -31424,8 +31582,18 @@
       // ...and HIS LEGS GOING, the whole time he is floating — not pedalling to a rhythm but scrabbling, the way
       // anything does when it is in the air and would rather not be. He is a runner with nothing under him, and
       // that is the one thing he is for; he looks for something to run on until there is something to run on.
-      // NO SPARK AND NO GLITTER out here. Both belong to the angel, and the angel is what the cube was holding —
-      // once the shell is off him he is a plain runner in the plain coat, with nothing coming off him at all.
+      // ...and A WHITE WAKE off him, the same glitter the six are leaving and the Holy Talismans page sheds, in
+      // white rather than in a charm's colour: he is the one thing up there that is not a charm, so the seven
+      // trails read as six colours and a white one and you can find him in the middle of them without looking.
+      // Sampled along the path he ACTUALLY took (openRunnerAt on the arc, not a remembered list of points), for
+      // the same reason the talismans' is — a grain cannot fall off a trail that is asked where the thing was.
+      // NO SPARK, though: the spark belongs to the angel, and the angel is what the cube was holding.
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      shedGlitter(ctx, (b) => {
+        const q = openRunnerAt(Math.max(OPENING.launch, Math.min(t, t + (b - ts))), M);
+        return { x: q.x, y: q.y - q.s*(RUNNER.legLen + RUNNER.bodyH*0.5), r: q.s*RUNNER.bodyH/1.9 };
+      }, ts, "#ffffff", cineC01((t - OPENING.launch)/220), 19, OPENING.runTrail);
+      ctx.restore();
       ctx.save();
       if (spun) { ctx.translate(P.x, my); ctx.rotate(spun); ctx.translate(-P.x, -my); }
       // NO NAMED POSE out here: the stock stride, which is running. `fromLotus` still walks him out of the sit
@@ -31870,7 +32038,7 @@
                     //   of it hanging off the back
     runScale: 1.00, // ...at the size he stands in a level: with the tile this big he is already the subject
     stride:   0.90, // where in the step he is caught, in half-turns — leaning into it
-    tile:     0.70, // THE TILE, across the icon: the tile and the sky are the whole composition, so the tile
+    tile:     0.65, // THE TILE, across the icon: the tile and the sky are the whole composition, so the tile
                     //   takes the room and the sky is a margin, not a scene
   };
   const iconLook = () => ({
@@ -31935,8 +32103,12 @@
           // moved — so one is laid: a STRAIGHT run of points back from where the ribbon leaves his body
           // (trailAnchor, as the board finds it), aged tail-first so it fades out exactly as it does in play.
           // Before him, so his body covers the join.
+          // ...and ONLY THE GLITTER OF IT. paintTrail is the ribbon plus its grains; the ribbon is a white band
+          // the width of his body, and at icon size a band that long reads as a bar drawn across the tile rather
+          // than as anything he left behind. The grains alone say the same thing and say it as light: they are
+          // scattered up his own height and drift and wink, so what is behind him is a sparkle and not a stripe.
           const tr = lookItem("trail");
-          if (tr && tr.cols && o.trail !== false) {
+          if (tr && tr.glitter && o.trail !== false) {
             const A = trailAnchor(EYES_OPEN, phase, true);
             const ax = rx + rs*A.x, ay = ry + rs*A.y, back = cell*ICON.trailLen;
             const hh = (n) => { const v = Math.sin(n*127.1 + 311.7)*43758.5453; return (v - Math.floor(v))*2 - 1; };
@@ -31945,7 +32117,7 @@
               const u = k/(ICON.trailN - 1);                       // 0 at the tail, 1 at his heels
               pts.push({ x: ax - back*(1 - u), y: ay, life: TRAIL_MS*(1 - u)*0.92, w: hh(k) });
             }
-            paintTrail(tr, pts, rs*RUNNER.bodyH, EYES_OPEN);
+            paintTrailGlitter(pts, rs*RUNNER.bodyH, EYES_OPEN);   // ...the grains, and NOT paintTrailBody's band
           }
           paintRunner(rx, ry, rs, phase, 0, true, EYES_OPEN, 0, true, as);
           runnerShadowClip = null;
