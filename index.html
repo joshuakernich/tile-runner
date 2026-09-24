@@ -5415,7 +5415,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.93";                    // shown on the title & pause screens
+  const VERSION = "v10.94";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -8082,10 +8082,19 @@
     backMs:  700,    // ...how long he lies there
     rollMs:  560,    // ...and the roll up onto his legs
     shadowFade: 6,   // how far up his shadow is gone altogether, in tiles
+    pulseMs: 460,    // the square of light the landing throws out of the tile...
+    pulseTo: 2.1,    // ...and how far it reaches, in tiles
   };
-  // Only chapter one. It is the first thing anybody sees of him on a board, and it is the one
-  // chapter the opening film hands directly to.
-  const dropLevel = () => levelIdx === 0;
+  // Only chapter one, and only ONCE. It is the first thing anybody sees of him on a board, and it is
+  // the one chapter the opening film hands directly to — but six seconds of arriving is right the
+  // first time and a toll on the fifth, so a retry gets the ordinary standing start.
+  //
+  // `levelAttempts` cannot answer this: it counts the board the TITLE runs behind its own logo, so
+  // by the time anybody has chosen to play chapter one it already says two. A flag of its own can,
+  // and it is set the first time the arrival is actually built — which is also why `titleActive` is
+  // in the test, so the board behind the logo does not spend it.
+  let dropDone = false;
+  const dropLevel = () => levelIdx === 0 && !titleActive && !dropDone;
   // How long he is stood there before the cue, in an ORDINARY intro: the tail, less the part of
   // it the gather and the forming were already using. Written this way rather than as a number
   // so that "pause the usual way" goes on meaning that if the intro is ever retuned.
@@ -8144,6 +8153,13 @@
     groundShadow(cell*RUNNER.bodyW*RUNNER.shadowW*(0.35 + 0.65*k), cell*RUNNER.shadow*(0.35 + 0.65*k),
                  RUNNER.shadowA*(0.30 + 0.70*k));
     ctx.restore();
+    // ...AND THE LANDING, as a square of light thrown out of the tile he hits. The game's own (squarePulse),
+    // with its outline: a pulse marking a thing that HAPPENED wants the line, because the line is the shape of
+    // the event. It is the same one a talisman throws when it comes down on its chapter at the end of the
+    // opening film, which is the same event and the same fall — this is where that fall finishes.
+    const lk = (s.introT - DROP.fallMs) / DROP.pulseMs;
+    if (lk > 0 && lk < 1)
+      squarePulse(D.hx, D.hy, cell*(0.35 + lk*DROP.pulseTo), (1 - lk)*(1 - lk), Math.max(1.5, cell*0.06*(1 - lk)));
     resetLeap();                                            // he is not leaping, he is arriving
     paintRunner(fx, fy, cell, 0, th, false, ts, 0, false, null);
   }
@@ -8183,6 +8199,7 @@
     // ask the path anything, and the whole choreography is a function of the clock.
     s.drop = null;
     if (dropLevel()) {
+      dropDone = true;                                       // ...and never again this session
       s.introMotes = null;                                   // nothing gathers: he is not made here, he lands here
       const C = nodeCenter(st0), H = cell*(RUNNER.legLen + RUNNER.bodyH);
       // WHERE THE SURFACE IS, asked rather than assumed. A tile's running face is not its cell's edge — the
@@ -8219,7 +8236,12 @@
       if (was < DROP.fallMs && s.introT >= DROP.fallMs) {
         s.drop.down = true;                                  // ...and the board arrives under him
         Sound.fallStop && Sound.fallStop();                  // the whistle ends as he lands, as it does in a fall
-        haptic(30);
+        // ...and the impact. crunch is the game's own — a noise burst under a bandpass falling away, with a
+        // triangle under it, and a bite that is never quite the same twice. It is what stone makes when it is
+        // struck and what the two halves of a crumble make when they meet; a body arriving head first out of the
+        // sky off the same shelf, rather than a new sound invented for one moment of one chapter.
+        Sound.crunch && Sound.crunch(0.8);
+        haptic([40, 20, 24]);
       }
       if (s.introT >= dropMs() + INTRO_STAND && s.status === "intro") {
         s.status = "cue"; s.cueT = Sound.cueDelay ? Sound.cueDelay() : 0;
@@ -9965,8 +9987,12 @@
     // WHERE IT STOPS: short of the leading tile. That tile is the junction, and the junction draws its own lines across
     // itself — one down each option, out to the squares (junctionTileLine) — so carrying this one over it too laid a
     // line along the route the race had not chosen yet.
+    // ...UNLESS THE LAST TILE IS ON THE FLAG, where there is no junction at all: leadNode answers null on the goal
+    // (there is nowhere left to choose between), drawTrack lays that tile as ordinary track, and so nothing whatever
+    // drew a line across it. The lit track stopped one tile short of the flag — on the single square the whole level
+    // is aimed at, and the one place the player most wants to see the route arrive.
     let lead = -1;
-    for (let i = 0; i < p.length; i++) if (!p[i].exited) lead = i;
+    if (leadNode()) for (let i = 0; i < p.length; i++) if (!p[i].exited) lead = i;
     const runs = [];                                 // contiguous stretches of live track, each its own polyline
     let cur = null, prev = -2;
     for (let i = 0; i < p.length; i++) {
@@ -12336,7 +12362,12 @@
     const s = state;
     s.guideClears++;
     if (s.guidesOff) return;                                        // waved off for this attempt — see guideOnDrop
-    if ((s.guide && !s.guide.done) || !s.guides.length || !tile) return;
+    // ONE AT A TIME — but only one that is actually ASKING something. drawGuide gives up when guideTarget answers
+    // null: no way on from the front of the track, the square it picked no longer an exit. The guide was still
+    // sitting there un-answered all the same, and this test read un-answered as "still being asked" — so a tile
+    // that cleared while an invisible guide was up was swallowed, and nothing came up again until the next drop
+    // marked the dead one done. Asked, rather than remembered.
+    if ((s.guide && !s.guide.done && guideTarget(s.guide)) || !s.guides.length || !tile) return;
     const lead = leadNode();
     let key = null, at = null;
     const right = lead && junctionExits(lead.n, lead.prev).find(e => e.c === lead.n.c + 1 && e.r === lead.n.r);
@@ -12365,7 +12396,15 @@
                : (g.key === "tap" || g.key === "tap2") ? g.at
                : guideTarget(g);
     g.done = true;
-    if (want && !(pos.c === want.c && pos.r === want.r)) state.guidesOff = true;
+    // ...EXCEPT ON CHAPTER ONE, which never stops teaching. Everywhere else this rule is right: a tile put down
+    // somewhere other than the square being pointed at is an answer — they have seen it and they are playing
+    // their own game — and showing the same thing a third time after it has been ignored twice is nagging.
+    // Chapter one is the one board where that is exactly backwards. It is the first thing anybody plays, its
+    // whole job is the one instruction, and the player who puts the tile somewhere else is precisely the player
+    // who has not got it yet. The arrow also points STRAIGHT ON at a junction, so on a board with a turn in it
+    // the player can follow the game perfectly and still trip this. So on chapter one every tile in the path
+    // gets the prompt the first one got, however it is played.
+    if (want && !(pos.c === want.c && pos.r === want.r) && levelIdx !== 0) state.guidesOff = true;
   }
   // His pace, and the guide's own clocks. Called from update(), so it all holds still under a pause.
   // THE LODESTONE, OFFERED. A level that lists it waits until there is a coin close enough to be worth pulling in —
