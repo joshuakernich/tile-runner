@@ -2193,6 +2193,27 @@
     background-color:#e0aa1e; border-color:transparent; color:#000; box-shadow:0 var(--btn-drop) 0 #8a6410;
   }
   #menu-body .shop-buy:active { transform:translateX(-50%) translateY(var(--btn-drop)); box-shadow:none; }
+  /* ---- THE SHOP'S FIRST VISIT ----------------------------------------------------------
+     A green square round the thing to press, and a line under it. ONE fixed overlay rather
+     than a class on each target, because the three targets live in three different places — a
+     cell in a scrolling rack, a button floating beside the figure, and a tab in the footer bar
+     — and a highlight styled into all three is three chances to get it wrong. It never takes a
+     press: the thing underneath it is the thing to press. Its green comes from the JS, off the
+     board's own guides (GUIDE.ink), so the two ways this game teaches are one colour. */
+  #shopTour { position:fixed; inset:0; pointer-events:none; z-index:60; display:none; }
+  #shopTour.on { display:block; }
+  /* The square itself is a CANVAS, not a border: it is the game's own hint — one unrounded line
+     with the standard spark rolling round it — and the spark is drawn by drawSpark, the same
+     routine that lights every hotspot, junction and charm in the game. A CSS border with a glow
+     on it would have been a likeness of that, and a likeness goes stale. */
+  #shopTour .st-ring { position:absolute; }
+  /* ...and the words hang off the TARGET rather than off the screen: centred on it, and above or
+     below it as the step asks. Two lines where a step writes two. */
+  #shopTour .st-say {
+    position:absolute; text-align:center; color:var(--tour); white-space:pre-line; line-height:1.45;
+    font-size:13px; letter-spacing:0.09em; text-transform:uppercase;
+    text-shadow:0 2px 0 #05040d, 0 -2px 0 #05040d, 2px 0 0 #05040d, -2px 0 0 #05040d;
+  }
   #menu-body .shop-buy canvas { width:17px; height:17px; display:block; }
   /* ...and the rack keeps clear of it, so the last row is never stuck underneath */
   #menu.top #menu-body { padding-bottom:80px; }
@@ -5415,7 +5436,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.94";                    // shown on the title & pause screens
+  const VERSION = "v10.95";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -8078,9 +8099,19 @@
     landX:   0.25,   // where across the start tile his head comes down: a quarter in from the near edge
     headMs:  1600,   // ...and how long he is stood on it, dead still. A second and a half is long enough to
                      //   read as a held pose and short enough not to be a wait
-    tipMs:   460,    // the topple FORWARD onto his back — eased IN, because a thing going over goes over
+    // THE WIND-UP AND THE KICK. He does not decide to turn over, he THROWS himself over: knees drawn right up
+    // against the way he is about to go, held a moment, then both legs snapped up and out together — hard enough
+    // to take him off the ground for the middle of it. Both legs, not a stride: a stride is a man going
+    // somewhere, and this is a man with nothing under him but his own head trying to get off it.
+    windMs:  360,    // ...how long he spends curling up and loading
+    windBack: 0.26,  // ...how far back he winds while he does it, in radians
+    curl:    1.00,   // ...how far the knees come up, as RUNNER's own leap crouch (1 halves the leg)
+    thrust:  1.60,   // ...and how far the legs go OUT at the top of the kick, in the same units
+    thrustAt: 0.30,  // ...reached this far into the throw, so the legs are already out when he leaves the ground
+    hopH:    0.26,   // how far off the track the kick takes him, in tiles, at the top of it
+    tipMs:   460,    // the throw onto his back — eased OUT, because a thrown thing leaves fast and settles
     backMs:  700,    // ...how long he lies there
-    rollMs:  560,    // ...and the roll up onto his legs
+    rollMs:  560,    // ...and the second throw, up onto his legs
     shadowFade: 6,   // how far up his shadow is gone altogether, in tiles
     pulseMs: 460,    // the square of light the landing throws out of the tile...
     pulseTo: 2.1,    // ...and how far it reaches, in tiles
@@ -8099,27 +8130,61 @@
   // it the gather and the forming were already using. Written this way rather than as a number
   // so that "pause the usual way" goes on meaning that if the intro is ever retuned.
   const INTRO_STAND = INTRO_TAIL - INTRO_GATHER - INTRO_FORM;
-  const dropMs = () => DROP.fallMs + DROP.headMs + DROP.tipMs + DROP.backMs + DROP.rollMs;
+  const dropMs = () => DROP.fallMs + DROP.headMs + DROP.tipMs + DROP.backMs + DROP.rollMs + DROP.windMs*2;
   // WHERE HE IS IN IT, as one angle and one pivot. `a` is measured from the headstand: 0 stood on
   // his head, PI/2 flat on his back, PI upright. `head` is true while the pivot is the top of his
   // head rather than his feet.
-  function dropAt(t) {
+  // ...`pose` is his legs, in RUNNER's own leap units: below nought the knees come up and the leg shortens,
+  // above it they stretch out (paintRunner's legK). `hop` is how far the kick has taken him off the track, 0..1.
+  // The throw's shape is one thing said twice: the legs are OUT by `thrustAt` of it and easing back to nothing
+  // after, and the hop is a half-sine that leaves the ground with the kick and puts him back down on the beat
+  // the turn finishes — so the legs, the lift and the rotation are three readings of one movement.
+  const dropKick = (e) => {
     const D = DROP;
+    return e < D.thrustAt ? cineMix(-D.curl, D.thrust, cineSmooth(e/D.thrustAt))
+                          : D.thrust * (1 - cineSmooth((e - D.thrustAt)/(1 - D.thrustAt)));
+  };
+  function dropAt(t) {
+    const D = DROP, H = Math.PI/2;
     if (t < D.fallMs) {
       // gravity: barely moving at the top of the frame, quickest just before it lands
       const k = clamp(t/D.fallMs, 0, 1);
-      return { a: 0, head: true, drop: 1 - k*k, landed: false };
+      return { a: 0, head: true, drop: 1 - k*k, landed: false, pose: 0, hop: 0 };
     }
     let u = t - D.fallMs;
-    if (u < D.headMs) return { a: 0, head: true, drop: 0, landed: true };
+    if (u < D.headMs) return { a: 0, head: true, drop: 0, landed: true, pose: 0, hop: 0 };   // held on his head
     u -= D.headMs;
-    if (u < D.tipMs)  return { a: (Math.PI/2)*easeIn(u/D.tipMs), head: true, drop: 0, landed: true };
+    if (u < D.windMs) { const e = cineSmooth(u/D.windMs);                       // ...curls up and loads
+      return { a: -D.windBack*e, head: true, drop: 0, landed: true, pose: -D.curl*e, hop: 0 }; }
+    u -= D.windMs;
+    if (u < D.tipMs) { const e = u/D.tipMs;                                      // ...and kicks himself over
+      return { a: cineMix(-D.windBack, H, easeOut(e)), head: true, drop: 0, landed: true,
+               pose: dropKick(e), hop: Math.sin(Math.PI*e) }; }
     u -= D.tipMs;
-    if (u < D.backMs) return { a: Math.PI/2, head: false, drop: 0, landed: true };
+    if (u < D.backMs) return { a: H, head: false, drop: 0, landed: true, pose: 0, hop: 0 };  // flat on his back
     u -= D.backMs;
-    if (u < D.rollMs) return { a: Math.PI/2 + (Math.PI/2)*cineSmooth(u/D.rollMs), head: false, drop: 0, landed: true };
-    return { a: Math.PI, head: false, drop: 0, landed: true, done: true };
+    if (u < D.windMs) { const e = cineSmooth(u/D.windMs);                       // ...curls up again
+      return { a: H - D.windBack*e, head: false, drop: 0, landed: true, pose: -D.curl*e, hop: 0 }; }
+    u -= D.windMs;
+    if (u < D.rollMs) { const e = u/D.rollMs;                                    // ...and kicks himself upright
+      return { a: cineMix(H - D.windBack, Math.PI, easeOut(e)), head: false, drop: 0, landed: true,
+               pose: dropKick(e), hop: Math.sin(Math.PI*e) }; }
+    return { a: Math.PI, head: false, drop: 0, landed: true, done: true, pose: 0, hop: 0 };
   }
+  // HOW FAR THE FIGURE FLOATS OFF THE POINT IT IS ANCHORED AT. paintRunner does not draw him on his anchor: it
+  // lifts him by the line every kick's sole is drawn on (KICK_SOLE), by a swagger's hover, and by the stride's
+  // own bob. Standing on his feet that is right and invisible. Standing on his HEAD it is the difference between
+  // flush and buried — his crown was two and a half pixels inside the platform, measured — so the pivot has to
+  // know it. The same three terms in the same units as paintRunner's, so retuning either of them keeps this true.
+  function dropLift() {
+    const w = lookItem("swagger");
+    return (w.spin ? 0 : cell*KICK_SOLE) + (w.hover ? cell*w.hover : 0);
+  }
+  // ...and HOW LONG HE IS, crown to soles, with his legs where the kick has them. paintRunner scales the leg by
+  // exactly this (legK) and hangs the body off the top of it, so a man with his knees up is a shorter man — and
+  // a pivot that did not know it would have his head lift off the track every time he curled.
+  const dropArm = (pose) => cell*(RUNNER.legLen*(1 + (pose < 0 ? pose*0.50 : pose*0.18)) + RUNNER.bodyH)
+                          + dropLift();
   // HIM, anywhere in that. The figure is drawn in the frame it always is — paintRunner takes the
   // world angle and puts his FEET where it is told — so all this has to work out is where the feet
   // are, which is the pivot swung round by the angle.
@@ -8134,10 +8199,17 @@
     //   was inside the track. The lift is his half-width projected onto the normal, which is nothing stood on his
     //   head, all of it flat on his back and nothing again upright: one sine, and continuous through the frame
     //   the pivot changes ends on.
-    const off = W.drop*D.high + D.bw*0.5*Math.sin(W.a);
+    // ...plus THE HOP: the kick takes him clean off the track for the middle of the throw, along the face's own
+    // normal like everything else here, so he is thrown into the next orientation rather than pivoting on a
+    // corner of himself the whole way round.
+    const off = W.drop*D.high + D.bw*0.5*Math.sin(W.a) + cell*DROP.hopH*W.hop;
     const px = (W.head ? D.hx : D.fx) + D.nx*off, py = (W.head ? D.hy : D.fy) + D.ny*off;
-    // ...and his feet, which is what paintRunner is handed: the pivot, plus his own height swung round
-    const fx = W.head ? px - D.H*Math.sin(th) : px, fy = W.head ? py + D.H*Math.cos(th) : py;
+    // ...and his feet, which is what paintRunner is handed: the pivot, plus his own height swung round — plus
+    // HOW FAR THE FIGURE FLOATS OFF ITS ANCHOR (dropLift), so that the crown lands on the pivot and not inside
+    // it. Weighted out as he comes upright, because by the time he is on his feet that float is the right thing
+    // and paintRunner's own is what should be putting it there.
+    const arm = D.H + (dropArm(W.pose) - D.H) * (1 + Math.cos(W.a))/2;
+    const fx = W.head ? px - arm*Math.sin(th) : px, fy = W.head ? py + arm*Math.cos(th) : py;
     // HIS SHADOW STAYS ON THE GROUND. paintRunner casts it in HIS frame, which is right for a man the right way
     // up and wrong for one going over: it swung round with him and spent the headstand above his head. Turned
     // off there (`grounded` false) and laid here instead — under the middle of his body, dropped onto the face
@@ -8161,7 +8233,13 @@
     if (lk > 0 && lk < 1)
       squarePulse(D.hx, D.hy, cell*(0.35 + lk*DROP.pulseTo), (1 - lk)*(1 - lk), Math.max(1.5, cell*0.06*(1 - lk)));
     resetLeap();                                            // he is not leaping, he is arriving
+    // NOT `moving`: a stride swings one leg against the other, and what this is is BOTH legs together — curled
+    // up under him and then thrown out. `_leapPose` is the game's own knob for exactly that (paintRunner folds
+    // the leg under at a negative and stretches it at a positive), so the curl and the kick are the leap's
+    // crouch and its reach, borrowed, rather than a second way of bending the same legs.
+    _leapPose = W.pose;
     paintRunner(fx, fy, cell, 0, th, false, ts, 0, false, null);
+    _leapPose = 0;
   }
   function startIntro() {
     const s = state; s.status = "intro"; s.introT = 0; s.introSnd = { gather:false, flash:false, drop:false };
@@ -8217,14 +8295,12 @@
                  : nry < 0 ? hy - camY : (camY + viewH) - hy;
       s.drop = { H, bw: cell*RUNNER.bodyW, ang: Math.atan2(dr, dc), nx: nrx, ny: nry,
                  hx, hy,                                     // where the top of his head lands...
-                 fx: hx + dc*H, fy: hy + dr*H,               // ...and where his feet finish, one height along
-                 high: Math.max(cell*2, edge + H*DROP.clear), down: false };
+                 // ...and where his feet finish: one height along, plus half the float, which is what the arm
+                 // in drawDrop comes to at the moment the pivot changes ends (his legs are straight there)
+                 fx: hx + dc*(H + dropLift()/2), fy: hy + dr*(H + dropLift()/2),
+                 high: Math.max(cell*2, edge + H*DROP.clear) };
     }
   }
-  // While he is still in the air there is NO BOARD: the platforms, the track, the line along it and the
-  // three loose tiles are all held back and arrive on the frame he hits them. It is the one moment in the
-  // game where the ground is the event.
-  const dropHidesBoard = () => !!(state.drop && state.status === "intro" && !state.drop.down);
   function tickIntro(dt) {
     const s = state;
     if (s.drop) {
@@ -8234,7 +8310,6 @@
       if (!s.introSnd.drop) { s.introSnd.drop = true; Sound.fall && Sound.fall(DROP.fallMs/1000); }
       const was = s.introT; s.introT += dt;
       if (was < DROP.fallMs && s.introT >= DROP.fallMs) {
-        s.drop.down = true;                                  // ...and the board arrives under him
         Sound.fallStop && Sound.fallStop();                  // the whistle ends as he lands, as it does in a fall
         // ...and the impact. crunch is the game's own — a noise burst under a bandpass falling away, with a
         // triangle under it, and a bite that is never quite the same twice. It is what stone makes when it is
@@ -8524,8 +8599,12 @@
       // "pick this up" better than an arrow saying "it comes back" does.
       real(() => { drawGlass(0, 0, cell); drawDragDots(cell/2, cell/2, cell); }); return;
     }
-    if (type==="turn")     {   // a laid elbow — the same corner surface the runner rides
-      real(() => { drawGlass(0, 0, cell); drawPlatformTile(N0, { c:-1, r:0 }, { c:0, r:1 }); }); return;
+    if (type==="turn")     {   // a laid elbow — the same corner surface the runner rides, and the turn the
+                               // card is about: IN FROM BELOW and OUT TO THE RIGHT, which is up-then-right, the
+                               // way the chapter that teaches it actually asks you to go. It used to come in
+                               // from the left and leave downwards — a right turn too, but drawn as the one
+                               // corner the level never makes
+      real(() => { drawGlass(0, 0, cell); drawPlatformTile(N0, { c:0, r:1 }, { c:1, r:0 }); }); return;
     }
     if (type==="wall")     { real(() => drawWall(0, 0)); return; }
     if (type==="stone")    { real(() => drawStone(0, 0, 0, { hp:2, vi:0 })); return; }
@@ -9979,6 +10058,33 @@
   // ...and a spark travels it, the way one goes round a shut circuit — the same size and the same unhurried pace, well
   // behind his. It runs the way he is running: up out of the tile he is on and away toward the front, over and over.
   const PATH_LINE = { cellMs: 1500, spark: 0.12 };   // the spark's time per cell, and its size in tiles (LOOP_LINE's)
+  // THE WAY ON, BEFORE HE HAS SET OFF. A chapter opens with its track lit end to end (drawPathLine) but stopping
+  // short of the leading tile, because that tile is the junction and the junction draws its own lines — one down
+  // each of its three options — as the race runs across it. Nothing races until he does, so at the start of a
+  // chapter the lit track simply stopped a tile short of its own front, with nothing to say which way it pointed.
+  // This lays the STRAIGHT way on across that tile and fades it to nothing at the tile's outer edge: full where
+  // the track arrives, gone where it would leave. It says "on, this way" without claiming the square beyond —
+  // which is the player's to choose, and which the race offers properly the moment he moves.
+  const FRONT_HINT = { a: 0.85, hold: 0.28 };   // how strong it is at the join, and how far it holds before it goes
+  function drawFrontHint() {
+    const s = state;
+    if (!s || !s.path || s.begun || s.vortex || (s.loop && s.loop.closed)) return;
+    const lead = leadNode(); if (!lead || lead.n.kind === "platform") return;
+    const d = lead.prev ? axisDir(lead.prev, lead.n) : { x: 0, y: -1 };          // straight on, as the junction means it
+    const S = tileSurface(lead.n, lead.prev, { c: lead.n.c + d.x, r: lead.n.r + d.y });
+    if (!S || S.length < 2) return;
+    const a = S[0], b = S[S.length - 1], blue = tvBlueHex();
+    const g = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+    g.addColorStop(0, hexA(blue, FRONT_HINT.a));
+    g.addColorStop(FRONT_HINT.hold, hexA(blue, FRONT_HINT.a));
+    g.addColorStop(1, hexA(blue, 0));
+    ctx.save();
+    ctx.strokeStyle = g; ctx.lineWidth = FOOTER.rim + 1; ctx.lineCap = "butt"; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.moveTo(a.x, a.y);
+    for (let j = 1; j < S.length; j++) ctx.lineTo(S[j].x, S[j].y);
+    ctx.stroke();
+    ctx.restore();
+  }
   function drawPathLine() {
     const s = state;
     if (!s || !s.path || s.vortex) return;
@@ -12324,7 +12430,9 @@
     head:   0.15,   // ...and its head's length
     // (the words are copy — COPY.guideDrag on the tile to carry, COPY.guideTap over the square to tap — set in the body
     //  type (bylineType) and the guide's green, no shadow)
-    wordRow: 0.875, // ...centred on the middle of the tile's bottom quarter, as a share of the tile down from its top
+    wordRow: 0.125, // DRAG ME, centred on the middle of the tile's TOP quarter, as a share of the tile down from
+                    //   its top — the same row TAP ME sits on in the square after it, so the two instructions are
+                    //   read off one line rather than one high and one low
     wordW:  0.90,   // ...and never wider than this share of it: its tracking tightens first, then the type if it must
     tipGap: 0.04,   // how far over the square to tap the tip sits, in tiles — close down on it
     tapRow: 0.125,  // ...and TAP ME in the square after it: centred on the middle of its top quarter, down from its top
@@ -12584,7 +12692,14 @@
     const lw = Math.max(1, cell*GUIDE.line), hl = cell*GUIDE.head, hw = hl*0.72;
     const nx = -dy/D, ny = dx/D, mx = (X0 + X1)/2, my = (Y0 + Y1)/2;
     const lean = nx*(COLS*cell/2 - mx) + ny*(ROWS*cell/2 - my);          // bow towards the board's middle
-    const sg = Math.abs(lean) < cell*0.25 ? 1 : Math.sign(lean);
+    // ...and where that is a COIN FLIP — a track running along the middle of the board, which is where a chapter
+    // most often puts one — the tie goes to THE SIDE HE RUNS ON: the track's own surface normal, which is the
+    // open air. It used to go to +1, and +1 for a runner heading right is straight DOWN, so the arrow arced
+    // under the platform and through the ground it is standing on rather than over the space above it.
+    const LN = leadNode();
+    const gin = LN ? (LN.prev ? axisDir(LN.prev, LN.n) : { x: 0, y: -1 }) : { x: 1, y: 0 };
+    const upward = nx*gin.y + ny*(-gin.x);                               // the left-normal: the face he stands on
+    const sg = Math.abs(lean) < cell*0.25 ? (upward < 0 ? -1 : 1) : Math.sign(lean);
     const PX = mx + nx*sg*D*GUIDE.bow, PY = my + ny*sg*D*GUIDE.bow;
     const at = u => [(1-u)*(1-u)*X0 + 2*(1-u)*u*PX + u*u*X1, (1-u)*(1-u)*Y0 + 2*(1-u)*u*PY + u*u*Y1];
     // the arc runs CORNER TO CORNER: on each square, the corner that is furthest towards the other square and out on the
@@ -17401,12 +17516,7 @@
       const i = sk.indexOf(","), c = +sk.slice(0, i), r = +sk.slice(i + 1);
       if (onView(c, r)) drawStone(c, r, ts, st);                                 // ...the ones on screen
     }
-    // NO PLATFORMS YET. Chapter one drops him onto a route that is ALREADY LAID — its glass, its line and its
-    // flag are all there from the first frame, so he is falling at something and not at nothing — but the solid
-    // he lands on arrives on the frame he hits it (dropHidesBoard). What is held back is the platform art and
-    // only that: the level's own platforms here, and every laid tile's slab inside drawTrack. Every other
-    // chapter answers false here on every frame.
-    if (!dropHidesBoard()) drawPlatforms(ts, onView);
+    drawPlatforms(ts, onView);
 
     drawBarriers(ts);
     drawSliders(ts);
@@ -17415,6 +17525,7 @@
     drawHazardPaths(ts);      // ground markings — under the track and the tiles standing on it
     drawTrack(ts);
     if (!win) drawPathLine();                     // the live track, lit end to end...
+    if (!win) drawFrontHint();                    // ...carried across the front tile, fading out, until he sets off
     if (!win) drawLoopLine();                     // ...and a closed circuit, lit along its length
     if (state.drag) drawTargets(ts);
     // The loose tiles are OFF during the victory replay. They are lying on the very cells the
@@ -18422,12 +18533,8 @@
           ctx.save();
           ctx.translate(mx, my); ctx.rotate(tl.ang); ctx.scale(k, k); ctx.translate(-mx, -my);
         }
-        // ...and on chapter one's arrival the SLAB waits: drawPathGlass above has already put the route on the
-        // board, so the tiles are in place and only the thing he lands ON is missing until he lands on it.
-        if (!dropHidesBoard()) {
-          if (i === p.length - 1 && leadNode()) drawJunction(p[i], p[i-1], ts);
-          else if (!drawRingMerge(i)) drawPlatformTile(p[i], p[i-1], nextNode(i));
-        }
+        if (i === p.length - 1 && leadNode()) drawJunction(p[i], p[i-1], ts);
+        else if (!drawRingMerge(i)) drawPlatformTile(p[i], p[i-1], nextNode(i));
         if (twist) ctx.restore();
       }
 
@@ -26498,6 +26605,7 @@
   document.getElementById("win-tv").addEventListener("click", () => {
     if (!menuEl.classList.contains("show")) return;
     Sound.unlock(); Sound.tabClick(TAB_ORDER.indexOf("tv"));
+    shopTourDid(2);                    // ...the last of the shop's three, and the end of it
     const go = () => { menuEl.classList.remove("whip-out");
                        if (menuReturn) menuReturn(); else { closeMenu(); showWinUI(); } };
     // The map is not a DOM screen, so what pans here is the menu going away — off in the same
@@ -26560,6 +26668,106 @@
   // nothing at all because a level is running and has its own arrangement.
   const ambBed = () => cineActive ? "intro" : titleActive ? "title"
                      : (win && win.ph === "wait") ? "shop" : null;
+  // ---------- THE SHOP'S FIRST VISIT ------------------------------------------------------
+  // Three things, said once, in the order you would do them: try something on, buy it, go back
+  // to the game. Each waits for the one before it to actually HAPPEN — this is not a slideshow,
+  // it is the same teaching the board does with its drag arrows, moved into the DOM because the
+  // shop is DOM and a line painted on the canvas would be behind it.
+  //
+  // The step is REMEMBERED (settings.shopTour), so leaving halfway and coming back picks it up
+  // where it stopped, and once the three are done it is never seen again. Everything about WHERE
+  // it points is asked every frame rather than held: the rack rebuilds on every tap, so an
+  // element kept from the last build is a node that is no longer in the page.
+  const SHOP_TOUR = [
+    { say: "Tap to try it on", at: () => document.querySelector("#menu-body .shop-rack .tal[data-tour-pick]") },
+    { say: "Tap to buy it",    at: () => document.querySelector("#menu-body .st-buy"), above: true },
+    // Two lines, because the tab it hangs over is a quarter of the footer wide and one line of
+    // this would have run across the tabs either side of it.
+    { say: "Back to\nthe game", at: () => document.getElementById("win-tv"), above: true },
+  ];
+  const SHOP_TOUR_PAD  = 6;                // how far the square stands off the thing it rings, px
+  const SHOP_TOUR_W    = 2;                // ...the line's own weight
+  const SHOP_TOUR_SZ   = 15;               // ...the spark's size, and
+  const SHOP_TOUR_BLOO = 30;               // ...the room its bloom needs outside the square
+  const SHOP_TOUR_GAP  = 9;                // ...and the gap between the square and the words
+  // A POINT ROUND A RECTANGLE, `u` of the way along its perimeter, anticlockwise from the top
+  // left. The board's own guideSquareSpark walks a SQUARE with the tile's corner radius on it;
+  // nothing here is square — a shelf cell is, but a Purchase button is three times as wide as it
+  // is tall and a footer tab wider still — and nothing here is rounded either.
+  function tourRim(x0, y0, w, h, u) {
+    const per = 2*(w + h);
+    let d = ((u % 1) + 1) % 1 * per;
+    if (d < w) return { x: x0 + d,     y: y0 };
+    d -= w;
+    if (d < h) return { x: x0 + w,     y: y0 + d };
+    d -= h;
+    if (d < w) return { x: x0 + w - d, y: y0 + h };
+    d -= w;
+    return       { x: x0,              y: y0 + h - d };
+  }
+  const shopTourStep = () => Math.max(0, settings.shopTour | 0);
+  // Done, and only if it is the step actually being asked for: every one of these sits on a
+  // handler that fires whether the tour is up or not.
+  function shopTourDid(n) {
+    if (shopTourStep() !== n) return;
+    settings.shopTour = n + 1; saveSettings();
+  }
+  let _tourEl = null, _tourRaf = 0;
+  // Running only while the SHOP is the screen — the rack's own presence is the test, which also
+  // keeps the last step (a footer tab, shared with every other screen) from following you out.
+  function shopTourAt() {
+    if (shopTourStep() >= SHOP_TOUR.length) return null;
+    if (!document.querySelector("#menu-body .shop-rack")) return null;
+    const S = SHOP_TOUR[shopTourStep()], el = S.at();
+    return el ? { el, say: S.say, above: !!S.above } : null;
+  }
+  function shopTourRun() {
+    if (shopTourStep() >= SHOP_TOUR.length) return;
+    if (!_tourEl) {
+      _tourEl = document.createElement("div"); _tourEl.id = "shopTour";
+      _tourEl.innerHTML = '<canvas class="st-ring"></canvas><div class="st-say"></div>';
+      _tourEl.style.setProperty("--tour", GUIDE.ink);   // the board's own teaching green: one source for both
+      document.body.appendChild(_tourEl);
+    }
+    if (!_tourRaf) _tourRaf = requestAnimationFrame(shopTourTick);
+  }
+  function shopTourTick() {
+    _tourRaf = 0;
+    const t = shopTourAt();
+    if (!t) { if (_tourEl) _tourEl.classList.remove("on"); return; }   // gone: the loop ends with it
+    const r = t.el.getBoundingClientRect(), p = SHOP_TOUR_PAD, B = SHOP_TOUR_BLOO;
+    const seen = r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight;
+    if (seen) {
+      const cv = _tourEl.querySelector(".st-ring"), say = _tourEl.querySelector(".st-say");
+      const W = r.width + p*2, H = r.height + p*2, cw = W + B*2, ch = H + B*2;
+      cv.style.left = (r.left - p - B) + "px"; cv.style.top = (r.top - p - B) + "px";
+      cv.style.width = cw + "px"; cv.style.height = ch + "px";
+      const px = ICON_SCALE, wantW = Math.round(cw*px), wantH = Math.round(ch*px);
+      if (cv.width !== wantW || cv.height !== wantH) { cv.width = wantW; cv.height = wantH; }
+      const g = cv.getContext("2d");
+      g.setTransform(px, 0, 0, px, 0, 0);
+      g.clearRect(0, 0, cw, ch);
+      const lw = SHOP_TOUR_W;
+      g.strokeStyle = GUIDE.ink; g.lineWidth = lw; g.lineJoin = "miter";
+      g.strokeRect(B + lw/2, B + lw/2, W - lw, H - lw);
+      // ...and the standard spark round it, at the standard pace: a lap in GUIDE_SPARK.lapMs,
+      // rolling by the ground it has covered, exactly as the board's hotspots run theirs.
+      const now = performance.now(), u = -now / GUIDE_SPARK.lapMs;
+      const q = tourRim(B, B, W, H, u), per = 2*(W + H);
+      g.save();
+      g.translate(q.x, q.y); g.rotate(u * per / (SHOP_TOUR_SZ * TAB_SPARK_ROLL));
+      drawSpark(g, 0, 0, SHOP_TOUR_SZ, now, { alpha: 1, col: GUIDE.ink, seed: 0.37 });
+      g.restore();
+      // ...and the words, centred on the THING rather than on the screen — a footer tab is a
+      // quarter of the width and nowhere near the middle of it.
+      say.textContent = t.say;
+      say.style.left = (r.left + r.width/2) + "px";
+      say.style.transform = t.above ? "translate(-50%, -100%)" : "translate(-50%, 0)";
+      say.style.top = (t.above ? r.top - p - SHOP_TOUR_GAP : r.bottom + p + SHOP_TOUR_GAP) + "px";
+    }
+    _tourEl.classList.toggle("on", seen);
+    _tourRaf = requestAnimationFrame(shopTourTick);
+  }
   function openMenu(screen, ret) { paused = true; menuReturn = ret || null;
                                    buildMenu(screen || "main"); menuEl.classList.add("show");
                                    document.body.classList.add("menu-open");
@@ -27262,6 +27470,7 @@
               if (payIn(pvCat) === "hearts") wallet.hearts -= pvIt.cost; else wallet.tiles -= pvIt.cost;
               wallet.owned.add(pvIt.id); saveWallet();
               shopPreview = null; wearLook(pvCat.key, pvIt.id); Sound.tapBig(); Sound.coin();
+              shopTourDid(1);
               buildMenu("shop:" + pvCat.key);
             };
             offer.appendChild(buy);
@@ -27345,6 +27554,14 @@
       const rack = document.createElement("div"); rack.className = "shop-rack";
       const grid = document.createElement("div"); grid.className = "tal-grid";
       const cat = LOOK.find(l => l.key === shopTab);
+      // THE ONE THE TOUR POINTS AT, if it is still on its first step: the cheapest thing on this
+      // shelf you do not own and CAN afford. Affordable because the two steps after this one are
+      // the Purchase button and the way out, and neither of them exists on a fitting you cannot
+      // pay for — a tour that strands you on step one is worse than no tour. A shelf with nothing
+      // to offer simply does not raise it; switch tabs and it appears.
+      const tourPick = shopTourStep() === 0
+        ? cat.items.filter(it => !owns(it) && balanceOf(cat) >= it.cost)
+                   .sort((a, b) => a.cost - b.cost)[0] : null;
       // What the shelf marks as EQUIPPED is what you actually own and wear — not the fitting.
       // Reading lookWorn here meant that trying something on took the green off the thing you
       // are still wearing and gave it to nothing, since the fitting wears gold instead.
@@ -27412,6 +27629,7 @@
         // the picture IS the thing, at two thirds of a cell, and the name was a line of 10px
         // type saying what you can already see. It stays on the button for a screen reader.
         el.setAttribute("aria-label", it.name + (have ? "" : ", " + it.cost + (payIn(cat) === "hearts" ? " hearts" : " tiles")));
+        if (tourPick && it.id === tourPick.id) el.dataset.tourPick = "1";
         el.appendChild(sc); el.appendChild(pr);
         el.onclick = () => {
           Sound.unlock();
@@ -27420,7 +27638,7 @@
           // and the tag beside him says what keeping it would cost. Tapping it again does NOT buy
           // it — a second tap on the same cell spent your coins before, which is one stray tap from
           // a purchase you never meant. Only the tag's Purchase button spends anything.
-          else if (!trying) { shopPreview = { key: cat.key, id: it.id }; Sound.tap(); }
+          else if (!trying) { shopPreview = { key: cat.key, id: it.id }; Sound.tap(); shopTourDid(0); }
           else { Sound.tap(); return; }
           buildMenu("shop:" + cat.key);
         };
@@ -27439,6 +27657,7 @@
       // the buy button is stacked on top of this one, so it has to know how tall it is
       requestAnimationFrame(() => document.documentElement.style.setProperty(
         "--go-h", Math.round(go.getBoundingClientRect().height) + "px"));
+      shopTourRun();                 // ...and the first visit's three instructions, if any are left
       return;
     }
     // ---- Holy Talismans: found, never bought, and shown as objects rather than as stock ----
