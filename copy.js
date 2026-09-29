@@ -190,6 +190,6 @@ var COPY_DATA = {
   guideTapMe: "Tap me",
   // ...and the Lodestone's own, said on the charm down in the footer once it has been spent: the one thing you need to
   // know about it, and the only chance there is to say it.
-  guideLodeUsed: "One use per level",
+  guideLodeUsed: "One use\nper level",
 };
 if (typeof module !== "undefined") module.exports = COPY_DATA;

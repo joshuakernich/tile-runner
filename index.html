@@ -5436,7 +5436,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.96";                    // shown on the title & pause screens
+  const VERSION = "v10.97";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -5535,44 +5535,54 @@
     { id:"magnet", col:"#f1645f", ms:3000,
       face:"#f2685f", edge:"#8f2820",
       etch:(g,x,y,r)=>{
-        // A STONE WITH ITS FIELD: a lump of rock in the middle, and on each side of it the field it
-        // throws — leaving at the top, bowing out round the side and coming home at the bottom. It
-        // used to be a horseshoe magnet, which is the diagram of a magnet rather than the thing a
-        // lodestone is: a stone that happens to pull.
+        // A MAGNET WITH A STONE IN THE MIDDLE OF IT. The horseshoe is what everyone reads as "magnet" at a
+        // glance — the thing it is a diagram of — and the lodestone is the rock inside it, which is what this
+        // charm actually is: a stone that happens to pull. It was the stone alone with its field drawn round
+        // it in two crescents, which is the honest picture and the one nobody recognises at badge size.
         //
-        // The stone is a filled, uneven seven-sided lump (a round rock at badge size reads as a
-        // coin). The field is drawn below.
-        //
-        // The whole mark is turned 90 degrees about its own middle, so the field lies left and right
-        // of the stone rather than above and below it.
-        g.save(); g.translate(x, y); g.rotate(Math.PI/2); g.translate(-x, -y);
-        const RS = r*0.30, LUMP = [1.00, 0.84, 1.04, 0.88, 0.97, 0.82, 0.93];
+        // Three fills, one colour, so the mark is a single silhouette however it is inked.
+        // THE CURVE AND ITS TWO POLES. The band curves the whole way it ever did — a C with sixty degrees of
+        // mouth at the bottom — and what changes is what happens AFTER the cut: the arc stops there, and the
+        // pole carries on in a straight line, tangent to where the curve was heading. So each pole is a perfect
+        // rectangle of the band's own width, and the cut between it and the body is a flat radial gap.
+        // The cut has to be a GAP and not a drawn line: the mark is one flat ink, and a line in the same ink is
+        // invisible. It is what every painted horseshoe carries where its poles begin.
+        const RO = r*0.80, RI = r*0.50, T = RO - RI, RM = (RO + RI)/2;
+        const MOUTH = 0.52;                                  // how far the mouth opens either side of straight down
+        const POLE = 0.55, CUT = r*0.09;                     // where the curve stops, in its own radians, and the gap
+        const A0 = Math.PI/2 + MOUTH + POLE;                 // where the body's curve STOPS, each side
+        const A1 = Math.PI/2 - MOUTH - POLE + Math.PI*2;
+        // THE BODY: out over the top along the outer edge, back along the inner one. A band, not a disc.
+        g.beginPath();
+        g.arc(x, y, RO, A0, A1, false);
+        g.arc(x, y, RI, A1, A0, true);
+        g.closePath(); g.fill();
+        // ...and A POLE off each end, running on in the direction the curve was going. `sd` is which way is
+        // "onward" at that end: at A0 the band was drawn away from the mouth, so onward is back toward it.
+        const leg = (ang, sd) => {
+          const cx0 = x + RM*Math.cos(ang), cy0 = y + RM*Math.sin(ang);
+          const ux = -sd*Math.sin(ang), uy = sd*Math.cos(ang);      // along the tangent, toward the mouth
+          const nx = Math.cos(ang), ny = Math.sin(ang);             // across the band
+          const p = (d, w) => [cx0 + ux*d + nx*w, cy0 + uy*d + ny*w];
+          // SQUARE: as long as the band is wide. A pole is a block at the end of an arm, and anything longer
+          // than it is wide starts reading as a second, straight arm rather than as the end of the first.
+          const L = T, q = [p(CUT, -T/2), p(CUT + L, -T/2), p(CUT + L, T/2), p(CUT, T/2)];
+          g.beginPath();
+          q.forEach(([px, py], i) => i ? g.lineTo(px, py) : g.moveTo(px, py));
+          g.closePath(); g.fill();
+        };
+        leg(A0, -1); leg(A1, 1);
+        // THE STONE, in the hollow of it. An uneven seven-sided lump, a touch wider than it is tall — a round
+        // rock at badge size reads as a coin. Small enough to leave clear air inside the band, because the two
+        // are one ink and anything that touches becomes one shape.
+        const RS = r*0.26, LUMP = [1.00, 0.84, 1.04, 0.88, 0.97, 0.82, 0.93];
         g.beginPath();
         LUMP.forEach((k, i) => {
-          const a = -Math.PI/2 + 0.25 + i * Math.PI*2/LUMP.length;
-          const px = x + Math.cos(a)*RS*k*1.08, py = y + Math.sin(a)*RS*k;   // a touch wider than tall
+          const an = -Math.PI/2 + 0.25 + i * Math.PI*2/LUMP.length;
+          const px = x + Math.cos(an)*RS*k*1.08, py = y + Math.sin(an)*RS*k;
           if (i) g.lineTo(px, py); else g.moveTo(px, py);
         });
-        g.closePath(); g.lineJoin = "round"; g.fill();
-        // THE FIELD, one to a side: not two lines of force but the SPACE BETWEEN them, filled — a
-        // distorted crescent that leaves the stone at its top, swells out round its side and comes
-        // home at its bottom. Out along the outer curve and back along the inner one, both starting
-        // and ending inside the stone's edge, so the crescent's two points are buried in the stone.
-        // Taller than wide, the way a field stands off the poles. (Control points well past the
-        // ends are what give the height.)
-        const pole = RS*0.80, px0 = RS*0.22;
-        // The VOID inside each crescent — the space between it and the stone — reaches well out toward
-        // the edge: the inner curve swells to ~0.47r out, while the outer one stays out by the badge's
-        // edge (~0.69r).
-        const IN = [r*0.60, r*1.40], OUT = [r*0.90, r*1.90];
-        for (const sd of [-1, 1]) {
-          g.beginPath();
-          g.moveTo(x + sd*px0, y - pole);
-          g.bezierCurveTo(x + sd*OUT[0], y - OUT[1], x + sd*OUT[0], y + OUT[1], x + sd*px0, y + pole);
-          g.bezierCurveTo(x + sd*IN[0],  y + IN[1],  x + sd*IN[0],  y - IN[1],  x + sd*px0, y - pole);
-          g.closePath(); g.fill();
-        }
-        g.restore(); } },
+        g.closePath(); g.lineJoin = "round"; g.fill(); } },
 
     // The id stays "finger": it is written into level 16's data, into the editor's picker and
     // into every save that has unlocked it, and none of that is worth churning for a name only
@@ -8597,7 +8607,7 @@
       // board draws one. The recycling arrow that used to loop round it was explaining the
       // mechanic twice — the card says it in words underneath, and the dots already say
       // "pick this up" better than an arrow saying "it comes back" does.
-      real(() => { drawGlass(0, 0, cell); drawDragDots(cell/2, cell/2, cell); }); return;
+      real(() => { drawGlass(0, 0, cell); drawFreeMark(0, 0, cell, ts || 0); }); return;
     }
     if (type==="turn")     {   // a laid elbow — the same corner surface the runner rides, and the turn the
                                // card is about: IN FROM BELOW and OUT TO THE RIGHT, which is up-then-right, the
@@ -12441,9 +12451,14 @@
     // THE LODESTONE'S OWN. This one does not point at the board at all: it points at the charm down in the footer, which
     // is a button in the DOM rather than anything drawn — so the highlight is a class on it and the words are painted on
     // the canvas over where it stands (see drawGuideLode).
-    lodeNear: 2,      // how near a coin has to be before the charm is worth offering, in tiles
     lodeHold: 2000,   // ...and how long the word about a spent one stands before play resumes
-    lodeRise: 0.55,   // how far above the charm the words sit, in tiles
+    lodeAfter: 3,     // how many tiles come back to you before it is offered. Not the first: the first tile
+                      //   clearing is the chapter teaching its own basic move, and a charm offered over the top
+                      //   of that is two lessons at once. By the third the cycle is understood and there is room
+    lodePad:  0.16,   // how much air the square leaves round the charm, in the CHARM's own widths — not in tiles:
+                      //   the charm is a DOM button of a fixed size and the tile is whatever the board makes it,
+                      //   so a pad in tiles is a different pad on every chapter
+    lodeRise: 0.12,   // ...and how far above that square the words sit, in tiles
   };
   // Where the tile has to go: the flag, or the cell straight on from the front of the track (a turn if that is shut).
   const lodeBtn = () => (typeof powerEl !== "undefined" && powerEl) ? powerEl.querySelector('.pw[data-tal="magnet"]') : null;
@@ -12515,8 +12530,13 @@
     if (want && !(pos.c === want.c && pos.r === want.r) && levelIdx !== 0) state.guidesOff = true;
   }
   // His pace, and the guide's own clocks. Called from update(), so it all holds still under a pause.
-  // THE LODESTONE, OFFERED. A level that lists it waits until there is a coin close enough to be worth pulling in —
-  // GUIDE.lodeNear tiles — and then holds everything and points at the charm in the footer. Once it has been spent and
+  // THE LODESTONE, OFFERED. A level that lists it waits for `lodeAfter` TILES TO COME BACK TO YOU and then holds
+  // everything and points at the charm in the footer. It used to wait for a coin to come within a couple of tiles,
+  // which sounds better and plays worse: the charm pulls coins in from a distance, so by the time one is close
+  // enough to trigger the offer it is close enough to simply run over, and the one chapter that teaches the
+  // Lodestone was teaching it at the moment it had least to say. A tile clearing is the first beat of the level
+  // that is about the player rather than about the board, and by then there is a charm in the rack to point at.
+  // Once it has been spent and
   // gone grey it holds everything once more to say the one thing about it that matters, and lets go on its own.
   // Both phases are per ATTEMPT, like the rest of the guides: a retry teaches again.
   function guideLodeCheck() {
@@ -12528,13 +12548,7 @@
     const raise = (key) => { s.guide = { key, t: 0, k: s.guide ? s.guide.k : 0, done: false, doneT: 0 }; };
     if (!s.lodeShown) {
       if (spent) { s.lodeShown = true; return; }            // used before we ever got to offer it: say nothing
-      const rp = visualAt(s.runIdx + s.runT);
-      let near = false;
-      for (const ck of s.coinCells) {
-        const i = ck.indexOf(","), c = +ck.slice(0, i), r = +ck.slice(i + 1);
-        if (Math.hypot(rp.x - (c + 0.5)*cell, rp.y - (r + 0.5)*cell) <= cell*GUIDE.lodeNear) { near = true; break; }
-      }
-      if (!near) return;
+      if (s.guideClears < GUIDE.lodeAfter) return;            // ...not before this many are back in your hand
       s.lodeShown = true; raise("lode");
     } else if (!s.lodeUsedShown && spent) {
       s.lodeUsedShown = true; raise("lode2");
@@ -12573,13 +12587,15 @@
   const GUIDE_SPARK = { lapMs: 6400, runMs: 2800, size: 0.15 };   // a lap of a square, a run of an arrow; size in tiles
   // `w` is the square it goes round — the hotspot's own size, when the guide is ringing one — and a whole cell when
   // it is not given.
-  function guideSquareSpark(x0, y0, ts, phase, w) {
-    const G = GUIDE_SPARK, sz = cell*G.size, u = ts / G.lapMs + (phase || 0), W = w > 0 ? w : cell;
+  // `col` and `size` are optional: everything that teaches wears GUIDE's green at the tile's own size, and the
+  // cleared tile's own outline (drawFreeMark) wears the Tileverse's blue at its.
+  function guideSquareSpark(x0, y0, ts, phase, w, col, size) {
+    const G = GUIDE_SPARK, sz = size > 0 ? size : cell*G.size, u = ts / G.lapMs + (phase || 0), W = w > 0 ? w : cell;
     const q = rimPointCCW(x0, y0, W, tileR(W), u);
     const dn = Math.max(0, Math.min(1, (q.y - y0) / W)), kz = 1 - PICK_TRACE_SHRINK * dn*dn*(3 - 2*dn);
     ctx.save();
     ctx.translate(q.x, q.y); ctx.rotate(-u * 4*cell / (sz * TAB_SPARK_ROLL));   // rolling, turned by the ground it covers
-    drawSpark(ctx, 0, 0, sz * kz, ts, { alpha: 1, col: GUIDE.ink, seed: 0.37 + (phase || 0) });
+    drawSpark(ctx, 0, 0, sz * kz, ts, { alpha: 1, col: col || GUIDE.ink, seed: 0.37 + (phase || 0) });
     ctx.restore();
   }
   function guideArrowSpark(arc, len, ts) {
@@ -12647,10 +12663,35 @@
     const b = lodeBtn(); if (!b) return;
     const cr = canvas.getBoundingClientRect(), br = b.getBoundingClientRect();
     if (!(br.width > 0)) return;
-    const sx = br.left + br.width/2 - cr.left, sy = br.top - cr.top;
-    const x = sx + Math.round(camX), y = sy + Math.round(camY) - cell*GUIDE.lodeRise;
-    const word = String((key === "lode2" ? COPY.guideLodeUsed : COPY.guideTapMe) || "");
-    if (!word) return;
+    // A SQUARE ROUND THE CHARM, the same one the board rings a tappable cell with — stroked black underneath and
+    // then in the guide's green, with the standard spark going round it. The charm is a DOM button and the square
+    // is painted on the CANVAS over where it stands, which is how its words have always been drawn: one surface,
+    // one treatment, and no second highlight to keep in step with the first.
+    // Off the button's WIDTH, and seated on its FOOT. Its height is no good for this: the box reaches well above
+    // the charm to make a thumb-sized target (its ::after), so a square built on that is a tall box with the charm
+    // sitting in the bottom of it. The charm itself is as wide as the button and stands on its foot.
+    const bw = br.width * (1 + GUIDE.lodePad*2);
+    const mx = br.left + br.width/2 - cr.left + Math.round(camX);
+    // ...and HELD INSIDE THE FRAME. The charms sit on the very bottom edge — that is the whole idea of the rack —
+    // so a square with air round it hangs off the end of the phone. Its foot is pinned inside and the box rides
+    // up by whatever that costs, which is a few pixels and never reads as misplaced.
+    const foot = Math.min(br.bottom - cr.top + (bw - br.width)/2, cr.height - 2);
+    const BX = mx - bw/2, BY = foot + Math.round(camY) - bw, lw = Math.max(1, cell*GUIDE.line);
+    ctx.save();
+    ctx.globalAlpha = A; ctx.lineJoin = "round";
+    const box = () => { ctx.beginPath(); rrect(BX, BY, bw, bw, tileR(bw)); ctx.stroke(); };
+    headGlowUnder(() => { ctx.lineWidth = lw; ctx.strokeStyle = "#000"; box(); });
+    ctx.strokeStyle = GUIDE.ink; ctx.lineWidth = lw; box();
+    guideSquareSpark(BX, BY, ts, 0, bw);
+    ctx.restore();
+    // ...and the words right up against its top edge, rather than half a tile off it.
+    const x = mx, y = BY - cell*GUIDE.lodeRise;
+    // AS MANY LINES AS IT IS WRITTEN ON. The break is in the copy (copy.js), not here: where a line turns is a
+    // decision about the writing, and "One use / per level" is two lines because the charm it stands over is one
+    // sixth of the footer wide and one line of it ran clean across its neighbours.
+    const lines = String((key === "lode2" ? COPY.guideLodeUsed : COPY.guideTapMe) || "").split("\n")
+                        .map(w => w.trim()).filter(Boolean);
+    if (!lines.length) return;
     const bt = bylineType();
     let fp = bt.px, ls = parseFloat(bt.ls) || 0;
     const setType = () => { ctx.font = bt.weight + " " + fp + "px " + UI_FONT; ctx.letterSpacing = ls + "px"; };
@@ -12659,12 +12700,19 @@
     ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = GUIDE.ink;
     setType();
     const maxW = cell*2.6;                                  // ...never wider than the rack it stands over
-    if (ctx.measureText(word).width > maxW) { ls = Math.min(ls, 1); setType(); }
-    const ww = ctx.measureText(word).width;
+    const widest = () => Math.max(...lines.map(w => ctx.measureText(w).width));
+    if (widest() > maxW) { ls = Math.min(ls, 1); setType(); }
+    const ww = widest();
     if (ww > maxW) { fp = Math.max(7, Math.floor(fp * maxW / ww)); setType(); }
-    headGlowUnder(() => { ctx.fillStyle = "#000"; ctx.fillText(word, x + ls/2, y + inkNudge(ctx.font)); });
-    ctx.fillStyle = GUIDE.ink;
-    ctx.fillText(word, x + ls/2, y + inkNudge(ctx.font));
+    // ...and the BLOCK sits where the single line sat: it grows upward off that baseline, so a second line
+    // lifts the words clear of the charm rather than pushing them down onto it.
+    const lh = Math.round(fp * 1.35), y0 = y - lh*(lines.length - 1);
+    lines.forEach((w, i) => {
+      const ly = y0 + i*lh + inkNudge(ctx.font);
+      headGlowUnder(() => { ctx.fillStyle = "#000"; ctx.fillText(w, x + ls/2, ly); });
+      ctx.fillStyle = GUIDE.ink;
+      ctx.fillText(w, x + ls/2, ly);
+    });
     ctx.restore();
   }
   function drawGuide(ts) {
@@ -24853,9 +24901,52 @@
     ctx.restore();
   }
 
+  // WHAT A CLEARED TILE LOOKS LIKE — the one lying there that is yours to pick up. It says so three ways, all in
+  // the Tileverse's blue, which is the colour this game outlines a square of itself in everywhere else: an outline
+  // hugging the INSIDE of its edge, the standard spark running round that outline, and the nine grip dots in the
+  // same blue with a spark on the middle one. Before this the only thing that said "yours" was the dots breathing
+  // in near-black, which on a dark board is a thing you have to already know is there.
+  // One routine, called by the board and by the card that teaches it, so the picture on the card cannot drift from
+  // the thing on the board.
+  const FREE_MARK = {
+    a:     0.92,    // how bright the outline is (its WEIGHT is the blue line's own — see below)
+    spark: 0.20,    // the spark going round it, in tiles (at GUIDE_SPARK's own pace)
+    dot:   0.15,    // ...and the one standing on the middle grip dot
+    pulse: [0.60, 0.35],  // the dots' breath: its floor, and how much of it moves
+  };
+  function drawFreeMark(x, y, s, ts) {
+    const F = FREE_MARK, blue = tvBlueHex();
+    // THE SAME WEIGHT AS THE PATH. Every blue line in this game is drawn at FOOTER.rim + 1 — the lit track, a
+    // shut circuit, the junction's three options, the way-on across the front tile — and this is one more of
+    // them. In pixels rather than in tiles, like the rest of them, so it stays one line at any zoom.
+    const lw = FOOTER.rim + 1;
+    // ON THE TILE'S OWN EDGE, and wholly INSIDE it: the stroke is laid half its weight in, so its outer edge
+    // lands exactly on the tile's boundary rather than straddling it. A stroke centred on the edge grows the
+    // square by half a line all round, and on a board where every square meets its neighbours that half-line is
+    // the difference between a tile and a tile with a rim.
+    ctx.save();
+    ctx.globalAlpha = F.a; ctx.strokeStyle = blue; ctx.lineWidth = lw;
+    rrect(x + lw/2, y + lw/2, s - lw, s - lw, Math.max(0, tileR(s) - lw/2));
+    ctx.stroke();
+    ctx.restore();
+    // ...its spark, round that same edge, seeded off the CELL so two tiles lying side by side are not in step
+    const ph = ((Math.round(x/s)*5 + Math.round(y/s)*11) % 16) / 16;
+    guideSquareSpark(x, y, ts, ph, s, blue, s*F.spark);
+    // ...and the grip, breathing. The breath is what says "pick this up", so it stays.
+    ctx.globalAlpha = F.pulse[0] + F.pulse[1]*(0.5 + 0.5*Math.sin(ts/180));
+    drawDragDots(x + s/2, y + s/2, s, blue);
+    ctx.globalAlpha = 1;
+    drawSpark(ctx, x + s/2, y + s/2, s*F.dot, ts, { alpha: 1, col: blue, seed: 0.29 + ph });
+  }
   function drawFreeTile(x, y, ts, lifted, spare) {
     const s = cell, r = tileR(s);
     if (lifted) { ctx.fillStyle = "rgba(5,4,13,0.4)"; rrect(x+6, y+9, s, s, r); ctx.fill(); }
+    // THE WALL'S OWN SHADOW under a tile that is lying on the board — the same two layers and the same numbers
+    // (WALL_SHADOW, through castShadow), so the squares you can move and the squares you cannot agree about where
+    // the light is. Not on a LIFTED one, which has the drag's own hard offset shadow, and not on a SPARE, which
+    // throws a monster's from the air a few lines below.
+    if (!lifted && !spare) castShadow(() => { rrect(x, y, s, s, r); ctx.fill(); },
+                                      [WALL_SHADOW.around, WALL_SHADOW.under]);
     // A SPARE IS THE SAME TILE, SITTING DIFFERENTLY. Everything below draws exactly what a draggable tile draws; all
     // that changes is the ground it is drawn on — shrunk, tipped, floating, with its shadow left behind on the floor.
     // Its own tilt and its own place in the bob come off the cell it lies on, so no two are stamped alike.
@@ -24931,10 +25022,7 @@
       if (spare) {
         drawDragDots(x + s/2, y + s/2, s, SPARE.dotInk);
       } else {
-        const pulse = 0.5 + 0.5*Math.sin(ts/180);
-        ctx.globalAlpha = 0.6 + 0.35*pulse;
-        drawDragDots(x + s/2, y + s/2, s);
-        ctx.globalAlpha = 1;
+        drawFreeMark(x, y, s, ts);
       }
     }
     if (spared) ctx.restore();
