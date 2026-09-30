@@ -5436,7 +5436,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.97";                    // shown on the title & pause screens
+  const VERSION = "v10.98";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -7417,6 +7417,10 @@
     state.score = computeScore(); updateScoreHud();
   }
   function beginLevel(L, label) {
+    // ...and the house mark is over, however we got here. It owns the frame while it runs, so anything that
+    // opens a board without going through the title — the editor's TEST button, a demo, a tool — would
+    // otherwise sit behind it until it had said its piece.
+    bootActive = false;
     Sound.fallStop();                          // a fall still whistling from the chapter before goes quiet
     // Whatever the last chapter was doing, it is not doing it any more. The victory sequence
     // owns the frame while it runs, so a chapter loaded out from under it — Skip, the Tileverse,
@@ -20648,60 +20652,100 @@
   // ...and the pips, in fractions of the berry's width from its middle — five of them, no two in a row, so the face
   // reads as scattered rather than as a pattern.
   const PELLET_PIPS = [[-0.26, -0.15], [0.22, -0.20], [0.02, 0.03], [-0.20, 0.21], [0.24, 0.17]];
-  function drawPellet(c, r, ts) {
-    // Everything about how it LIES here is the coin's, read straight off COIN and worked out the way drawCoin works it
-    // out: the same width, the same float on the same clock, the same lazy rock, and the same stamped shadow held
-    // steady on the ground beneath it while it rises.
+  // HOW A FRUIT LIES ON THE BOARD, and it is the COIN'S exactly, read straight off COIN and worked out the way
+  // drawCoin works it out: the same width, the same float on the same clock, the same lazy rock, and the same
+  // stamped shadow held steady on the ground beneath it while it rises. Three things lie this way now — the
+  // strawberry, the mango and the melon — so none of them can drift from the coins they are lying among, or from
+  // each other. `paint(w, h, R)` draws the fruit itself, middle at the origin, in the frame that floats and rocks.
+  function drawFruit(c, r, ts, sparkCol, paint) {
     const x = (c + 0.5)*cell, y = (r + 0.5)*cell, w = cell*COIN.size, R = tileR(w), h = w/2;
     const t = ts / COIN.floatMs;
     const lift = (0.5 + 0.5*Math.sin(t)) * cell * COIN.float;
-    const tilt = Math.sin(t*0.8) * COIN.rock;
     const ss = w * COIN.shadowK;
     stampShadow(x, y + cell*COIN.shadowY, ss, COIN.shadowA, tileR(ss));
     ctx.save();
-    ctx.translate(x, y - lift); ctx.rotate(tilt);
-    // THE TOP: a green tile across its shoulders, on its own edge, drawn first so the berry stands in front of it.
-    const lw = w*0.84, lh = w*0.30, ly = -h - lh*0.34;
-    extrude(ctx, lh, PELLET.leafEdge, (dx, dy) => { rrect(-lw/2 + dx, ly + dy, lw, lh, tileR(lh)); ctx.fill(); });
-    ctx.fillStyle = PELLET.leaf;
-    rrect(-lw/2, ly, lw, lh, tileR(lh)); ctx.fill();
-    // THE BERRY: one square red tile on the edge it sits on — the coin's own extrusion, in the berry's darker red.
-    extrude(ctx, w, PELLET.edge, (dx, dy) => { rrect(-h + dx, -h + dy, w, w, R); ctx.fill(); });
-    ctx.fillStyle = PELLET.body;
-    rrect(-h, -h, w, w, R); ctx.fill();
-    ctx.save();
-    rrect(-h, -h, w, w, R); ctx.clip();                            // ...the PIPS, kept on the face
-    ctx.fillStyle = PELLET.seed;
-    const sd = Math.max(1, w*0.13);
-    for (const [px, py] of PELLET_PIPS) { rrect(px*w - sd/2, py*w - sd/2, sd, sd, tileR(sd)); ctx.fill(); }
+    ctx.translate(x, y - lift); ctx.rotate(Math.sin(t*0.8) * COIN.rock);
+    paint(w, h, R);
     ctx.restore();
-    ctx.restore();
-    // ...and the catch of light, upright whatever the berry is doing, as the coin's is.
-    drawSpark(ctx, x, y - lift - h*0.9, w*0.72, ts, { col: PELLET.spark, seed: ((c*7 + r*3) % 97)/97 });
+    // ...and the catch of light, upright whatever the fruit is doing, as the coin's is.
+    drawSpark(ctx, x, y - lift - h*0.9, w*0.72, ts, { col: sparkCol, seed: ((c*7 + r*3) % 97)/97 });
   }
-  // a collectible boost / slow token that bobs on its cell (grab it for a timed speed effect)
+  // ...and the piece all three are built out of: one tile, on the edge it sits on.
+  const fruitTile = (x0, y0, w, h, R, face, edge) => {
+    extrude(ctx, Math.max(w, h), edge, (dx, dy) => { rrect(x0 + dx, y0 + dy, w, h, R); ctx.fill(); });
+    ctx.fillStyle = face; rrect(x0, y0, w, h, R); ctx.fill();
+  };
+  function drawPellet(c, r, ts) {
+    drawFruit(c, r, ts, PELLET.spark, (w, h, R) => {
+      // THE TOP: a green tile across its shoulders, on its own edge, drawn first so the berry stands in front of it.
+      const lw = w*0.84, lh = w*0.30;
+      fruitTile(-lw/2, -h - lh*0.34, lw, lh, tileR(lh), PELLET.leaf, PELLET.leafEdge);
+      // THE BERRY: one square red tile on the edge it sits on — the coin's own extrusion, in the berry's darker red.
+      fruitTile(-h, -h, w, w, R, PELLET.body, PELLET.edge);
+      ctx.save();
+      rrect(-h, -h, w, w, R); ctx.clip();                          // ...the PIPS, kept on the face
+      ctx.fillStyle = PELLET.seed;
+      const sd = Math.max(1, w*0.13);
+      for (const [px, py] of PELLET_PIPS) { rrect(px*w - sd/2, py*w - sd/2, sd, sd, tileR(sd)); ctx.fill(); }
+      ctx.restore();
+    });
+  }
+  // ---- THE OTHER TWO FRUIT ----------------------------------------------------------------------------
+  // Boost and Slow used to be tokens: a disc with an arrow in it, pointing up or down. That is a symbol for a
+  // thing rather than a thing, and it was the only object on the board you picked up that was not an object.
+  // They are fruit now, built the way the strawberry is built — out of tiles, lying the way a coin lies — so
+  // everything on the floor worth running over belongs to one family.
+  //
+  // A MANGO for the boost: gold, with the red cheek a ripe one wears and a leaf still on it. A WATERMELON for
+  // the slow: a slice, which is the one view of a melon anybody reads at this size — flesh, a pale rind line,
+  // and the green across its foot. The green goes at the FOOT where the strawberry's goes at its shoulders,
+  // which is most of what keeps the two apart at a glance; the rest is that one is gold and one is pink.
+  const MANGO = {
+    body: "#f7a624", edge: "#a2600c",     // the gold, and the depth it sits on
+    blush:"#ef5a2a",                      // ...the red cheek, on the shoulder the light is on
+    leaf: "#49d47c", leafEdge: "#2b8a4f", // ...the leaf, the strawberry's own green
+    spark:"#ffd24a",                      // ...and the catch of light on it
+  };
+  // Two blocks rather than a gradient: this game has no gradients in its objects, and a cheek made of two
+  // squares is the same cheek at any size.
+  const MANGO_BLUSH = [[-0.30, -0.34, 0.34, 0.30], [-0.06, -0.40, 0.26, 0.20]];   // x, y, w, h in body widths
+  const MELON = {
+    body: "#ff6f8e", edge: "#a63552",     // the flesh, and its depth
+    rind: "#3fae52", rindEdge: "#24702f", // ...the green across its foot
+    pith: "#eaf7d8",                      // ...the pale line between the two
+    seed: "#2a1a12",                      // ...and the pips, which are dark where a berry's are light
+    spark:"#ffa8bd",
+  };
+  const MELON_PIPS = [[-0.26, -0.20], [0.18, -0.26], [-0.02, -0.02], [0.26, 0.04], [-0.24, 0.08]];
   function drawFxPickup(c, r, ts, kind) {
-    const col = kind === "boost" ? pal("boost") : pal("slow");
-    const x = (c+0.5)*cell, y = (r+0.5)*cell + Math.sin(ts/340 + c + r)*cell*0.05;
-    const dir = kind === "boost" ? -1 : 1;              // chevrons point up (boost) / down (slow)
-    ctx.save();
-    ctx.globalAlpha = 0.22; ctx.fillStyle = col;        // glow
-    ctx.beginPath(); ctx.arc(x, y, cell*0.28, 0, Math.PI*2); ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = col;                                // token disc
-    ctx.beginPath(); ctx.arc(x, y, cell*0.18, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = "rgba(10,8,20,0.32)";
-    ctx.beginPath(); ctx.arc(x, y, cell*0.145, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = col; ctx.lineWidth = Math.max(2, cell*0.04); ctx.lineCap = "round"; ctx.lineJoin = "round";
-    const ah = cell*0.11, aw = cell*0.072, hl = cell*0.075;   // arrow half-height, head half-width, head length
-    const tipY = y + dir*ah, tailY = y - dir*ah;              // boost (dir -1) points up; slow (dir +1) points down
-    ctx.beginPath(); ctx.moveTo(x, tailY); ctx.lineTo(x, tipY); ctx.stroke();   // stem
-    ctx.beginPath();                                          // arrowhead
-    ctx.moveTo(x - aw, tipY - dir*hl);
-    ctx.lineTo(x,       tipY);
-    ctx.lineTo(x + aw, tipY - dir*hl);
-    ctx.stroke();
-    ctx.restore();
+    const boost = kind === "boost", F = boost ? MANGO : MELON;
+    drawFruit(c, r, ts, F.spark, (w, h, R) => {
+      if (boost) {
+        // THE LEAF, off to one side rather than across the shoulders: a mango keeps a leaf on its stalk, and a
+        // band right across the top is the berry's mark.
+        const lw = w*0.46, lh = w*0.26;
+        fruitTile(-h + w*0.10, -h - lh*0.52, lw, lh, tileR(lh), F.leaf, F.leafEdge);
+        fruitTile(-h, -h, w, w, R, F.body, F.edge);
+        ctx.save();
+        rrect(-h, -h, w, w, R); ctx.clip();                        // ...the cheek, kept on the face
+        ctx.fillStyle = F.blush;
+        for (const [bx, by, bw, bh] of MANGO_BLUSH) { rrect(bx*w, by*w, bw*w, bh*w, tileR(bh*w)); ctx.fill(); }
+        ctx.restore();
+      } else {
+        fruitTile(-h, -h, w, w, R, F.body, F.edge);
+        ctx.save();
+        rrect(-h, -h, w, w, R); ctx.clip();                        // ...everything below is kept on the face
+        ctx.fillStyle = F.seed;                                    // ...the pips first, so the rind covers any it meets
+        const sd = Math.max(1, w*0.12);
+        for (const [px, py] of MELON_PIPS) { rrect(px*w - sd/2, py*w - sd/2, sd, sd, tileR(sd)); ctx.fill(); }
+        ctx.fillStyle = F.pith;                                    // ...the pale line
+        const py0 = h - w*0.34, ph = w*0.09;
+        rrect(-h, py0, w, ph, 0); ctx.fill();
+        ctx.fillStyle = F.rind;                                    // ...and the green under it
+        rrect(-h, py0 + ph, w, h - py0 - ph, 0); ctx.fill();
+        ctx.restore();
+      }
+    });
   }
   function drawChevrons(c, r, ts, dir, color) {   // dir -1 = boost (up), +1 = slow (down)
     const x = cx(c), y = cy(r), s = cell, ph = (ts/380) % 1;
@@ -25106,6 +25150,7 @@
     if (winPointerDown(e)) return;      // the victory sequence is waiting to be let on
     if (finTap()) return;               // ...and so, at the very end, are the credits
     Sound.unlock();                     // first touch unlocks audio (iOS autoplay policy)
+    if (bootActive)  { skipBoot(); return; }     // tap anywhere to send the house mark on its way
     if (openActive)  { skipOpening(); return; }  // tap anywhere to go straight to the drop into chapter one
     if (cineActive)  { cineStep(); return; }    // tap anywhere to skip ahead one chapter
     if (titleActive) { leaveTitle(); return; }
@@ -25265,6 +25310,8 @@
     // The films own the frame — but the section headings' sparks and the tab bars' are drawn on canvases of
     // their own over it, which only ever clear themselves when asked to draw. Asked here too, so a replay
     // started from the Tileverse does not leave its heading's sparks hanging over the opening.
+    // The house mark comes before all of it, including the films: nothing else has started yet.
+    if (bootActive) { tickBoot(dt); drawBoot(ts); requestAnimationFrame(frame); return; }
     if (openActive)  { tickOpening(dt); drawOpening(ts); drawHeadSparks(ts); drawTabSpark(ts); drawShopTabSpark(ts); requestAnimationFrame(frame); return; }
     if (cineActive)  { tickCine(dt);  drawCine(ts);  drawHeadSparks(ts); drawTabSpark(ts); drawShopTabSpark(ts); requestAnimationFrame(frame); return; }
     if (titleActive) { tickTitle(dt); drawTitle(ts); titleFromBlack(); drawHeadSparks(ts); drawTabSpark(ts); drawShopTabSpark(ts); requestAnimationFrame(frame); return; }
@@ -28810,6 +28857,36 @@
     }
     ctx.restore();
     return { top: cy - totalH/2, bottom: cy + totalH/2 };
+  }
+
+  // ---------- BOOT: the house mark, before anything of the game ------------------------
+  // The studio card, on every launch, over the same cosmos everything else in this game hangs
+  // in — and then it hands to the title. It is the first thing the game says and it is not
+  // about the game, which is the whole job of a studio card.
+  // Up out of black, a beat, and away: it owns the frame while it runs and nothing under it is
+  // ticking, so there is nothing for it to be out of step with. Tap to skip, as the opening is
+  // skipped — but only past the HOLD, so the mark always goes the way it came rather than
+  // being cut, which is the one thing that reads as a bug rather than as a choice.
+  const BOOT = {
+    in:   560,      // up out of black...
+    hold: 1150,     // ...and it stands...
+    out:  520,      // ...and away, into the title
+    wide: 0.50,     // how wide the mark is set, in screen widths...
+    max:  360,      // ...and never wider than this, so it is a card on a desktop and not a banner
+    y:    0.46,     // ...and where it sits, down the screen
+  };
+  let bootActive = true, bootT = 0;
+  const bootMs = () => BOOT.in + BOOT.hold + BOOT.out;
+  function tickBoot(dt){ bootT += dt; if (bootT >= bootMs()) bootActive = false; }
+  // A tap takes the hold away and lets the fade run; it never takes the fade.
+  function skipBoot(){ if (bootActive) bootT = Math.max(bootT, BOOT.in + BOOT.hold); }
+  function drawBoot(ts){
+    drawVoid(ts);
+    const a = bootT < BOOT.in                ? bootT / BOOT.in
+            : bootT < BOOT.in + BOOT.hold    ? 1
+            : 1 - (bootT - BOOT.in - BOOT.hold) / BOOT.out;
+    drawLogo(viewW/2, viewH*BOOT.y, Math.min(viewW*BOOT.wide, BOOT.max), ts,
+             cineSmooth(Math.max(0, Math.min(1, a))));
   }
 
   // ---------- Opening cinematic -------------------------------------------
@@ -32502,6 +32579,7 @@
           if (raw) L = JSON.parse(raw); } catch(_) {}
     if (!L || !L.start || !Array.isArray(L.walls)) return false;
     titleActive = false;
+
     const pf = document.getElementById("pauseFloat"); if (pf) pf.style.display = "";
     // The label is the theme seed, so passing the level's own number gets the palette the
     // level would really wear rather than a demo one.
