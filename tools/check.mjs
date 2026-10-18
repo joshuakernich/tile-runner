@@ -13,7 +13,7 @@ import vm from "node:vm";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (f) => readFileSync(join(ROOT, f), "utf8");
-const HTML = ["index.html", "level-editor.html", "runner-lab.html", "icon-lab.html", "music-lab.html", "monster-lab.html", "stone-generator.html"];
+const HTML = ["index.html", "level-editor.html", "runner-lab.html", "icon-lab.html", "music-lab.html", "monster-lab.html", "stone-generator.html", "opening-lab.html", "eye-lab.html"];
 
 let failures = 0, checks = 0;
 const ok   = (m) => { checks++; console.log("  \x1b[32m✓\x1b[0m " + m); };
@@ -335,6 +335,34 @@ head("Ship ritual");
     if (missing.length) bad(`sw.js precaches files that don't exist: ${missing.join(", ")}`);
     else ok("every file sw.js precaches exists");
   }
+}
+
+// ------------------------------------------------- N. one name, one function
+// TWO FUNCTION DECLARATIONS WITH ONE NAME IN ONE SCOPE IS NOT AN ERROR. The later one simply
+// wins, everywhere, including in the code written against the earlier one — so the whole of a
+// new feature can call the wrong function on every frame and nothing anywhere says a word.
+// (It happened: a swarm's `flyPos(i, ts)` landed in the same scope as the thrown tile's
+// `flyPos()`, and the swarm was invisible until somebody measured it.)
+//
+// Everything in index.html's game script lives in ONE closure, so a name used twice at its top
+// level is always this bug. Nested functions are indented further and are not compared — they
+// are in scopes of their own.
+// Only index.html: it is the one file whose whole script is a single closure indented two
+// spaces, which is what makes "same indent" mean "same scope" here. The labs are laid out
+// differently and a count of nothing would be a check that passes by not looking.
+head("One name, one function");
+for (const f of ["index.html"]) {
+  if (!existsSync(join(ROOT, f))) continue;
+  const body = scripts(read(f)).join("\n");
+  const seen = new Map();
+  const dupes = [];
+  for (const m of body.matchAll(/^(\s*)function\s+([A-Za-z_$][\w$]*)\s*\(/gm)) {
+    if (m[1].length !== 2) continue;                       // top level of the game's closure only
+    const name = m[2];
+    if (seen.has(name)) dupes.push(name); else seen.set(name, 1);
+  }
+  if (dupes.length) bad(`${f} declares ${[...new Set(dupes)].join(", ")} twice at the same level — the later one wins everywhere`);
+  else ok(`${f} — ${seen.size} top-level functions, no name used twice`);
 }
 
 // ------------------------------------------------------------------ done

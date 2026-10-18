@@ -523,6 +523,16 @@
       <input type="text" id="cGuideTap" maxlength="80"></label>
     <label class="fld"><span>level guides — the words in the square to tap after that</span>
       <input type="text" id="cGuideTapMe" maxlength="40"></label>
+    <label class="fld"><span>level guides — the Lodestone, once spent (a line break puts it on two lines)</span>
+      <input type="text" id="cGuideLodeUsed" maxlength="40"></label>
+    <label class="fld"><span>a CLEAR with every coin taken — the word stamped on the takings, one per line</span>
+      <textarea id="cFullWords" rows="8"></textarea></label>
+    <div class="two">
+      <label class="fld"><span>a FALL with butterflies — said once, the first time they ever leave you</span>
+        <input type="text" id="cFliesGone" maxlength="60"></label>
+      <label class="fld"><span>...and when it is more than ever left you before</span>
+        <input type="text" id="cFliesRecord" maxlength="40"></label>
+    </div>
   </div>
 
   <div class="card">
@@ -2621,10 +2631,12 @@ idbGet("levelsHandle").then(h=>{ if(h){ fsHandle=h; $("saveFs").title="writes ov
 const COPY_SHIPPED = (typeof COPY_DATA !== "undefined") ? COPY_DATA : {};
 const COPY_KEY = "tilerunner:editor:copy";
 const LIST_FIELDS = { cLoseTitles:"loseTitles", cLoseQuips:"loseQuips", cPauseQuips:"pauseQuips",
-                      cWinQuips:"winQuips", cWinQuipsRetry:"winQuipsRetry", cSkipQuips:"skipQuips" };
+                      cWinQuips:"winQuips", cWinQuipsRetry:"winQuipsRetry", cSkipQuips:"skipQuips",
+                      cFullWords:"fullWords" };
 const TEXT_FIELDS = { cPauseTitle:"pauseTitle", cWinTitle:"winTitle",
                       cWinTitleLast:"winTitleLast", cWinBylineLast:"winBylineLast",
-                      cGuideDrag:"guideDrag", cGuideTap:"guideTap", cGuideTapMe:"guideTapMe" };
+                      cGuideDrag:"guideDrag", cGuideTap:"guideTap", cGuideTapMe:"guideTapMe",
+                      cGuideLodeUsed:"guideLodeUsed", cFliesGone:"fliesGone", cFliesRecord:"fliesRecord" };
 let copyDraft = null;
 
 const linesOf = t => String(t == null ? "" : t).split("\n").map(x => x.trim()).filter(Boolean);
@@ -2763,6 +2775,18 @@ function copyFile(){
   out += "  guideDrag: " + q(copyDraft.guideDrag || "") + ",\n";
   out += "  guideTap: " + q(copyDraft.guideTap || "") + ",\n";
   out += "  guideTapMe: " + q(copyDraft.guideTapMe || "") + ",\n";
+  out += "  // ...and the Lodestone's own, said on the charm down in the footer once it has been spent: the one thing you need to\n";
+  out += "  // know about it, and the only chance there is to say it.\n";
+  out += "  guideLodeUsed: " + q(copyDraft.guideLodeUsed || "") + ",\n";
+  out += "  // A FALL WITH BUTTERFLIES ON HIM. The first one says what has just happened, and is said once ever — after that\n";
+  out += "  // you know, and the number on its own is the whole of it. The second is for a flock bigger than any that has\n";
+  out += "  // left you before.\n";
+  out += "  fliesGone: " + q(copyDraft.fliesGone || "") + ",\n";
+  out += "  fliesRecord: " + q(copyDraft.fliesRecord || "") + ",\n";
+  out += "  // EVERY COIN ON THE BOARD, said on the clear screen where the stamp used to read \"100%\". A figure is a mark out of\n";
+  out += "  // ten; this is the game being pleased with you, and it says it differently every time — which is also why the odd\n";
+  out += "  // ones are in here. One is picked per clear, never the same one twice running.\n";
+  out += list("fullWords", copyDraft.fullWords || []);
   out += "};\n";
   out += 'if (typeof module !== "undefined") module.exports = COPY_DATA;\n';
   return out;
@@ -2850,7 +2874,9 @@ function copyFillGaps(){
   if (!Array.isArray(copyDraft.skipQuips) || !copyDraft.skipQuips.length)
     copyDraft.skipQuips = clone(COPY_TRUTH.skipQuips || []);
   // ...and the guides' words, which a draft saved before there were any has no opinion on
-  for (const k of ["guideDrag", "guideTap", "guideTapMe"]) if (!copyDraft[k]) copyDraft[k] = COPY_TRUTH[k] || "";
+  for (const k of ["guideDrag", "guideTap", "guideTapMe", "guideLodeUsed", "fliesGone", "fliesRecord"])
+    if (!copyDraft[k]) copyDraft[k] = COPY_TRUTH[k] || "";
+  if (!(copyDraft.fullWords && copyDraft.fullWords.length)) copyDraft.fullWords = (COPY_TRUTH.fullWords || []).slice();
 }
 async function copyInit(){
   let draft = null;

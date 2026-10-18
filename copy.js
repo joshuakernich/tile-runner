@@ -191,5 +191,29 @@ var COPY_DATA = {
   // ...and the Lodestone's own, said on the charm down in the footer once it has been spent: the one thing you need to
   // know about it, and the only chance there is to say it.
   guideLodeUsed: "One use\nper level",
+  // A FALL WITH BUTTERFLIES ON HIM. The first one says what has just happened, and is said once ever — after that
+  // you know, and the number on its own is the whole of it. The second is for a flock bigger than any that has
+  // left you before.
+  fliesGone: "Your butterflies flew away",
+  fliesRecord: "New record",
+  // EVERY COIN ON THE BOARD, said on the clear screen where the stamp used to read "100%". A figure is a mark out of
+  // ten; this is the game being pleased with you, and it says it differently every time — which is also why the odd
+  // ones are in here. One is picked per clear, never the same one twice running.
+  fullWords: [
+    "PERFECT!",
+    "DELIGHTFUL!",
+    "SUPERB!",
+    "JUICY!",
+    "NICE!",
+    "IMPRESSIVE!",
+    "WONDERFUL!",
+    "VORACIOUS!",
+    "MOREISH!",
+    "PLUMP!",
+    "NO NOTES!",
+    "UNREASONABLE!",
+    "EXQUISITE!",
+    "GREEDY!",
+  ],
 };
 if (typeof module !== "undefined") module.exports = COPY_DATA;

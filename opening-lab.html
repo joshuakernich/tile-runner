@@ -1,0 +1,404 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tile Runner — the cube opening</title>
+<style>
+  :root{--bg:#0b0a1a;--panel:#141231;--line:#2a2750;--ink:#dfe3ff;--dim:#8e92c4;--hot:#ffd24a;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.45 ui-sans-serif,system-ui,sans-serif;}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);}
+  h1{margin:0 0 3px;font-size:16px;letter-spacing:0.4px;}
+  header p{margin:0;color:var(--dim);max-width:70ch;}
+  .wrap{display:flex;gap:18px;padding:18px 20px;align-items:flex-start;flex-wrap:wrap;}
+  iframe{width:100%;max-width:420px;height:82vh;border:1px solid var(--line);
+         border-radius:12px;background:#000;flex:0 0 auto;}
+  .rail{flex:1 1 420px;min-width:360px;display:flex;flex-direction:column;gap:12px;}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;}
+  .panel h2{margin:0 0 8px;font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--hot);}
+  .panel p.note{margin:0 0 9px;color:var(--dim);}
+  .row{display:grid;grid-template-columns:150px 1fr 62px;gap:9px;align-items:center;margin:3px 0;}
+  .row label{color:var(--dim);}
+  .row output{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink);}
+  input[type=range]{width:100%;accent-color:var(--hot);}
+  textarea{width:100%;height:150px;background:#0a0920;color:#bfe;border:1px solid var(--line);
+           border-radius:8px;padding:9px;font:12px/1.45 ui-monospace,Menlo,monospace;}
+  button{background:#232051;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+         padding:6px 11px;cursor:pointer;font:inherit;}
+  button:hover{border-color:var(--hot);}
+  button.on{background:var(--hot);color:#1a1500;border-color:var(--hot);}
+  .btns{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px;}
+  .warn{color:#ff8a80;}
+  #status{color:var(--dim);margin-top:7px;}
+  .scrub{display:grid;grid-template-columns:1fr;gap:5px;}
+  .marks{display:flex;gap:6px;flex-wrap:wrap;color:var(--dim);font-size:11px;}
+</style>
+
+<header>
+  <h1>The cube opening</h1>
+  <p>The moment the Tiloid is thrown open — the last of its turn, the flash it opens inside, the six charms and
+     him going up out of it, and the camera's rush in. It REPLAYS ON A LOOP in the frame beside you, for as long as you
+     like: the lab holds the film's clock itself and steps it, so any window — two seconds round the pop, or the WHOLE
+     INTRO end to end — comes round again and again at whatever speed you want, and every slider lands on the next pass.
+     It does not stop at the end of the film and it does not have to be restarted: a seek takes down anything standing
+     over the film and puts the film back up if it has gone. Nothing is drawn here — that is the shipped film, in an iframe,
+     pushed through <code>__TR.openTune()</code> and re-seeked, so what you are tuning cannot drift from what ships.
+     <b>Serve this page</b> (<code>python3 tools/serve.py 8123</code>); off the filesystem the frame cannot be read.</p>
+</header>
+
+<div class="wrap">
+  <iframe id="game" title="Tile Runner"></iframe>
+
+  <div class="rail">
+    <div class="panel">
+      <h2>The loop</h2>
+      <div class="scrub">
+        <div class="row"><label>from (ms)</label><input type="range" id="from" min="0" max="36000" step="50" value="16800"><output></output></div>
+        <div class="row"><label>to (ms)</label><input type="range" id="to" min="0" max="36000" step="50" value="21500"><output></output></div>
+        <div class="row"><label>speed</label><input type="range" id="speed" min="0.05" max="2" step="0.05" value="1"><output></output></div>
+        <div class="row"><label>scrub</label><input type="range" id="at" min="0" max="36000" step="10" value="16800"><output></output></div>
+      </div>
+      <div class="btns">
+        <button id="play" class="on">Pause</button>
+        <button data-win="windup">The wind-up</button>
+        <button data-win="pop">It opens</button>
+        <button data-win="throw">The throw</button>
+        <button data-win="all">The whole intro</button>
+        <button id="again">Reload the film</button>
+      </div>
+      <div class="marks" id="marks"></div>
+      <div id="status">starting the film…</div>
+    </div>
+
+    <div class="panel">
+      <h2>The turn into it</h2>
+      <p class="note">The tumble the shockwave starts. It does not come to a halt — it is still gathering speed on
+         the frame the cube bursts, and the flash covers the instant the turning stops.</p>
+      <div class="row"><label>whole turns</label><input type="range" id="spinTurns" min="1" max="8" step="1"><output></output></div>
+      <div class="row"><label>how it builds</label><input type="range" id="spinPow" min="1" max="5" step="0.1"><output></output></div>
+      <div class="row"><label>vibration</label><input type="range" id="spinShake" min="0" max="0.6" step="0.01"><output></output></div>
+      <div class="row"><label>camera backs off</label><input type="range" id="spinOut" min="0" max="1.2" step="0.01"><output></output></div>
+    </div>
+
+    <div class="panel">
+      <h2>The opening</h2>
+      <p class="note">When the cube opens, how long it takes to lie flat, and how long the map then takes to
+         unfold out of it. The launch and the map's start are chained to these — they are one event.</p>
+      <div class="row"><label>opens at (ms)</label><input type="range" id="unfoldAt" min="14000" max="22000" step="50"><output></output></div>
+      <div class="row"><label>takes (ms)</label><input type="range" id="unfoldMs" min="400" max="6000" step="50"><output></output></div>
+      <div class="row"><label>map unfolds (ms)</label><input type="range" id="growMs" min="600" max="8000" step="50"><output></output></div>
+    </div>
+
+    <div class="panel">
+      <h2>The flash it opens inside</h2>
+      <p class="note">The bloom that hides the moment itself — white at the core, the rainbow past it.</p>
+      <div class="row"><label>whole flash (ms)</label><input type="range" id="flashMs" min="150" max="2500" step="10"><output></output></div>
+      <div class="row"><label>the rise</label><input type="range" id="flashUp" min="0.01" max="0.5" step="0.01"><output></output></div>
+      <div class="row"><label>the fall</label><input type="range" id="flashFall" min="0.5" max="6" step="0.1"><output></output></div>
+      <div class="row"><label>brightness</label><input type="range" id="flashA" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>reach</label><input type="range" id="flashR" min="0.1" max="2" step="0.01"><output></output></div>
+      <div class="row"><label>starts at</label><input type="range" id="flashFrom" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>white core</label><input type="range" id="flashCore" min="0" max="0.8" step="0.01"><output></output></div>
+      <div class="row"><label>colour</label><input type="range" id="flashBow" min="0" max="2" step="0.01"><output></output></div>
+    </div>
+
+    <div class="panel">
+      <h2>What it throws</h2>
+      <p class="note">Him and the six charms, each on its own long arc out of the box.</p>
+      <div class="row"><label>arc height</label><input type="range" id="arcApex" min="0" max="24" step="0.5"><output></output></div>
+      <div class="row"><label>first flight (ms)</label><input type="range" id="arcMs" min="2000" max="18000" step="100"><output></output></div>
+      <div class="row"><label>each one longer</label><input type="range" id="arcStep" min="0" max="3000" step="50"><output></output></div>
+      <div class="row"><label>he lands after</label><input type="range" id="runLag" min="0" max="8000" step="100"><output></output></div>
+      <div class="row"><label>his tumble (turns)</label><input type="range" id="tumble" min="0" max="10" step="0.25"><output></output></div>
+      <div class="row"><label>...over (ms)</label><input type="range" id="tumbleMs" min="200" max="5000" step="50"><output></output></div>
+      <div class="row"><label>his size</label><input type="range" id="runCells" min="0.1" max="1.5" step="0.01"><output></output></div>
+    </div>
+
+    <div class="panel">
+      <h2>The camera</h2>
+      <p class="note">Three movements, and then the stepped pull-back. It is THROWN BACK off the blast to take in
+         the whole scene, HELD there while the charms and he come up out of it, and only then goes all the way in
+         and finds him. 1 is the framing that holds the whole scene; bigger is closer.</p>
+      <div class="row"><label>on the pop itself</label><input type="range" id="camRushFrom" min="0.5" max="14" step="0.1"><output></output></div>
+      <div class="row"><label>thrown back to</label><input type="range" id="camWide" min="0.4" max="4" step="0.05"><output></output></div>
+      <div class="row"><label>...over (ms)</label><input type="range" id="camWideMs" min="80" max="3000" step="20"><output></output></div>
+      <div class="row"><label>held wide (ms)</label><input type="range" id="camWideHold" min="0" max="8000" step="50"><output></output></div>
+      <div class="row"><label>then in on him to</label><input type="range" id="camIn" min="0.5" max="14" step="0.1"><output></output></div>
+      <div class="row"><label>...over (ms)</label><input type="range" id="camRushMs" min="60" max="3000" step="10"><output></output></div>
+      <div class="row"><label>steps back out in</label><input type="range" id="camSteps" min="1" max="10" step="1"><output></output></div>
+      <div class="row"><label>...a step every (ms)</label><input type="range" id="camStepMs" min="300" max="5000" step="50"><output></output></div>
+    </div>
+
+    <div class="panel">
+      <h2>The cube itself</h2>
+      <p class="note">Its edges taper from the corner nearest you to the one furthest; its sides are rainbow glass
+         with a wide curved sheen crossing them.</p>
+      <div class="row"><label>edge: far corner</label><input type="range" id="eThin" min="0.05" max="2" step="0.05"><output></output></div>
+      <div class="row"><label>edge: near corner</label><input type="range" id="eThick" min="0.2" max="5" step="0.05"><output></output></div>
+      <div class="row"><label>glass</label><input type="range" id="gA" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>far side</label><input type="range" id="gBack" min="0" max="1" step="0.01"><output></output></div>
+      <div class="row"><label>sheen width</label><input type="range" id="gBand" min="0.04" max="1.2" step="0.01"><output></output></div>
+      <div class="row"><label>sheen bow</label><input type="range" id="gBow" min="0.15" max="4" step="0.05"><output></output></div>
+      <div class="row"><label>sheen shoulder</label><input type="range" id="gShoulder" min="0.02" max="0.48" step="0.01"><output></output></div>
+      <div class="row"><label>sheen strength</label><input type="range" id="gShineA" min="0" max="1.5" step="0.01"><output></output></div>
+      <div class="row"><label>sheen lap (ms)</label><input type="range" id="gShineMs" min="400" max="9000" step="50"><output></output></div>
+      <div class="row"><label>colour lap (ms)</label><input type="range" id="gSlideMs" min="800" max="20000" step="100"><output></output></div>
+    </div>
+
+    <div class="panel">
+      <h2>Keep it</h2>
+      <p class="note">The lines below replace the matching ones in <code>OPENING</code>; the two blocks under them
+         paste over <code>CUBE_EDGE</code> and <code>CUBE_GLASS</code> whole.</p>
+      <textarea id="out" readonly></textarea>
+      <div class="btns">
+        <button id="copy">Copy</button>
+        <button id="reset">Reset — the shipped film</button>
+        <button id="restoreBtn">Restore — yours</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const frame = $("game");
+let W = null, SHIPPED = null, playing = true, t = 0, last = 0, running = false;
+
+// A service worker will happily hand this frame a cached index.html, which would mean tuning code the file on
+// disk no longer contains. A unique query cannot match anything in that cache.
+const GAME_SRC = () => "index.html?lab=" + Date.now();
+
+// The keys this lab owns, by the block they belong to. `unfoldAt`/`unfoldMs`/`growMs` are not OPENING keys —
+// they are how the lab says `unfold`, `grow` and `launch`, which are one event said three times (see push).
+const OKEYS = ["spinTurns", "spinPow", "spinShake", "spinOut",
+               "flashMs", "flashUp", "flashFall", "flashA", "flashR", "flashFrom", "flashCore", "flashBow",
+               "arcApex", "arcMs", "arcStep", "runLag", "tumble", "tumbleMs", "runCells",
+               "camRushFrom", "camWide", "camWideMs", "camWideHold", "camIn", "camRushMs",
+               "camSteps", "camStepMs"];
+const CHAIN = ["unfoldAt", "unfoldMs", "growMs"];
+const EKEYS = { eThin: "thin", eThick: "thick" };
+const GKEYS = { gA: "a", gBack: "back", gBand: "band", gBow: "bow", gShoulder: "shoulder",
+                gShineA: "shineA", gShineMs: "shineMs", gSlideMs: "slideMs" };
+const LOOP = ["from", "to", "speed", "at"];
+const ALL = OKEYS.concat(CHAIN, Object.keys(EKEYS), Object.keys(GKEYS), LOOP);
+
+const DP = { spinTurns:0, spinPow:1, spinShake:2, spinOut:2,
+             flashMs:0, flashUp:2, flashFall:1, flashA:2, flashR:2, flashFrom:2, flashCore:2, flashBow:2,
+             arcApex:1, arcMs:0, arcStep:0, runLag:0, tumble:2, tumbleMs:0, runCells:2,
+             camRushFrom:1, camWide:2, camWideMs:0, camWideHold:0, camIn:1, camRushMs:0,
+             camSteps:0, camStepMs:0, speed:2 };
+
+// Everything on this rail is written down as you move it and put back when you come back.
+const SAVE_KEY = "tilerunner:opening-lab";
+function save(){
+  const o = {};
+  for (const k of ALL) o[k] = +$(k).value;
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(o)); } catch (e) {}
+}
+function restore(){
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) {}
+  if (!v || typeof v !== "object") return false;
+  for (const k of ALL) if (typeof v[k] === "number") $(k).value = v[k];
+  return true;
+}
+// RESET goes back to the shipped film; RESTORE goes back to yours. So reset keeps a copy of yours first —
+// otherwise pressing it is the one move in here you cannot undo.
+function keepMine(){
+  try { const cur = localStorage.getItem(SAVE_KEY);
+        if (cur) localStorage.setItem(SAVE_KEY + ":kept", cur); } catch (e) {}
+}
+
+// The shipped values onto the rail. `unfold`/`grow`/`launch` come apart into the three the lab shows.
+function apply(S){
+  for (const k of OKEYS) if (typeof S.opening[k] === "number") $(k).value = S.opening[k];
+  const u = S.opening.unfold || [17900, 19900], g = S.opening.grow || [19900, 23100];
+  $("unfoldAt").value = u[0];
+  $("unfoldMs").value = Math.max(400, u[1] - u[0]);
+  $("growMs").value   = Math.max(600, g[1] - g[0]);
+  for (const id in EKEYS) $(id).value = S.edge[EKEYS[id]];
+  for (const id in GKEYS) $(id).value = S.glass[GKEYS[id]];
+  ALL.forEach(sync);
+}
+
+function sync(k){
+  const el = $(k); if (!el) return;
+  const out = el.parentNode.querySelector("output");
+  if (out) out.textContent = (+el.value).toFixed(DP[k] == null ? 0 : DP[k]);
+}
+
+function values(){
+  const o = {};
+  for (const k of OKEYS) o[k] = +$(k).value;
+  // ONE EVENT, SAID THREE TIMES. The cube opens, everything in it leaves on that same instant, and the map
+  // begins unfolding as the sides land — so the launch is the unfold's start and the map's start is its end.
+  // Three sliders here would let them come apart, and a film where the charms leave a box that is not open yet
+  // is not a thing you want to be able to build by accident.
+  const at = +$("unfoldAt").value, ms = +$("unfoldMs").value, gm = +$("growMs").value;
+  o.unfold = [at, at + ms];
+  o.launch = at;
+  o.grow   = [at + ms, at + ms + gm];
+  return o;
+}
+function edgeValues(){ const o = {}; for (const id in EKEYS) o[EKEYS[id]] = +$(id).value; return o; }
+function glassValues(){ const o = {}; for (const id in GKEYS) o[GKEYS[id]] = +$(id).value; return o; }
+
+function push(){
+  if (!W || !W.__TR || !W.__TR.openTune) return;
+  try {
+    W.__TR.openTune({ opening: values(), edge: edgeValues(), glass: glassValues() });
+    refreshOut(); save(); marks();
+  } catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; }
+}
+
+// ---- the loop ---------------------------------------------------------------------------------
+// The lab holds the clock. __TR.opening(ms) parks the film on a frame and draws it, so stepping it here gives
+// playback this page controls outright: the same window every time, at any speed, and a slider lands on the
+// very next frame rather than on whenever the film next happens to pass this way.
+// Every frame of the loop asks the film for one moment. `__TR.opening(ms)` restarts it if it is not running and
+// takes down anything standing over it, so this works whether the film is up, finished, skipped, or behind a menu
+// — which is what makes the replay CONTINUAL rather than one pass and then whatever happened to be on screen.
+// A failure is said out loud rather than swallowed: a loop that has quietly stopped looks exactly like a slow one.
+let _seekFail = 0;
+function seek(ms){
+  if (!W || !W.__TR || !W.__TR.opening) return;
+  try { W.__TR.opening(ms); _seekFail = 0; }
+  catch (e) {
+    if (++_seekFail === 1 || _seekFail % 120 === 0)
+      $("status").innerHTML = '<span class="warn">the film stopped answering: ' + e.message +
+                              ' — press "Reload the film"</span>';
+  }
+}
+function step(now){
+  requestAnimationFrame(step);
+  if (!W) { last = 0; return; }                     // the frame is being rebuilt; the clock waits for it
+  const dt = last ? Math.min(100, now - last) : 0; last = now;
+  const a = +$("from").value, b = Math.max(a + 100, +$("to").value);
+  if (playing) {
+    t += dt * (+$("speed").value);
+    if (t > b || t < a) t = a;
+    $("at").value = t; sync("at");
+    seek(t);
+  }
+}
+function setWindow(a, b){
+  $("from").value = a; $("to").value = b; t = a;
+  sync("from"); sync("to"); save(); marks();
+}
+const WINDOWS = {
+  windup: () => [13700, 18400],              // the blow, the tumble, and the first side giving
+  pop:    () => { const at = +$("unfoldAt").value; return [at - 900, at + (+$("unfoldMs").value) + 900]; },
+  throw:  () => { const at = +$("unfoldAt").value; return [at - 300, at + 5200]; },
+  // ...and the whole thing, end to end, asked of the film rather than written down here — it is the one window
+  // that has to follow a retune of the beat table, and OPENING.end is where the black is complete.
+  all:    () => [0, (FILM_END || 36000)],
+};
+let FILM_END = 0;
+function marks(){
+  if (!W || !W.__TR || !W.__TR.openingMarks) return;
+  try {
+    const m = W.__TR.openingMarks(), r = n => Math.round(n);
+    FILM_END = m.end || 36000;
+    $("marks").textContent = "hit " + r(m.hit) + "  ·  spin window " + m.spinWin.map(r).join(" / ") +
+      "  ·  one fold " + r(m.foldMs) + "ms  ·  unfold " + m.unfold.map(r).join("–") +
+      "  ·  the film ends at " + r(FILM_END);
+    $("status").textContent = playing ? "looping " + r(+$("from").value) + "–" + r(+$("to").value) + "ms"
+                                      : "held at " + r(t) + "ms";
+  } catch (e) {}
+}
+
+function refreshOut(){
+  const v = values(), e = edgeValues(), g = glassValues();
+  const f = (n, d) => (+n).toFixed(d);
+  const line = (k, d) => "    " + (k + ":").padEnd(16) + f(v[k], d) + ",";
+  $("out").value =
+    "// ---- into OPENING, over the matching lines ----\n" +
+    "    unfold:   [" + v.unfold[0] + ", " + v.unfold[1] + "],\n" +
+    "    grow:     [" + v.grow[0] + ", " + v.grow[1] + "],\n" +
+    "    launch:   " + v.launch + ",\n" +
+    [["spinTurns",0],["spinPow",1],["spinShake",2],["spinOut",2],
+     ["flashMs",0],["flashUp",2],["flashFall",1],["flashA",2],["flashR",2],["flashFrom",2],
+     ["flashCore",2],["flashBow",2],["arcApex",1],["arcMs",0],["arcStep",0],["runLag",0],
+     ["tumble",2],["tumbleMs",0],["runCells",2],["camRushFrom",1],["camWide",2],
+     ["camWideMs",0],["camWideHold",0],["camIn",1],["camRushMs",0],["camSteps",0],["camStepMs",0]]
+      .map(([k, d]) => line(k, d)).join("\n") + "\n\n" +
+    "// ---- the whole of CUBE_EDGE ----\n" +
+    "  const CUBE_EDGE = {\n" +
+    "    thin:  " + f(e.thin, 2)  + ",   // an edge's weight at the furthest corner of the cube, as a share of the line's own\n" +
+    "    thick: " + f(e.thick, 2) + ",   // ...and at the nearest\n" +
+    "  };\n\n" +
+    "// ---- and of CUBE_GLASS (keep its `cols` as it is) ----\n" +
+    "  const CUBE_GLASS = { a: " + f(g.a, 2) + ", back: " + f(g.back, 2) +
+      ", slideMs: " + Math.round(g.slideMs) + ", shineMs: " + Math.round(g.shineMs) +
+      ", shineA: " + f(g.shineA, 2) + ",\n" +
+    "                       band: " + f(g.band, 2) + ",\n" +
+    "                       bow:  " + f(g.bow, 2) + ",\n" +
+    "                       shoulder: " + f(g.shoulder, 2) + ",\n" +
+    "                       cols: [\"#f1645f\", \"#f7933b\", \"#f6cd28\", \"#49d47c\", \"#4baff1\", \"#c37ef1\"] };\n";
+}
+
+// ---- boot -------------------------------------------------------------------------------------
+// The game boots into its title and its own rAF loop; wait for the debug surface rather than guessing a delay.
+function attach(){
+  W = frame.contentWindow;
+  let tries = 0;
+  (function wait(){
+    if (W.__TR && W.__TR.openTune && W.__TR.opening) {
+      // ...and it must be the FILM we are looking at, not the title it would otherwise sit on.
+      try { W.localStorage.removeItem("tilerunner:cine"); } catch (e) {}
+      SHIPPED = W.__TR.openTune();                 // read BEFORE anything is pushed: this is "reset"
+      if (!restore()) apply(SHIPPED);
+      t = +$("from").value;
+      seek(t);                                      // ...which starts the film and parks it
+      push();
+      // ONCE. attach runs again on every reload of the frame, and a second rAF chain would step the clock
+      // twice a frame — the loop would quietly run at double speed and keep doubling.
+      if (!running) { running = true; requestAnimationFrame(step); }
+      return;
+    }
+    if (++tries > 200) {
+      $("status").innerHTML = '<span class="warn">the game never came up — is this being SERVED? ' +
+        'file:// blocks the frame from being read.</span>';
+      return;
+    }
+    setTimeout(wait, 50);
+  })();
+}
+frame.addEventListener("load", attach);
+frame.src = GAME_SRC();
+
+OKEYS.concat(CHAIN, Object.keys(EKEYS), Object.keys(GKEYS)).forEach(k =>
+  $(k).addEventListener("input", () => { sync(k); push(); }));
+// ...and the line that says what the loop is doing is rewritten whenever the loop changes. Left to refresh only
+// on a push it sat there naming the window you had just moved off, which reads as a lab that has stopped.
+LOOP.forEach(k => $(k).addEventListener("input", () => { sync(k); save(); marks(); }));
+$("at").addEventListener("input", () => { playing = false; $("play").textContent = "Play";
+                                          $("play").classList.remove("on");
+                                          t = +$("at").value; seek(t); marks(); });
+$("play").onclick = () => { playing = !playing;
+  $("play").textContent = playing ? "Pause" : "Play";
+  $("play").classList.toggle("on", playing); marks(); };
+document.querySelectorAll("[data-win]").forEach(b => b.onclick = () => {
+  const [a, z] = WINDOWS[b.dataset.win]();
+  setWindow(a, z); playing = true; $("play").textContent = "Pause"; $("play").classList.add("on"); marks(); });
+// THE LAST RESORT. Everything above keeps the film up on its own; this throws the frame away and builds a new
+// one, for the day something in the game gets into a state the debug surface cannot talk it out of.
+$("again").onclick = () => {
+  $("status").textContent = "reloading the film…";
+  W = null; last = 0;
+  frame.src = GAME_SRC();
+};
+$("copy").onclick = () => { $("out").select(); document.execCommand("copy");
+                            $("status").textContent = "copied"; };
+$("reset").onclick = () => { keepMine(); if (SHIPPED) apply(SHIPPED); push();
+                             $("status").textContent = "back to the shipped film (yours is kept — press Restore)"; };
+$("restoreBtn").onclick = () => {
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(SAVE_KEY + ":kept") || localStorage.getItem(SAVE_KEY) || "null"); } catch (e) {}
+  if (!v) { $("status").textContent = "nothing of yours to come back to"; return; }
+  for (const k of ALL) if (typeof v[k] === "number") $(k).value = v[k];
+  ALL.forEach(sync); push(); $("status").textContent = "yours, back";
+};
+// A wheel over a slider scrolls the rail; it does not drag the value.
+document.querySelectorAll("input[type=range]").forEach(el =>
+  el.addEventListener("wheel", (e) => { e.preventDefault(); window.scrollBy(0, e.deltaY); }, { passive: false }));
+</script>

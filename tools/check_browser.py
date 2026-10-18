@@ -25,8 +25,13 @@ except ImportError:
 ROOT = Path(__file__).resolve().parent.parent
 url = lambda f: (ROOT / f).as_uri()
 
+# Only the pages that stand alone. The iframe labs (radius, magnet, bell, hammer, tiloid, glow,
+# footer, swagger, cosmos, crumble, monster, pile, opening) read a frame of the game and so must
+# be SERVED; off file:// they fail for a reason that is not a bug, and a check that always fails
+# is a check nobody reads. eye-lab is here because it keeps its own copy of the eye code, which
+# is exactly the copy that can go stale without the parser noticing.
 TOOLS = ["level-editor.html", "runner-lab.html", "icon-lab.html",
-         "music-lab.html", "stone-generator.html"]
+         "music-lab.html", "stone-generator.html", "eye-lab.html"]
 # offline sandboxes can't fetch webfonts; that isn't a code fault
 IGNORE = ("ERR_TUNNEL", "ERR_NAME", "ERR_INTERNET", "ERR_CONNECTION", "Failed to load resource")
 

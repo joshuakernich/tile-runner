@@ -35,7 +35,8 @@
       <div class="row"><label>radius</label><input type="range" id="r" min="0.01" max="0.1" step="0.001"><output></output></div>
       <div class="row"><label>spacing</label><input type="range" id="gap" min="0.02" max="0.4" step="0.002"><output></output></div>
       <div class="row"><label>look-bias</label><input type="range" id="bias" min="-0.1" max="0.1" step="0.002"><output></output></div>
-      <div class="row"><label>lid width</label><input type="range" id="lid" min="0.1" max="1.5" step="0.02"><output></output></div>
+      <div class="row"><label>lid width (round eyes)</label><input type="range" id="lid" min="0.1" max="1.5" step="0.02"><output></output></div>
+      <div class="row"><label>lid thinness (square eyes)</label><input type="range" id="lidThin" min="0.05" max="0.8" step="0.01"><output></output></div>
     </div>
     <div class="grp"><h2>Life</h2>
       <div class="row"><label>glance x</label><input type="range" id="glanceX" min="0" max="0.09" step="0.002"><output></output></div>
@@ -58,7 +59,13 @@ const SHIPPED = {
   r:        0.038,   // radius
   gap:      0.115,   // centre to centre
   bias:     0.020,   // how far the pair sits toward the way the face is looking
-  lid:      0.60,    // shut-lid stroke width, as a fraction of the radius
+  lid:      0.60,    // shut-lid stroke width, as a fraction of the radius — the ROUND eyes' lid, which is a
+                     //   stroke with round caps, because a round eye shuts into a rounded line
+  lidThin:  0.26,    // ...and the SQUARE eyes' (the runner's): a flat bar exactly as wide as the open eye, this
+                     //   thick as a share of that width, with the corners square. A shut eye and an open one are
+                     //   the same eye — so it is the same width and the same corners, and all that has changed
+                     //   is that it has closed. It was a round-capped stroke 2.6 radii long on an eye 1.77 wide:
+                     //   wider than the eye it belonged to, and rounded on a face that has none
   glanceX:  0.030,   // how far the pupils dart sideways
   glanceY:  0.024,   // ...and up
   glanceMs: 5200,    // one full look-around
@@ -117,7 +124,7 @@ function rrect(g,x,y,w,h,r){ r=Math.max(0,Math.min(r,w/2,h/2));
   g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r);
   g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); }
 
-function drawEyes(g, cx0, cy0, s, col, face, t, off) {
+function drawEyes(g, cx0, cy0, s, col, face, t, off, nx, ny, square) {
   const R = s*EYES.r, gap = s*EYES.gap, bias = s*EYES.bias*(face || 0);
   const G = EYES.glanceMs, gt = (t + (off||0)) % G;
   let gx = 0, gy = 0;
@@ -127,12 +134,24 @@ function drawEyes(g, cx0, cy0, s, col, face, t, off) {
   const bt = (t + (off||0)) % EYES.blinkMs;
   const shut = bt < EYES.blinkMs*0.04 || (bt > EYES.blinkMs*0.058 && bt < EYES.blinkMs*0.085);
   const x1 = cx0 + bias - gap/2, x2 = cx0 + bias + gap/2;
-  if (shut) {
+  // `square` is the runner's pair (RUNNER_SQUARE_EYES in the game): a square open and a flat bar of the same
+  // width shut. Everything else with a face is round, and shuts into a round-capped line.
+  if (shut && square) {
+    const a = R*Math.sqrt(Math.PI), h = Math.max(1, a*EYES.lidThin)/2;
+    g.fillStyle = col;
+    g.fillRect(x1 - a/2, cy0 + gy - h, a, h*2);
+    g.fillRect(x2 - a/2, cy0 + gy - h, a, h*2);
+  } else if (shut) {
     g.strokeStyle = col; g.lineWidth = Math.max(1, R*EYES.lid); g.lineCap = "round";
     g.beginPath();
     g.moveTo(x1 - R, cy0 + gy); g.lineTo(x1 + R, cy0 + gy);
     g.moveTo(x2 - R, cy0 + gy); g.lineTo(x2 + R, cy0 + gy);
     g.stroke();
+  } else if (square) {
+    const a = R*Math.sqrt(Math.PI), hh = a/2;
+    g.fillStyle = col;
+    g.fillRect(x1 + gx - hh, cy0 + gy - hh, a, a);
+    g.fillRect(x2 + gx - hh, cy0 + gy - hh, a, a);
   } else {
     g.fillStyle = col;
     g.beginPath(); g.arc(x1 + gx, cy0 + gy, R, 0, Math.PI*2); g.fill();
@@ -147,7 +166,7 @@ function face(x, y, kind, t){
   if (kind === "runner"){
     const bw = s*RUNNER.bodyW, bh = s*RUNNER.bodyH, top = y - bh;
     ctx.fillStyle = "#bfe6ff"; rrect(ctx, x-bw/2, top, bw, bh, s*RUNNER.bodyR); ctx.fill();
-    drawEyes(ctx, x, top + bh*RUNNER.eyeY, s, "#17263f", 1, t, 0);
+    drawEyes(ctx, x, top + bh*RUNNER.eyeY, s, "#17263f", 1, t, 0, 0, 0, true);   // the runner's are SQUARE
     return "runner";
   }
   if (kind === "biter"){                                   // a splitting monster's upper half
@@ -219,7 +238,7 @@ function render(t){
   requestAnimationFrame(render);
 }
 // ---- wiring -----------------------------------------------------------------------
-const KEYS = ["r","gap","bias","lid","glanceX","glanceY","glanceMs","blinkMs"];
+const KEYS = ["r","gap","bias","lid","lidThin","glanceX","glanceY","glanceMs","blinkMs"];
 
 // Everything on this page is written down as you move it and put back when you come back. A
 // tuning page you have to set up again every time you open it is a tuning page you stop opening
@@ -237,7 +256,7 @@ function restore(){
   return true;
 }
 
-const DP = { r:3, gap:3, bias:3, lid:2, glanceX:3, glanceY:3, glanceMs:0, blinkMs:0 };
+const DP = { r:3, gap:3, bias:3, lid:2, lidThin:2, glanceX:3, glanceY:3, glanceMs:0, blinkMs:0 };
 function syncOut(){
   const lines = KEYS.map(k => "    " + (k+":").padEnd(10) + " " + (+EYES[k]).toFixed(DP[k]) + ",");
   $("out").value = "  const EYES = {\n" + lines.join("\n") + "\n  };";

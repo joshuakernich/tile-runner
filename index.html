@@ -1744,6 +1744,22 @@
        is where the parent is centred anyway. A punchline, not a paragraph. */
     text-align:center; width:80vw; max-width:none; margin:0 0 0 calc(50% - 40vw);
     text-wrap:balance; }
+  /* WHAT THE BUTTERFLIES DID, under the quip on a fall: the line that says it (once ever), the count with one of
+     them beside it, and the record. It is not a control either, so it is as quiet as the quip is — except for the
+     figure, which is the only thing on this screen anybody is going to want to read twice. */
+  /* ...standing clear of the quip: it is a SECOND thing the screen is saying, and butted up under the line it
+     read as a third line of it. */
+  .flies-gone { display:flex; flex-direction:column; align-items:center; gap:5px; margin-top:14px; }
+  .flies-gone p { margin:0; text-align:center; }
+  .flies-gone .fg-say { font-size:var(--body); color:#fff1ea; letter-spacing:var(--ls); }
+  .flies-gone .fg-n { display:flex; align-items:center; justify-content:center; gap:7px;
+    font-weight:900; font-size:34px; letter-spacing:1px; color:#fff;
+    text-shadow:0.85px 1px 0 #000a, 1.7px 2px 0 #0008; }
+  .flies-gone .fg-n canvas { display:block; width:30px; height:30px; }
+  /* The record in the colour every other "you have done the most of this" on this game wears — the full-coins
+     yellow — and in caps, because it is a stamp and not a sentence. */
+  .flies-gone .fg-rec { font-size:var(--body); letter-spacing:2px; font-weight:900;
+    text-transform:uppercase; color:#ffe14a; }
   /* ...and the talismans in their own metal, matching the button that opened them, so arriving
      on the screen confirms the button you pressed. */
   #menu-title.amber { color:#ffa24a;
@@ -3961,6 +3977,28 @@
         k = Math.min(steps.length - 1, k + 1 + Math.floor(Math.random() * 2));
       }
     }
+    // THE SWARM LEAVING. `twinkle` is five quick notes for one butterfly going; this is all of them at once, so it
+    // is a TUNE rather than a sparkle: a pentatonic run climbing out of the middle of the keyboard and off the top
+    // of it, a note per butterfly, each a soft sine with two quieter partials over it and a long ring, most of it
+    // into the room. It RISES because they do, and it is longer the more of them there are — which is the only
+    // place in the game where how well you did is said in music.
+    function fliesAway(n) {
+      if (muted || !ac || ac.state !== "running") return;
+      const t0 = ac.currentTime, steps = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26, 28, 31, 33, 36];
+      const N = Math.max(5, Math.min(steps.length, Math.round(n || 0) + 4));
+      for (let i = 0; i < N; i++) {
+        const t = t0 + i*0.085, hz = BASE * Math.pow(2, (33 + steps[i])/12), lvl = 0.034 * (1 - (i/N)*0.45);
+        for (const [mul, amp] of [[1, 1], [2, 0.30], [3, 0.11]]) {
+          const o = ac.createOscillator(), g = ac.createGain();
+          o.type = "sine"; o.frequency.setValueAtTime(hz*mul, t);
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(lvl*amp, t + 0.006);
+          g.gain.exponentialRampToValueAtTime(0.0002, t + 0.90);
+          o.connect(g); g.connect(master); g.connect(sendBus);
+          o.start(t); o.stop(t + 1.0);
+        }
+      }
+    }
     // THE SPEED PLATE GIVING UP — ∞. A great glass bell struck: a root, its fifth and its octave, each with a real bell's
     // inharmonic partials on three voices a few cents apart so the whole chord beats slowly as it rings, over a low sine
     // swelling up under it — held for seconds, and most of it in the room.
@@ -5400,7 +5438,7 @@
              slide, clack, tap, tapBig, swish, airSwish, flyWhoosh, tabClick, power, warp, vortex, thrum, crunch, growl, trapWind,
              tileDrop, tileLaid, ceremony, swallow, heartbeat, duck, choir,
              ambient,
-             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, charmReveal, tallyRing, tallyStep, pelletStep, pelletEnd, setEpic, boom, whump, rumblePeak: RUMBLE_PEAK, whumpRise: WHUMP_RISE, twinkle, holeChime, infinityRing, loopClosed, crack, powerDown, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
+             introGather, introFlash, typeBlip, rumble, flap, life, claim, shimmer, talismanLand, titleFlash, charmReveal, tallyRing, tallyStep, pelletStep, pelletEnd, setEpic, boom, whump, rumblePeak: RUMBLE_PEAK, whumpRise: WHUMP_RISE, twinkle, fliesAway, holeChime, infinityRing, loopClosed, crack, powerDown, magnetPull, setSong, setMusic, setTempo, resetMelody, setMuted, isMuted,
              levelMusicStart, levelMusicHandover, levelMusicStop, cueDelay, starTheme, talismanTheme, choirLift, setMusicGate,
              musicNow: () => ({ ...MU }) };
   })();
@@ -5436,7 +5474,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v10.98";                    // shown on the title & pause screens
+  const VERSION = "v10.99";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -7561,11 +7599,9 @@
       heartHudPop: -1e9,                    // ...when it last took one
       heartHudCol: null,                    // ...and the colour of that one, which the counter wears
       heartRun: [],                         // hearts on their way from him to their counter
-      fliesGot: 0,                          // butterflies the Bell has freed this run
-      fliesShown: 0,                        // ...what their counter is SAYING
-      flyHudPop: -1e9,                      // ...when it last took one
-      flyHudCol: null,                      // ...and the colour of that one
-      flyRun: [],                           // butterflies on their way from where they flew to their counter
+      fliesGot: 0,                          // butterflies the Bell has freed on THIS chapter — the line on its
+      flyCol: null,                         //   clear screen, and the colour of the last one. They themselves
+                                            //   belong to the run and not to the chapter: see SWARM
       loop: null,                           // a circuit he is going round, once we are sure
       vortex: null,                         // ...and what happens to the world when he is
       singularity: new Set((L.singularity||[]).map(c=>key(c[0],c[1]))),
@@ -7711,6 +7747,7 @@
     Sound.setTempo(effSpeed);     // backing-track tempo tracks this level's (ramped) runner speed
     computeLayout();
     snapCamera();                 // camera at the runner's start
+    fliesReseat();                // ...and the butterflies that came with him, put down where they belong
     // if the finish flag starts off-screen, open on the flag and glide back to the start
     const startCam = { x: camX, y: camY };
     const g = state.goal;
@@ -8104,6 +8141,12 @@
   // his head to his feet exactly halfway — at which point the two descriptions agree to the
   // pixel, because his feet measured from his head are his feet. That is why the choreography
   // is written as an angle and not as three separate poses.
+  //
+  // ...and the kick TRAVELS, by exactly the amount that puts his feet down on the spot he stands on for the
+  // cue (D.kx/ky). A rotation alone cannot: it lands his feet a body-length past his crown, and the cue's
+  // frame — drawn by drawRunner, not by any of this — puts him a quarter-tile past it, so the arrival used
+  // to finish thirteen pixels ahead of itself and jump back. He is off the ground for the middle of the
+  // throw, which is the whole of where the travel goes.
   const DROP = {
     fallMs:  1200,   // out of the top of the frame and down onto the tile, head first
     clear:   1.5,    // ...from just off the edge of the FRAME, by this much of his own height. Not a fixed
@@ -8122,10 +8165,22 @@
     curl:    1.00,   // ...how far the knees come up, as RUNNER's own leap crouch (1 halves the leg)
     thrust:  1.60,   // ...and how far the legs go OUT at the top of the kick, in the same units
     thrustAt: 0.30,  // ...reached this far into the throw, so the legs are already out when he leaves the ground
-    hopH:    0.26,   // how far off the track the kick takes him, in tiles, at the top of it
-    tipMs:   460,    // the throw onto his back — eased OUT, because a thrown thing leaves fast and settles
-    backMs:  700,    // ...how long he lies there
-    rollMs:  560,    // ...and the second throw, up onto his legs
+    // ...AND IT LANDS ON HIS BACK ON THE WAY. The turn used to run head to feet without stopping, which is a
+    // tumble — a man falling over in the right direction. Now he hops over onto his BACK and comes down on it,
+    // lies there a beat with his legs a little apart, and only then thrusts again onto his feet: two efforts
+    // with a landing between them, which is what getting up off your head actually takes.
+    //
+    // The beat he lies on is a RIGHT ANGLE, which is exactly where the pivot changes ends — so the pause and
+    // the swap from his crown to his heels are the same instant, and the one frame the two descriptions have
+    // to agree on is one he spends perfectly still.
+    flipMs:  420,    // THE FIRST LITTLE HOP: off his head and over onto his back, landing on the track
+    flipH:   0.14,   // ...and how far off it that one takes him, in tiles. A hop — the throw is the big one
+    sprawlMs: 380,   // ...then how long he lies there before he goes again
+    splay:   0.70,   // ...with his legs this far apart while he does, as a share of the heap's own (PILE.splay).
+                     //   A LITTLE apart: the heap's full measure is a body thrown down, and this is a man landing
+    hopH:    0.38,   // how far off the track the kick takes him, in tiles, at the top of it
+    throwMs: 640,    // THE THRUST: flat on his back up onto his feet, eased OUT, because a thrown thing leaves
+                     //   fast and settles
     shadowFade: 6,   // how far up his shadow is gone altogether, in tiles
     pulseMs: 460,    // the square of light the landing throws out of the tile...
     pulseTo: 2.1,    // ...and how far it reaches, in tiles
@@ -8144,12 +8199,15 @@
   // it the gather and the forming were already using. Written this way rather than as a number
   // so that "pause the usual way" goes on meaning that if the intro is ever retuned.
   const INTRO_STAND = INTRO_TAIL - INTRO_GATHER - INTRO_FORM;
-  const dropMs = () => DROP.fallMs + DROP.headMs + DROP.tipMs + DROP.backMs + DROP.rollMs + DROP.windMs*2;
+  const dropMs = () => DROP.fallMs + DROP.headMs + DROP.windMs + DROP.flipMs + DROP.sprawlMs + DROP.throwMs;
   // WHERE HE IS IN IT, as one angle and one pivot. `a` is measured from the headstand: 0 stood on
   // his head, PI/2 flat on his back, PI upright. `head` is true while the pivot is the top of his
   // head rather than his feet.
   // ...`pose` is his legs, in RUNNER's own leap units: below nought the knees come up and the leg shortens,
-  // above it they stretch out (paintRunner's legK). `hop` is how far the kick has taken him off the track, 0..1.
+  // above it they stretch out (paintRunner's legK). `hop` is how far off the track he is, IN TILES — each of the
+  // two efforts carries its own height, so the little one and the big one are two numbers rather than one scaled
+  // at the far end. `splay` is how far his legs are apart (the heap's pose, borrowed, at a fraction of it), and
+  // `slip` is how much of the thrust's TRAVEL he has covered — see D.kx/ky.
   // The throw's shape is one thing said twice: the legs are OUT by `thrustAt` of it and easing back to nothing
   // after, and the hop is a half-sine that leaves the ground with the kick and puts him back down on the beat
   // the turn finishes — so the legs, the lift and the rotation are three readings of one movement.
@@ -8159,31 +8217,40 @@
                           : D.thrust * (1 - cineSmooth((e - D.thrustAt)/(1 - D.thrustAt)));
   };
   function dropAt(t) {
-    const D = DROP, H = Math.PI/2;
+    const D = DROP;
     if (t < D.fallMs) {
       // gravity: barely moving at the top of the frame, quickest just before it lands
       const k = clamp(t/D.fallMs, 0, 1);
-      return { a: 0, head: true, drop: 1 - k*k, landed: false, pose: 0, hop: 0 };
+      return { a: 0, head: true, drop: 1 - k*k, landed: false, pose: 0, hop: 0, splay: 0, slip: 0 };
     }
     let u = t - D.fallMs;
-    if (u < D.headMs) return { a: 0, head: true, drop: 0, landed: true, pose: 0, hop: 0 };   // held on his head
+    if (u < D.headMs) return { a: 0, head: true, drop: 0, landed: true, pose: 0, hop: 0, splay: 0, slip: 0 };   // held on his head
     u -= D.headMs;
     if (u < D.windMs) { const e = cineSmooth(u/D.windMs);                       // ...curls up and loads
-      return { a: -D.windBack*e, head: true, drop: 0, landed: true, pose: -D.curl*e, hop: 0 }; }
+      return { a: -D.windBack*e, head: true, drop: 0, landed: true, pose: -D.curl*e, hop: 0, splay: 0, slip: 0 }; }
     u -= D.windMs;
-    if (u < D.tipMs) { const e = u/D.tipMs;                                      // ...and kicks himself over
-      return { a: cineMix(-D.windBack, H, easeOut(e)), head: true, drop: 0, landed: true,
-               pose: dropKick(e), hop: Math.sin(Math.PI*e) }; }
-    u -= D.tipMs;
-    if (u < D.backMs) return { a: H, head: false, drop: 0, landed: true, pose: 0, hop: 0 };  // flat on his back
-    u -= D.backMs;
-    if (u < D.windMs) { const e = cineSmooth(u/D.windMs);                       // ...curls up again
-      return { a: H - D.windBack*e, head: false, drop: 0, landed: true, pose: -D.curl*e, hop: 0 }; }
-    u -= D.windMs;
-    if (u < D.rollMs) { const e = u/D.rollMs;                                    // ...and kicks himself upright
-      return { a: cineMix(H - D.windBack, Math.PI, easeOut(e)), head: false, drop: 0, landed: true,
-               pose: dropKick(e), hop: Math.sin(Math.PI*e) }; }
-    return { a: Math.PI, head: false, drop: 0, landed: true, done: true, pose: 0, hop: 0 };
+    // THE FIRST LITTLE HOP, over onto his back — a right angle, and no further. He leaves the ground and comes
+    // back down on it (a half-sine, up and home), and his legs come apart as he goes so that what lands is the
+    // pose rather than a man arriving and then arranging himself.
+    if (u < D.flipMs) { const e = u/D.flipMs;
+      return { a: cineMix(-D.windBack, Math.PI/2, easeOut(e)), head: true, drop: 0, landed: true,
+               pose: dropKick(e), hop: D.flipH*Math.sin(Math.PI*e), splay: cineSmooth(e), slip: 0 }; }
+    u -= D.flipMs;
+    // ...AND HE LIES THERE. Flat, still, legs a little apart. Nothing moves, which is the whole point of it:
+    // the thrust that follows reads as a second effort only if there was a moment when he was not making one.
+    if (u < D.sprawlMs) return { a: Math.PI/2, head: false, drop: 0, landed: true,
+                                 pose: 0, hop: 0, splay: 1, slip: 0 };
+    u -= D.sprawlMs;
+    // ...THEN HE GOES AGAIN: flat on his back up onto his feet, the legs coming back together as they load and
+    // then kicking out. The thrust TRAVELS while he is up there (slip): smoothstep, so he is still on the ground
+    // at both ends of it and moving fastest at the top of the hop. That is what puts his feet down on the spot he
+    // stands on for the cue instead of somewhere near it — a kick-up lands you behind your own heels, and this is
+    // exactly how far behind.
+    if (u < D.throwMs) { const e = u/D.throwMs;
+      return { a: cineMix(Math.PI/2, Math.PI, easeOut(e)), head: false, drop: 0, landed: true,
+               pose: dropKick(e), hop: D.hopH*Math.sin(Math.PI*e),
+               splay: Math.max(0, 1 - e/Math.max(0.01, D.thrustAt)), slip: cineSmooth(e) }; }
+    return { a: Math.PI, head: false, drop: 0, landed: true, done: true, pose: 0, hop: 0, splay: 0, slip: 1 };
   }
   // HOW FAR THE FIGURE FLOATS OFF THE POINT IT IS ANCHORED AT. paintRunner does not draw him on his anchor: it
   // lifts him by the line every kick's sole is drawn on (KICK_SOLE), by a swagger's hover, and by the stride's
@@ -8216,8 +8283,14 @@
     // ...plus THE HOP: the kick takes him clean off the track for the middle of the throw, along the face's own
     // normal like everything else here, so he is thrown into the next orientation rather than pivoting on a
     // corner of himself the whole way round.
-    const off = W.drop*D.high + D.bw*0.5*Math.sin(W.a) + cell*DROP.hopH*W.hop;
-    const px = (W.head ? D.hx : D.fx) + D.nx*off, py = (W.head ? D.hy : D.fy) + D.ny*off;
+    const off = W.drop*D.high + D.bw*0.5*Math.sin(W.a) + cell*W.hop;
+    // ...and THE KICK'S TRAVEL, along the track. A pure topple leaves his feet one whole body-length past his
+    // crown, and the spot he stands on for the cue is a quarter-tile past it — so the topple overshot by the
+    // difference and the handover to drawRunner snapped him back thirteen pixels. The kick carries him that
+    // distance instead, while he is off the ground, added to WHICHEVER pivot is in use so the frame the pivot
+    // changes ends on stays the one point it has to be.
+    const px = (W.head ? D.hx : D.fx) + D.nx*off + D.kx*W.slip,
+          py = (W.head ? D.hy : D.fy) + D.ny*off + D.ky*W.slip;
     // ...and his feet, which is what paintRunner is handed: the pivot, plus his own height swung round — plus
     // HOW FAR THE FIGURE FLOATS OFF ITS ANCHOR (dropLift), so that the crown lands on the pivot and not inside
     // it. Weighted out as he comes upright, because by the time he is on his feet that float is the right thing
@@ -8252,8 +8325,12 @@
     // the leg under at a negative and stretches it at a positive), so the curl and the kick are the leap's
     // crouch and its reach, borrowed, rather than a second way of bending the same legs.
     _leapPose = W.pose;
+    // ...and his legs A LITTLE APART where he lands on his back. It is the HEAP's pose (PILE.splay) at a fraction
+    // of itself — the one way this game already has of throwing a man's legs open — rather than a second idea
+    // about the same joint. DROP.splay is how much of it he gets.
+    _deadSplay = (W.splay || 0) * DROP.splay;
     paintRunner(fx, fy, cell, 0, th, false, ts, 0, false, null);
-    _leapPose = 0;
+    _leapPose = 0; _deadSplay = 0;
   }
   function startIntro() {
     const s = state; s.status = "intro"; s.introT = 0; s.introSnd = { gather:false, flash:false, drop:false };
@@ -8300,6 +8377,10 @@
       // the face's own normal. Guessed at half a cell, he stood a cell's half above the track. resetLeap right
       // after, because runnerInfo walks the leap machinery and this is not a frame that draws him.
       const ri = runnerInfo(); resetLeap();
+      // HIS LENGTH AT THE INSTANT HE GOES FLAT, which is the end of the first hop and the beat he lies on: his
+      // legs are straight there (the kick eases back to nothing), so this is the arm's own formula with a
+      // straight pose, whose weight at a right angle is a half.
+      const armFlat = H + (dropArm(0) - H)*0.5;
       const surf = (ri.sx - C.x)*nrx + (ri.sy - C.y)*nry;
       const hx = C.x + nrx*surf + dc*cell*(DROP.landX - 0.5);   // the surface, a quarter along it
       const hy = C.y + nry*surf + dr*cell*(DROP.landX - 0.5);
@@ -8309,9 +8390,17 @@
                  : nry < 0 ? hy - camY : (camY + viewH) - hy;
       s.drop = { H, bw: cell*RUNNER.bodyW, ang: Math.atan2(dr, dc), nx: nrx, ny: nry,
                  hx, hy,                                     // where the top of his head lands...
-                 // ...and where his feet finish: one height along, plus half the float, which is what the arm
-                 // in drawDrop comes to at the moment the pivot changes ends (his legs are straight there)
-                 fx: hx + dc*(H + dropLift()/2), fy: hy + dr*(H + dropLift()/2),
+                 // ...and where his feet finish: what the arm in drawDrop comes to at the very moment the
+                 // pivot changes ends. His legs are mid-kick there, not straight, so this has to ask dropArm
+                 // for the length he actually is at that instant — measured, not assumed.
+                 fx: hx + dc*armFlat, fy: hy + dr*armFlat,
+                 // ...and THE TRAVEL THE KICK HAS TO COVER: the distance from where that topple leaves his feet
+                 // to where he must be standing when the throw ends. Not a knob — a knob here is a number that
+                 // is either right or visibly wrong, and there is only one right one. It is drawRunner's OWN
+                 // answer (runnerInfo, the same call the cue's frame makes) minus the topple's, so the two
+                 // cannot disagree: whatever retunes his height, his legs, the landing spot or the track's
+                 // surface moves both ends of this together.
+                 kx: ri.sx - (hx + dc*armFlat), ky: ri.sy - (hy + dr*armFlat),
                  high: Math.max(cell*2, edge + H*DROP.clear) };
     }
   }
@@ -9272,107 +9361,258 @@
         life: 0, max: SPILL.life, sz: cell * HEART.size });
     });
   }
-  // THE BELL'S BUTTERFLIES: what a monster the Bell of Unmaking catches becomes. It APPEARS as the monster's own tile, at
-  // exactly its size, under a quick white flash of the figure that hides the change; SHRINKS fast to a small thing a
-  // quarter of a tile across, beginning to flap as it does; HOLDS there a moment, flapping; and then FLITS away from him
-  // in a wobbling climb that starts slow and gathers (eased in), fading out at the end. Its body is one tile cut down
-  // the middle into two half-tiles hinged edge to edge — no gap — each squeezed toward the hinge as it swings up.
+  // THE BELL'S BUTTERFLIES: what a monster the Bell of Unmaking catches becomes. It APPEARS as the monster's own
+  // tile, at exactly its size, under a quick white flash of the figure that hides the change; SHRINKS fast to a
+  // small thing a quarter of a tile across, beginning to flap as it does; and HOLDS there a moment, flapping. Its
+  // body is one tile cut down the middle into two half-tiles hinged edge to edge — no gap — each squeezed toward
+  // the hinge as it swings up.
+  //
+  // AND THEN IT COMES TO HIM. It used to flit off on its own, fade out, and tick a counter in the corner of the
+  // screen — which is a receipt for a thing you watched disappear. The counter is gone and so is the flit: it
+  // catches him up and flies with him for the rest of the run (SWARM), and the only tally is the line of them
+  // behind his head.
   const BUTTERFLY = {
     flashMs:  200,    // the white flash over the figure as it appears, fading
     shrinkMs: 260,    // ...then down to its small size, quickly
-    pauseMs:  520,    // ...a moment there, flapping
-    flyMs:   1300,    // ...and away
+    pauseMs:  520,    // ...and a moment there, flapping, before it goes after him
     small:   0.25,    // its size once shrunk, in tiles across both wings
     flapMs:   200,    // one beat of the wings
-    travel:   1.4,    // how far its drift carries it from him, in tiles...
-    climb:    1.1,    // ...and how far up. EASED OUT, so it settles into its flit rather than escaping: it used to
-                      //    accelerate off over three tiles and be gone, which is a thing leaving rather than a thing
-                      //    set free — and half the time it left the screen before you had seen what it was.
-    roam:     0.90,   // ...and the wander it flits through on top of that, in tiles
-    roamMs: [760, 520], // ...its two periods, across and up — different, so the path never closes on itself
-    edge:     0.60,   // how near the edge of the view it is allowed, in tiles
-    wobble:   0.35,   // the flit's side to side, radians
-    fade:     0.35,   // the last share of the flight it fades over
-    trail:    0.50,   // its glitter trail, as a share of the talismans' length
-    trailR:   0.90,   // ...and how wide the glitter scatters, in its own widths
   };
-  const butterflyLife = () => { const B = BUTTERFLY; return B.flashMs + B.shrinkMs + B.pauseMs + B.flyMs; };
-  // Where one is and how it looks at time t of its own life — a pure function of t, so its glitter can ask where it was.
+  const butterflyLife = () => { const B = BUTTERFLY; return B.flashMs + B.shrinkMs + B.pauseMs; };
+  // Where one is and how it looks at time t of its own life. It does not move while it is becoming a butterfly —
+  // it stands where the monster stood and changes size — so this is the shrink and nothing else.
   function butterflyAt(f, t) {
-    const B = BUTTERFLY, t1 = B.flashMs, t2 = t1 + B.shrinkMs, t3 = t2 + B.pauseMs, big = f.size || MONSTER.size;
-    const ks = t < t1 ? 0 : Math.min(1, (t - t1) / B.shrinkMs), es = 1 - Math.pow(1 - ks, 3);   // the shrink, fast off
-    const kf = t < t3 ? 0 : Math.min(1, (t - t3) / B.flyMs), ef = 1 - (1 - kf)*(1 - kf);      // the drift, eased OUT
-    const wob = Math.sin(t/140 + (f.seed || 0)) * B.wobble * kf, sd = f.seed || 0;
-    let x = f.x + Math.cos(f.ang + wob) * cell * B.travel * ef + Math.sin(t/B.roamMs[0] + sd*3) * cell * B.roam * kf;
-    let y = f.y + Math.sin(f.ang + wob) * cell * B.travel * ef - cell * B.climb * ef
-                + Math.cos(t/B.roamMs[1] + sd*5) * cell * B.roam * 0.6 * kf;
-    // ...AND IT STAYS ON SCREEN. Held inside the view it was freed in — caught once, at the moment the Bell took it
-    // (f.view) — rather than the view the camera has now: this is a pure function of t, and its glitter trail asks it
-    // where the butterfly WAS, so a bound that moved with the camera would drag the whole trail along with it.
-    const V = f.view;
-    if (V) {
-      const m = cell * B.edge;
-      x = Math.max(V.x + m, Math.min(V.x + V.w - m, x));
-      y = Math.max(V.y + m, Math.min(V.y + V.h - m, y));
-    }
-    return { x, y, W: cell * (big + (B.small - big) * es), ks, kf,
-             A: kf < 1 - B.fade ? 1 : Math.max(0, (1 - kf) / B.fade) };
+    const B = BUTTERFLY, big = f.size || MONSTER.size;
+    const ks = t < B.flashMs ? 0 : Math.min(1, (t - B.flashMs) / B.shrinkMs);
+    const es = 1 - Math.pow(1 - ks, 3);                                  // the shrink, fast off
+    return { x: f.x, y: f.y, W: cell * (big + (B.small - big) * es), ks };
   }
   let _butterflySang = -1e9;
   function updateButterflies(dt) {
     const s = state; if (!s || !s.butterflies || !s.butterflies.length) return;
-    const B = BUTTERFLY, takeOff = B.flashMs + B.shrinkMs + B.pauseMs;
+    const life = butterflyLife();
     for (const f of s.butterflies) {
       f.t += dt;
       // ...and a twinkle as it takes off: once for any that go together (a Bell catching several at once is one sound)
-      if (!f.sang && f.t >= takeOff) {
+      if (!f.sang && f.t >= life) {
         f.sang = true;
         const now = performance.now();
         if (now - _butterflySang > 150) { _butterflySang = now; try { Sound.twinkle && Sound.twinkle(); } catch (_) {} }
       }
     }
-    // ...and once one has flown, it goes up to the COUNTER, the way a coin or a heart does: it is the Bell's tally, and a
-    // thing that simply faded out over the board left nothing to say how many you had freed.
+    // ...and once it is a butterfly, it goes after HIM.
     for (const f of s.butterflies) {
-      if (f.t < butterflyLife() || f.counted) continue;
-      f.counted = true;
-      s.fliesGot = (s.fliesGot || 0) + 1;
-      const q = butterflyAt(f, butterflyLife());
-      (s.flyRun || (s.flyRun = [])).push({ wx: q.x, wy: q.y, w0: q.W, col: f.col, t: 0, done: false,
-                                           delay: Math.min(5, s.flyRun.length) * COINRUN.stagger });
+      if (f.t < life || f.joined) continue;
+      f.joined = true;
+      flyJoin(f);
+      s.fliesGot = (s.fliesGot || 0) + 1;      // the chapter's own count, for the line on the clear screen
+      s.flyCol = f.col;
     }
-    s.butterflies = s.butterflies.filter(f => f.t < butterflyLife());
+    s.butterflies = s.butterflies.filter(f => f.t < life);
   }
   function drawButterflies(ts) {
     const s = state; if (!s || !s.butterflies || !s.butterflies.length) return;
     const B = BUTTERFLY;
     for (const f of s.butterflies) {
       const t = f.t, q = butterflyAt(f, t), W = q.W;
-      // A LITTLE SPARKLY TRAIL once it is away: the talismans' glitter (shedGlitter), in its colour, a short one, each
-      // grain dropped where it was and left to wink out — coming up over the start of the flight rather than all at once.
-      if (q.kf > 0 && ts != null) {
-        ctx.save();
-        ctx.globalCompositeOperation = "lighter";
-        shedGlitter(ctx, (tx) => { const p = butterflyAt(f, Math.max(0, t - (ts - tx))); return { x: p.x, y: p.y, r: p.W * B.trailR }; },
-                    ts, f.col, q.A * Math.min(1, q.kf * 4), f.seed || 0, B.trail);
-        ctx.restore();
-      }
       // flat as the monster's tile to begin with, beating once it starts to shrink
       const beat = 0.25 + 0.75 * Math.abs(Math.cos((t / B.flapMs) * Math.PI + (f.seed || 0)));
-      const open = 1 + (beat - 1) * q.ks;
-      // ONE PAIR OF WINGS in the game, drawn by one routine (flyWings): the thing flying off a monster and the little
-      // mark in the counter are the same object seen at two sizes, and they were being drawn by two different pieces
-      // of code — a squeeze here, a fold there. `open` runs from the monster's flat tile to the beat of a flying one,
-      // which is exactly the 1..0 the fold takes.
-      const wing = (fill) => flyWings(W, fill, open);
+      // ONE PAIR OF WINGS in the game, drawn by one routine (flyWings): the thing coming off a monster and the one
+      // flying behind him are the same object seen at two sizes. `open` runs from the monster's flat tile to the
+      // beat of a flying one, which is exactly the 1..0 the fold takes.
+      const wing = (fill) => flyWings(W, fill, 1 + (beat - 1) * q.ks);
       ctx.save();
-      ctx.globalAlpha = q.A;
       ctx.translate(q.x, q.y);
-      ctx.rotate(Math.sin(t/260 + (f.seed || 0)) * 0.25 * q.kf);
       wing(f.col);
-      if (t < B.flashMs) { ctx.globalAlpha = q.A * (1 - t / B.flashMs); wing("#ffffff"); }   // the flash, hiding the change
+      if (t < B.flashMs) { ctx.globalAlpha = 1 - t / B.flashMs; wing("#ffffff"); }   // the flash, hiding the change
       ctx.restore();
     }
+  }
+
+  // ---------- The swarm ---------------------------------------------------
+  // EVERY BUTTERFLY THE BELL HAS FREED, FLYING WITH HIM. They do not belong to a chapter — they belong to the RUN,
+  // so they come through the flag and the map and the next chapter's opening with him, and the only thing that ever
+  // takes them is dying. A counter in the corner said "4"; this says it by being four butterflies.
+  //
+  // Each one flies a place in a QUEUE measured on his own path (visualAt), a fixed lag behind the one in front, so
+  // the line follows the track round its corners instead of cutting them — and hovers off the running face along
+  // that face's own normal, which is what keeps them over the track on a board he runs up the side of. On top of
+  // that each has a wander of its own, so it is a swarm and not a string of beads.
+  const SWARM = {
+    lag:     0.45,   // how far back each one trails the one in front, in tiles of HIS OWN PATH
+    fallLag: 0.80,   // ...and the same, tightened, while he is falling and they are strung out above him
+    rise:    0.62,   // ...and how far off the running face they fly, in tiles
+    riseVar: 0.34,   // ...give or take this much of it, per butterfly, so they are not a row at one height
+    roam:    0.22,   // the wander each flits through round its place, in tiles — enough that the line reads as a
+                     //   loose swarm following him and not as a row of beads on a string
+    roamMs: [980, 710],   // ...its two periods, across and up — different, so its path never closes on itself
+    size:    0.25,   // one of them, in tiles across both wings
+    flapMs:  210,    // one beat of the wings...
+    open:  [0.30, 0.78],  // ...between these two, and never the whole way out: flat open is a tile with a line down
+                     //   it, and one flying at you edge on is a stick. A butterfly is the middle of that range, so
+                     //   the beat lives there. (The thing coming off a monster still opens all the way — it IS the
+                     //   monster's tile at that moment, which is the point of it.)
+    tilt:    0.22,   // how far it rocks as it flies, radians
+    joinMs:  820,    // HOW LONG ONE TAKES TO CATCH HIM UP when it is freed, from where the monster stood
+    trail:   0.45,   // the glitter it sheds while it is catching up and while it is leaving, as a share of the
+    trailR:  0.90,   //   talismans' own — and how wide that scatters, in its own widths
+    // ...AND THE LEAVING. He goes down, everything he was carrying comes out of him, and the one thing that does
+    // not fall is these. They go UP, fanning out, one after another, and the tune goes with them.
+    goMs:    1600,   // how long one takes to go
+    goStagger: 110,  // ...and how far apart they leave
+    goUp:    3.4,    // ...how far up, in tiles
+    goOut:   1.5,    // ...and how far they fan as they rise
+    goFan:   1.5,    // ...the angle of that fan, radians, across the whole flock
+    goFade:  0.45,   // ...the last share of the flight it fades over
+  };
+  let flySwarm = [];       // [{ col, seed, rise, join, from, lvl, hist }] — in joining order, nearest him first
+  let flyGo = null;        // { t } once he is down and they are leaving
+  // THE RECORD. How many have ever left him at once, and whether the words have been said. Its own key: it is a
+  // fact about the player rather than about a chapter, and `tilerunner:best` is keyed by chapter.
+  const FLIES_KEY = "tilerunner:flies";
+  let flyRec = (() => { try { return JSON.parse(localStorage.getItem(FLIES_KEY)) || {}; } catch (_) { return {}; } })();
+  const saveFlyRec = () => { try { localStorage.setItem(FLIES_KEY, JSON.stringify(flyRec)); } catch (_) {} };
+  const FLY_COL = "#c37ef1";            // the house purple, for one with no monster's colour to wear
+
+  function flyJoin(f) {
+    flySwarm.push({ col: f.col || FLY_COL, seed: Math.random(), join: 0,
+                    from: { x: f.x, y: f.y }, lvl: levelIdx, hist: [] });
+  }
+  // WHERE THE i-TH ONE'S PLACE IS: his path, a lag per butterfly back, lifted off the running face and wandering.
+  function flySlot(i, ts) {
+    const s = state, f = flySwarm[i];
+    if (!s || !s.path || !s.path.length) return null;
+    // HE GOES OVER THE EDGE AND THEY GO WITH HIM. The queue is measured on his PATH, and the moment he leaves it
+    // they would hang over the track he fell off while the camera whips down after him — so the one thing anybody
+    // was going to watch happened above the top of the screen. Strung out above him instead, in joining order: a
+    // tail going down a hole, which puts them over the heap when he lands, which is where they leave from.
+    const F = s.fall;
+    if (F && (s.status === "falling" || s.status === "lose")) {
+      const drop = cell * SWARM.lag * SWARM.fallLag * (i + 1);
+      return { x: F.x + Math.sin(ts/SWARM.roamMs[0] + f.seed*7.1)*cell*SWARM.roam,
+               y: F.y - drop + Math.cos(ts/SWARM.roamMs[1] + f.seed*11.3)*cell*SWARM.roam };
+    }
+    // CLAMPED FIRST, and then sampled either side of where it actually is. Taking the two samples around the RAW
+    // lag put both of them outside the path at the start of a level — visualAt clamps, so they landed on the same
+    // point, the tangent was zero and the whole flock flew at no height at all, sitting in the track he was stood
+    // on. The clamp belongs here, where the two samples can be kept apart across it.
+    const end = s.path.length - 0.5;
+    const raw = (s.runIdx + s.runT) - SWARM.lag*(i + 1);
+    const p = Math.max(0, Math.min(end, raw));
+    const q = visualAt(p);
+    // the face's own normal, taken the way runnerInfo takes it — off the path either side rather than off him,
+    // which would walk the leap machinery on a frame that is not drawing him
+    const a = visualAt(Math.max(0, p - 0.08)), b = visualAt(Math.min(end, p + 0.08));
+    const tx = b.x - a.x, ty = b.y - a.y, m = Math.hypot(tx, ty) || 1;
+    const nx = ty/m, ny = -tx/m;                           // left-normal: the side he runs on
+    const rise = cell * (SWARM.rise + (f.seed - 0.5)*2*SWARM.riseVar);
+    // ...AND THE LINE CARRIES ON PAST THE TRACK. A queue measured on his path runs out of path the moment there
+    // is less of it behind him than there are butterflies, and everybody left over piles up on the start square
+    // in a heap. The overflow is spent along the tangent instead, so the line simply continues into the air off
+    // the end of the track — which is what a line of things following somebody looks like.
+    const over = (raw - p) * cell;
+    return { x: q.x + (tx/m)*over + nx*rise + Math.sin(ts/SWARM.roamMs[0] + f.seed*7.1)*cell*SWARM.roam,
+             y: q.y + (ty/m)*over + ny*rise + Math.cos(ts/SWARM.roamMs[1] + f.seed*11.3)*cell*SWARM.roam };
+  }
+  // ...and where one actually IS, whichever of the three things it is doing.
+  // (flyAt, not flyPos: flyPos is the TILE in mid-throw, further down this file. Two function declarations with one
+  //  name in one scope is not an error — the later simply wins — so the clash cost the swarm every frame of its
+  //  existence and said nothing. tools/check.mjs now refuses a repeated name for exactly this reason.)
+  function flyAt(i, ts) {
+    const f = flySwarm[i];
+    if (flyGo) {
+      const u = Math.max(0, Math.min(1, (flyGo.t - i*SWARM.goStagger) / SWARM.goMs));
+      const e = u*u;                                        // leaving, so it gathers rather than settles
+      return { x: f.gx + Math.cos(f.gang)*cell*SWARM.goOut*e
+                       + Math.sin(ts/SWARM.roamMs[0] + f.seed*7.1)*cell*SWARM.roam,
+               y: f.gy + Math.sin(f.gang)*cell*SWARM.goOut*e - cell*SWARM.goUp*e
+                       + Math.cos(ts/SWARM.roamMs[1] + f.seed*11.3)*cell*SWARM.roam*0.6,
+               a: u < 1 - SWARM.goFade ? 1 : Math.max(0, (1 - u)/SWARM.goFade), u };
+    }
+    const slot = flySlot(i, ts);
+    if (!slot) return null;
+    if (f.join >= 1) return { x: slot.x, y: slot.y, a: 1, u: 1 };
+    const k = cineSmooth(f.join);                           // it catches him up, easing in and out of the chase
+    return { x: f.from.x + (slot.x - f.from.x)*k, y: f.from.y + (slot.y - f.from.y)*k, a: 1, u: f.join };
+  }
+  function tickFlies(dt) {
+    if (flyGo) { flyGo.t += dt;
+                 if (flyGo.t > SWARM.goMs + SWARM.goStagger*flySwarm.length) { flySwarm = []; flyGo = null; }
+                 return; }
+    for (const f of flySwarm) {
+      if (f.lvl !== levelIdx) { f.lvl = levelIdx; f.join = 1; f.hist.length = 0; }   // a new board: they are simply with him
+      if (f.join < 1) f.join = Math.min(1, f.join + dt/Math.max(1, SWARM.joinMs));
+    }
+  }
+  // A SHORT MEMORY OF WHERE EACH HAS BEEN, kept only so its glitter can be dropped where it was. The queue's place
+  // is a function of HIS position, which has no past this can ask for, so the past is recorded rather than solved.
+  const FLY_HIST = 420;    // ms of it
+  function flyHistAt(f, tx) {
+    const h = f.hist; if (!h.length) return null;
+    if (tx <= h[0].t) return h[0];
+    for (let i = h.length - 1; i >= 0; i--) {
+      if (h[i].t <= tx) {
+        const n = h[i + 1]; if (!n) return h[i];
+        const k = (tx - h[i].t) / Math.max(1e-3, n.t - h[i].t);
+        return { x: h[i].x + (n.x - h[i].x)*k, y: h[i].y + (n.y - h[i].y)*k };
+      }
+    }
+    return h[0];
+  }
+  function drawFlies(ts) {
+    if (!flySwarm.length) return;
+    const S = SWARM, W = cell * S.size;
+    for (let i = 0; i < flySwarm.length; i++) {
+      const f = flySwarm[i], q = flyAt(i, ts);
+      if (!q || !(q.a > 0.01)) continue;
+      f.hist.push({ t: ts, x: q.x, y: q.y });
+      while (f.hist.length > 2 && ts - f.hist[0].t > FLY_HIST) f.hist.shift();
+      // GLITTER while it is CHASING HIM DOWN and while it is LEAVING, and at no other time: a permanent sparkle
+      // behind every butterfly he has ever collected is weather. The talismans' own (shedGlitter), in its colour,
+      // each grain dropped where it was and left to wink out.
+      const streak = flyGo ? Math.min(1, q.u*4) : (f.join < 1 ? 1 - f.join : 0);
+      if (streak > 0.01 && ts != null && f.hist.length > 1) {
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        shedGlitter(ctx, (tx) => { const p = flyHistAt(f, tx) || q; return { x: p.x, y: p.y, r: W * S.trailR }; },
+                    ts, f.col, q.a * streak, f.seed, S.trail);
+        ctx.restore();
+      }
+      const beat = S.open[0] + (S.open[1] - S.open[0]) * Math.abs(Math.cos((ts / S.flapMs) * Math.PI + f.seed*6.283));
+      ctx.save();
+      ctx.globalAlpha = q.a;
+      ctx.translate(q.x, q.y);
+      ctx.rotate(Math.sin(ts/300 + f.seed*9.7) * S.tilt);
+      flyWings(W, f.col, beat);
+      ctx.restore();
+    }
+  }
+  // HE IS DOWN. Everything he was carrying comes out of him (spillPurse) and falls; these are the one thing that
+  // does not. They go up instead, fanned out and one after another, and the tune goes with them. Returns what the
+  // fall screen has to say about it, or null if he had none — in which case nothing is said and nothing is stored.
+  function fliesLeave(x, y) {
+    const n = flySwarm.length;
+    if (!n || flyGo) return null;
+    const ts = performance.now();
+    flySwarm.forEach((f, i) => {
+      const q = flyAt(i, ts);
+      f.gx = q ? q.x : x; f.gy = q ? q.y : y;
+      // up, and fanned across the flock: the first out goes one way, the last the other
+      f.gang = -Math.PI/2 + (n > 1 ? (i/(n - 1) - 0.5) : 0) * SWARM.goFan;
+      f.join = 1;
+    });
+    flyGo = { t: 0 };
+    try { Sound.fliesAway && Sound.fliesAway(n); } catch (_) {}
+    const best = flyRec.best || 0, first = !flyRec.told;
+    const record = n > best;
+    flyRec.best = Math.max(best, n); flyRec.told = 1; saveFlyRec();
+    return { n, record, first, col: flySwarm[flySwarm.length - 1].col };
+  }
+  // A NEW BOARD. Anything still in the air from the last one is put down where it belongs — and a flock caught
+  // halfway out of a run that has already ended is simply gone, because the run it belonged to is.
+  function fliesReseat() {
+    if (flyGo) { flySwarm = []; flyGo = null; return; }
+    for (const f of flySwarm) { f.join = 1; f.lvl = levelIdx; f.hist.length = 0; }
   }
   function updateShards(dt) {
     if (!state || !state.shards.length) return;
@@ -9918,7 +10158,7 @@
     const h = s.path[tip];
     if (h.kind === "tile" && h.tileId === t.id && s.runIdx < tip) {
       while (s.path.length > tip) s.path.pop();
-      t.status = "free"; t.freedAt = ++s.freeSeq;   // pop it off the front, back into the pool
+      t.status = "free"; t.freedAt = ++s.freeSeq; t.freeT = lastTs;   // pop it off the front, back into the pool
     } else if (t.status === "parked") {
       t.status = "free"; t.freedAt = ++s.freeSeq;   // un-stage a parked tile
     } else { return; }
@@ -12106,8 +12346,7 @@
       const dark = (0.2126*rgb[0] + 0.7152*rgb[1] + 0.0722*rgb[2]) / 255 < 0.12;
       s.butterflies.push({ x: h.wx, y: h.wy, t: 0, col: dark ? (K.eye || col) : (K.body || col),
                            size: (K.move === "rail" || K.look === "rail") ? SWIM.size : MONSTER.size,   // his own size
-                           ang: Math.atan2(h.wy - rp.y, h.wx - rp.x), seed: Math.random() * 1000,
-                           view: { x: camX, y: camY, w: viewW, h: viewH } });   // ...the screen it must stay inside
+                           seed: Math.random() * 1000 });
     }
     s.hazards = s.hazards.filter(h => !doomed.includes(h));
     markOccDirty();                     // a blocking monster gone means the cell opens up
@@ -12157,7 +12396,7 @@
       const nd = s.path[k];
       if (nd.kind !== "tile" || nd.tileId == null) continue;
       const t = s.tiles[nd.tileId];
-      if (t && !want.has(nd.tileId)) { t.status = "free"; t.freedAt = ++s.freeSeq; }
+      if (t && !want.has(nd.tileId)) { t.status = "free"; t.freedAt = ++s.freeSeq; t.freeT = lastTs; }
     }
     if (cut < s.path.length) s.path.length = cut;
 
@@ -12196,16 +12435,6 @@
         Sound.coinBank();                    // ...the little sound of it going in
       }
       s.coinRun = s.coinRun.filter(f => !f.done);
-    }
-    if (s.flyRun && s.flyRun.length) {           // ...and butterflies to theirs
-      for (const f of s.flyRun) f.t += dt;
-      for (const f of s.flyRun) if (!f.done && f.t - f.delay >= COINRUN.flash + COINRUN.fly) {
-        f.done = true;
-        s.fliesShown = (s.fliesShown || 0) + 1;
-        s.flyHudPop = performance.now(); s.flyHudCol = f.col;
-        Sound.coinBank();
-      }
-      s.flyRun = s.flyRun.filter(f => !f.done);
     }
     if (s.heartRun && s.heartRun.length) {       // ...and hearts to theirs, the same way
       for (const f of s.heartRun) f.t += dt;
@@ -12456,9 +12685,11 @@
     // is a button in the DOM rather than anything drawn — so the highlight is a class on it and the words are painted on
     // the canvas over where it stands (see drawGuideLode).
     lodeHold: 2000,   // ...and how long the word about a spent one stands before play resumes
-    lodeAfter: 3,     // how many tiles come back to you before it is offered. Not the first: the first tile
-                      //   clearing is the chapter teaching its own basic move, and a charm offered over the top
-                      //   of that is two lessons at once. By the third the cycle is understood and there is room
+    lodeLine: 0.5,    // how near his own line a coin has to be before it is offered, in tiles. The Lodestone
+                      //   pulls in a straight sweep round him, so the moment worth offering it is the moment the
+                      //   coins come LEVEL with him — a tap then takes them, and a tap a beat either side does
+                      //   not. Half a tile is "on his line", which on a corridor chapter is exactly the frame he
+                      //   draws alongside them
     lodePad:  0.16,   // how much air the square leaves round the charm, in the CHARM's own widths — not in tiles:
                       //   the charm is a DOM button of a fixed size and the tile is whatever the board makes it,
                       //   so a pad in tiles is a different pad on every chapter
@@ -12534,13 +12765,13 @@
     if (want && !(pos.c === want.c && pos.r === want.r) && levelIdx !== 0) state.guidesOff = true;
   }
   // His pace, and the guide's own clocks. Called from update(), so it all holds still under a pause.
-  // THE LODESTONE, OFFERED. A level that lists it waits for `lodeAfter` TILES TO COME BACK TO YOU and then holds
-  // everything and points at the charm in the footer. It used to wait for a coin to come within a couple of tiles,
-  // which sounds better and plays worse: the charm pulls coins in from a distance, so by the time one is close
-  // enough to trigger the offer it is close enough to simply run over, and the one chapter that teaches the
-  // Lodestone was teaching it at the moment it had least to say. A tile clearing is the first beat of the level
-  // that is about the player rather than about the board, and by then there is a charm in the rack to point at.
-  // Once it has been spent and
+  // THE LODESTONE, OFFERED. A level that lists it waits until A COIN IS LEVEL WITH HIM and then holds everything
+  // and points at the charm in the footer — because that is the frame where the charm has something to do. It
+  // used to wait for a coin to come within a couple of TILES of him, which is a different thing entirely: the
+  // charm pulls from a distance, so a coin near enough to trigger that was near enough to simply run over, and
+  // the one chapter that teaches the Lodestone was teaching it at the moment it had least to say. On the corridor
+  // it teaches on, the coins sit behind the walls either side, and drawing level with them is the only moment a
+  // tap is worth anything at all. Once it has been spent and
   // gone grey it holds everything once more to say the one thing about it that matters, and lets go on its own.
   // Both phases are per ATTEMPT, like the rest of the guides: a retry teaches again.
   function guideLodeCheck() {
@@ -12552,7 +12783,14 @@
     const raise = (key) => { s.guide = { key, t: 0, k: s.guide ? s.guide.k : 0, done: false, doneT: 0 }; };
     if (!s.lodeShown) {
       if (spent) { s.lodeShown = true; return; }            // used before we ever got to offer it: say nothing
-      if (s.guideClears < GUIDE.lodeAfter) return;            // ...not before this many are back in your hand
+      // ...and not until a coin is on his own line, where the charm would actually reach it
+      const rp = visualAt(s.runIdx + s.runT), rc = rp.x/cell - 0.5, rr = rp.y/cell - 0.5;
+      let lined = false;
+      for (const ck of s.coinCells) {
+        const i = ck.indexOf(","), c = +ck.slice(0, i), r = +ck.slice(i + 1);
+        if (Math.abs(c - rc) <= GUIDE.lodeLine || Math.abs(r - rr) <= GUIDE.lodeLine) { lined = true; break; }
+      }
+      if (!lined) return;
       s.lodeShown = true; raise("lode");
     } else if (!s.lodeUsedShown && spent) {
       s.lodeUsedShown = true; raise("lode2");
@@ -12569,7 +12807,10 @@
     g.t += dt;
     // The invitation is ANSWERED by the charm going grey — that is what a tap on it does. The word about a spent one
     // answers to nothing but the clock: it stands its two seconds and lets play resume.
-    if (!g.done && g.key === "lode" && lodeBtn() && lodeBtn().classList.contains("spent")) g.done = true;
+    // ...and the tap gives him his PACE back on the same frame, not over the ease the other guides use. The
+    // charm is working from that instant — the coins are already coming — and watching that happen in slow
+    // motion is the game holding you still to admire itself.
+    if (!g.done && g.key === "lode" && lodeBtn() && lodeBtn().classList.contains("spent")) { g.done = true; g.k = 0; }
     if (!g.done && g.key === "lode2" && g.t >= GUIDE.lodeHold) g.done = true;
     if (!g.done && !guideTarget(g)) g.done = true;          // nowhere left to go (the track closed, say): let it go
     if (!g.done && g.key === "tap2" && g.at && state.queued &&  // ...and a tap on the second square with no tile free yet
@@ -12940,7 +13181,7 @@
               s.shake = Math.max(s.shake, cell * 0.12);
               Sound.swallow();
             } else {
-              t.status = "free"; t.freedAt = ++s.freeSeq;
+              t.status = "free"; t.freedAt = ++s.freeSeq; t.freeT = lastTs;   // ...and the instant it came free, for the release
               guideOnClear(t);                                  // ...which may be what a guide was waiting for
             }
             changed = true;
@@ -13457,6 +13698,9 @@
       Sound.thud ? Sound.thud() : Sound.clack();
       haptic(18);
       spillPurse(f.x, f.y);          // ...and everything he was carrying comes out of him
+      // ...except the BUTTERFLIES, which go up. Here rather than on the fall screen two seconds later: this is
+      // the instant the run ends, and it is the only one where you are still watching the board they leave from.
+      state.flyEnd = fliesLeave(f.x, f.y);
       return;
     }
     // ...but not while the Ankh is still on offer. The drop is shorter than the grace, and
@@ -13871,10 +14115,13 @@
             // and must not be chewed up by the thing replaying it.
             picks: (state.picked || []).map(q => Object.assign({}, q, { t: -1 })),
             coins: 0, coinsTotal: ((state.L && state.L.coins) || []).length, clock: 0, pickSnd: -1e9,
+            // ...and the word for taking every coin on the board, chosen here rather than where it is drawn: that
+            // runs every frame the stamp is up, and a word picked there would be a different word each one.
+            fullWord: pickFullWord(),
             // ...and what else the chapter yielded, in the order the summary says it: the hearts under its stone and the
             // butterflies the Bell made of its monsters. Each is a line of its own under the purse (see SUMMARY_ROWS).
             hearts: state.heartsGot || 0, heartCols: (state.heartCols || []).slice(),
-            flies: state.fliesGot || 0, flyCol: state.flyHudCol || null,
+            flies: state.fliesGot || 0, flyCol: state.flyCol || null,
             // The purse as it stood before this chapter, and what the chapter put in it.
             was: purseWas || 0, gain: purseGain || 0, nextWasOpen: _nextWasOpen,
             // What this chapter yielded that was not money. Copied, like `picks`: the run's own
@@ -16556,7 +16803,21 @@
     ms:      1500,        // ...how long it is up altogether
     out:     320,         // ...how long it takes to GO — and the beat the purse rises on (SUMMARY.liftMs)
     rise:    0.9,         // ...which it does by lifting this far, in tally heights, as it fades
+    fit:     0.86,        // ...and the widest the word is allowed to be, as a share of the screen: the list is copy and
+                          //    somebody will one day write a long one into it, so it shrinks to fit rather than running
+                          //    off both edges
   };
+  // ...and WHAT IT SAYS. It said "100%", which is a mark out of ten — a figure you are being given rather than the game
+  // being pleased with you. One of these instead, fresh every clear and never the same one twice running. They live in
+  // copy.js with everything else the game says.
+  const FULL_WORDS = (COPY.fullWords && COPY.fullWords.length) ? COPY.fullWords : ["PERFECT!"];
+  let _lastFull = -1;
+  function pickFullWord() {
+    let i = (Math.random() * FULL_WORDS.length) | 0;
+    if (i === _lastFull && FULL_WORDS.length > 1) i = (i + 1) % FULL_WORDS.length;
+    _lastFull = i;
+    return FULL_WORDS[i];
+  }
   // When the number on screen is the true one. Everything downstream — the tap that moves the
   // sequence on, the prompt that offers it — waits for this rather than for a fixed 700, so the
   // beat cannot be tapped away in the middle of its own arithmetic.
@@ -16742,7 +17003,14 @@
         ctx.globalAlpha = alpha * e * (1 - out);
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
         ctx.letterSpacing = "1px";                 // ...the tracking every other line on this screen is set with
-        const f = "900 " + Math.round(h*F.size) + "px " + UI_FONT;
+        const word = P.fullWord || FULL_WORDS[0];
+        // ...at the tally's type, unless the word is too long for the screen at it, in which case it takes whatever
+        // size it does fit at. Nothing in the shipped list needs this; the list is copy, and copy grows.
+        let px = Math.round(h*F.size);
+        ctx.font = "900 " + px + "px " + UI_FONT;
+        const room = viewW * F.fit, wide = ctx.measureText(word).width;
+        if (wide > room) px = Math.max(10, Math.floor(px * room / wide));
+        const f = "900 " + px + "px " + UI_FONT;
         ctx.font = f;
         // EXACTLY WHERE THE "n OF t" STOOD — the line it is about is not there any more, and the stamp landing in its
         // place is what says which line it was about. So it does not ride up with the purse when that gets out of the
@@ -16751,7 +17019,7 @@
         const ty = y + summaryLift(P) - h*PAYOUT.rise - (h*F.rise)*easeOut(out);
         ctx.translate(viewW/2, ty); ctx.scale(pop, pop);
         ctx.fillStyle = "#ffffff";
-        ctx.fillText("100%", 0, inkNudge(f));
+        ctx.fillText(word, 0, inkNudge(f));
         ctx.restore();
       }
     }
@@ -17427,6 +17695,36 @@
       el.appendChild(ln); return ln;
     });
   }
+  // WHAT THE BUTTERFLIES DID, as a piece of the fall screen. Nothing at all if none left him, which is the
+  // ordinary case; the words only the first time it ever happens; the record only when it is one. The mark beside
+  // the figure is the GAME's butterfly — flyWings, through the board's own ctx (withCanvas) — so the thing on the
+  // card and the things that just flew off him cannot drift apart.
+  function fliesGoneBlock(F) {
+    if (!F || !(F.n > 0)) return null;
+    const box = document.createElement("div"); box.className = "flies-gone";
+    if (F.first && COPY.fliesGone) {
+      const say = document.createElement("p"); say.className = "fg-say";
+      say.textContent = COPY.fliesGone; box.appendChild(say);
+    }
+    const row = document.createElement("div"); row.className = "fg-n";
+    const cv = document.createElement("canvas"), S = 30, px = Math.max(1, window.devicePixelRatio || 1);
+    cv.width = Math.round(S*px); cv.height = Math.round(S*px);
+    cv.setAttribute("aria-hidden", "true");
+    const g = cv.getContext("2d");
+    g.setTransform(px, 0, 0, px, 0, 0);
+    // ...at a little under the box, because the fold throws the near wing's outer edge TOWARD you and it is
+    // drawn wider than the hinge for it (flyWings): at full width that overhang is outside the canvas.
+    try { withCanvas(g, S, 0, 0, () => hudFly(S/2, S/2, S*0.72, F.col || FLY_COL)); } catch (_) {}
+    row.appendChild(cv);
+    const n = document.createElement("span"); n.textContent = String(F.n);
+    row.appendChild(n);
+    box.appendChild(row);
+    if (F.record && COPY.fliesRecord) {
+      const rec = document.createElement("p"); rec.className = "fg-rec";
+      rec.textContent = COPY.fliesRecord; box.appendChild(rec);
+    }
+    return box;
+  }
   const LOSE_QUIPS = COPY.loseQuips || [""];
   const LOSE_TITLES = COPY.loseTitles || [""];
   let _lastQuip = -1, _lastPause = -1;
@@ -17446,9 +17744,13 @@
     let i = (Math.random() * LOSE_QUIPS.length) | 0;
     if (i === _lastQuip) i = (i + 1) % LOSE_QUIPS.length;   // avoid repeating the last quip
     _lastQuip = i;
+    // ...and if the run ended some way that never reached the heap, they still have to go.
+    if (!state.flyEnd) state.flyEnd = fliesLeave(0, 0);
     state.end = { kind:"lose", last:false,
       title: LOSE_TITLES[(Math.random() * LOSE_TITLES.length) | 0],
-      byline: LOSE_QUIPS[i] };
+      byline: LOSE_QUIPS[i],
+      // ...and what the butterflies did, if there were any. null is the ordinary case and says nothing.
+      flies: state.flyEnd || null };
     openMenu("main");                    // the ordinary menu, wearing a fall
     Sound.death();                  // a short sad jingle on the death screen
   }
@@ -17590,7 +17892,7 @@
         const jx = 0, jy = 0;
         const fly = flyPos();
         if (fly && fly.id === t.id) drawFreeTile(fly.x, fly.y, ts, true, false);   // lifted, mid-throw
-        else drawFreeTile(cx(t.c) + jx, cy(t.r) + jy, ts, false, !!t.spare);
+        else drawFreeTile(cx(t.c) + jx, cy(t.r) + jy, ts, false, !!t.spare, freeSettleK(t, ts));
       }
     drawLaidFlash();                              // over the tile it belongs to, nothing else
 
@@ -17611,6 +17913,7 @@
     // only the legs are left out in the air, which is the picture.
     else drawRunnerAndPile(ts);                   // "cue" included: standing, about to go
     drawSpill();                                  // ...and whatever he was carrying, leaving
+    drawFlies(ts);                                // ...including the one thing that does not fall (SWARM)
     // (the monsters and the instruction over them are drawn at the very end now — see the foot of this function)
     // Coins last of everything on the board. They hover off the surface, so a saw or a
     // block passing over one used to swallow it and the player would never know it was there.
@@ -17687,8 +17990,8 @@
     drawCoinRuns(shx, shy);      // ...and whatever is on its way to it, over the top of it
     drawHeartHud();              // the hearts' counter beside it, once there is a heart to count
     drawHeartRuns(shx, shy);
-    drawFlyHud();                // ...and the butterflies' beside that, once the Bell has freed one
-    drawFlyRuns(shx, shy);
+    // (no butterfly counter. They are not a figure in the corner any more — they are flying behind his head,
+    //  and the only time anybody is told a number is the fall that takes them off him. See SWARM.)
     drawCeremony(ts);                   // over the board and under nothing: it IS the screen
     drawTalismanFlash(16, ts);
     drawVortex(ts);                     // ...and the whirlpool, over the top of everything
@@ -18199,25 +18502,7 @@
     ctx.fillText(B.num, B.textX, B.midY + inkNudge(B.font));
     ctx.restore();
   }
-  // THE BUTTERFLY COUNTER, right of the hearts' and built the same way: not there until the Bell has freed one, then it is
-  // suddenly there and stays for the run, wearing the colour of the last one to land.
-  function flyHudBox() {
-    const s = state;
-    if (!hudLive() || !((s.fliesShown || 0) > 0 || (s.flyRun && s.flyRun.length))) return null;
-    const P = hudPlate(), H = heartHudBox(), C = coinHudBox();
-    const num = String(s.fliesShown || 0), font = "900 " + P.fs2 + "px " + UI_FONT;
-    ctx.save();
-    ctx.font = font; const nw = ctx.measureText(num).width;
-    ctx.textBaseline = "alphabetic";
-    const dm = ctx.measureText("0123456789"), inkH = dm.actualBoundingBoxAscent + dm.actualBoundingBoxDescent;
-    ctx.restore();
-    const cw = Math.round((inkH > 0 ? inkH : P.fs2*0.72) * 1.15), gap = Math.round(P.fs2*0.55), padX = Math.round(P.fs*0.55);
-    const w = padX*2 + cw + gap + nw;
-    const prev = H || C;
-    const x = prev ? prev.x + prev.w + Math.round(P.fs2*HEART_HUD.gap) : Math.round((viewW - w)/2);
-    return { x, y: P.top, w, h: P.h, midY: P.top + P.h/2, iconX: x + padX, iconW: cw, textX: x + padX + cw + gap, num, font };
-  }
-  // One butterfly as the HUD draws it: its two half-tiles, open, in its own colour — the same body drawButterflies flies.
+  // ONE BUTTERFLY, small: its two half-tiles, open, in its own colour — the same body the swarm flies.
   // THE BUTTERFLY'S TWO WINGS, FOLDED. Not a flat squeeze — that is what a fold about a vertical hinge looks like seen
   // dead square-on, and it is why the icon came out as a rectangle getting narrower. This turns the wings in THREE
   // dimensions and projects them: each wing is a quad hinged on the body, swung toward the viewer as it closes, and
@@ -18272,44 +18557,6 @@
     ctx.save(); ctx.translate(x, y);
     flyWings(w, col, open == null ? FLY_ICON_OPEN : open);
     ctx.restore();
-  }
-  function drawFlyHud() {
-    const B = flyHudBox(); if (!B) return;
-    const s = state, col = s.flyHudCol || (s.flyRun && s.flyRun[0] && s.flyRun[0].col) || "#c37ef1";
-    ctx.save();
-    const now = performance.now();
-    if (!s.flyHudBorn) s.flyHudBorn = now;
-    const born = now - s.flyHudBorn, age = now - (s.flyHudPop || -1e9);
-    let k = 1;
-    if (born < HEART_HUD.popMs) k = Math.max(0.01, easeOutBack(born / HEART_HUD.popMs));
-    else if (age >= 0 && age < COINRUN.bump) k = 1 + 0.16*(1 - easeOutBack(age/COINRUN.bump));
-    if (k !== 1) { const px = B.x + B.w/2, py = B.midY; ctx.translate(px, py); ctx.scale(k, k); ctx.translate(-px, -py); }
-    ctx.textBaseline = "middle";
-    rrect(B.x, B.y, B.w, B.h, 0);
-    ctx.fillStyle = "rgba(10,8,22,0.62)"; ctx.fill();
-    hudFly(B.iconX + B.iconW/2, B.midY, B.iconW, col);
-    ctx.textAlign = "left"; ctx.font = B.font; ctx.fillStyle = col;
-    ctx.fillText(B.num, B.textX, B.midY + inkNudge(B.font));
-    ctx.restore();
-  }
-  function drawFlyRuns(shx, shy) {
-    const s = state; if (!s || !s.flyRun || !s.flyRun.length) return;
-    const B = flyHudBox(); if (!B) return;
-    const ox = Math.round(camX - shx), oy = Math.round(camY - shy);
-    const x1 = B.iconX + B.iconW/2, y1 = B.midY;
-    for (const f of s.flyRun) {
-      const t = f.t - f.delay;
-      if (t < 0) continue;
-      const x0 = f.wx - ox, y0 = f.wy - oy;
-      if (t < COINRUN.flash) {
-        const g = Math.sin(Math.PI * (t/COINRUN.flash));
-        hudFly(x0, y0, f.w0 * (1 + (COINRUN.pop - 1)*g), f.col);
-        continue;
-      }
-      const u = Math.min(1, (t - COINRUN.flash)/COINRUN.fly), e = u*u;
-      const cxp = x0 + (x1 - x0)*0.18, cyp = y0 + (y1 - y0)*COINRUN.bow, m = 1 - e;
-      hudFly(m*m*x0 + 2*m*e*cxp + e*e*x1, m*m*y0 + 2*m*e*cyp + e*e*y1, f.w0 + (B.iconW - f.w0)*e, f.col);
-    }
   }
   // ...and the hearts on their way to it: flaring where they were taken, then racing up, exactly as the coins do.
   function drawHeartRuns(shx, shy) {
@@ -19089,6 +19336,12 @@
   // the block itself (a metal tile) sitting on the rail, with grip dots
   function drawBlockBody(bx, by, ts, dragging) {
     const s = cell;
+    // THE WALL'S OWN SHADOW, because a block IS a wall — paintWallInto draws it, a line below. The static walls
+    // get theirs baked into the edge atlas once per level; this one moves, so it cannot be baked and was going
+    // without. The same two layers and the same numbers, so a block slid up against a wall does not suddenly
+    // stop casting what the wall beside it casts.
+    castShadow(() => { rrect(bx, by, s, s, tileR(s)); ctx.fill(); },
+               [WALL_SHADOW.around, WALL_SHADOW.under]);
     paintWallInto(ctx, bx, by, s);
     ctx.save(); rrect(bx, by, s, s, tileR(s)); ctx.clip();
     if (dragging) { ctx.fillStyle = "rgba(255,255,255,0.12)"; ctx.fillRect(bx, by, s, s); }
@@ -22151,7 +22404,13 @@
     r:        0.038,   // radius
     gap:      0.115,   // centre to centre
     bias:     0.020,   // how far the pair sits toward the way the face is looking
-    lid:      0.60,    // shut-lid stroke width, as a fraction of the radius
+    lid:      0.60,    // shut-lid stroke width, as a fraction of the radius — the ROUND eyes' lid, which is a
+                       //   stroke with round caps, because a round eye shuts into a rounded line
+    lidThin:  0.26,    // ...and the SQUARE eyes' (the runner's): a flat bar exactly as wide as the open eye, this
+                       //   thick as a share of that width, with the corners square. A shut eye and an open one are
+                       //   the same eye — so it is the same width and the same corners, and all that has changed
+                       //   is that it has closed. It was a round-capped stroke 2.6 radii long on an eye 1.77 wide:
+                       //   wider than the eye it belonged to, and rounded on a face that has none
     glanceX:  0.030,   // how far the pupils dart sideways
     glanceY:  0.024,   // ...and up
     glanceMs: 5200,    // one full look-around
@@ -22200,7 +22459,14 @@
     const R = s*EYES.r, gap = s*EYES.gap, bias = s*EYES.bias*(face || 0);
     const { gx, gy, shut } = eyeGlance(s, t, off);
     const x1 = cx0 + bias - gap/2, x2 = cx0 + bias + gap/2;
-    if (shut) {
+    if (shut && square) {
+      // A SQUARE EYE SHUTS INTO A BAR OF ITS OWN WIDTH. Same width as the open eye, same square corners, just
+      // thin — so the blink reads as the eye closing rather than as a different mark appearing in its place.
+      const a = R*Math.sqrt(Math.PI), h = Math.max(1, a*EYES.lidThin)/2;
+      g.fillStyle = col;
+      g.fillRect(x1 - a/2, cy0 + gy - h, a, h*2);
+      g.fillRect(x2 - a/2, cy0 + gy - h, a, h*2);
+    } else if (shut) {
       g.strokeStyle = col; g.lineWidth = Math.max(1, R*EYES.lid); g.lineCap = "round";
       g.beginPath();
       g.moveTo(x1 - R, cy0 + gy); g.lineTo(x1 + R, cy0 + gy);
@@ -22856,7 +23122,7 @@
       // at the top of a pile of bodies. It goes in as extra stride reach, the same arithmetic
       // the run and the straddle already use, so the knees and the kicks keep working.
       const reach = _floatPose ? sp*(1 - _floatPose)
-                  : swing + sp + (_deadSplay ? s*PILE.splay : 0);
+                  : swing + sp + s*PILE.splay*(_deadSplay || 0);   // ...and SOME of it, for a landing that is not a death
       // A TOE, for the one swagger that has one. A third bone off the end of the leg: lying
       // flat along the real ground while the foot is planted — hence the -L, which undoes the
       // lean the same way the boots do — and swinging down to point at the floor as the foot
@@ -22905,11 +23171,19 @@
     // order: `fromLotus` toward the lotus (how the angel unfolds out of the sit into the Hop's stance),
     // `curl` toward the fetal ball, and `splay` toward the legs flung wide (see POSES). One after the
     // other, so a leg goes from each shape to the next without a jump.
-    const legsOf = (name) => {                          // [front, back], each [hip, knee x, knee y, foot x, foot y]
+    const legsOf = (name) => {              // [front, back], each [hip, knee x, knee y, foot x, foot y, toe x, toe y]
       if (name === "lotus") {
+        // THE SAME LOTUS THE GAME SITS IN, down to the TOE. This was the shape without it — knee and foot
+        // and nothing on the end — so the film's sit had two stumps where the Millstone's and the Floating
+        // swagger's have tucked feet, and the one pose the game uses in three places looked like two poses.
+        // It is POSES.lotus either way now; the branch above is the same bones said once.
         const L = POSES.lotus, br = 1 + L.breathe*Math.sin(ts/Math.max(1, L.breatheMs));
+        const tl = seg*(L.toe || 0), ta = L.toeDown || 0;
         return [1, -1].map(d => { const kx = d*(frontHip + seg*L.knee), ky = hipY + seg*L.kneeDrop*br;
-                                  return [d*frontHip, kx, ky, kx - d*seg*L.foot, ky + seg*L.footDrop*br]; });
+                                  const fx = kx - d*seg*L.foot, fy = ky + seg*L.footDrop*br;
+                                  return [d*frontHip, kx, ky, fx, fy,
+                                          tl > 0 ? fx - d*Math.cos(ta)*tl : null,
+                                          tl > 0 ? fy + Math.sin(ta)*tl : null]; });
       }
       if (name === "fetal") {
         const F = POSES.fetal;
@@ -22933,7 +23207,17 @@
       const k = Math.min(1, k0 || 0);
       if (!(k > 0) || limbs.length < 2) continue;
       const T = legsOf(name);
-      limbs.slice(0, 2).forEach((lb, j) => { for (let n = 0; n < 5; n++) lb[n] += (T[j][n] - lb[n]) * k; });
+      limbs.slice(0, 2).forEach((lb, j) => {
+        const t = T[j], has = t[5] != null;
+        // A TOE IS A BONE LIKE THE OTHERS and is walked like them. A limb that has none grows one out of its
+        // own foot (a stump, length nothing) before the walk starts, and one going to a shape that has none
+        // shrinks it back into the foot — so the toe is the same bone the whole way rather than something
+        // that pops into existence when the blend lands.
+        if (has && lb[5] == null) { lb[5] = lb[3]; lb[6] = lb[4]; }
+        const tx = has ? t[5] : t[3], ty = has ? t[6] : t[4];
+        for (let n = 0; n < 5; n++) lb[n] += (t[n] - lb[n]) * k;
+        if (lb[5] != null) { lb[5] += (tx - lb[5]) * k; lb[6] += (ty - lb[6]) * k; }
+      });
     }
     limbs.sort((p, q) => q[0] - p[0]);                  // by hip: front (+x) first, back last
     for (const [hx, kx, ky, fx, fy, tx, ty, up] of limbs) {
@@ -24982,25 +25266,43 @@
     ctx.globalAlpha = 1;
     drawSpark(ctx, x + s/2, y + s/2, s*F.dot, ts, { alpha: 1, col: blue, seed: 0.29 + ph });
   }
-  function drawFreeTile(x, y, ts, lifted, spare) {
+  // A TILE DOES NOT SNAP INTO LYING THERE. The frame before the runner cleared it, it was full size and flat in the
+  // track; the frame after, it was smaller, tipped and hovering. That is a substitution, not a release — the eye
+  // reads it as one tile being swapped for another rather than as this tile being let go of. It now makes the
+  // journey: over FREE_SETTLE.ms it shrinks to the spare's size, tips to its own angle, takes up its place in the
+  // bob and lays down its shadow, easing a little past each and settling back, which is what a dropped thing does.
+  //
+  // ONE NUMBER drives all four, so nothing in the release can drift out of step with the rest of it — and it is a
+  // function of the clock and the instant it came free, so it survives a frame skip and needs nothing ticked.
+  const FREE_SETTLE = {
+    ms:   260,    // how long the release takes
+    back: 0.22,   // how far past its resting size and angle it swings on the way (0 = straight there), as the heart's morph measures it
+  };
+  const freeSettleK = (t, ts) => {
+    if (!t || t.freeT == null) return 1;                  // laid out by the level, or freed before this was a thing
+    const u = Math.min(1, Math.max(0, (ts - t.freeT) / Math.max(1, FREE_SETTLE.ms)));
+    if (u >= 1) return 1;
+    const b = FREE_SETTLE.back;
+    return 1 + (b + 1)*Math.pow(u - 1, 3) + b*Math.pow(u - 1, 2);
+  };
+  function drawFreeTile(x, y, ts, lifted, spare, settle) {
     const s = cell, r = tileR(s);
     if (lifted) { ctx.fillStyle = "rgba(5,4,13,0.4)"; rrect(x+6, y+9, s, s, r); ctx.fill(); }
-    // THE WALL'S OWN SHADOW under a tile that is lying on the board — the same two layers and the same numbers
-    // (WALL_SHADOW, through castShadow), so the squares you can move and the squares you cannot agree about where
-    // the light is. Not on a LIFTED one, which has the drag's own hard offset shadow, and not on a SPARE, which
-    // throws a monster's from the air a few lines below.
-    if (!lifted && !spare) castShadow(() => { rrect(x, y, s, s, r); ctx.fill(); },
-                                      [WALL_SHADOW.around, WALL_SHADOW.under]);
-    // A SPARE IS THE SAME TILE, SITTING DIFFERENTLY. Everything below draws exactly what a draggable tile draws; all
-    // that changes is the ground it is drawn on — shrunk, tipped, floating, with its shadow left behind on the floor.
-    // Its own tilt and its own place in the bob come off the cell it lies on, so no two are stamped alike.
+    // EVERY TILE LYING ON THE BOARD SITS THE SAME WAY — shrunk, tipped, floating, with its shadow left behind on
+    // the floor. It was the SPARE's treatment alone, and a cleared tile sat flat and square beside it: two things
+    // in the same state, one of them plainly an object lying there and the other plainly part of the ground. Its
+    // own tilt and its own place in the bob come off the cell it lies on, so no two are stamped alike.
+    // A LIFTED one is exempt: it is in your hand, and it has the drag's own hard offset shadow above.
     let spared = false;
-    if (spare) {
+    if (!lifted) {
       const c0 = Math.round(x/cell), r0 = Math.round(y/cell);
       const seed = (((c0*7 + r0*13) % 16) + 16) % 16 / 16;
-      const bob = Math.sin(ts/Math.max(1, SPARE.floatMs)*Math.PI*2 + seed*Math.PI*2) * cell*SPARE.float;
-      const tilt = (seed - 0.5) * 2 * SPARE.tilt;
-      const mx = x + s/2, my = y + s/2, ss = s * SPARE.scale * SPARE.shadowK;
+      // ...and how far through being let go of it is. 1 for everything that has been lying here a while.
+      const k = settle == null ? 1 : settle;
+      const sc = 1 + (SPARE.scale - 1)*k;
+      const bob = Math.sin(ts/Math.max(1, SPARE.floatMs)*Math.PI*2 + seed*Math.PI*2) * cell*SPARE.float * k;
+      const tilt = (seed - 0.5) * 2 * SPARE.tilt * k;
+      const mx = x + s/2, my = y + s/2, ss = s * sc * SPARE.shadowK;
       // THE SHADOW A MONSTER THROWS, thrown by a tile — the same two layers and the same blur (castShadow), so the
       // things lying on this board and the things walking over it agree about where the light is. It stays on the
       // FLOOR while the tile rises off it, which is what makes it a hover rather than a wobble.
@@ -25010,10 +25312,12 @@
       // soft one.
       ctx.save();
       ctx.translate(mx, my); ctx.rotate(tilt);
-      stampShadow(0, 0, ss, SPARE.shadowA, tileR(ss));       // stamped inside the tilt, so the shadow leans with it
+      // ...and the shadow comes UP with it: while it is still flat in the track it is the ground, and the ground
+      // does not throw one. At k=0 the stamp is the tile's own size and wholly under it, so there is nothing to see.
+      stampShadow(0, 0, ss, SPARE.shadowA * Math.min(1, k), tileR(ss));   // stamped inside the tilt, so the shadow leans with it
       ctx.restore();
       ctx.save();
-      ctx.translate(mx, my + bob); ctx.rotate(tilt); ctx.scale(SPARE.scale, SPARE.scale); ctx.translate(-mx, -my);
+      ctx.translate(mx, my + bob); ctx.rotate(tilt); ctx.scale(sc, sc); ctx.translate(-mx, -my);
       spared = true;
     }
     drawGlass(x, y, s);
@@ -25345,6 +25649,7 @@
       }
       updateShards(dt);
       updateButterflies(dt);
+      tickFlies(dt);                       // ...and the ones already flying with him
       tickStarDust(dt);
       tickFx(dt);
       tickHeartbeat(dt);
@@ -28379,6 +28684,10 @@
       menuBody.appendChild(head);
       const by0 = menuBody.querySelector(".menu-byline");
       if (by0) menuBody.appendChild(by0);                // (balanced once the screen is up — see `begin` below)
+      // ...and under the quip, what the butterflies did. appendChild MOVES, so it lands below the line and above
+      // the room the answers stand in — the last thing said about the run before you are asked what to do next.
+      const fgone = fliesGoneBlock(end.flies);
+      if (fgone) menuBody.appendChild(fgone);
       const below = menuPush(); below.classList.add("push-more");
       menuBody.appendChild(below);
       // SKIP on the left, RETRY on the right: the one you mean is under your writing thumb,
@@ -28403,7 +28712,7 @@
       // the heading cannot be told where it wraps (every word of a two-line heading came back on one "line", which
       // flew in as one block and gave its spark nothing to find), and the byline cannot tell whether it needs
       // balancing. So everything that moves is held back, hidden, and it all starts the moment the screen is up.
-      for (const q of [head, by0, row, back]) if (q) q.style.visibility = "hidden";
+      for (const q of [head, by0, fgone, row, back]) if (q) q.style.visibility = "hidden";
       const begin = () => {
         if (!head.isConnected) return;                   // the screen went before it could begin
         for (const q of [head, by0, row, back]) if (q) q.style.visibility = "";
@@ -28433,14 +28742,17 @@
         const typing = typeOut(parts, flown + FELL_FLY.rest);
         _fallTyping = typing.stop;
         const after = typing.total + FELL_STEP;
-        cue(row, after);
-        cue(back, after + FELL_STEP);
+        // The butterflies first — they are the last thing that HAPPENED, and it is said before you are asked
+        // what to do about it.
+        if (fgone) { fgone.style.visibility = ""; cue(fgone, typing.total); }
+        cue(row, after + (fgone ? FELL_STEP : 0));
+        cue(back, after + FELL_STEP + (fgone ? FELL_STEP : 0));
         // ...and the wash under the buttons, arriving WITH them rather than with the screen
         setTimeout(() => {
           if (!head.isConnected) return;                 // the screen went before its buttons came
           const fd = document.getElementById("winfade");
           if (fd) fd.classList.add("show", "under");
-        }, after);
+        }, after + (fgone ? FELL_STEP : 0));            // ...with the buttons, whenever they are
       };
       setTimeout(begin, 0);                              // ...after openMenu has shown the screen
       return;
@@ -28528,14 +28840,52 @@
     // A number holds it on that moment; "play" lets it run on from wherever it is held.
     // Asked with nothing, it only answers where it is.
     opening: (ms, next) => { if (ms == null) return openActive ? openT : null;
+                             // A SEEK IS A PROMISE TO SHOW THE FILM ON THAT FRAME, and three things can be
+                             // standing in front of it — and the first of them is silent. The frame loop takes
+                             // them in order and RETURNS on the first it finds, so the house mark on a cold boot
+                             // holds the screen for its two and a quarter seconds while the film runs behind it
+                             // unseen; a menu or the victory sequence will do the same for as long as they are up.
+                             // All three go, every seek, so a lab can ask for a moment and get it from the first
+                             // frame — and get it again after anything at all has happened in between.
+                             bootActive = false;
+                             if (win) winEnd();
+                             closeMenu();
                              if (!openActive) { titleActive = false; startOpening(next || "menu"); }
                              else if (next) openNext = next;
                              if (ms === "play") openHold = false;
                              else if (ms != null) { openSeek(ms); openHold = true; drawOpening(performance.now()); }
                              return openT; },
+    // opening-lab.html drives this: the film's beat table and the cube's own art, pushed into the RUNNING film and
+    // then re-seeked, so everything derived from a knob (the net, the fold's pace, the slams) is rebuilt rather than
+    // left over from the last value. Asked with nothing, it only answers what the three blocks are now.
+    openTune: (p) => {
+      if (p) {
+        if (p.opening) Object.assign(OPENING, p.opening);
+        if (p.edge)    Object.assign(CUBE_EDGE, p.edge);
+        if (p.glass)   Object.assign(CUBE_GLASS, p.glass);
+        if (openActive) { openSeek(openT); drawOpening(performance.now()); }
+      }
+      return { opening: { ...OPENING }, edge: { ...CUBE_EDGE }, glass: { ...CUBE_GLASS } };
+    },
+    // ...and the cube's turn at any instant, in radians, for measuring the shape of it rather than reading it off
+    // the picture: openSpinAngle is the one function the tumble, the camera's pull-back and the shake all ask.
+    spinAt: (t) => openSpinAngle(t),
+    // ...and where the camera is at any instant: its zoom against the framing that holds the whole scene (1 IS
+    // that framing), and what it is centred on. For measuring the shape of a move rather than eyeballing it.
+    camAt: (t) => { const M = openMapCam(), c = openCam(t);
+                    return { zoom: c.S/M.S, cx0: c.cx0, cy0: c.cy0 }; },
     openingMarks: () => ({ ...OPENING, foldMs: openFoldMs(), spinWin: openSpinWin(),
                            flaps: openFlaps ? openFlaps.map(Math.round) : [], slams: openSlams().map(o => ({ chapter: o.sp.idx, id: o.sp.def.id, go: o.go, hit: o.hit })) }),
     runner: () => runnerInfo(),
+    // The swarm flying with him (SWARM): how many, where each is, whether they are leaving, and the record they
+    // are measured against. `flies(n)` puts n of them on him without a Bell, for looking at the line.
+    flies: (n) => { if (n != null) for (let i = 0; i < n; i++)
+                      flyJoin({ x: (state.runIdx + 0.5)*cell, y: (state.runT + 0.5)*cell,
+                                col: ["#c37ef1", "#f1645f", "#49d47c", "#ffd24a"][i % 4] });
+                    return { n: flySwarm.length, leaving: !!flyGo, record: { ...flyRec },
+                             at: flySwarm.map((f, i) => { const q = flyAt(i, performance.now());
+                                                          return q && { x: +q.x.toFixed(1), y: +q.y.toFixed(1),
+                                                                        join: +f.join.toFixed(2) }; }) }; },
     // Corner radius, live. Every tile-shaped thing in the game takes its corners from
     // tileR() = s * TILE.radius, so this one number is the whole knob — but two caches bake
     // the old corner in and have to be told: the wall layer is a pre-rendered bitmap of every
@@ -30516,7 +30866,17 @@
   // corner and slide slowly through it — each side a sixth of the way round from the last, so no two neighbours match —
   // and a white shimmer sweeps across every pane in turn. See-through, so he shows through the near side; the far side
   // is fainter still (`back`). `quads` are screen corners, `ids` which side each is, `A` the fade.
-  const CUBE_GLASS = { a: 0.26, back: 0.55, slideMs: 7000, shineMs: 2800, shineA: 0.60, band: 0.16,
+  // THE SHIMMER IS AN ARC, not a stripe. A linear gradient crossing a pane is a straight-edged band, which on a
+  // sheet of glass reads as a wipe — a mask moving over it. Light on glass bows: it comes off a curved front and
+  // the bright part of it is a CURVE, wide and soft-shouldered, bending across the pane as it crosses. So the band
+  // is a ring of a radial gradient whose centre sits off the pane along its own diagonal: `bow` is how far off,
+  // in pane diagonals, and it is the whole of the curvature — far away is nearly straight, close is a tight arc.
+  const CUBE_GLASS = { a: 0.26, back: 0.55, slideMs: 7000, shineMs: 2800, shineA: 0.60,
+                       band: 0.44,     // the shimmer's width, in pane diagonals — it was a sixth, and a narrow
+                                       //   white line on a rainbow pane reads as a scratch rather than a sheen
+                       bow:  0.80,     // ...and where its curve comes from: the arc's centre, that many diagonals
+                                       //   off the near corner. Smaller is more curved
+                       shoulder: 0.20, // ...the soft edge either side of the bright core, as a share of the band
                        cols: ["#f1645f", "#f7933b", "#f6cd28", "#49d47c", "#4baff1", "#c37ef1"] };
   function drawCubeGlass(quads, ids, A, ts) {
     if (!(A > 0.004) || !quads.length) return;
@@ -30531,15 +30891,116 @@
       const gd = ctx.createLinearGradient(x0 - dx*slide, y0 - dy*slide, x0 + dx*(2 - slide), y0 + dy*(2 - slide));
       for (let k = 0; k <= 2*n; k++) gd.addColorStop(k/(2*n), G.cols[(k + id) % n]);
       ctx.globalAlpha = A * G.a; ctx.fillStyle = gd; path(); ctx.fill();
-      // ...and the shimmer, a white band crossing the pane on its own staggered clock
-      const p = ((ts / G.shineMs) + id*0.17) % 1 * (1 + 4*G.band) - 2*G.band, at = v => (v + 1)/3;
-      const sh = ctx.createLinearGradient(x0 - dx, y0 - dy, x0 + dx*2, y0 + dy*2);
-      sh.addColorStop(at(p - G.band), "rgba(255,255,255,0)");
-      sh.addColorStop(at(p), "rgba(255,255,255," + G.shineA + ")");
-      sh.addColorStop(at(p + G.band), "rgba(255,255,255,0)");
+      // ...and the shimmer: a wide, soft, CURVED band crossing the pane on its own staggered clock. The curve is
+      // a ring of a radial gradient centred off the pane along its diagonal, so the bright part bows as it goes.
+      const len = Math.hypot(dx, dy) || 1, ux = dx/len, uy = dy/len;
+      const R = len * G.bow, band = len * G.band;
+      const sx = x0 - ux*R, sy = y0 - uy*R;                       // the arc's centre, back off the near corner
+      const u = (((ts / G.shineMs) + id*0.17) % 1 + 1) % 1;
+      const at = R - band + u*(len + 2*band);                     // ...and where the bright part of it is now
+      const r0 = Math.max(0, at - band), r1 = at + band;
+      const sh = ctx.createRadialGradient(sx, sy, r0, sx, sy, r1);
+      const w = (k) => "rgba(255,255,255," + (G.shineA*k).toFixed(3) + ")";
+      sh.addColorStop(0, w(0));
+      sh.addColorStop(Math.max(0.001, 0.5 - G.shoulder), w(0.16));  // a soft shoulder either side of the core...
+      sh.addColorStop(0.5, w(1));
+      sh.addColorStop(Math.min(0.999, 0.5 + G.shoulder), w(0.16));
+      sh.addColorStop(1, w(0));
       ctx.globalAlpha = A; ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = sh; path(); ctx.fill();
       ctx.restore();
     });
+  }
+  // THE OUTLINE, WEIGHTED BY DEPTH. One line of one weight round every face says the cube is a drawing of a cube.
+  // A line that THICKENS as it comes toward you says it is a solid in a room — and it has to vary ALONG each edge,
+  // not merely per edge, because an edge going away from you is nearer at one end than the other. So an edge is not
+  // stroked: it is a tapered strip, filled, from its first corner's weight to its second's, with each end run on by
+  // half its own width so three of them meeting at a corner make a joint rather than three notches.
+  const CUBE_EDGE = {
+    thin:  0.50,   // an edge's weight at the furthest corner of the cube, as a share of the line's own
+    thick: 1.85,   // ...and at the nearest
+  };
+  // Corner depth -> weight. cineProj's Z grows AWAY from the camera, so the nearest corner is the smallest.
+  const cubeEdgeW = (z, lo, hi, base) =>
+    base * (CUBE_EDGE.thin + (CUBE_EDGE.thick - CUBE_EDGE.thin) * (hi > lo ? (hi - z)/(hi - lo) : 0.5));
+  // ONE FACE'S OUTLINE AS A TAPERED RING, MITRED. Each of its four corners is cut on the bisector of the two
+  // edges meeting there and run out to where their outer boundaries actually cross, which is what makes a corner
+  // a POINT. (`scale` is 1/cos of the half angle — the standard mitre — with a floor on it so a face seen almost
+  // edge-on cannot throw its corner off to infinity.)
+  //
+  // Outward is decided per corner against the face's own middle rather than from the winding, because a cube's
+  // far faces project the opposite way round from its near ones and a fixed perpendicular would turn half of
+  // them inside out.
+  // The floor on that cosine, which is a MITRE LIMIT: it is the sine of half the corner's angle, so a right
+  // angle asks for 1.41 of the line's half-width and a square-on cube corner rather less. A face turned nearly
+  // edge-on, though, has corners of a few degrees, and those ask for a spike ten times the line's width — which
+  // is what the bottom of a spinning cube grew. Cut off here, such a corner takes a bevel instead, and it costs
+  // nothing: a foreshortened face's corners are not the cube's corners anyway, they are the other faces' — and
+  // those get their own mitres, which are the ones you see.
+  const MITRE_MIN = 0.45;
+  function faceRing(V, H) {
+    const n = V.length;
+    let cx = 0, cy = 0;
+    for (const v of V) { cx += v[0]; cy += v[1]; }
+    cx /= n; cy /= n;
+    const outer = [], inner = [];
+    for (let i = 0; i < n; i++) {
+      const p = V[(i - 1 + n) % n], v = V[i], q = V[(i + 1) % n];
+      let ax = v[0] - p[0], ay = v[1] - p[1], am = Math.hypot(ax, ay) || 1; ax /= am; ay /= am;
+      let bx = q[0] - v[0], by = q[1] - v[1], bm = Math.hypot(bx, by) || 1; bx /= bm; by /= bm;
+      const out = (dx, dy) => { let ox = dy, oy = -dx;
+                                if (ox*(v[0] - cx) + oy*(v[1] - cy) < 0) { ox = -ox; oy = -oy; }
+                                return [ox, oy]; };
+      const [p1x, p1y] = out(ax, ay), [p2x, p2y] = out(bx, by);
+      let ux = p1x + p2x, uy = p1y + p2y;
+      const um = Math.hypot(ux, uy);
+      let k = 1;
+      if (um < 1e-6) { ux = p2x; uy = p2y; }             // doubled right back: the normal is all there is
+      else { ux /= um; uy /= um; k = 1 / Math.max(MITRE_MIN, ux*p2x + uy*p2y); }
+      const h = H[i] * k;
+      outer.push([v[0] + ux*h, v[1] + uy*h]);
+      inner.push([v[0] - ux*h, v[1] - uy*h]);
+    }
+    return { outer, inner };
+  }
+  // THE CUBE'S OUTLINE, face by face, as a ring of tapered line with mitred corners.
+  //
+  // It was drawn edge by edge, each a strip run on half its own width past both ends so three of them meeting at
+  // a corner would not leave notches between them. Three overshooting strips do not make a point — they make a
+  // KNEE CAP: a little rounded lump standing out past where the lines' own boundaries cross. Nothing is run on
+  // now. Every face's outline is one closed ring, mitred at each of its four corners, and a cube corner where
+  // three faces meet gets three mitres — one in each wedge between adjacent edges, which is exactly what a
+  // three-way joint is.
+  //
+  // The rings go into ONE path and are filled ONCE under the nonzero rule, which is what lets an edge two faces
+  // share be laid down twice without showing: every outer ring is wound the same way (the vertex order is
+  // normalised to one screen handedness first) and every inner ring against it, so overlapping band stays band
+  // and overlapping hole stays hole.
+  function wireCubeEdges(C, ids, A, col, base) {
+    if (!ids.length || !(A > 0.004)) return;
+    let lo = Infinity, hi = -Infinity;
+    for (const c of C) { if (c[2] < lo) lo = c[2]; if (c[2] > hi) hi = c[2]; }
+    ctx.save();
+    ctx.fillStyle = col || tvBlueHex();
+    ctx.globalAlpha *= 0.95 * A;
+    ctx.beginPath();
+    for (const j of ids) {
+      const f = CUBE_FACES[j];
+      let V = f.map(i => C[i]), H = f.map(i => cubeEdgeW(C[i][2], lo, hi, base) / 2);
+      // ...all of them the same way round on the screen, whichever way the face itself is turned
+      let area = 0;
+      for (let i = 0; i < 4; i++) { const u = V[i], w = V[(i + 1) % 4]; area += u[0]*w[1] - w[0]*u[1]; }
+      if (Math.abs(area) < 0.5) continue;                 // edge-on: no ring to make, and its edges belong to other faces
+      if (area < 0) { V = V.slice().reverse(); H = H.slice().reverse(); }
+      const R = faceRing(V, H);
+      ctx.moveTo(R.outer[0][0], R.outer[0][1]);
+      for (let i = 1; i < R.outer.length; i++) ctx.lineTo(R.outer[i][0], R.outer[i][1]);
+      ctx.closePath();
+      ctx.moveTo(R.inner[R.inner.length - 1][0], R.inner[R.inner.length - 1][1]);   // ...against the outer
+      for (let i = R.inner.length - 2; i >= 0; i--) ctx.lineTo(R.inner[i][0], R.inner[i][1]);
+      ctx.closePath();
+    }
+    ctx.fill();
+    ctx.restore();
   }
   const CUBE_WALK = [0, 1, 3, 2, 6, 7, 5, 4];
   const CUBE_SPARK = { edgeMs: 1800, size: 0.16 };  // one edge takes this long; the size is in cube edges
@@ -30548,7 +31009,8 @@
     const ids = CUBE_FACES.map((f, j) => j).filter(j => (CUBE_FACES[j].reduce((z, i) => z + C[i][2], 0) > 0) === back);
     const quads = ids.map(j => CUBE_FACES[j].map(i => C[i]));
     drawCubeGlass(quads, ids, A * (glassA == null ? 1 : glassA) * (back ? CUBE_GLASS.back : 1), performance.now());
-    wireQuads(quads, V.S, A * (back ? 0.55 : 1), CUBE_WIRE_K, back ? null : "#ffffff");   // far side blue, near side white
+    // far side blue, near side white — and every edge tapered by how near its two ends are (wireCubeEdges)
+    wireCubeEdges(C, ids, A * (back ? 0.55 : 1), back ? null : "#ffffff", WIRE_W * CUBE_WIRE_K);
     const sa = A * (sparkA == null ? 1 : sparkA) * (back ? 0.55 : 1);
     if (!(sa > 0.004)) return;
     const ts = performance.now(), W = CUBE_SPARK, u = ts / W.edgeMs, i = Math.floor(u), f = u - i;
@@ -30884,12 +31346,17 @@
                                //   (see the charm's radius below: his body's width, and talBadge's own 1.9)
     // ...and THE CAMERA goes right in on him as it opens, follows him exactly, and steps back out
     camIn:    7.0,             // how far in it is once it has rushed in, against the framing that holds the whole map
-    camRushFrom: 3.0,          // ...and how far in it is at the launch ITSELF, in the same units, so the rush is
-                               //   this to camIn. NOT the wide shot: everything thrown out of the cube is sized off
-                               //   the camera, and starting at the framing that holds the whole map threw out six
-                               //   specks that then grew, when what leaves the cube should leave it the size it is
-    camRushMs: 380,            // ...and how long it takes to close that. Quick — it is the camera reacting to
-                               //   something going off, and a slow push would read as a decision
+    camRushFrom: 3.0,          // ...and how far in it is on the INSTANT of the pop, in the same units — the
+                               //   framing the throw-back below starts from
+    // THE THREE MOVEMENTS THE EXPLOSION ITSELF GETS, before the stepped pull-back ever begins. The camera used to
+    // do one thing here: push straight in on him and start backing out. That is a camera that already knows what
+    // happened. This is one that does not: it is thrown BACK first, far enough to take in the whole thing, holds
+    // there while the six charms and he come up out of the wreck — and only then goes and finds him.
+    camWide:   1.0,            // how far back the throw goes. 1 IS the framing that holds the whole scene
+    camWideMs: 900,            // ...how fast it gets there. Thrown, not eased: the blast is what moved it
+    camWideHold: 2400,         // ...and how long it stays out there before it goes looking for him
+    camRushMs: 700,            // ...then how long it takes to come all the way in on him, wide to camIn. Quick —
+                               //   it is the camera picking him out of a wide shot, not drifting onto him
     camSteps: 5,               // ...and it comes out in this many jumps, each the same size to the eye...
     camStepMs: 2000,           // ...this far apart...
     camSnap:  0.34,            // ...each taken over this share of the gap, so it is a step and not a slide
@@ -30999,15 +31466,6 @@
                              //   sides lie down on the map rather than near it. Three rather than five: at five it
                              //   was a blur by the end, and a solid turning too fast to follow is a smear and not
                              //   a thing being thrown about
-    spinEase:  2.2,          // HOW IT STOPS. Over the final spin the rate goes as (1 - v) to this, so most of the
-                             //   speed goes at once and the last of it takes the whole rest of the window to creep
-                             //   away — a heavy thing settling, not a thing switched off
-    spinEaseFolds: 1.0,      // ...and how long that final spin lasts, measured in FIRST FOLDS (openFoldMs) and
-                             //   CENTRED on the moment the cube opens. One, which is to say: the wind-up tops out
-                             //   half a fold BEFORE the unfold begins, so the cube is still turning as it starts to
-                             //   come apart; everything in it is thrown out at the middle of that spin, which is
-                             //   exactly `launch` and exactly `unfold[0]`; and the turn is at rest by the time the
-                             //   first side is halfway down
     wireOutMs:  700,         // the wireframe fading off the finished, coloured Tileverse after the last landing
     domino:    { pop: 360, lead: 0.80, slow: 0.22, after: 0.40, floatAfter: 0.25 },   // the unfolding's wave (openDomino): one square's
                              //   swing near the start (ms, before it is fitted to `grow`), how far down the square it hangs off
@@ -31258,7 +31716,7 @@
                                             // (openSpinWin), not just as far as the cube opening. rumble tops out at
                                             // `rumblePeak` of what it is given, which puts its loudest moment under
                                             // the fastest of the turn rather than under the settle.
-                                            Sound.rumble && Sound.rumble(openSpinWin()[2] - OPENING.hit); } },
+                                            Sound.rumble && Sound.rumble(openSpinWin()[1] - OPENING.hit); } },
     // A WHUMP PER WAVE, as each goes over the cube — the same spacious swell the first one used to land with on
     // its own, not a click on top of it. A boom would be wrong for all of them: a boom is a strike, and these are
     // walls of pressure closing on something. Each is fired EARLY by its own rise (Sound.whumpRise), so the top of
@@ -31383,12 +31841,15 @@
     return openArcAt(seat, { c: one.c, r: one.r + O.runLandY },
                      (t - O.launch)/Math.max(1, openRunMs()));
   }
-  // HOW FAR THE CAMERA HAS COME BACK OUT since the launch: 0 right in on him, 1 holding the whole map. It STEPS
+  // WHEN THE STEPPED PULL-BACK BEGINS: once the throw-back, the hold and the rush in on him are all done with.
+  const openCamStepFrom = () =>
+    OPENING.launch + OPENING.camWideMs + OPENING.camWideHold + OPENING.camRushMs;
+  // HOW FAR THE CAMERA HAS COME BACK OUT since it found him: 0 right in on him, 1 holding the whole map. It STEPS
   // rather than slides — `camSteps` jumps, each taken over `camSnap` of the gap between them — because a camera
   // easing out continuously reads as one slow push, and this is meant to read as a series of decisions.
   function openCamOut(t){
     const O = OPENING, n = Math.max(1, O.camSteps);
-    const u = cineC01((t - O.launch) / Math.max(1, n*O.camStepMs));
+    const u = cineC01((t - openCamStepFrom()) / Math.max(1, n*O.camStepMs));
     if (u >= 1) return 1;
     const i = Math.min(n - 1, Math.floor(u*n)), f = cineC01((u*n - i) / Math.max(0.05, O.camSnap));
     return (i + cineSmooth(f)) / n;
@@ -31407,13 +31868,34 @@
     // following was off the top of it. Cubed, it holds him near enough dead centre for four of the five steps and
     // hands over to the map's own framing on the last — which is where the whole scene is meant to be in shot.
     let w = e*e*e;
-    // ...and it RUSHES IN AS HE IS THROWN. It used to simply BE at camIn on the instant of the launch, which is a
-    // cut and not a move: the one moment in the film with something to chase, and the camera was already sitting
-    // on top of it. It now starts at `camRushFrom` and closes on camIn over camRushMs — a hard push in on the
-    // thing that has just gone off, arriving well before his arc does anything. Quick: this is the camera
-    // reacting, not deciding.
-    const rk = cineSmooth(cineC01((t - OPENING.launch) / Math.max(1, OPENING.camRushMs)));
-    if (rk < 1) zoom = Math.exp(cineMix(Math.log(OPENING.camRushFrom), Math.log(zoom), rk));
+    // ...BUT FIRST, THE THREE MOVEMENTS THE EXPLOSION GETS, and while they are running they own the camera
+    // outright — the stepped curve above only takes over when they are finished (openCamStepFrom), so there is no
+    // moment where two moves are arguing about where the frame is.
+    //
+    //   · THROWN BACK, out of camRushFrom to the framing that holds the whole scene. The box has gone off and the
+    //     camera's first instinct is to get far enough away to see what happened, which is the opposite of what
+    //     it used to do and the reason this beat reads as an event rather than as a destination.
+    //   · HELD there, wide, while the six charms and he come up out of it.
+    //   · and then ALL THE WAY IN ON HIM — the frame picking one figure out of a wide shot, which is a thing a
+    //     camera decides, where a push-in from a close shot is only a thing it continues.
+    //
+    // The centre is on the MAP for the first two (w = 1, the whole scene) and walks onto him across the third,
+    // arriving at 0 exactly as the step-out starts from 0. Continuous at every seam.
+    const O = OPENING, u0 = t - O.launch;
+    const wideEnd = O.camWideMs, holdEnd = wideEnd + O.camWideHold, inEnd = holdEnd + O.camRushMs;
+    if (u0 < inEnd) {
+      if (u0 < wideEnd) {
+        zoom = Math.exp(cineMix(Math.log(O.camRushFrom), Math.log(O.camWide),
+                                cineSmooth(cineC01(u0 / Math.max(1, O.camWideMs)))));
+        w = 1;
+      } else if (u0 < holdEnd) {
+        zoom = O.camWide; w = 1;
+      } else {
+        const k = cineSmooth(cineC01((u0 - holdEnd) / Math.max(1, O.camRushMs)));
+        zoom = Math.exp(cineMix(Math.log(O.camWide), Math.log(O.camIn), k));
+        w = 1 - k;
+      }
+    }
     // ...and then BACK IN on him, slowly, from the moment the last talisman splashes: the zoom walks to `camClose`
     // and the centre walks back onto him, so the film ends the way it began — one man, close to — except that this
     // time there is a whole Tileverse under him and the black takes it before he lands.
@@ -31492,39 +31974,35 @@
   // searched for every time (cineBuildNet) and a chapter moved on the map can change how deep it goes.
   const openFoldMs = () => (OPENING.unfold[1] - OPENING.unfold[0]) /
                            (0.85*((cineNet && cineNet.maxDepth) || 4) + 0.15);
-  // THE CUBE'S TUMBLE, AS ONE RATE FROM THE BLOW TO THE HALT — three windows, [hit, top, stop]:
-  //   hit → top:   winding up. Rate ∝ u^(spinPow-1), so it is still gathering speed at every instant of it.
-  //   top → stop:  the settle. Rate ∝ (1-v)^spinEase: the speed mostly goes at once and the last of it creeps
-  //                away over the whole rest of the window, which is what a heavy thing coming to rest looks like.
-  // The settle is `spinEaseFolds` first folds long and CENTRED ON THE MOMENT THE CUBE OPENS, which buys all
-  // three things at once: the unfold begins in the last of the spin, everything is thrown out of the cube at the
-  // middle of that final spin (`launch`, which is `unfold[0]`), and the turn is at rest exactly as the first side
-  // reaches halfway down. The turn is the INTEGRAL of that rate rather than a rate applied to a frame's dt, so it
-  // scrubs like the rest of the film — and the peak rate is SOLVED, not chosen, so that the whole of it comes to
-  // exactly `spinTurns` turns however the three windows are retuned.
+  // THE CUBE'S TUMBLE, AS ONE RATE FROM THE BLOW TO THE MOMENT IT OPENS — [hit, open], and nothing after it.
+  // Rate ∝ u^(spinPow-1) the whole way, so it is STILL GATHERING SPEED at every instant of it, fastest of all on
+  // the frame the thing bursts. It used to settle: a window either side of the opening over which the speed went
+  // out of it, so the cube arrived at its own explosion slowing down — a thing winding down and then, for no
+  // reason the eye could find, going off. A box under that much spin does not ease to a halt; it comes apart at
+  // the top of the turn.
+  //
+  // Nothing has to cover the instant the rotation ends, because the flash already does (openFlash, which starts
+  // on this same frame) — and the turn comes to exactly `spinTurns` WHOLE turns, so the pose underneath it is
+  // the identity anyway and the net unfolds square whatever the windows are retuned to.
+  //
+  // The turn is the INTEGRAL of that rate rather than a rate applied to a frame's dt, so it scrubs like the rest
+  // of the film.
   function openSpinWin(){
-    const h = openFoldMs() * OPENING.spinEaseFolds / 2;
-    return [OPENING.hit, OPENING.unfold[0] - h, OPENING.unfold[0] + h];
+    return [OPENING.hit, OPENING.unfold[0]];
   }
-  const openSpinPeak = (TA, TB) =>
-    OPENING.spinTurns*Math.PI*2 / (TA/OPENING.spinPow + TB/(OPENING.spinEase + 1));
   function openSpinAngle(t){
-    const O = OPENING, W = openSpinWin(), TA = Math.max(1, W[1] - W[0]), TB = Math.max(1, W[2] - W[1]);
+    const O = OPENING, W = openSpinWin(), T = Math.max(1, W[1] - W[0]);
     if (t <= W[0]) return 0;
-    if (t >= W[2]) return O.spinTurns*Math.PI*2;              // ...and whole turns, so this is the identity
-    const a = openSpinPeak(TA, TB);
-    if (t <= W[1]) return a*TA*Math.pow((t - W[0])/TA, O.spinPow)/O.spinPow;
-    const v = (t - W[1])/TB;
-    return a*TA/O.spinPow + a*TB*(1 - Math.pow(1 - v, O.spinEase + 1))/(O.spinEase + 1);
+    if (t >= W[1]) return O.spinTurns*Math.PI*2;              // ...and whole turns, so this is the identity
+    return O.spinTurns*Math.PI*2 * Math.pow((t - W[0])/T, O.spinPow);
   }
-  // ...and the same curve's RATE, normalised to 1 at the top. The screen's shake is off this, so the vibration
-  // and the turn are one curve and not two that have to be kept in step — including through the settle, where
-  // the shaking now dies away with the spin instead of being cut off at the unfold.
+  // ...and the same curve's RATE, normalised to 1 where it is fastest, which is now the end. The screen's shake
+  // is off this, so the vibration and the turn are one curve and not two that have to be kept in step: it shakes
+  // hardest on the frame it goes.
   function openSpinRate(t){
     const W = openSpinWin();
-    if (t <= W[0] || t >= W[2]) return 0;
-    if (t <= W[1]) return Math.pow((t - W[0])/Math.max(1, W[1] - W[0]), OPENING.spinPow - 1);
-    return Math.pow(1 - (t - W[1])/Math.max(1, W[2] - W[1]), OPENING.spinEase);
+    if (t <= W[0] || t >= W[1]) return 0;
+    return Math.pow((t - W[0])/Math.max(1, W[1] - W[0]), OPENING.spinPow - 1);
   }
   // ...as a quaternion about the off-axis line it tumbles on. Identity before the blow and identity again once
   // it has stopped, which is what lets the unfold simply multiply by it and land square anyway.
@@ -31904,7 +32382,7 @@
         // and handed to cineProj as a whole rotation. openSpinQ is the identity once the spin is done, so from
         // that moment this reduces EXACTLY to the view's own turns and the net still lands on the map.
         const spinQ = openSpinQ(t);
-        if (t < openSpinWin()[2])
+        if (t < openSpinWin()[1])
           Vc.m = quatMat(quatMul(spinQ, quatEuler(Math.atan2(Vc.sry, Vc.cry), Math.atan2(Vc.srx, Vc.crx))));
         const T0 = openCubeAt(t);                              // where it floated to
         const t0y = T0.y - T0.s*(RUNNER.legLen + RUNNER.bodyH*0.5);
