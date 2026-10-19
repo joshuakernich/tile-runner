@@ -132,6 +132,11 @@ Everything that matters survives; just don't be surprised.
 
 ## Working with Josh
 
+- **Ship at the end of each batch, without being asked.** When a run of his requests is finished
+  and verified and he has gone quiet, run the ritual above and push — he should not have to type
+  "commit and push". PER BATCH, not per change: a commit per tweak is a keystroke log, and the
+  ritual's version bump would burn forty numbers a day. Never ship a tree with work in progress
+  in it, or a change he has not yet seen the result of.
 - **He designs the levels, not you.** He builds them in `level-editor.html` and pastes the JSON.
   Don't invent level layouts unless he asks.
 - **Don't play-test his level designs.** He verifies those by hand. Static validation (parity,
