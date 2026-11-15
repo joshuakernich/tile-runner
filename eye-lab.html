@@ -37,6 +37,7 @@
       <div class="row"><label>look-bias</label><input type="range" id="bias" min="-0.1" max="0.1" step="0.002"><output></output></div>
       <div class="row"><label>lid width (round eyes)</label><input type="range" id="lid" min="0.1" max="1.5" step="0.02"><output></output></div>
       <div class="row"><label>lid thinness (square eyes)</label><input type="range" id="lidThin" min="0.05" max="0.8" step="0.01"><output></output></div>
+      <div class="row"><label>lid bow (square eyes)</label><input type="range" id="lidBow" min="-0.6" max="0.6" step="0.01"><output></output></div>
     </div>
     <div class="grp"><h2>Life</h2>
       <div class="row"><label>glance x</label><input type="range" id="glanceX" min="0" max="0.09" step="0.002"><output></output></div>
@@ -61,6 +62,7 @@ const SHIPPED = {
   bias:     0.020,   // how far the pair sits toward the way the face is looking
   lid:      0.60,    // shut-lid stroke width, as a fraction of the radius — the ROUND eyes' lid, which is a
                      //   stroke with round caps, because a round eye shuts into a rounded line
+  lidBow:   0.22,    // how far the middle of the shut bar rises above its ends, as a share of its width
   lidThin:  0.26,    // ...and the SQUARE eyes' (the runner's): a flat bar exactly as wide as the open eye, this
                      //   thick as a share of that width, with the corners square. A shut eye and an open one are
                      //   the same eye — so it is the same width and the same corners, and all that has changed
@@ -137,10 +139,21 @@ function drawEyes(g, cx0, cy0, s, col, face, t, off, nx, ny, square) {
   // `square` is the runner's pair (RUNNER_SQUARE_EYES in the game): a square open and a flat bar of the same
   // width shut. Everything else with a face is round, and shuts into a round-capped line.
   if (shut && square) {
-    const a = R*Math.sqrt(Math.PI), h = Math.max(1, a*EYES.lidThin)/2;
+    // ...AND IT BOWS. A straight bar is an eye shut with a ruler; a lid closed over a round eye curves,
+    // and that curve is most of what makes it read as closed rather than as a mark somebody drew on his
+    // face. BOTH edges bow by the same amount, so the bar keeps its thickness the whole way across, and
+    // the ends stay square — which is the rest of what the open eye is.
+    const a = R*Math.sqrt(Math.PI), h = Math.max(1, a*EYES.lidThin)/2, bow = a*(EYES.lidBow || 0);
     g.fillStyle = col;
-    g.fillRect(x1 - a/2, cy0 + gy - h, a, h*2);
-    g.fillRect(x2 - a/2, cy0 + gy - h, a, h*2);
+    for (const ex of [x1, x2]) {
+      const ey = cy0 + gy;
+      g.beginPath();
+      g.moveTo(ex - a/2, ey - h);
+      g.quadraticCurveTo(ex, ey - h - bow*2, ex + a/2, ey - h);
+      g.lineTo(ex + a/2, ey + h);
+      g.quadraticCurveTo(ex, ey + h - bow*2, ex - a/2, ey + h);
+      g.closePath(); g.fill();
+    }
   } else if (shut) {
     g.strokeStyle = col; g.lineWidth = Math.max(1, R*EYES.lid); g.lineCap = "round";
     g.beginPath();
@@ -238,7 +251,7 @@ function render(t){
   requestAnimationFrame(render);
 }
 // ---- wiring -----------------------------------------------------------------------
-const KEYS = ["r","gap","bias","lid","lidThin","glanceX","glanceY","glanceMs","blinkMs"];
+const KEYS = ["r","gap","bias","lid","lidThin","lidBow","glanceX","glanceY","glanceMs","blinkMs"];
 
 // Everything on this page is written down as you move it and put back when you come back. A
 // tuning page you have to set up again every time you open it is a tuning page you stop opening
@@ -256,7 +269,7 @@ function restore(){
   return true;
 }
 
-const DP = { r:3, gap:3, bias:3, lid:2, lidThin:2, glanceX:3, glanceY:3, glanceMs:0, blinkMs:0 };
+const DP = { r:3, gap:3, bias:3, lid:2, lidThin:2, lidBow:2, glanceX:3, glanceY:3, glanceMs:0, blinkMs:0 };
 function syncOut(){
   const lines = KEYS.map(k => "    " + (k+":").padEnd(10) + " " + (+EYES[k]).toFixed(DP[k]) + ",");
   $("out").value = "  const EYES = {\n" + lines.join("\n") + "\n  };";

@@ -1,0 +1,333 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tile Runner — the lotus</title>
+<style>
+  :root{--bg:#0b0a1a;--panel:#141231;--line:#2a2750;--ink:#dfe3ff;--dim:#8e92c4;--hot:#ffd24a;--near:#6ad8ff;--far:#ff8ab0;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.45 ui-sans-serif,system-ui,sans-serif;}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);}
+  h1{margin:0 0 3px;font-size:16px;letter-spacing:0.4px;}
+  header p{margin:0;color:var(--dim);max-width:78ch;}
+  .wrap{display:flex;gap:18px;padding:18px 20px;align-items:flex-start;flex-wrap:wrap;}
+  .stage{position:relative;flex:0 0 auto;touch-action:none;}
+  .stage canvas{display:block;border:1px solid var(--line);border-radius:12px;background:#0d0b1a;}
+  .h{position:absolute;width:19px;height:19px;margin:-10px 0 0 -10px;border-radius:50%;
+     border:2px solid #0b0a1a;cursor:grab;touch-action:none;}
+  .h:active{cursor:grabbing;}
+  .h.near{background:var(--near);}
+  .h.far{background:var(--far);}
+  .h.toe{width:13px;height:13px;margin:-7px 0 0 -7px;}
+  .h::after{content:attr(data-n);position:absolute;left:22px;top:-2px;font-size:10px;
+            letter-spacing:0.4px;color:var(--dim);white-space:nowrap;pointer-events:none;}
+  .rail{flex:1 1 360px;min-width:320px;display:flex;flex-direction:column;gap:12px;}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;}
+  .panel h2{margin:0 0 8px;font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--hot);}
+  .panel p.note{margin:0 0 9px;color:var(--dim);}
+  .row{display:grid;grid-template-columns:132px 1fr 64px;gap:9px;align-items:center;margin:3px 0;}
+  .row label{color:var(--dim);}
+  .row output{text-align:right;font-variant-numeric:tabular-nums;}
+  input[type=range]{width:100%;accent-color:var(--hot);}
+  textarea{width:100%;height:132px;background:#0a0920;color:#bfe;border:1px solid var(--line);
+           border-radius:8px;padding:9px;font:12px/1.45 ui-monospace,Menlo,monospace;}
+  button{background:#232051;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+         padding:6px 11px;cursor:pointer;font:inherit;}
+  button:hover{border-color:var(--hot);}
+  button.on{background:var(--hot);color:#1a1500;border-color:var(--hot);}
+  .btns{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px;}
+  .key{display:flex;gap:14px;margin-top:8px;color:var(--dim);font-size:11px;}
+  .key i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px;}
+  .warn{color:#ff8a80;}
+  #status{color:var(--dim);margin-top:7px;}
+  #frame{position:fixed;left:-4000px;top:0;width:420px;height:820px;border:0;}
+</style>
+
+<header>
+  <h1>The lotus</h1>
+  <p>Drag the joints. He is drawn by the GAME — <code>__TR.lotusJoints()</code> paints the shipped figure into
+     this page's canvas and hands back where every joint of it actually landed, so the handles sit on the pose
+     rather than on a diagram of it, and what you are shaping is what ships. Dragging writes straight into
+     <code>POSES.lotus</code> in the running game. <b>Serve this page</b>
+     (<code>python3 tools/serve.py 8123</code>); off the filesystem the frame cannot be read.</p>
+</header>
+
+<div class="wrap">
+  <div class="stage" id="stage">
+    <canvas id="cv"></canvas>
+  </div>
+
+  <div class="rail">
+    <div class="panel">
+      <h2>The joints</h2>
+      <p class="note">KNEE sets how far out and how far down. FOOT sets how far back in it tucks, and how far
+         down — and the two feet move independently in height (that is <code>cross</code>; level is nought).
+         TOE is the little bone off the end: its length and the angle it points.</p>
+      <div class="key">
+        <span><i style="background:var(--near)"></i>near leg — drawn in front</span>
+        <span><i style="background:var(--far)"></i>far leg — behind</span>
+      </div>
+      <p class="note" style="margin-top:9px">One thing to know: a pose is written as a few numbers, not as four
+         free points. How far out the knees sit and how far in the feet tuck are ONE number each, shared by both
+         legs, so dragging either knee moves both. Only the two feet's heights are separate.</p>
+      <div class="btns">
+        <button id="breath">Let it breathe</button>
+        <button id="reset">Reset — the shipped pose</button>
+        <button id="restoreBtn">Restore — yours</button>
+      </div>
+      <div id="status">starting the game…</div>
+    </div>
+
+    <div class="panel">
+      <h2>The rest of it</h2>
+      <p class="note">Not positions, so not handles. <b>Sits lower by</b> drops the whole figure toward the
+         track, in cells — a folded leg stops well above the line a standing foot is on, so without it he hangs
+         over the ground with a gap nothing in the pose can close. Then the slow swell the fold rides on.</p>
+      <div class="row"><label>sits lower by</label><input type="range" id="sit" min="0" max="0.3" step="0.005"><output></output></div>
+      <div class="row"><label>breathe</label><input type="range" id="breathe" min="0" max="0.3" step="0.005"><output></output></div>
+      <div class="row"><label>...over (ms)</label><input type="range" id="breatheMs" min="120" max="2000" step="10"><output></output></div>
+      <div class="row"><label>figure size</label><input type="range" id="zoom" min="240" max="980" step="10"><output></output></div>
+    </div>
+
+    <div class="panel">
+      <h2>Keep it</h2>
+      <p class="note">The whole <code>POSES</code> block, pasted over the one in <code>index.html</code>.</p>
+      <textarea id="out" readonly></textarea>
+      <div class="btns"><button id="copy">Copy POSES block</button></div>
+    </div>
+  </div>
+</div>
+
+<iframe id="frame" title="Tile Runner"></iframe>
+
+<script>
+const $ = id => document.getElementById(id);
+const frame = $("frame"), cv = $("cv"), stage = $("stage");
+let W = null, SHIPPED = null, J = null, breathing = false, running = false;
+
+// A service worker will happily hand this frame a cached index.html, which would mean shaping a pose the file
+// on disk no longer draws. A unique query cannot match anything in that cache.
+const GAME_SRC = () => "index.html?lab=" + Date.now();
+
+const SAVE_KEY = "tilerunner:lotus-lab";
+const SLIDERS = ["sit", "breathe", "breatheMs", "zoom"];
+const DP = { sit: 3, breathe: 3, breatheMs: 0, zoom: 0 };
+
+// THE CLOCK IS HELD AT NOUGHT while you are dragging, and for a reason: the breath is a sine on the clock, so
+// at any other instant every joint is somewhere between where the numbers put it and where the breath has
+// carried it — and a handle you drag to a spot would write back a number that is not the spot. At ts=0 the
+// breath is exactly 1 and the handles are on the pose itself. "Let it breathe" runs the clock to watch it.
+let t0 = 0, raf = 0;
+
+function pose(){ return (W && W.__TR) ? W.__TR.poses().lotus : null; }
+function setPose(patch){ if (W && W.__TR) W.__TR.poses({ lotus: patch }); }
+
+// ---- drawing -------------------------------------------------------------------------------------
+function render(){
+  if (!W || !W.__TR || !W.__TR.lotusJoints) return;
+  // BIG. A leg bone is about an eighth of a cell, so at anything like the size he is on a board one
+  // is forty pixels and a joint cannot be placed to better than a tenth of a bone by hand. Drawn at
+  // two or three times that, the tile he sits on overruns the box — which costs nothing, it is ground —
+  // and a bone is a hundred pixels, which is a thing you can actually aim at.
+  const S = +$("zoom").value, px = Math.max(1, window.devicePixelRatio || 1);
+  const BOX = 580;
+  if (cv.width !== Math.round(BOX*px)) {
+    cv.width = Math.round(BOX*px); cv.height = Math.round(BOX*px);
+    cv.style.width = BOX + "px"; cv.style.height = BOX + "px";
+  }
+  const g = cv.getContext("2d");
+  g.setTransform(px, 0, 0, px, 0, 0);
+  g.clearRect(0, 0, BOX, BOX);
+  try {
+    J = W.__TR.lotusJoints(g, BOX, BOX, t0, { cell: S, footY: 0.58, moving: false });
+  } catch (e) { $("status").innerHTML = '<span class="warn">' + e.message + "</span>"; return; }
+  // the centre line, so "crossed" can be judged against his middle
+  g.setTransform(px, 0, 0, px, 0, 0);
+  g.strokeStyle = "rgba(255,255,255,0.16)"; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(BOX/2, 0); g.lineTo(BOX/2, BOX); g.stroke();
+  placeHandles();
+  refreshOut();
+}
+
+// local (the figure's own frame, which is what a pose is written in) <-> page pixels
+function toPage(p){
+  const m = J.m;
+  return { x: m[0]*p[0] + m[2]*p[1] + m[4], y: m[1]*p[0] + m[3]*p[1] + m[5] };
+}
+function toLocal(x, y){
+  const m = J.m, det = m[0]*m[3] - m[1]*m[2];
+  const dx = x - m[4], dy = y - m[5];
+  return [ (dx*m[3] - dy*m[2]) / det, (dy*m[0] - dx*m[1]) / det ];
+}
+
+const HANDLES = [];       // {el, side, kind}
+function handle(side, kind, label){
+  const el = document.createElement("div");
+  el.className = "h " + (side < 0 ? "near" : "far") + (kind === "toe" ? " toe" : "");
+  el.dataset.n = label;
+  el.addEventListener("pointerdown", (e) => startDrag(e, side, kind, el));
+  stage.appendChild(el);
+  HANDLES.push({ el, side, kind });
+  return el;
+}
+function buildHandles(){
+  for (const h of HANDLES) h.el.remove();
+  HANDLES.length = 0;
+  for (const side of [-1, 1]) {
+    const w = side < 0 ? "near" : "far";
+    handle(side, "knee", w + " knee");
+    handle(side, "foot", w + " foot");
+    handle(side, "toe",  "");
+  }
+}
+function placeHandles(){
+  if (!J || !J.limbs) return;
+  for (const h of HANDLES) {
+    const L = J.limbs.find(q => q.side === h.side);
+    const p = L && L[h.kind];
+    if (!p) { h.el.style.display = "none"; continue; }
+    const q = toPage(p);
+    h.el.style.display = "";
+    h.el.style.left = q.x + "px";
+    h.el.style.top  = q.y + "px";
+  }
+}
+
+// ---- dragging ------------------------------------------------------------------------------------
+// Each handle writes back the ONE OR TWO numbers its joint is made of, inverted through the same
+// scalars the game placed it with (seg, frontHip, hipY — all handed over by the probe). Nothing here
+// knows how the figure is positioned on the page; that is the matrix's job.
+function startDrag(e, side, kind, el){
+  if (!J) return;
+  el.setPointerCapture(e.pointerId);
+  const move = (ev) => {
+    const r = cv.getBoundingClientRect();
+    const [x, y] = toLocal(ev.clientX - r.left, ev.clientY - r.top);
+    const P = pose(); if (!P) return;
+    const seg = J.seg, fh = J.frontHip, hipY = J.hipY, d = side;
+    const br = 1;                                     // held at ts=0 — see the note on the clock
+    if (kind === "knee") {
+      setPose({ knee: Math.max(0, (d*x - fh) / seg), kneeDrop: (y - hipY) / (seg*br) });
+    } else if (kind === "foot") {
+      const kx = d*(fh + seg*pose().knee), ky = hipY + seg*pose().kneeDrop*br;
+      const drop = (y - ky) / (seg*br);
+      if (d > 0) setPose({ foot: d*(kx - x) / seg, footDrop: drop });
+      else       setPose({ foot: d*(kx - x) / seg, cross: pose().footDrop - drop });
+    } else {
+      const L = J.limbs.find(q => q.side === d);
+      const vx = x - L.foot[0], vy = y - L.foot[1];
+      const tl = Math.hypot(vx, vy);
+      setPose({ toe: tl / seg, toeDown: Math.atan2(vy, -d*vx) });
+    }
+    render(); save();
+  };
+  const up = () => { el.removeEventListener("pointermove", move);
+                     el.removeEventListener("pointerup", up);
+                     el.removeEventListener("pointercancel", up); };
+  el.addEventListener("pointermove", move);
+  el.addEventListener("pointerup", up);
+  el.addEventListener("pointercancel", up);
+  move(e);
+}
+
+// ---- the rail ------------------------------------------------------------------------------------
+function sync(k){ const el = $(k); if (!el) return;
+  const o = el.parentNode.querySelector("output");
+  if (o) o.textContent = (+el.value).toFixed(DP[k] == null ? 0 : DP[k]); }
+
+function save(){
+  const P = pose(); if (!P) return;
+  const o = { pose: P }; for (const k of SLIDERS) o[k] = +$(k).value;
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(o)); } catch (e) {}
+}
+function keepMine(){ try { const c = localStorage.getItem(SAVE_KEY);
+                           if (c) localStorage.setItem(SAVE_KEY + ":kept", c); } catch (e) {} }
+function restore(from){
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(from) || "null"); } catch (e) {}
+  if (!v) return false;
+  if (v.pose) setPose(v.pose);
+  for (const k of SLIDERS) if (typeof v[k] === "number") { $(k).value = v[k]; sync(k); }
+  const P = pose();
+  if (P) { $("sit").value = P.sit || 0; $("breathe").value = P.breathe; $("breatheMs").value = P.breatheMs;
+           sync("sit"); sync("breathe"); sync("breatheMs"); }
+  return true;
+}
+
+const NUM = (n, d) => (+n).toFixed(d).replace(/\.?0+$/, "") || "0";
+function refreshOut(){
+  if (!W || !W.__TR) return;
+  const A = W.__TR.poses(), L = A.lotus, F = A.fetal, Y = A.splay;
+  const kv = (o, keys) => keys.map(k => k + ": " + NUM(o[k], 3)).join(", ");
+  $("out").value =
+    "  const POSES = {\n" +
+    "    lotus: { " + kv(L, ["knee","kneeDrop","foot","footDrop","toe","toeDown","cross","sit","breathe","breatheMs"]) + " },\n" +
+    "    fetal: { " + kv(F, ["backReach","frontReach","kneeUp","footBack","footDrop","rollStretch","rollOpen","rollOpenFront"]) + " },\n" +
+    "    splay: { " + kv(Y, ["kneeOut","kneeDrop","footOut","footDrop","toeUp"]) + " },\n" +
+    "  };";
+}
+
+// ---- boot ------------------------------------------------------------------------------------------
+function attach(){
+  W = frame.contentWindow;
+  let tries = 0;
+  (function wait(){
+    if (W.__TR && W.__TR.lotusJoints && W.__TR.poses && W.__TR.fitSwagger) {
+      W.__TR.fitSwagger("float");                  // the Floating swagger IS the lotus, worn without being bought
+      SHIPPED = JSON.parse(JSON.stringify(W.__TR.poses()));
+      buildHandles();
+      const P = pose();
+      $("sit").value = P.sit || 0;
+      $("breathe").value = P.breathe; $("breatheMs").value = P.breatheMs; $("zoom").value = 660;
+      SLIDERS.forEach(sync);
+      restore(SAVE_KEY);
+      render();
+      $("status").textContent = "live — drag a joint";
+      if (!running) { running = true; tick(); }
+      return;
+    }
+    if (++tries > 200) {
+      $("status").innerHTML = '<span class="warn">the game never came up — is this being SERVED? ' +
+        'file:// blocks the frame from being read.</span>';
+      return;
+    }
+    setTimeout(wait, 50);
+  })();
+}
+function tick(){
+  requestAnimationFrame(tick);
+  if (!breathing) return;
+  t0 = performance.now();
+  render();
+}
+frame.addEventListener("load", attach);
+frame.src = GAME_SRC();
+
+SLIDERS.forEach(k => $(k).addEventListener("input", () => {
+  sync(k);
+  if (k !== "zoom") setPose({ [k]: +$(k).value });
+  render(); save();
+}));
+$("breath").onclick = () => {
+  breathing = !breathing;
+  $("breath").classList.toggle("on", breathing);
+  $("breath").textContent = breathing ? "Hold it still" : "Let it breathe";
+  if (!breathing) { t0 = 0; render(); }
+  $("status").textContent = breathing ? "breathing — the handles are off the pose while it moves"
+                                      : "live — drag a joint";
+};
+$("reset").onclick = () => { keepMine();
+  if (SHIPPED) W.__TR.poses(SHIPPED);
+  const P = pose(); $("sit").value = P.sit || 0;
+  $("breathe").value = P.breathe; $("breatheMs").value = P.breatheMs;
+  SLIDERS.forEach(sync); render(); save();
+  $("status").textContent = "back to the shipped pose (yours is kept — press Restore)"; };
+$("restoreBtn").onclick = () => {
+  if (!restore(SAVE_KEY + ":kept") && !restore(SAVE_KEY))
+    { $("status").textContent = "nothing of yours to come back to"; return; }
+  render(); $("status").textContent = "yours, back";
+};
+$("copy").onclick = () => { $("out").select(); document.execCommand("copy");
+                            $("status").textContent = "copied"; };
+document.querySelectorAll("input[type=range]").forEach(el =>
+  el.addEventListener("wheel", (e) => { e.preventDefault(); window.scrollBy(0, e.deltaY); }, { passive: false }));
+</script>

@@ -5474,7 +5474,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v11.0";                    // shown on the title & pause screens
+  const VERSION = "v11.1";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -6800,11 +6800,36 @@
   // THE FOLDED POSES' SHAPES — how a swagger that REPLACES the stride holds its legs. Every length is
   // in `seg`, one bone of his leg, so a pose keeps its shape at any size. swagger-lab.html tunes these
   // through __TR.poses(); paste its block back over this one.
+  // ONE LOTUS, asked for by both the things that sit in it: the pose itself (the Millstone's sit and the
+  // Floating swagger) and the opening's blend, which walks the angel INTO it from whatever its legs were
+  // doing. It was written out twice, and the two had already drifted — the film's sit had no toe bone at
+  // all, so its feet were stumps where the game's are tucked. One function now, and they cannot.
+  // Returns [hip, knee x, knee y, foot x, foot y, toe x, toe y] for the side `d` (+1 or -1).
+  function lotusLeg(d, frontHip, hipY, seg, br){
+    const P = POSES.lotus;
+    const kx = d*(frontHip + seg*P.knee), ky = hipY + seg*P.kneeDrop*br;
+    // ...and the two shins do NOT meet at one height. The near leg is the one drawn LAST (its hip is at
+    // -frontHip; see the sort below), and its foot rides higher — over the other's shin, which is where
+    // a crossed leg actually sits.
+    const drop = P.footDrop - (d < 0 ? (P.cross || 0) : 0);     // ...the near one lifts; the far one stays put
+    const fx = kx - d*seg*P.foot, fy = ky + seg*drop*br;
+    const tl = seg*(P.toe || 0), ta = P.toeDown || 0;
+    return [d*frontHip, kx, ky, fx, fy,
+            tl > 0 ? fx - d*Math.cos(ta)*tl : null,
+            tl > 0 ? fy + Math.sin(ta)*tl : null];
+  }
+  const lotusBreath = (ts) =>
+    1 + POSES.lotus.breathe*Math.sin(ts/Math.max(1, POSES.lotus.breatheMs));
   const POSES = {
     // The legs CROSS: `foot` is further back in than the knee is out, so each foot passes the middle and tucks under the
     // other knee. `toe` is a short bone off the end, in leg bones, and `toeDown` how steeply it points at the floor
     // (radians below level, carrying on the way the foot tucked).
-    lotus: { knee: 0.78, kneeDrop: 0.445, foot: 1.30, footDrop: 0.36, toe: 0.22, toeDown: 1.15, breathe: 0.05, breatheMs: 430 },
+    // Dragged into shape in lotus-lab.html, which puts a handle on each joint — so these are where Josh
+    // put them, not where anybody calculated they should be. `cross` lifts the NEAR foot above the far
+    // one, in leg bones: it is the one freedom the pose did not used to have, both feet being locked to
+    // a single height, which is what left the two shins as exact mirror images.
+    lotus: { knee: 0.746, kneeDrop: 0.46, foot: 0.919, footDrop: 0.17, toe: 0.049, toeDown: 1.783,
+             cross: 0.004, sit: 0.05, breathe: 0.05, breatheMs: 430 },
     // `rollStretch`: how long the legs are when a ROLL straightens them over the top, against his standing leg
     // `rollOpen`: how far toward straight, 0..1, the BACK leg goes at the top of the roll; `rollOpenFront` the front one
     fetal: { backReach: 0.72, frontReach: 0.92, kneeUp: 0.55, footBack: 0.45, footDrop: 0.85, rollStretch: 1.00,
@@ -22411,6 +22436,8 @@
                        //   the same eye — so it is the same width and the same corners, and all that has changed
                        //   is that it has closed. It was a round-capped stroke 2.6 radii long on an eye 1.77 wide:
                        //   wider than the eye it belonged to, and rounded on a face that has none
+    lidBow:   0.22,    // ...and how far the middle of that bar rises above its ends, as a share of its width.
+                       //   Positive arches it the way a lid lies over an eyeball; nought is the flat bar it was
     glanceX:  0.030,   // how far the pupils dart sideways
     glanceY:  0.024,   // ...and up
     glanceMs: 5200,    // one full look-around
@@ -22462,10 +22489,21 @@
     if (shut && square) {
       // A SQUARE EYE SHUTS INTO A BAR OF ITS OWN WIDTH. Same width as the open eye, same square corners, just
       // thin — so the blink reads as the eye closing rather than as a different mark appearing in its place.
-      const a = R*Math.sqrt(Math.PI), h = Math.max(1, a*EYES.lidThin)/2;
+      // ...AND IT BOWS. A straight bar is an eye shut with a ruler; a lid closed over a round eye curves,
+      // and that curve is most of what makes it read as closed rather than as a mark somebody drew on his
+      // face. BOTH edges bow by the same amount, so the bar keeps its thickness the whole way across, and
+      // the ends stay square — which is the rest of what the open eye is.
+      const a = R*Math.sqrt(Math.PI), h = Math.max(1, a*EYES.lidThin)/2, bow = a*(EYES.lidBow || 0);
       g.fillStyle = col;
-      g.fillRect(x1 - a/2, cy0 + gy - h, a, h*2);
-      g.fillRect(x2 - a/2, cy0 + gy - h, a, h*2);
+      for (const ex of [x1, x2]) {
+        const ey = cy0 + gy;
+        g.beginPath();
+        g.moveTo(ex - a/2, ey - h);
+        g.quadraticCurveTo(ex, ey - h - bow*2, ex + a/2, ey - h);
+        g.lineTo(ex + a/2, ey + h);
+        g.quadraticCurveTo(ex, ey + h - bow*2, ex - a/2, ey + h);
+        g.closePath(); g.fill();
+      }
     } else if (shut) {
       g.strokeStyle = col; g.lineWidth = Math.max(1, R*EYES.lid); g.lineCap = "round";
       g.beginPath();
@@ -22680,6 +22718,13 @@
   let _leapLift = 0, _leapPose = 0, _leapFoot = 1, _leapAir = 0;
   // Set while the one body lying at the summit is drawn; PILE.splay is how wide.
   let _deadSplay = 0;
+  // WHERE HIS JOINTS ACTUALLY LAND, for a lab that wants to put a handle on one. Set to an object and
+  // paintRunner fills it in as it draws: every limb in the figure's OWN frame, plus the matrix that
+  // frame was under at the moment of drawing and the three scalars a pose is written in. Taken off the
+  // live ctx rather than worked out again — the transform the figure arrives under is a stack of a
+  // dozen things (the sole, the hover, the sink, the lean, the bob, a roll) and a lab that rebuilt it
+  // would be a second copy of the hardest part of this file.
+  let _lotusProbe = null;
   // The level-start FORM. His body arrives one background patch across and with no legs at all,
   // and these three are what let the intro say so without a second copy of the character
   // sitting in it: two multipliers on the body box and one on the leg. Everything else about
@@ -22786,7 +22831,13 @@
     // the caller, so that it lands in the runner's own rotated frame — down the tile's normal on
     // a corner, not down the screen — and so the shadow below can undo it the same way it undoes
     // the hover. Moving him from outside took his shadow with him, and it slid under the rail.
-    const sink = s * REST_SINK * _restFold;
+    // ...and the LOTUS sits closer to the ground than its own anchor would leave it. A folded leg stops
+    // well above the line a standing foot is on, so a cross-legged figure hangs over the track with a
+    // gap under it that nothing in the pose can close — the pose has no say in where the whole figure
+    // is. `sit` is that say. Only where the pose IS the lotus: the opening's angel blends into the same
+    // shape in mid-air, where there is no ground to be near and this would only shift him in his cube.
+    const sink = s * (REST_SINK * _restFold
+                      + (w.pose === "lotus" ? (POSES.lotus.sit || 0) : 0));
     // ON the platform, not in it. His local y = 0 is the track's surface, and his feet end there — but a leg is stroked with
     // a round cap, and every kick's sole is drawn on the line that cap reaches (KICK_SOLE), so the bottom of him was half a
     // leg's width INTO the platform. He is lifted by exactly that, and his underside sits on its top edge. (Not on a roll,
@@ -23027,15 +23078,8 @@
       // reason it reads at all — legs the same colour as the body are invisible over it.
       // The shape is POSES.lotus: how far out and down each knee sits, how far back in and down its foot
       // tucks, and how much the fold breathes along with the hover.
-      const P = POSES.lotus, br = 1 + P.breathe*Math.sin(ts/Math.max(1, P.breatheMs));
-      for (const d of [1, -1]) {
-        const kx = d*(frontHip + seg*P.knee), ky = hipY + seg*P.kneeDrop*br;
-        const fx = kx - d*seg*P.foot, fy = ky + seg*P.footDrop*br;
-        // ...and the toe off the tucked foot, pointing down and on across, so the foot reads as tucked rather than as a stump
-        const tl = seg*(P.toe || 0), ta = P.toeDown || 0;
-        limbs.push([d*frontHip, kx, ky, fx, fy,
-                    tl > 0 ? fx - d*Math.cos(ta)*tl : null, tl > 0 ? fy + Math.sin(ta)*tl : null]);
-      }
+      const br = lotusBreath(ts);
+      for (const d of [1, -1]) limbs.push(lotusLeg(d, frontHip, hipY, seg, br));
     } else if (w.pose === "fetal") {
       // Curled into a ball: knees up in front of the chest, feet tucked back underneath.
       // The near leg reaches further so its knee clears the body and the pair reads as two.
@@ -23173,17 +23217,8 @@
     // other, so a leg goes from each shape to the next without a jump.
     const legsOf = (name) => {              // [front, back], each [hip, knee x, knee y, foot x, foot y, toe x, toe y]
       if (name === "lotus") {
-        // THE SAME LOTUS THE GAME SITS IN, down to the TOE. This was the shape without it — knee and foot
-        // and nothing on the end — so the film's sit had two stumps where the Millstone's and the Floating
-        // swagger's have tucked feet, and the one pose the game uses in three places looked like two poses.
-        // It is POSES.lotus either way now; the branch above is the same bones said once.
-        const L = POSES.lotus, br = 1 + L.breathe*Math.sin(ts/Math.max(1, L.breatheMs));
-        const tl = seg*(L.toe || 0), ta = L.toeDown || 0;
-        return [1, -1].map(d => { const kx = d*(frontHip + seg*L.knee), ky = hipY + seg*L.kneeDrop*br;
-                                  const fx = kx - d*seg*L.foot, fy = ky + seg*L.footDrop*br;
-                                  return [d*frontHip, kx, ky, fx, fy,
-                                          tl > 0 ? fx - d*Math.cos(ta)*tl : null,
-                                          tl > 0 ? fy + Math.sin(ta)*tl : null]; });
+        const br = lotusBreath(ts);
+        return [1, -1].map(d => lotusLeg(d, frontHip, hipY, seg, br));   // the game's own lotus, exactly
       }
       if (name === "fetal") {
         const F = POSES.fetal;
@@ -23220,7 +23255,16 @@
       });
     }
     limbs.sort((p, q) => q[0] - p[0]);                  // by hip: front (+x) first, back last
-    for (const [hx, kx, ky, fx, fy, tx, ty, up] of limbs) {
+    if (_lotusProbe) {
+      const M = ctx.getTransform();
+      _lotusProbe.m = [M.a, M.b, M.c, M.d, M.e, M.f];
+      _lotusProbe.seg = seg; _lotusProbe.frontHip = frontHip; _lotusProbe.hipY = hipY; _lotusProbe.lw = lw;
+      _lotusProbe.limbs = limbs.map(([hx, kx, ky, fx, fy, tx, ty]) =>
+        ({ side: hx < 0 ? -1 : 1, hip: [hx, hipY], knee: kx == null ? null : [kx, ky],
+           foot: [fx, fy], toe: tx == null ? null : [tx, ty] }));
+    }
+    for (let li = 0; li < limbs.length; li++) {
+      const [hx, kx, ky, fx, fy, tx, ty, up] = limbs[li];
       ctx.strokeStyle = legInk(hx);
       ctx.beginPath(); ctx.moveTo(hx, hipY);
       if (kx != null) ctx.lineTo(kx, ky);
@@ -28999,6 +29043,14 @@
       return JSON.parse(JSON.stringify(POSES));
     },
     runnerFigure: (g, W, H, ts, opts) => drawRunnerFigure(g, W, H, ts, opts || {}),
+    // lotus-lab.html drives this: the same figure, PLUS where every joint of it landed. The lab puts a
+    // drag handle on each, so what it is moving is the pose the game draws rather than a diagram of it.
+    lotusJoints: (g, W, H, ts, opts) => {
+      const probe = {};
+      _lotusProbe = probe;
+      try { drawRunnerFigure(g, W, H, ts, opts || {}); } finally { _lotusProbe = null; }
+      return probe;
+    },
     // ...and one falling star right now, without waiting out the clock: the phase is counted
     // from shootT0, so moving it to this instant starts a fall on the next frame.
     shootNow: () => { COSMOS.shootT0 = performance.now(); },
