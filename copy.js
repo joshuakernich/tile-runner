@@ -196,24 +196,17 @@ var COPY_DATA = {
   // left you before.
   fliesGone: "Your butterflies flew away",
   fliesRecord: "New record",
-  // EVERY COIN ON THE BOARD, said on the clear screen where the stamp used to read "100%". A figure is a mark out of
-  // ten; this is the game being pleased with you, and it says it differently every time — which is also why the odd
-  // ones are in here. One is picked per clear, never the same one twice running.
+  // EVERY COIN ON THE BOARD, said on the clear screen where the stamp used to read "100%". A figure is a mark out
+  // of ten; this is the game being pleased with you, and it says it differently every time. One is picked per
+  // clear, never the same one twice running. NO EXCLAMATION MARKS: the word is struck across the screen at the
+  // tally's own size and the shout is in the size, not in the punctuation.
   fullWords: [
-    "PERFECT!",
-    "DELIGHTFUL!",
-    "SUPERB!",
-    "JUICY!",
-    "NICE!",
-    "IMPRESSIVE!",
-    "WONDERFUL!",
-    "VORACIOUS!",
-    "MOREISH!",
-    "PLUMP!",
-    "NO NOTES!",
-    "UNREASONABLE!",
-    "EXQUISITE!",
-    "GREEDY!",
+    "PERFECT",
+    "DELIGHTFUL",
+    "SUPERB",
+    "IMPRESSIVE",
+    "EXQUISITE",
+    "GREEDY",
   ],
 };
 if (typeof module !== "undefined") module.exports = COPY_DATA;
