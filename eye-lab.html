@@ -141,19 +141,30 @@ function drawEyes(g, cx0, cy0, s, col, face, t, off, nx, ny, square) {
   if (shut && square) {
     // ...AND IT BOWS. A straight bar is an eye shut with a ruler; a lid closed over a round eye curves,
     // and that curve is most of what makes it read as closed rather than as a mark somebody drew on his
-    // face. BOTH edges bow by the same amount, so the bar keeps its thickness the whole way across, and
-    // the ends stay square — which is the rest of what the open eye is.
-    const a = R*Math.sqrt(Math.PI), h = Math.max(1, a*EYES.lidThin)/2, bow = a*(EYES.lidBow || 0);
-    g.fillStyle = col;
+    // face.
+    //
+    // STROKED, not filled between two curves. It was a band between a bowed top edge and a bowed bottom
+    // one, both shifted by the same amount DOWN — which holds the vertical gap constant and lets the
+    // real thickness, the one measured across the arc, pinch away to nothing at the ends where the
+    // curve is steepest. The eye came out fat in the middle and pointed at both tips. A stroke is the
+    // same width perpendicular to the curve at every point of it, by construction.
+    //
+    // `butt` caps: the ends are a flat cut, square as they were — just square to the ARC now rather
+    // than to the page, which is what the end of a band of constant width looks like. Saved and
+    // restored around, because the cap and the join are context state and the legs want their own.
+    const a = R*Math.sqrt(Math.PI), bow = a*(EYES.lidBow || 0);
+    g.save();
+    g.strokeStyle = col;
+    g.lineWidth = Math.max(1, a*EYES.lidThin);
+    g.lineCap = "butt";
     for (const ex of [x1, x2]) {
       const ey = cy0 + gy;
       g.beginPath();
-      g.moveTo(ex - a/2, ey - h);
-      g.quadraticCurveTo(ex, ey - h + bow*2, ex + a/2, ey - h);
-      g.lineTo(ex + a/2, ey + h);
-      g.quadraticCurveTo(ex, ey + h + bow*2, ex - a/2, ey + h);
-      g.closePath(); g.fill();
+      g.moveTo(ex - a/2, ey);
+      g.quadraticCurveTo(ex, ey + bow*2, ex + a/2, ey);
+      g.stroke();
     }
+    g.restore();
   } else if (shut) {
     g.strokeStyle = col; g.lineWidth = Math.max(1, R*EYES.lid); g.lineCap = "round";
     g.beginPath();
