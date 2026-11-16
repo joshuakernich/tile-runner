@@ -5474,7 +5474,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v11.6";                    // shown on the title & pause screens
+  const VERSION = "v11.7";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -8913,6 +8913,24 @@
   // of the time he spends on his feet he would be walking FASTER than he flies, and the jump — the thing the
   // whole style is — would stop being the quick part of it.
   const LEAP_WALK = 0.28;
+  // ...AND WHAT THE LEGS DO WHILE HE TAKES IT. The step borrows a window of the stock run cycle, and WHICH window
+  // decides how many steps you see. A window that starts and ends with the feet together must move BOTH legs —
+  // feet together, travel, feet together is two footfalls however it is drawn, and it read, correctly, as two
+  // steps between every jump. There is no window of a run cycle that is one footfall AND has the feet together at
+  // both ends; a step ends with the legs apart, and a leaper lands and takes off with them under him.
+  //
+  // So the two movements are told apart instead of one of them being removed. `lift` turns the foot-lift hump a
+  // quarter cycle late, which puts it over the leg going FORWARD and leaves the other leg's hump entirely outside
+  // the window: one leg picks up, reaches and plants — a step — and the other stays flat on the floor and slides
+  // under him, which is a man's trailing foot, not a second step. `out` is then how much of the time on the
+  // ground that reach is given, the rest being the gather; it ends where the push off does (LEAP_PUSH.share), so
+  // the feet come together exactly as the legs drive up, and the stride and the jump are one gesture.
+  const LEAP_STEP = { out: 1 - LEAP_PUSH.share, lift: -Math.PI/2 };
+  // 0..1 through the stand → 0..1 through that one step, the reach slow and the gather quick.
+  function leapStride(g) {
+    const k = LEAP_STEP.out;
+    return g < k ? 0.5*g/k : 0.5 + 0.5*(g - k)/Math.max(1e-4, 1 - k);
+  }
   function leapPush(g) {
     const P = LEAP_PUSH, p = Math.max(0, Math.min(1, (g - (1 - P.share)) / P.share));
     const u = Math.min(1, p / P.rise);
@@ -22855,12 +22873,15 @@
     // THE STEP BETWEEN TWO JUMPS (leapAt). Every leaping swagger zeroes the stride, because on one of those all
     // the leg movement is in the leap — so left alone the step would be a glide on stiff legs. For the length of
     // it the stride is handed back at the runner's own numbers, on a phase of its own: `legPhase` runs 0..π over
-    // the step, which is exactly ONE footfall of the stock cycle — the near leg lifts from under him, reaches
-    // forward, plants and pushes back under him while the far one does the other half — so the feet are together
-    // at both ends of it, which is where the landing and the take-off want them. A swagger that has a stride of
-    // its own keeps it; only a zero is given back. Everything that is not the legs stays on the level's own phase
-    // (the Dripping skin's coat, a roll, a hover's breath), so a step does not reach outside itself.
-    const legPhase = _leapStep != null ? Math.PI*_leapStep : phase;
+    // the step — one half of the stock cycle, shaped by LEAP_STEP so the reach is slow and the gather quick — and
+    // it is turned a further half cycle on every other leap, off the same `foot` the leap already alternates by,
+    // so he leads with one leg and then the other instead of taking the same step every time. The feet are
+    // together at both ends of it, which is where the landing and the take-off want them, and which leg is the
+    // one stepping is settled by the lift rather than by the window (LEAP_STEP.lift). A swagger that has a stride
+    // of its own keeps it; only a zero is given back. Everything that is not the legs stays on the level's own
+    // phase (the Dripping skin's coat, a roll, a hover's breath), so a step does not reach outside itself.
+    const legPhase = _leapStep != null
+      ? Math.PI*leapStride(_leapStep) + (_leapFoot < 0 ? Math.PI : 0) : phase;
     const legMul = (v) => _leapStep != null ? (mul(v, 1) || 1) : mul(v, 1);
     const swing = moving ? Math.sin(legPhase) * s*RUNNER.swing * legMul(w.swing) : 0;
     let   bob   = moving ? Math.abs(Math.sin(legPhase)) * s*RUNNER.bob * legMul(w.bob) : 0;
@@ -23107,8 +23128,12 @@
     // ...and `liftLead` turns the hump EARLIER in the cycle. Without it the peak lands with the
     // foot at mid-swing, which is a run; a step picks the foot up first and then carries it.
     // Zero everywhere but the Moonwalk, so every other stride is the one it always was.
+    // THE STEP BETWEEN TWO JUMPS turns it a quarter cycle LATE, and that one number is what makes that step
+    // one step: over a window of half a cycle it puts this leg's whole hump inside and the other leg's whole
+    // hump outside, so one foot picks up, reaches and plants while the other never leaves the floor.
+    const liftLead = (w.liftLead || 0) + (_leapStep != null ? LEAP_STEP.lift : 0);
     const liftU = (ph) => moving
-      ? Math.pow(Math.max(0, swingSgn*Math.cos(ph + (w.liftLead || 0))), RUNNER.footLiftPow) : 0;
+      ? Math.pow(Math.max(0, swingSgn*Math.cos(ph + liftLead)), RUNNER.footLiftPow) : 0;
     const lift = (ph) => -s*RUNNER.footLift * legMul(w.lift) * liftU(ph);
     // Every limb is hip → knee → foot. The stock stride works its knee out with IK from where
     // the foot landed; a folded pose places knee AND foot by hand, because a folded knee is
@@ -31490,11 +31515,15 @@
     starX:      0.28,        // how far RIGHT of the middle the star sits WHEN THE CAMERA IS BACK AT THE CUBE, in screen
                              //   widths — so the line out to it goes past his side rather than straight through him, and
                              //   so this is the gap the shockwave has to cross once the camera has fallen back again
-    starY:      0.14,        // ...and how far BELOW it, in screen heights. It used to sit dead level with him, which put
+    starY:      0.27,        // ...and how far BELOW it, in screen heights. It used to sit dead level with him, which put
                              //   the star, the cube and him on one horizontal line — three things in a row across the
                              //   middle of the frame, and a shockwave that crossed it edge to edge like a wipe. Below
                              //   and to the right is a DIAGONAL: the line out to the star goes down past his shoulder,
-                             //   and what comes back comes up at him from under it
+                             //   and what comes back comes up at him from under it. NEARLY TWICE the drop it first had:
+                             //   on a tall screen a fourteenth of the height is barely off the level, and the diagonal
+                             //   only reads as one once the star is clearly down in the lower corner of the frame —
+                             //   this puts it a bit over a quarter of the way down from the middle, which on a phone
+                             //   is most of the way to the bottom edge and still well inside it
     pullBack:   0.16,        // how much of the star is left once the camera has fallen back off the lock to watch. It
                              //   is a long way off by the time it goes: the six are seen to lock square while the
                              //   camera is already running away from them, and what explodes is a distant thing
@@ -31919,6 +31948,28 @@
     return { c: cineMix(from.c, to.c, e),
              r: cineMix(from.r, to.r, k) - OPENING.arcApex*4*k*(1 - k) };
   }
+  // ...AND THE SHELL IT IS THROWN OUT OF IS NOT ON THE MAP. The cube does not travel: it hangs at the middle of
+  // the screen and the camera moves under it. Everything thrown out of it travels in MAP SQUARES, from the seat
+  // — the square the net is about to lie down on — and the camera at that moment is framing the WHOLE cloud, so
+  // the seat is wherever that framing happens to put it. The two are a third of a screen apart, which meant the
+  // six and he appeared out of empty sky beside a cube that was still visibly coming apart: a thing thrown and a
+  // thing it was thrown from, with a gap between them.
+  //
+  // So they are BORROWED BACK onto the cube for as long as the shell is still there, and let go of exactly as it
+  // lands. Which is what the net itself already does (dxC/dyC in the unfold below, the same `1 - u`): it is drawn
+  // in the map's frame and dragged onto the cube's place until it is flat. This is that same correction, handed
+  // to the things that came out of it, so all three converge on the map together instead of one of them starting
+  // there. It is worked out at the time ASKED for, not at the frame's, so a trail shed along the way lies on the
+  // path actually taken.
+  function openSeatPull(t){
+    const pull = 1 - cineSmooth(openK(OPENING.unfold, t));
+    if (!(pull > 0)) return { dx: 0, dy: 0 };
+    const Cb = openCubeAt(t), V = openCam(t), q = mapRectAt(openSeat(), V.S, V.cx0, V.cy0);
+    // the cube's MIDDLE, which is his own middle in it — openCubeAt hands back his feet, as everything that
+    // draws a runner does
+    return { dx: (Cb.x - (q.x + q.w/2)) * pull,
+             dy: (Cb.y - Cb.s*(RUNNER.legLen + RUNNER.bodyH*0.5) - (q.y + q.h/2)) * pull };
+  }
   // THE FLASH THE CUBE OPENS INSIDE. Everything in this film changes on one frame at the launch: he goes from
   // folded in the lotus under the cube's glass to flung out and running, the six appear out of nothing having
   // never been anywhere, and the shell stops being a solid and becomes a net lying down. A change that big wants
@@ -32240,8 +32291,9 @@
       const bob = Math.sin(t / TITLE_SCENE.bobMs * Math.PI*2) * P.s * TITLE_SCENE.bob;
       return { x: P.x, y: P.y + bob, s: P.s };
     }
-    const V = openCam(t), q = mapRectAt(openRunnerCell(t), V.S, V.cx0, V.cy0), s = V.S*O.runCells;
-    return { x: q.x + q.w/2, y: q.y + q.h/2 + s*(RUNNER.legLen + RUNNER.bodyH*0.5), s };
+    const V = openCam(t), q = mapRectAt(openRunnerCell(t), V.S, V.cx0, V.cy0), s = V.S*O.runCells,
+          p = openSeatPull(t);                         // ...out of the cube, not out of the sky beside it
+    return { x: q.x + q.w/2 + p.dx, y: q.y + q.h/2 + p.dy + s*(RUNNER.legLen + RUNNER.bodyH*0.5), s };
   }
   // HOW FAR ROUND HE HAS TUMBLED. Whole turns as he is flung out of the cube, front-loaded so it is wildest at
   // the moment the shell goes — and then he keeps turning, slowly, for the whole of the time he is up there, and
@@ -32562,8 +32614,9 @@
       const charmR = S*OPENING.runCells*RUNNER.bodyH / 1.9;
       const where = (tt) => {
         const q = mapRectAt(openArcAt(openSeat(), mapCells()[o.sp.idx] || openSeat(),
-                                      (tt - OPENING.launch)/Math.max(1, o.ms)), S, cx0, cy0);
-        return { x: q.x + q.w/2, y: q.y + q.h/2, r: charmR };
+                                      (tt - OPENING.launch)/Math.max(1, o.ms)), S, cx0, cy0),
+              p = openSeatPull(tt);                    // ...on the cube until the shell is down (openSeatPull)
+        return { x: q.x + q.w/2 + p.dx, y: q.y + q.h/2 + p.dy, r: charmR };
       };
       const q = where(t), A = cineC01((t - OPENING.launch)/220);
       // HALF OF THEM PASS BEHIND HIM. There is no depth to sort by out here — they are all points on the same
