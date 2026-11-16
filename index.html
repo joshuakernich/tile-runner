@@ -5474,7 +5474,7 @@
   // going wrong. He does NOT stop there and go straight out — the pace tops out and HOLDS, and
   // what ends it is the hole in the middle of his loop finishing its meal. See HOLE.
   const LOOP_MAX_CPS  = 10.0;
-  const VERSION = "v11.5";                    // shown on the title & pause screens
+  const VERSION = "v11.6";                    // shown on the title & pause screens
   // Canvas twin of the CSS --font. Canvas never triggers a webfont fetch on its own —
   // only DOM text does — and most of the UI text lives inside panels that are hidden
   // at boot, so without this nudge the canvas would draw in the fallback face until some
@@ -6791,12 +6791,13 @@
   //   hover a constant height off the track, fraction of a cell
   //   spin  radians per ms of continuous roll
   //   pose  a named leg fold that replaces the stock stride: lotus, fetal, onefoot
-  //   leap  leaps per TILE. He stands still on the ground at every 1/leap of a tile and
-  //         covers the whole of that gap in one jump, so his forward motion happens only in
-  //         the air. leapH is how high, leapHold the share of each cycle spent on the ground,
-  //         leapSplit how far the feet part at the apex, leapAlt swapping which foot is the
-  //         key one from one leap to the next so he comes down on them in turn, leapSpin
-  //         whole turns in the air per leap — positive forward, negative back.
+  //   leap  leaps per TILE. He TAKES A STEP at every 1/leap of a tile and jumps the rest of
+  //         that gap, so most of his forward motion is in the air and the rest of it is one
+  //         pace on the ground. leapH is how high, leapHold the share of each cycle spent on
+  //         the ground, leapWalk how much of the gap that step carries him (the jump covers
+  //         what is left), leapSplit how far the feet part at the apex, leapAlt swapping which
+  //         foot is the key one from one leap to the next so he comes down on them in turn,
+  //         leapSpin whole turns in the air per leap — positive forward, negative back.
   // THE FOLDED POSES' SHAPES — how a swagger that REPLACES the stride holds its legs. Every length is
   // in `seg`, one bone of his leg, so a pose keeps its shape at any size. swagger-lab.html tunes these
   // through __TR.poses(); paste its block back over this one.
@@ -8905,6 +8906,13 @@
   // straight for the rest of it, so the straightening is on screen as its own thing before the feet leave rather than
   // happening in the last frame. 0 crouched .. 1 straight.
   const LEAP_PUSH = { share: 0.32, rise: 0.60 };
+  // HOW FAR THE STEP BETWEEN TWO JUMPS CARRIES HIM, as a share of the gap — the jump covers the rest of it.
+  // He used to stand stock still there: planted, absorbing the landing, sinking into the wind-up and then gone,
+  // all on one spot, which is a man bouncing rather than a man travelling. Well under half: the step is taken
+  // over `leapHold` of the gap's time and covers this much of its ground, so at anything approaching the share
+  // of the time he spends on his feet he would be walking FASTER than he flies, and the jump — the thing the
+  // whole style is — would stop being the quick part of it.
+  const LEAP_WALK = 0.28;
   function leapPush(g) {
     const P = LEAP_PUSH, p = Math.max(0, Math.min(1, (g - (1 - P.share)) / P.share));
     const u = Math.min(1, p / P.rise);
@@ -8917,9 +8925,14 @@
     const foot = (idx & 1) ? -1 : 1;
     const u = (param - anchor) / step;               // 0..1 through this leap
     const hold = w.leapHold == null ? 0.40 : w.leapHold;
+    const walk = w.leapWalk == null ? LEAP_WALK : w.leapWalk;
     // `pose` is what the legs do: negative folds them under him, positive stretches them out.
     if (u < hold) {
       const g = u / hold;                            // 0 the instant he lands, 1 as he leaves
+      // ...and he WALKS it. `at` is where that step has got him — a share of the gap, at a constant rate, which
+      // is slower than the pace he is really travelling at and leaves the jump to make the difference up. The
+      // squash, the wind-up and the push below are untouched; they are what the step is taken out of.
+      const at = anchor + step*walk*g;
       // The impact is a hard squash — it SHOULD arrive as a snap, since that is what landing
       // is — and it recovers over the first half of the stand. The rest of the stand is the
       // wind-up: he sinks again, on purpose this time, loading for the next jump.
@@ -8929,14 +8942,15 @@
       if (w.landStraight) {
         const HOLD = 0.25, DROP = 0.30;                   // shares of the stand: straight, then the fall into the squat
         const k = Math.max(0, Math.min(1, (g - HOLD) / DROP)), e = 1 - (1 - k)*(1 - k);
-        return { param: anchor, lift: 0, foot, air: 0, pose: -e * (1 - leapPush(g)) };
+        return { param: at, lift: 0, foot, air: 0, stride: g, pose: -e * (1 - leapPush(g)) };
       }
       // (with bent knees, the wind-up finishes a little early and the legs are SEEN to straighten before they leave: leapPush)
       if (w.kneesBend) {
         const wind = -0.75 * Math.min(1, Math.max(0, (g - 0.55) / Math.max(0.01, 0.45 - LEAP_PUSH.share)));
-        return { param: anchor, lift: 0, foot, air: 0, pose: (g < 0.55 ? -(1 - g/0.55) : wind) * (1 - leapPush(g)) };
+        return { param: at, lift: 0, foot, air: 0, stride: g,
+                 pose: (g < 0.55 ? -(1 - g/0.55) : wind) * (1 - leapPush(g)) };
       }
-      return { param: anchor, lift: 0, foot, air: 0,
+      return { param: at, lift: 0, foot, air: 0, stride: g,
                pose: g < 0.55 ? -(1 - g/0.55) : -0.75 * (g - 0.55)/0.45 };
     }
     const f = (u - hold) / (1 - hold);               // 0..1 through the air
@@ -8944,7 +8958,7 @@
     // The legs stretch in proportion to the arc, so they are longest at the apex and back to
     // their standing length exactly as he takes off and again as he touches down.
     const a = Math.sin(Math.PI * f);
-    return { param: anchor + step*f, lift: a, pose: a, foot, air: f };
+    return { param: anchor + step*(walk + (1 - walk)*f), lift: a, pose: a, foot, air: f };
   }
   // Given how far along a path a runner is, in TILES, set the leap flags paintRunner reads and
   // hand back where he should actually be drawn. This is the whole of a leaping swagger, and
@@ -8957,9 +8971,10 @@
     if (!(w && w.leap > 0 && moving !== false)) { resetLeap(); return tiles; }
     const L = leapAt(w, tiles);
     _leapLift = L.lift; _leapPose = L.pose; _leapFoot = L.foot; _leapAir = L.air;
+    _leapStep = L.stride == null ? null : L.stride;      // null in the air; 0..1 through the step on the ground
     return L.param;
   }
-  function resetLeap() { _leapLift = 0; _leapPose = 0; _leapFoot = 1; _leapAir = 0; }
+  function resetLeap() { _leapLift = 0; _leapPose = 0; _leapFoot = 1; _leapAir = 0; _leapStep = null; }
   // runner frame: centre point, tangent (travel dir), normal (surface "up"),
   // and the surface point the runner's feet rest on
   function runnerInfo() {
@@ -22733,7 +22748,7 @@
   const SCURRY = { swing: 0.10, lift: 0.75, bob: 0.04, hop: 0, lean: 0, hover: 0 };
   // ...and how far a leaping swagger has him off the track, 0..1. Same reasoning: paintRunner
   // is called from places that have no path to leap along.
-  let _leapLift = 0, _leapPose = 0, _leapFoot = 1, _leapAir = 0;
+  let _leapLift = 0, _leapPose = 0, _leapFoot = 1, _leapAir = 0, _leapStep = null;
   // Set while the one body lying at the summit is drawn; PILE.splay is how wide.
   let _deadSplay = 0;
   // WHERE HIS JOINTS ACTUALLY LAND, for a lab that wants to put a handle on one. Set to an object and
@@ -22837,8 +22852,18 @@
             : _scurry > 0.5 ? SCURRY
             : as ? (as.swagger || {}) : lookItem("swagger");
     const mul = (v, d) => (v == null ? d : v);
-    const swing = moving ? Math.sin(phase) * s*RUNNER.swing * mul(w.swing, 1) : 0;
-    let   bob   = moving ? Math.abs(Math.sin(phase)) * s*RUNNER.bob * mul(w.bob, 1) : 0;
+    // THE STEP BETWEEN TWO JUMPS (leapAt). Every leaping swagger zeroes the stride, because on one of those all
+    // the leg movement is in the leap — so left alone the step would be a glide on stiff legs. For the length of
+    // it the stride is handed back at the runner's own numbers, on a phase of its own: `legPhase` runs 0..π over
+    // the step, which is exactly ONE footfall of the stock cycle — the near leg lifts from under him, reaches
+    // forward, plants and pushes back under him while the far one does the other half — so the feet are together
+    // at both ends of it, which is where the landing and the take-off want them. A swagger that has a stride of
+    // its own keeps it; only a zero is given back. Everything that is not the legs stays on the level's own phase
+    // (the Dripping skin's coat, a roll, a hover's breath), so a step does not reach outside itself.
+    const legPhase = _leapStep != null ? Math.PI*_leapStep : phase;
+    const legMul = (v) => _leapStep != null ? (mul(v, 1) || 1) : mul(v, 1);
+    const swing = moving ? Math.sin(legPhase) * s*RUNNER.swing * legMul(w.swing) : 0;
+    let   bob   = moving ? Math.abs(Math.sin(legPhase)) * s*RUNNER.bob * legMul(w.bob) : 0;
     if (w.hop && moving) bob += Math.max(0, Math.sin(phase)) * s*w.hop;   // one big bounce a stride
     // a hover sits him off the track and breathes, whether or not he is running
     // (A rolling swagger's hover is a plain offset, no breathing: its height off the track is decided by the shape of the
@@ -23084,7 +23109,7 @@
     // Zero everywhere but the Moonwalk, so every other stride is the one it always was.
     const liftU = (ph) => moving
       ? Math.pow(Math.max(0, swingSgn*Math.cos(ph + (w.liftLead || 0))), RUNNER.footLiftPow) : 0;
-    const lift = (ph) => -s*RUNNER.footLift * mul(w.lift, 1) * liftU(ph);
+    const lift = (ph) => -s*RUNNER.footLift * legMul(w.lift) * liftU(ph);
     // Every limb is hip → knee → foot. The stock stride works its knee out with IK from where
     // the foot landed; a folded pose places knee AND foot by hand, because a folded knee is
     // nowhere near the hip-to-foot line and there is no talking IK into putting it there.
@@ -23107,8 +23132,8 @@
     } else if (w.pose === "onefoot") {
       // Hopping on the one leg. The foot leaves the track at the top of the hop rather than
       // staying pinned to it — otherwise the leg has to stretch to the full height of the hop.
-      const up = _leapLift || (moving ? Math.max(0, Math.sin(phase)) : 0);
-      const fx = moving ? Math.sin(phase)*s*0.03 : 0, fy = -up*s*(w.hop||0)*0.80;
+      const up = _leapLift || (moving ? Math.max(0, Math.sin(legPhase)) : 0);
+      const fx = moving ? Math.sin(legPhase)*s*0.03 : 0, fy = -up*s*(w.hop||0)*0.80;
       if (w.leapAlt) {
         // A bound. He comes down on one foot and swaps which one every leap, and the idle leg
         // is folded BACK the whole time — never up in front — so the only thing that changes
@@ -23135,7 +23160,7 @@
       const kx = backHip + seg*0.85, ky = hipY + seg*0.35*tk;
       limbs.push([backHip, kx, ky, kx - seg*0.95, ky + seg*0.30*tk]);
       }
-    } else if (w.leapSpin) {
+    } else if (w.leapSpin && _leapStep == null) {
       // Flipping. He curls up the moment he leaves the ground — knees out in front, feet drawn
       // in under him — and opens back out as he comes down, landing with his feet a little
       // apart to take it. Both ends are placed by hand and crossfaded on the leap's own arc:
@@ -23191,7 +23216,7 @@
       // comes up. Driven off liftU, so the bend and the lift are the same movement rather than
       // two that have to be kept in time.
       const toeL = s*(w.toe || 0), toeD = w.toeDrop == null ? 1.25 : w.toeDrop;
-      for (const [hx, fx, ph] of [[backHip, reach, phase], [frontHip, -reach, phase + Math.PI]]) {
+      for (const [hx, fx, ph] of [[backHip, reach, legPhase], [frontHip, -reach, legPhase + Math.PI]]) {
         const fy = (lift(ph) - fx*sinL) / cosL;
         // BENT KNEES on a crouch (`kneesBend`). A leap's crouch shortens the leg (legK), and IK on a shorter leg only
         // makes a shorter straight leg — he sank like a piston. With this the leg keeps its STANDING length, so when the
@@ -30892,6 +30917,11 @@
   }
   // The title cube's camera at time ts, around his middle — or turned to `rot` ({ry, rx}) when the
   // opening is steering it. A unit cube about its own centre, through the opening's projection.
+  // WHICH AXIS IS WHICH, ON THE SCREEN: not the one the names say. `ry` turns the cube about its own vertical and
+  // `rx` tips it — but the whole thing is then rolled a QUARTER TURN on the screen (cubeRoll, CUBE_RUN.roll = 90°,
+  // applied outside the pair), and a quarter turn swaps them over. So this slow turn, which is written as a yaw,
+  // is a PITCH where you watch it: the near face climbs the front, over the top and away. The held `tilt` is the
+  // yaw. Don't reach for `rx` to make it roll up — it is already rolling up, and `rx` would turn it sideways.
   function titleCubeRot(ts) { const T = TITLE_SCENE;
     return { ry: ts / T.spinMs * Math.PI*2, rx: T.tilt + 0.06*Math.sin(ts/5200) }; }
   function titleCubeView(P, rot) {
@@ -31460,6 +31490,11 @@
     starX:      0.28,        // how far RIGHT of the middle the star sits WHEN THE CAMERA IS BACK AT THE CUBE, in screen
                              //   widths — so the line out to it goes past his side rather than straight through him, and
                              //   so this is the gap the shockwave has to cross once the camera has fallen back again
+    starY:      0.14,        // ...and how far BELOW it, in screen heights. It used to sit dead level with him, which put
+                             //   the star, the cube and him on one horizontal line — three things in a row across the
+                             //   middle of the frame, and a shockwave that crossed it edge to edge like a wipe. Below
+                             //   and to the right is a DIAGONAL: the line out to the star goes down past his shoulder,
+                             //   and what comes back comes up at him from under it
     pullBack:   0.16,        // how much of the star is left once the camera has fallen back off the lock to watch. It
                              //   is a long way off by the time it goes: the six are seen to lock square while the
                              //   camera is already running away from them, and what explodes is a distant thing
@@ -31533,7 +31568,14 @@
                              //   the six faces from the middle of the cloud — so these are in those units
     shake:     0.18,         // how hard each talisman landing throws the screen, in tiles (the game's own shake)
     // ---- everything after, as it was ----
-    spinAxis:  [0.45, 0.82, 0.35],   // the axis the cube tumbles about when the shockwave hits it...
+    spinAxis:  [-0.82, 0.45, 0.35],  // the axis the cube tumbles about when the shockwave hits it, IN THE CAMERA'S
+                             //   OWN FRAME (the tumble is applied outside everything else, so x is the screen's across,
+                             //   y its down and z its depth). Dominantly -x, which throws the face nearest us UP: the
+                             //   blast comes from below and to the right — the star hangs down there — and a box struck
+                             //   from under one corner goes over the top, not round the side. It used to be dominantly
+                             //   +y, a yaw, and the cube span away to the left like a thing on a turntable. The other
+                             //   two are what keep it a tumble rather than a wheel, and they are the old numbers: the
+                             //   same throw, turned a quarter of the way round the screen...
     spinTurns: 3,            // ...and how many whole turns it takes from the blow to the halt. WHOLE, so whatever
                              //   the tumble did the net is square again by the time it comes to rest and the six
                              //   sides lie down on the map rather than near it. Three rather than five: at five it
@@ -32021,7 +32063,8 @@
   // camera PANS ONTO IT as it goes, so by the time it is out there the star is in the middle of the frame and turns
   // there, which is where a thing doing its work belongs. Falling back again takes it out to the right once more,
   // and the cube back to the middle, so the two of them end up standing in the same relation they began in.
-  function openStarXY(t){ return { x: viewW/2 + viewW*OPENING.starX*(1 - openJourney(t)), y: viewH/2 }; }
+  function openStarXY(t){ const j = 1 - openJourney(t);
+    return { x: viewW/2 + viewW*OPENING.starX*j, y: viewH/2 + viewH*OPENING.starY*j }; }
   function openCubeZ(t){
     const O = OPENING;
     if (t < O.pop) return Math.exp(Math.log(O.cubeGo) * openJourney(t));    // swelling as the camera goes by it
@@ -32407,9 +32450,11 @@
       // Their life is SOLVED rather than set, so the first one's edge is on the cube exactly at OPENING.hit and
       // the rest cross it at even `waveEvery` intervals after — which is what the whooshes are hung on. The gap
       // it has to cross is a fixed thing: by the hit the camera is home, so the sun sits `starX` right of the
-      // middle and the cube `cubeHitX` left of it, and the distance between them is that sum, in screen widths.
+      // middle and `starY` below it and the cube `cubeHitX` left of it — so the gap is the DIAGONAL between those
+      // two places, not the width between them. Measured as the width when the star was level with the cube; a
+      // star dropped below it is further away than that, and a wave solved off the width alone would arrive early.
       const r0 = starB*0.5*OPENING.pullBack, reach = diag*OPENING.waveReach;
-      const crossAt = viewW*(OPENING.starX + OPENING.cubeHitX);
+      const crossAt = Math.hypot(viewW*(OPENING.starX + OPENING.cubeHitX), viewH*OPENING.starY);
       const life = (OPENING.hit - OPENING.pop) /
                    Math.pow(cineC01((crossAt - r0)/Math.max(1, reach - r0)), 1/OPENING.wavePow);
       for (let i = 0; i < OPENING.waveN; i++) {
